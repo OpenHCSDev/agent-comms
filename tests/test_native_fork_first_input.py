@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import time
+from abc import abstractmethod
 from pathlib import Path
 
 import pytest
@@ -16,13 +17,15 @@ from agent_comms.acp_extension import (
     CompactionPublishedUpdate,
     decode_updates,
 )
+from agent_comms.child_process import DetachedProcess
 from agent_comms.comms import Comms
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.pi_commands import GetSessionStats, GetState
+from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.selected_pi_route import read_selected_compaction_decision
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
-from agent_comms.child_process import DetachedProcess
-from agent_comms.pi_commands import GetState, GetSessionStats
-from agent_comms.pi_rpc import PiRpcChannel
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
@@ -30,8 +33,60 @@ tmp_path = private_root_fixture
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-async def test_underbudget_physical_native_fork_answers_first_input_without_compaction(
-    native_backend, monkeypatch
+class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
+    @abstractmethod
+    async def create(self, comms): ...
+
+    @abstractmethod
+    def verify_fraction(self, fraction): ...
+
+    @abstractmethod
+    def verify_history(self, native, thread, original): ...
+
+
+class OrdinaryOwnerCase(OwnerAdmissionCase):
+    repetitions = 2400
+
+    async def create(self, comms):
+        await asyncio.to_thread(comms.owners.start, "physical-parent")
+        return comms.registry.require("physical-parent")
+
+    def verify_fraction(self, fraction):
+        assert 0.60 < fraction < 0.70
+
+    def verify_history(self, native, thread, original):
+        assert Path(thread.session_file) == native.session
+        assert native.session.read_bytes().startswith(original)
+
+
+class ForkOwnerCase(OwnerAdmissionCase):
+    repetitions = 900
+
+    async def create(self, comms):
+        return await asyncio.to_thread(
+            comms.threads.fork,
+            ForkSpec(
+                name="physical-child",
+                parent="physical-parent",
+                task="Continue retained architecture",
+            ),
+        )
+
+    def verify_fraction(self, fraction):
+        assert 0.20 < fraction < 0.27
+
+    def verify_history(self, native, thread, original):
+        assert Path(thread.session_file) != native.session
+        assert native.session.read_bytes() == original
+
+
+@pytest.mark.parametrize(
+    "case",
+    [member() for member in OwnerAdmissionCase.members_with(OwnerAdmissionCase)],
+    ids=lambda case: case.declared_name,
+)
+async def test_underbudget_physical_native_owner_answers_without_compaction(
+    native_backend, monkeypatch, case
 ):
     native = native_backend
     # Select a normal bounded model before creating physical parent history.
@@ -47,7 +102,9 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
             }
         )
     )
-    parent_text = "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * 900
+    parent_text = (
+        "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * case.repetitions
+    )
     result = await native.run(parent_text)
     assert result[-1].ok, result[-1]
     assert native.provider.posts == 1
@@ -63,12 +120,45 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
 
     state = await probe(GetState(id="parent-state"))
     stats = await probe(GetSessionStats(id="parent-stats"))
-    assert stats.context_usage.tokens is not None
-    assert 0.20 < stats.context_usage.tokens / state.model.context_window < 0.27
+    fraction = stats.context_usage.tokens / state.model.context_window
+    case.verify_fraction(fraction)
     print("PHYSICAL_PARENT_STATS", repr(stats), flush=True)
     assert state.model.context_window == 32768
     print("PHYSICAL_PARENT_STATE", repr(state), flush=True)
+    decision = await read_selected_compaction_decision(
+        native.persistent,
+        session_file=str(native.session),
+        expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+        provider=state.model.provider,
+        model_id=state.model.id,
+        context_window=state.model.context_window,
+    )
+    print("ACTUAL_SELECTED_COMPACTION_DECISION", repr(decision), flush=True)
+    assert decision.enabled
+    assert not decision.trigger
     original = native.session.read_bytes()
+    source_rows = [json.loads(line) for line in original.splitlines()]
+    selected_messages = [row["message"] for row in source_rows if row["type"] == "message"]
+    serialized_bytes = len(
+        json.dumps(selected_messages, ensure_ascii=False, separators=(",", ":")).encode()
+    )
+    effective_tokens = state.model.context_window - decision.reserve_tokens
+    old_mixed_unit_budget = effective_tokens * 0.75
+    assert stats.context_usage.tokens < effective_tokens
+    assert serialized_bytes > old_mixed_unit_budget
+    print(
+        "TOKEN_BYTE_MISMATCH",
+        "tokens",
+        stats.context_usage.tokens,
+        "effective_tokens",
+        effective_tokens,
+        "serialized_context_bytes",
+        serialized_bytes,
+        "old_mixed_unit_budget",
+        old_mixed_unit_budget,
+        flush=True,
+    )
+
     await native.persistent.close()
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv(
@@ -114,14 +204,7 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
 
     monkeypatch.setattr(DetachedProcess, "launch", logged_launch)
     try:
-        child = await asyncio.to_thread(
-            comms.threads.fork,
-            ForkSpec(
-                name="physical-child",
-                parent="physical-parent",
-                task="Continue retained architecture",
-            ),
-        )
+        child = await case.create(comms)
         async with asyncio.timeout(15):
             while True:
                 try:
@@ -158,7 +241,8 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
         assert not any(isinstance(fact, CompactionCommittedUpdate) for fact in facts)
         assert not any(isinstance(fact, CompactionPublishedUpdate) for fact in facts)
         thread = comms.registry.require(child.name)
-        assert thread.session_file and thread.session_file != str(native.session)
+        assert thread.session_file
+
         entries = [json.loads(line) for line in Path(thread.session_file).read_text().splitlines()]
         assert sum(entry["type"] == "compaction" for entry in entries) == 0
         users = [
@@ -166,9 +250,12 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
             for entry in entries
             if entry["type"] == "message" and entry["message"].get("role") == "user"
         ]
+        assert any("PHYSICAL_PARENT_CONTEXT" in json.dumps(message["content"]) for message in users)
         assert sum("hey Boss" in json.dumps(message["content"]) for message in users) == 1
         assert native.provider.posts == 2  # physical parent, first answer only
-        assert native.session.read_bytes() == original
+        assert "PHYSICAL_PARENT_CONTEXT" in json.dumps(native.provider.requests[-1]["messages"])
+        assert "hey Boss" in json.dumps(native.provider.requests[-1]["messages"])
+        case.verify_history(native, thread, original)
         await asyncio.sleep(1.2)
         assert native.provider.posts == 2  # No uncertain original replay or unsolicited retry.
     finally:

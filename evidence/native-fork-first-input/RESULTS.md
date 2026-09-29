@@ -49,3 +49,33 @@ on local fixture and records measured latency, requires no ACP compaction phase 
 commit fact, zero physical compaction entries, exactlyparent+answer provider calls.
 These assertions remain pending real worker startup correction; no false GREEN.
 Live ACP log00_16_47 inspected read-only; never reused as test native session.
+
+## Independent ordinary cold-restoration RED/GREEN
+
+Deleted 16 superseded test/helper lines; shared typed case declarations now own
+ordinary/fork setup and assertions, membership derived from DeclaredFamily.
+The loopback provider retains real HTTP request bodies to prove preserved context.
+No production edits, native event stubs, pending database seeds or live changes.
+
+Exact installed core340 1f6bc389 + matched native candidate: PASS 1 test in12.30s;
+first ACP answer5.4644s. Physical native parent:21013/32768tokens (64.13%),
+actual reserve2048 => effective30720; serialized selected messages84664bytes
+exceed old mistaken23040byte threshold. Actual native decision trigger=False.
+First provider answer request retains physical parent context and new input.
+No ACP compaction start/commit/publication, no physical compaction entry, exactly
+two provider calls (parent+answer), original input once, history retained, cleanup.
+Final declaration-family version PASS1test12.42s, first answer5.5577s.
+
+Exact old core3f06022f + pinned5fde SAME ordinary test: RED1test16.80s,
+first answer11.1585s then CompactionPublishedUpdate rejected. Successful reply
+after hidden compaction is expressly a failure. Receipts core340-ordinary.log,
+ordinary-oldpin-red.log and owner-family-ordinary.log preserve actual facts.
+
+Exact current refactor-audit.skill archive reread: SKILL, patterns README,
+identity/over-time/agent-defaults, principles13/14. IDEN-3 canonical foreign
+absence measure stays3->3 and0->0; IMPL-14 chain terms0->0 both files.
+No class crosses500; no godclass growth. IMPL-1/MEMB-1 case behavior and
+family-derived membership; BOUND-1 existing native RPC decoding; TIME-9 no
+codec subclass/adapter; AGENT-8 actual existing native fixture/tool path.
+Fork proof still requires latest339 startup correction; no blanket fork/branch
+or live deployment certification from this ordinary receipt.

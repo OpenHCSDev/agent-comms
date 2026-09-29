@@ -1,0 +1,8 @@
+PHYSICAL_PARENT_STATS SessionStatsData(session_id='462b22b2b8af424fa7e4a7060d5f8902', session_file='/var/tmp/ac-sealed-test-5_andpa1/sessions/enrolled-462b22b2b8af424fa7e4a7060d5f8902.jsonl', context_usage=PiContextUsage(tokens=21013, context_window=32768))
+PHYSICAL_PARENT_STATE StateData(session_id='462b22b2b8af424fa7e4a7060d5f8902', session_file='/var/tmp/ac-sealed-test-5_andpa1/sessions/enrolled-462b22b2b8af424fa7e4a7060d5f8902.jsonl', session_name=None, native_input_proof_capability='pi-native-input-v1-live-only', model=PiModel(provider='response-local', id='fixture', name='Local response fixture', context_window=32768), thinking_level='off', message_count=2, pending_message_count=0, is_streaming=False, is_compacting=False)
+ACTUAL_SELECTED_COMPACTION_DECISION PiCompactionDecision(reserve_tokens=2048, keep_recent_tokens=1024, enabled=True, trigger=False)
+TOKEN_BYTE_MISMATCH tokens 21013 effective_tokens 30720 serialized_context_bytes 84664 old_mixed_unit_budget 23040.0
+FIRST_SEND_LATENCY_SECONDS 5.585239926003851
+ACTUAL_WORKER_LOG 
+.
+1 passed, 1 deselected in 12.26s

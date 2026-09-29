@@ -11,6 +11,7 @@ class LoopbackProvider:
         self.port = 0
         self.posts = 0
         self.paths = []
+        self.requests = []
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -28,7 +29,8 @@ class LoopbackProvider:
                 0,
             )
             if length:
-                await asyncio.wait_for(reader.readexactly(length), 3)
+                body = await asyncio.wait_for(reader.readexactly(length), 3)
+                self.requests.append(json.loads(body))
             if self.status == 0:
                 # This attempt stays in flight until Pi is cancelled.
                 await asyncio.wait_for(reader.read(), 20)
