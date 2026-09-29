@@ -11,6 +11,7 @@ from acp.schema import AgentMessageChunk, TextContentBlock
 
 from .acp_extension import (
     TextRouteUpdate,
+    TurnSettledUpdate,
     TranscriptSnapshotUpdate,
     TurnStartedUpdate,
     encode_updates,
@@ -44,28 +45,41 @@ class AgentTextTranscriptUpdate(TranscriptUpdate):
             )
 
 
-@dataclass(frozen=True, kw_only=True)
-class StartedTranscriptUpdate(TranscriptUpdate):
-    turn_id: str | None = None
-    started_at: float | None = None
-    activity: str | None = None
-    activity_detail: str | None = None
+class TurnTranscriptUpdate(TranscriptUpdate):
+    @property
+    @abstractmethod
+    def fact(self): ...
 
     async def publish(self, session_id: str, client: Any) -> None:
-        if self.turn_id is None:
-            return
         await client.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(
-                    TurnStartedUpdate(
-                        self.turn_id, self.started_at, self.activity, self.activity_detail
-                    )
-                ),
+                field_meta=encode_updates(self.fact),
             ),
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class StartedTranscriptUpdate(TurnTranscriptUpdate):
+    turn_id: str
+    started_at: float | None = None
+    activity: str | None = None
+    activity_detail: str | None = None
+
+    @property
+    def fact(self):
+        return TurnStartedUpdate(self.turn_id, self.started_at, self.activity, self.activity_detail)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SettledTranscriptUpdate(TurnTranscriptUpdate):
+    turn_id: str | None = None
+
+    @property
+    def fact(self):
+        return TurnSettledUpdate(self.turn_id)
 
 
 class TranscriptReplay:

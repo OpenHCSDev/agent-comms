@@ -562,9 +562,9 @@ class ForkCliCommand(CliCommand):
     help = "Fork a child pi thread"
     name: str = option("--name")
     parent: str = option("--parent")
-    task: str = option("--task")
-    tags: frozenset[str] = option(
-        "--tags", default_factory=frozenset, parser_default="", normalize=_tags
+    task: str = option("--task", default="")
+    tags: frozenset[str] | None = option(
+        "--tags", default=None, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None)
     pi_bin: str = option(

@@ -702,12 +702,12 @@ class CommsForkTool(ToolRequest):
     action_order = 10
     name: str = tool_field("Child thread name")
     parent: str = tool_field("Parent thread name", binding=SubjectBinding)
-    task: str = tool_field("Task for the child")
-    tags: str = tool_field("Comma-separated tags", default="")
+    task: str = tool_field("Optional task for the child", default="")
+    tags: str | None = tool_field("Comma-separated tags; omitted inherits parent tags", default=None)
     prompt: str | None = tool_field("Initial prompt override", default=None)
 
     def apply(self, comms: Comms) -> JsonObject:
-        tags = _tag_set(self.tags)
+        tags = _tag_set(self.tags) if self.tags is not None else None
         prompt = self.prompt
         child = comms.threads.fork(
             ForkSpec(

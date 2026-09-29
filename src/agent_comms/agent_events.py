@@ -314,11 +314,6 @@ class TurnSettled(AgentEvent):
     turn_id: str
 
 
-@dataclass(frozen=True)
-class NoActiveTurn(AgentEvent):
-    """Replay has no active turn; no fabricated internal turn identity."""
-
-
 class AgentEventConsumer(MroDispatch, ABC):
     """Shared activity and metadata algorithms; owners supply their context."""
 
