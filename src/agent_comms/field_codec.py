@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import math
 import types
+from abc import ABC, abstractmethod
 from dataclasses import MISSING, Field, fields, is_dataclass
+from datetime import datetime
 from enum import Enum
 from functools import lru_cache
+from pathlib import Path
 from typing import (
+    Annotated,
     Any,
     Literal,
     TypeVar,
@@ -22,6 +26,66 @@ from typing import (
 from .declared_family import DeclaredFamily
 
 T = TypeVar("T")
+
+
+class FieldRepresentation(ABC):
+    """A field capability, declared as ``Annotated[ValueType, Representation]``.
+
+    Private transports can declare captures without permitting those objects in
+    ordinary JSON. All record structure remains owned by FieldCodec.
+    """
+
+    @classmethod
+    @abstractmethod
+    def encode(cls, value: object) -> object: ...
+
+    @classmethod
+    @abstractmethod
+    def decode(cls, value: object) -> object: ...
+
+    @classmethod
+    def schema(cls) -> dict[str, Any]:
+        raise TypeError(f"{cls.__name__} has no JSON schema")
+
+
+class TextRepresentation(FieldRepresentation):
+    """External text scalars share strict decoding at the canonical boundary."""
+
+    @classmethod
+    def decode(cls, value: object) -> object:
+        return cls.from_text(FieldCodec.decode(str, value))
+
+    @classmethod
+    @abstractmethod
+    def from_text(cls, value: str) -> object: ...
+
+    @classmethod
+    def schema(cls) -> dict[str, Any]:
+        return FieldCodec.value_schema(str)
+
+
+class PathText(TextRepresentation):
+    @classmethod
+    def encode(cls, value: object) -> str:
+        if not isinstance(value, Path):
+            raise TypeError("Expected a filesystem path")
+        return str(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> Path:
+        return Path(value)
+
+
+class TimestampText(TextRepresentation):
+    @classmethod
+    def encode(cls, value: object) -> str:
+        if not isinstance(value, datetime):
+            raise TypeError("Expected a datetime")
+        return value.isoformat()
+
+    @classmethod
+    def from_text(cls, value: str) -> datetime:
+        return datetime.fromisoformat(value)
 
 
 class Projected(property):
@@ -46,7 +110,26 @@ class FieldCodec:
     arrays. Init fields and explicitly projected wire properties participate;
     projected values are derived again on decode. ClassVars are not stored.
     ``wire_nonnull`` rejects an explicit null while allowing an omitted default.
+    Annotated field representations add scalar/capture behavior while retaining
+    the single record codec and declaration-derived schema.
     """
+
+    def __init_subclass__(cls) -> None:
+        if cls.__module__ != __name__:
+            raise TypeError("FieldCodec has one implementation; declare a FieldRepresentation")
+
+    @staticmethod
+    def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
+        if get_origin(annotation) is not Annotated:
+            return annotation, None
+        target, *metadata = get_args(annotation)
+        representations = [
+            item for item in metadata
+            if isinstance(item, type) and issubclass(item, FieldRepresentation)
+        ]
+        if len(representations) > 1:
+            raise TypeError("A field must have one representation")
+        return target, next(iter(representations), None)
 
     @staticmethod
     @lru_cache(maxsize=256)
@@ -76,7 +159,7 @@ class FieldCodec:
     @staticmethod
     @lru_cache(maxsize=256)
     def _types(declaration: type) -> dict[str, Any]:
-        return get_type_hints(declaration)
+        return get_type_hints(declaration, include_extras=True)
 
     @overload
     @classmethod
@@ -84,18 +167,22 @@ class FieldCodec:
 
     @overload
     @classmethod
-    def encode(cls, value: object) -> Any: ...
+    def encode(cls, value: object, annotation: object = None) -> Any: ...
 
     @classmethod
-    def encode(cls, value: object) -> Any:
+    def encode(cls, value: object, annotation: object = None) -> Any:
+        _, representation = cls._representation(annotation)
+        if representation is not None and value is not None:
+            return representation.encode(value)
         if is_dataclass(value) and not isinstance(value, type):
+            hints = cls._types(type(value))
             result = (
                 {value.family_discriminator: value.declared_name}
                 if isinstance(value, DeclaredFamily)
                 else {}
             )
             result.update(
-                (key, cls.encode(getattr(value, field.name)))
+                (key, cls.encode(getattr(value, field.name), hints[field.name]))
                 for field, key in cls._fields(type(value))
                 if not (
                     field.metadata.get("wire_omit_default")
@@ -156,7 +243,7 @@ class FieldCodec:
             if declared.default is MISSING and declared.default_factory is MISSING:
                 required.append(key)
             elif declared.default is not MISSING and declared.default is not None:
-                schema["default"] = cls.encode(declared.default)
+                schema["default"] = cls.encode(declared.default, annotation)
             properties[key] = schema
         return {
             "type": "object",
@@ -168,6 +255,12 @@ class FieldCodec:
     @classmethod
     def value_schema(cls, annotation: object) -> dict[str, Any]:
         """Derive external scalar/array choices from the same decode declarations."""
+        annotation, representation = cls._representation(annotation)
+        if representation is not None:
+            schema = representation.schema()
+            if type(None) in get_args(annotation):
+                return {"anyOf": [schema, {"type": "null"}]}
+            return schema
         origin, args = get_origin(annotation), get_args(annotation)
         if origin in (Union, types.UnionType):
             members = list(args)
@@ -197,16 +290,20 @@ class FieldCodec:
         raise TypeError(f"No declared JSON schema for {annotation}")
 
     @classmethod
-    def project(cls, value: object, view: str) -> Any:
+    def project(cls, value: object, view: str, annotation: object = None) -> Any:
         """Encode a redacted view using field exclusions and owned properties.
 
         Projection is deliberately one way. Excluded secrets cannot be rebuilt
         from a read-only view, and a view never serves as a persistence record.
         """
+        _, representation = cls._representation(annotation)
+        if representation is not None:
+            return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
+            hints = cls._types(type(value))
             result = {
                 field.metadata.get(f"{view}_name", key): cls.project(
-                    getattr(value, field.name), view
+                    getattr(value, field.name), view, hints[field.name]
                 )
                 for field, key in cls._fields(type(value))
                 if not field.metadata.get(f"{view}_exclude")
@@ -232,6 +329,9 @@ class FieldCodec:
 
     @classmethod
     def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and data is not None:
+            return representation.decode(data)
         if target is Any:
             cls.encode(data)  # still require valid JSON data
             return data

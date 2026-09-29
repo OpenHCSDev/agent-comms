@@ -1,0 +1,111 @@
+F
+=================================== FAILURES ===================================
+________ test_actual_fork_attachment_survives_cold_owner_before_socket _________
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7fc03c641010>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc03c810770>
+
+    async def test_actual_fork_attachment_survives_cold_owner_before_socket(
+        native_backend, monkeypatch
+    ):
+        fixture = native_backend
+        await fixture.run("Parent saved history for cold attachment")
+        await fixture.persistent.close()
+        comms = Comms(fixture.root)
+        package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        launcher = str(Path(sys.executable).with_name("pi-comms-native"))
+        arguments = [
+            "--provider",
+            "response-local",
+            "--model",
+            "fixture",
+            "--thinking",
+            "off",
+            "--offline",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--no-prompt-templates",
+            "--no-tools",
+        ]
+        monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", shlex.join(arguments))
+        with comms.bus.log.locked():
+            root_id = comms.bus.log.read_metadata_unlocked().root_id
+        comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
+        comms.threads.register(
+            Thread(
+                "parent",
+                frozenset(),
+                str(fixture.project),
+                session_file=str(fixture.session),
+                model="response-local/fixture",
+                thinking_level="off",
+            )
+        )
+        launched = []
+        launch = DetachedProcess.launch
+    
+        def hold_worker(*args, **kwargs):
+            child = launch(*args, **kwargs)
+            if kwargs["env"].get("AGENT_COMMS_THREAD") == "cold-fork":
+                Platform.current().send(child.identity, signal.SIGSTOP)
+                launched.append(child)
+            return child
+    
+        monkeypatch.setattr(DetachedProcess, "launch", hold_worker)
+        client = CommsClient(
+            comms,
+            agent_bin=launcher,
+            agent_args=arguments,
+            auto_wake=False,
+            private_nk_native_package=package,
+            private_nk_wire_root_id=root_id,
+        )
+        updates = []
+    
+        class View:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs)
+    
+        client.on_connect(View())
+        loading = None
+        try:
+            child = await asyncio.to_thread(
+                comms.threads.fork,
+                ForkSpec("cold-fork", "parent", "One new cold fork diagnostic input"),
+                launcher,
+            )
+            endpoint = socket_path(fixture.root, child.pid)
+            assert len(launched) == 1 and not endpoint.exists()
+            loading = asyncio.create_task(client.load_session(str(fixture.project), child.name))
+            await asyncio.sleep(5.4)
+>           assert not loading.done(), "live registered startup expired before its socket existed"
+E           AssertionError: live registered startup expired before its socket existed
+E           assert not True
+E            +  where True = <built-in method done of _asyncio.Task object at 0x7fc03b4d9b70>()
+E            +    where <built-in method done of _asyncio.Task object at 0x7fc03b4d9b70> = <Task finished name='Task-56' coro=<CommsAgent.load_session() done, defined at /home/ts/wt/comms-selected-cold-compact...0928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/acp.py:195> exception=RequestError('Invalid params')>.done
+
+tests/test_runtime_cold_attachment.py:97: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_runtime_cold_attachment.py::test_actual_fork_attachment_survives_cold_owner_before_socket
+1 failed in 10.52s
+Task exception was never retrieved
+future: <Task finished name='Task-56' coro=<CommsAgent.load_session() done, defined at /home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/acp.py:195> exception=RequestError('Invalid params')>
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/session_lifecycle.py", line 198, in attach_owner
+  File "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/runtime.py", line 321, in subscribe
+  File "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/runtime.py", line 326, in _subscribe_once
+  File "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/runtime.py", line 302, in _connect_current
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py", line 97, in open_unix_connection
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py", line 252, in create_unix_connection
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/selector_events.py", line 645, in sock_connect
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/selector_events.py", line 653, in _sock_connect
+FileNotFoundError: [Errno 2] No such file or directory
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/acp.py", line 202, in load_session
+  File "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/session_lifecycle.py", line 313, in load_session
+  File "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/src/agent_comms/session_lifecycle.py", line 201, in attach_owner
+acp.exceptions.RequestError: Invalid params

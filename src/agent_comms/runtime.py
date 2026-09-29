@@ -20,6 +20,10 @@ from typing import Any, cast
 from acp.schema import RequestPermissionResponse
 
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
+from .registry_document import RegistrySnapshot
+from .child_process import ProcessIdentity
+from .thread_identity import OwnerIdentity
+from .errors import RelationViolationError
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -270,52 +274,59 @@ class RuntimeProxy:
         self._closed = False
         self._controller_token: str | None = None
         self._permission_tasks: dict[str, asyncio.Task[None]] = {}
-        try:
-            thread = self._comms.registry.require(session_id)
-        except ValueError:
-            self._identity: float | None = None
-        else:
-            self._identity = thread.created_at
+        self._identity = self._comms.registry.require(session_id).incarnation
+        self._root_identity = self._comms.root.stat()
 
-    def _owner_path(self) -> Path:
+    def _owner_snapshot(self) -> RegistrySnapshot:
+        if self._closed:
+            raise ConnectionError("Owner attachment was closed before request dispatch")
+        try:
+            same_root = os.path.samestat(self._root_identity, self._comms.root.stat())
+        except FileNotFoundError:
+            same_root = False
+        if not same_root:
+            raise OwnerIdentityChangedError("Wire root changed; open a new attachment.")
         snapshot = self._comms.registry.snapshot()
-        canonical = snapshot.aliases.get(self.session_id, self.session_id)
-        thread = snapshot.threads.get(canonical)
-        if thread is None:
-            raise RuntimeError(f"Thread {self.session_id!r} is not registered.")
-        identity = thread.created_at
-        if self._identity is None:
-            self._identity = identity
-        elif identity != self._identity:
+        if not self._identity.current(snapshot):
             raise OwnerIdentityChangedError("Thread identity changed; open a new attachment.")
-        if thread.pid <= 0 or not snapshot.statuses[canonical].running:
-            raise ConnectionError(f"Thread {self.session_id!r} has no running owner.")
-        return socket_path(self._comms.root, thread.pid)
+        return snapshot
+
+    def _require_connect_owner(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
+        try:
+            self._owner_snapshot().require_owner_process(owner, process)
+        except RelationViolationError as error:
+            raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
+        if not process.alive():
+            raise ConnectionError(
+                f"Owner {process.pid} for {self.session_id!r} exited before attachment; "
+                f"request not sent. Startup output: {self._comms.root / 'diagnostics'}"
+            )
 
     async def _connect_current(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        # A failed connect has sent no request bytes. Resolve again because a
-        # replacement owner may have registered while its socket was starting.
-        deadline = asyncio.get_running_loop().time() + 5
+        # Startup has no elapsed-time expiry. The registered process and lease
+        # own its lifetime; caller cancellation also ends this unsent operation.
+        snapshot = self._owner_snapshot()
+        try:
+            process = snapshot.require_active(self.session_id).require_process()
+        except RelationViolationError as error:
+            raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
+        owner = snapshot.owner_identity(self.session_id)
+        path = socket_path(self._comms.root, process.pid)
+
         while True:
+            self._require_connect_owner(owner, process)
             try:
-                path = self._owner_path()
                 reader, writer = await asyncio.open_unix_connection(path, limit=8 * 1024 * 1024)
-            except (FileNotFoundError, ConnectionRefusedError, ConnectionError):
-                if asyncio.get_running_loop().time() >= deadline:
-                    raise
+            except (FileNotFoundError, ConnectionRefusedError):
                 await asyncio.sleep(0.05)
                 continue
             try:
-                if self._owner_path() == path:
-                    self.path = path
-                    return reader, writer
+                self._require_connect_owner(owner, process)
+                self.path = path
+                return reader, writer
             except BaseException:
                 writer.close()
                 raise
-            writer.close()
-            if asyncio.get_running_loop().time() >= deadline:
-                raise ConnectionError("Thread owner changed before attachment.")
-            await asyncio.sleep(0.05)
 
     async def subscribe(self) -> dict[str, Any]:
         reader, metadata = await self._subscribe_once()

@@ -48,7 +48,7 @@ def disposition_rows(agent):
 @pytest.mark.asyncio
 async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_path, monkeypatch):
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
-    store = agent.turns.open_goal_store()
+    store = agent.turns.goals.open_goal_store()
     goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
     prior_generation = store.snapshot(goal.id)
 
@@ -96,7 +96,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
     tmp_path, monkeypatch, existing_goal
 ):
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
-    store = agent.turns.open_goal_store()
+    store = agent.turns.goals.open_goal_store()
     if existing_goal:
         comms.goals.update_goal("project", SetGoalAction(text="Original goal"), owner_store=store)
     original_emit = agent.inputs.emit_input_disposition
@@ -139,7 +139,7 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
 @pytest.mark.asyncio
 async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monkeypatch):
     agent, comms, _, _ = await owner(tmp_path, monkeypatch)
-    store = agent.turns.open_goal_store()
+    store = agent.turns.goals.open_goal_store()
     goal = comms.goals.update_goal("project", SetGoalAction(text="Keep reading"), owner_store=store)
     prior_generation = store.snapshot(goal.id)
     boundaries = []

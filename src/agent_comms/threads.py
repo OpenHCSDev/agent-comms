@@ -131,6 +131,12 @@ class Thread:
         if self.process_identity != process:
             raise RelationViolationError("live owner is not the current process incarnation")
 
+    def require_process(self) -> ProcessIdentity:
+        self.role.require_executable()
+        if self.process_identity is None:
+            raise RelationViolationError(f"Thread {self.name!r} has no owner process")
+        return self.process_identity
+
     def require_idle(self) -> None:
         if self.active_turn is not None:
             raise RelationViolationError("live owner already has an active turn")
@@ -145,6 +151,21 @@ class Thread:
         turn = self.active_turn
         if turn is None or TurnId(turn.id) != turn_id:
             raise RelationViolationError("live owner does not hold the requested turn")
+
+    def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
+        if self.goal_checkpoint != checkpoint:
+            raise ValueError("The goal changed; refresh its state.")
+        assert self.goal is not None
+        return self.goal
+
+    def require_active_goal(self, goal_id: str) -> Goal:
+        goal = self.goal
+        if goal is None:
+            raise RelationViolationError("The executing goal is absent")
+        if goal.id != goal_id:
+            raise RelationViolationError("The executing goal was replaced")
+        goal.state.require_active()
+        return goal
 
     @property
     def goal_checkpoint(self) -> GoalRevision | None:

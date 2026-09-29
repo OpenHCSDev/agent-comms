@@ -6,7 +6,6 @@ from dataclasses import asdict, replace
 
 import pytest
 
-from delivery_owner_fixture import canonical_agent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
@@ -23,6 +22,7 @@ from agent_comms.goal_generation import CancelledGeneration
 from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
+from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -36,7 +36,7 @@ async def goal_owner(tmp_path, monkeypatch):
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     scheduled = []
-    monkeypatch.setattr(owner.turns, "schedule_goal", scheduled.append)
+    monkeypatch.setattr(owner.turns.goals, "schedule_goal", scheduled.append)
     try:
         yield comms, owner, proxy, session, scheduled
     finally:
@@ -77,7 +77,7 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
     goal = comms.goals.update_goal(
         session,
         SetGoalAction(text="Review child output"),
-        owner_store=owner.turns.open_goal_store(),
+        owner_store=owner.turns.goals.open_goal_store(),
     )
     paused = await proxy.request(
         "update_goal", status="paused", goal_id=goal.id, expected_revision=goal.revision
@@ -110,7 +110,7 @@ async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):
         expected_revision=resumed["goal"]["revision"],
     ) == {"goal": None, "goalExecution": None}
     assert scheduled == [session]
-    assert owner.turns.goal_store.snapshot(goal.id).lifecycle == CancelledGeneration()
+    assert owner.turns.goals.goal_store.snapshot(goal.id).lifecycle == CancelledGeneration()
 
 
 async def test_goal_update_cannot_bypass_blocked_retry_or_replace_owner(goal_owner, monkeypatch):

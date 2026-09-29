@@ -86,7 +86,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     private.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(private)
     retry = RetryGoalAction(
-        expect=GoalPrecondition(goal_id=goal.id, expected_owner_pid=os.getpid())
+        expect=GoalPrecondition(goal_id=goal.id, expected_owner=ProcessIdentity.capture(os.getpid()))
     )
     with pytest.raises(ValueError, match="Retry cannot create a grant"):
         comms.goals.update_goal("owner", retry, actor=OwnerInvocable, owner_store=store)
@@ -214,7 +214,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
         comms.registry.register(replace(comms.registry.require(session), goal=goal))
         with pytest.raises(RuntimeError, match="Retry cannot create a grant"):
             await proxy.request("retry_goal", goal_id=goal.id, expected_revision=goal.revision)
-        assert owner.turns.open_goal_store().snapshot(goal.id) is None
+        assert owner.turns.goals.open_goal_store().snapshot(goal.id) is None
         assert comms.registry.require(session).goal == goal
         assert not owner.turns.turn_tasks and not owner.inputs.wake_tasks
     finally:

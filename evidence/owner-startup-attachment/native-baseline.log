@@ -1,0 +1,202 @@
+F
+=================================== FAILURES ===================================
+________ test_actual_fork_attachment_survives_cold_owner_before_socket _________
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent')
+
+    def _trusted_package(package: Path) -> Path:
+        package = package.absolute()  # lexical: resolve() would hide a symlink component
+        if ".." in package.parts:
+            raise NativePiUnavailable("Pinned native Pi package path is not lexical")
+        if package.parts[-3:] != (
+            "node_modules",
+            "@earendil-works",
+            "pi-coding-agent",
+        ):
+            raise NativePiUnavailable("Canonical native Pi package layout is required")
+        for ancestor in (package, *package.parents):
+            info = ancestor.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise NativePiUnavailable("Native Pi package has a redirected ancestor")
+            if info.st_uid not in (0, os.geteuid()):
+                raise NativePiUnavailable("Native Pi package has a foreign ancestor")
+            if info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX:
+                raise NativePiUnavailable("Native Pi package has a writable ancestor")
+        root = package.parents[2]
+        if root.stat().st_uid != os.geteuid() or stat.S_IMODE(root.stat().st_mode) != 0o700:
+            raise NativePiUnavailable("Disposable native Pi root must be owner-only")
+        from .native_package import NativePackageError, verify_native_package
+    
+        try:
+>           verify_native_package(package)
+
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/native_pi.py:579: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/native_package.py:119: in verify_native_package
+    for line in MANIFEST.read_text().splitlines()
+                ^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:787: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/stack/pi-native.sha256')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline/stack/pi-native.sha256'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:771: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f16a5711be0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f16a40b1e00>
+
+    async def test_actual_fork_attachment_survives_cold_owner_before_socket(
+        native_backend, monkeypatch
+    ):
+        fixture = native_backend
+        await fixture.run("Parent saved history for cold attachment")
+        await fixture.persistent.close()
+        comms = Comms(fixture.root)
+        package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+        launcher = str(Path(sys.executable).with_name("pi-comms-native"))
+        arguments = [
+            "--provider",
+            "response-local",
+            "--model",
+            "fixture",
+            "--thinking",
+            "off",
+            "--offline",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--no-prompt-templates",
+            "--no-tools",
+        ]
+        monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", shlex.join(arguments))
+        with comms.bus.log.locked():
+            root_id = comms.bus.log.read_metadata_unlocked().root_id
+        comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
+        comms.threads.register(
+            Thread(
+                "parent",
+                frozenset(),
+                str(fixture.project),
+                session_file=str(fixture.session),
+                model="response-local/fixture",
+                thinking_level="off",
+            )
+        )
+        launched = []
+        launch = DetachedProcess.launch
+    
+        def hold_worker(*args, **kwargs):
+            child = launch(*args, **kwargs)
+            if kwargs["env"].get("AGENT_COMMS_THREAD") == "cold-fork":
+                Platform.current().send(child.identity, signal.SIGSTOP)
+                launched.append(child)
+            return child
+    
+        monkeypatch.setattr(DetachedProcess, "launch", hold_worker)
+        client = CommsClient(
+            comms,
+            agent_bin=launcher,
+            agent_args=arguments,
+            auto_wake=False,
+            private_nk_native_package=package,
+            private_nk_wire_root_id=root_id,
+        )
+        updates = []
+    
+        class View:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs)
+    
+        client.on_connect(View())
+        loading = None
+        try:
+>           child = await asyncio.to_thread(
+                comms.threads.fork,
+                ForkSpec("cold-fork", "parent", "One new cold fork diagnostic input"),
+                launcher,
+            )
+
+tests/test_runtime_cold_attachment.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/thread_management.py:593: in fork
+    return self._fork_unlocked(spec, resolved_bin)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/thread_management.py:612: in _fork_unlocked
+    session = fork_native_session(parent.session_file, parent.worktree, pi_bin)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/native_fork.py:32: in fork_native_session
+    package = NativePiRpcLaunch.package_for_command(launcher)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/native_pi.py:286: in package_for_command
+    route = private_nk_from_environment()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/private_nk_entrypoint.py:82: in private_nk_from_environment
+    return private_nk_launch(root, environment)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/private_nk_entrypoint.py:64: in private_nk_launch
+    _preflight(validated_root, root_id, native_package, True)
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/cohort_foreground.py:63: in _preflight
+    _trusted_package(native_package)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+package = PosixPath('/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent')
+
+    def _trusted_package(package: Path) -> Path:
+        package = package.absolute()  # lexical: resolve() would hide a symlink component
+        if ".." in package.parts:
+            raise NativePiUnavailable("Pinned native Pi package path is not lexical")
+        if package.parts[-3:] != (
+            "node_modules",
+            "@earendil-works",
+            "pi-coding-agent",
+        ):
+            raise NativePiUnavailable("Canonical native Pi package layout is required")
+        for ancestor in (package, *package.parents):
+            info = ancestor.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise NativePiUnavailable("Native Pi package has a redirected ancestor")
+            if info.st_uid not in (0, os.geteuid()):
+                raise NativePiUnavailable("Native Pi package has a foreign ancestor")
+            if info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX:
+                raise NativePiUnavailable("Native Pi package has a writable ancestor")
+        root = package.parents[2]
+        if root.stat().st_uid != os.geteuid() or stat.S_IMODE(root.stat().st_mode) != 0o700:
+            raise NativePiUnavailable("Disposable native Pi root must be owner-only")
+        from .native_package import NativePackageError, verify_native_package
+    
+        try:
+            verify_native_package(package)
+        except (OSError, NativePackageError) as error:
+>           raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork") from error
+E           agent_comms.native_pi.NativePiUnavailable: Pinned native Pi package differs from reviewed fork
+
+.artifacts/owner-startup-attachment/baseline/src/agent_comms/native_pi.py:581: NativePiUnavailable
+=========================== short test summary info ============================
+FAILED tests/test_runtime_cold_attachment.py::test_actual_fork_attachment_survives_cold_owner_before_socket
+1 failed in 0.87s
