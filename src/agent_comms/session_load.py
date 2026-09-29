@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .thread_presentation import LiveThreadOwnerBinding, ThreadOwnerBinding
+from .thread_presentation import LiveThreadOwnerBinding
 
 if TYPE_CHECKING:
     from .session_lifecycle import AttachedSessionLifecycle
@@ -21,9 +21,6 @@ class SessionLoadAdmission(DeclaredFamily, affix="SessionLoadAdmission"):
 
     def metadata(self) -> dict:
         return {"agentCommsLoad": FieldCodec.encode(self)}
-
-    def already_requested(self, binding: ThreadOwnerBinding) -> bool:
-        return False
 
     @abstractmethod
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread": ...
@@ -41,9 +38,6 @@ class EnsuringSessionLoadAdmission(SessionLoadAdmission):
 @dataclass(frozen=True, slots=True)
 class ExistingSessionLoadAdmission(SessionLoadAdmission):
     binding: LiveThreadOwnerBinding
-
-    def already_requested(self, binding: ThreadOwnerBinding) -> bool:
-        return self.binding == binding
 
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
         snapshot = await asyncio.to_thread(lifecycle.comms.registry.snapshot)

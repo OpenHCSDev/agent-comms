@@ -197,7 +197,7 @@ class SessionLifecycle:
         proxy = self.effects._create_runtime_proxy(thread, session_id)
         try:
             metadata = await proxy.subscribe()
-        except (OSError, RuntimeError) as error:
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
             await proxy.close()
             raise RequestError.invalid_params(
                 {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}"}
@@ -305,6 +305,11 @@ class AttachedSessionLifecycle(SessionLifecycle):
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = self.validated_thread(cwd, session_id)
-        admission = SessionLoadAdmission.at_ingress(kwargs.get("agentCommsLoad"))
-        owner = await admission.resolve(self, thread)
+        try:
+            admission = SessionLoadAdmission.at_ingress(kwargs.get("agentCommsLoad"))
+            owner = await admission.resolve(self, thread)
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            raise RequestError.invalid_params(
+                {"reason": f"Session load not admitted for {thread.name!r}: {error}"}
+            ) from error
         return await self.attach_owner(owner, session_id)
