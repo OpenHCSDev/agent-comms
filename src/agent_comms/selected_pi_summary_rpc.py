@@ -16,7 +16,8 @@ from typing import Any
 
 from .agent_events import AgentEvent, CompactionSummaryProgress
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession
-from .compaction_journal import CompactionJournal, SelectedSummarySource
+from .compaction_journal import CompactionJournal
+from .compaction_records import SelectedSummarySource
 from .field_codec import FieldCodec
 from .fresh_private_session import FreshPrivateSession
 from .input_disposition import FutureInputQueue
@@ -171,7 +172,7 @@ class SelectedSummarySlot:
             if witness.revision != ":".join(map(str, retained.revision[0])):
                 raise SelectedChildUnknown("Selected source witness is stale")
             proc, reader = retained.child.proc, retained.child.reader
-            operation = journal.reserve_selected_summary(
+            operation = journal.summaries.reserve(
                 session_file,
                 source,
                 fresh_session=fresh_session,
@@ -205,18 +206,18 @@ class SelectedSummarySlot:
                 if not retained.current:
                     raise SelectedChildUnknown("Selected source changed during summary")
                 if isinstance(result, SummaryFailedData):
-                    journal.fail_selected_summary(operation, result.reason)
+                    journal.summaries.fail(operation, result.reason)
                 elif result.summary is None and result.decline_reason not in {
                     "split_turn",
                     "unsupported",
                 }:
-                    journal.refuse_selected_summary(operation, result.decline_reason)
+                    journal.summaries.refuse(operation, result.decline_reason)
             except BaseException as error:
                 persistent.require_reopen(session_file)
                 # Keep the child marked unusable even if cancellation interrupts
                 # its reap. PersistentPiSession owns the shielded close task.
                 try:
-                    journal.mark_selected_summary_unknown(operation)
+                    journal.summaries.mark_unknown(operation)
                 finally:
                     with suppress(asyncio.CancelledError):
                         await persistent.close()

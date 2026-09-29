@@ -204,7 +204,7 @@ async def maybe_compact_owner_turn(
             if result.summary is None:
                 if result.decline_reason in {"split_turn", "unsupported"}:
                     return SelectedSummaryDecline(
-                        bridge.journal.selected_summary(result.operation_id),
+                        bridge.journal.summaries.get(result.operation_id),
                         identity,
                         result.decline_reason,
                     )
@@ -216,7 +216,7 @@ async def maybe_compact_owner_turn(
                 result.summary.text,
                 result.summary.details,
                 result.summary.usage,
-                bridge.journal.selected_summary(result.operation_id),
+                bridge.journal.summaries.get(result.operation_id),
                 identity,
             )
 

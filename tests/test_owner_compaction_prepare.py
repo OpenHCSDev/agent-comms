@@ -127,8 +127,8 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
         source=source,
     )
     assert operation.state.declared_name == "committed"
-    assert bridge.journal.unresolved(str(session)) == ()
-    assert len(bridge.journal.pending_publications(str(session))) == 1
+    assert bridge.journal.operations.unresolved(str(session)) == ()
+    assert len(bridge.journal.publications.pending(str(session))) == 1
 
 
 def write_capacity_history(file: Path, minimum_bytes: int) -> dict:
@@ -535,7 +535,7 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
                 timeout=30,
             )
             assert operation.state.committed
-            assert not bridge.journal.unresolved(str(session))
+            assert not bridge.journal.operations.unresolved(str(session))
             receipt["phases"].append("commit")
             from agent_comms.native_session_reopen import validate_native_reopen
 
@@ -610,7 +610,7 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
             source=source,
         )
     assert session.read_bytes() == before
-    assert bridge.journal.unresolved(str(session)) == ()
+    assert bridge.journal.operations.unresolved(str(session)) == ()
 
 
 @pytest.mark.asyncio
@@ -654,7 +654,7 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
         )
     assert persistent.custody.session_file == str(session)
     assert session.read_bytes() == original
-    assert bridge.journal.unresolved(str(session)) == ()
+    assert bridge.journal.operations.unresolved(str(session)) == ()
 
 
 @pytest.mark.asyncio
@@ -721,7 +721,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     try:
         assert await asyncio.to_thread(entered.wait, 6)
         assert turn_lock.locked()
-        assert len(bridge.journal.unresolved(str(session))) == 1
+        assert len(bridge.journal.operations.unresolved(str(session))) == 1
         task.cancel()
         await asyncio.sleep(0.03)
         assert turn_lock.locked() and not task.done()
@@ -737,7 +737,7 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
             await asyncio.gather(extra, return_exceptions=True)
         await asyncio.sleep(0.03)
         assert turn_lock.locked() and not task.done()
-        assert len(bridge.journal.unresolved(str(session))) == 1
+        assert len(bridge.journal.operations.unresolved(str(session))) == 1
         assert not any(
             candidate.get_name() == "owner-native-compaction-commit"
             for candidate in asyncio.all_tasks()
@@ -757,10 +757,10 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
     await asyncio.wait_for(following, 2)
     assert next_entered.is_set()
     assert not turn_lock.locked()
-    assert bridge.journal.unresolved(str(session)) == ()
-    pending = bridge.journal.pending_publications(str(session))
+    assert bridge.journal.operations.unresolved(str(session)) == ()
+    pending = bridge.journal.publications.pending(str(session))
     assert len(pending) == 1
-    assert bridge.journal.get(pending[0].commit_id).state.declared_name == "committed"
+    assert bridge.journal.operations.get(pending[0].commit_id).state.declared_name == "committed"
     assert persistent.custody.session_file == str(session)
     assert (
         len(
@@ -877,11 +877,11 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
         )
         assert operation.state.declared_name == "committed"
         commit_ids.append(operation.commit_id)
-        assert bridge.journal.unresolved(str(session)) == ()
+        assert bridge.journal.operations.unresolved(str(session)) == ()
         assert registry.require("owner").goal.id == "goal-unchanged"
     assert len(set(commit_ids)) == 3
     assert [
-        row.commit_id for row in bridge.journal.pending_publications(str(session))
+        row.commit_id for row in bridge.journal.publications.pending(str(session))
     ] == commit_ids
     compactions = [
         json.loads(row)
@@ -967,7 +967,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
             commit_ids.append(operation.commit_id)
             assert persistent.custody.session_file == str(session)
             assert await publish_pending_local(agent, "project", "project") == 1
-            assert bridge.journal.pending_publications(str(session)) == ()
+            assert bridge.journal.publications.pending(str(session)) == ()
             assert comms.registry.require("project").goal.id == "goal-e2e"
         publications = [
             fact.publication

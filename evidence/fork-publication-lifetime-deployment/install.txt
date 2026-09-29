@@ -1,0 +1,13 @@
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-source-render-reuse-20260929
+Resolved 68 packages in 11ms
+   Building batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@5923395c93e7c56d65e1cb0e527954b2759f3622
+   Building agent-comms @ git+https://github.com/OpenHCSDev/agent-comms.git@2ccfaed4ce22406c71391da1db2d962b951742f4
+      Built agent-comms @ git+https://github.com/OpenHCSDev/agent-comms.git@2ccfaed4ce22406c71391da1db2d962b951742f4
+      Built batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@5923395c93e7c56d65e1cb0e527954b2759f3622
+Prepared 2 packages in 430ms
+Uninstalled 2 packages in 32ms
+Installed 2 packages in 8ms
+ - agent-comms==0.1.0 (from git+https://github.com/OpenHCSDev/agent-comms.git@4febe05e386a9cfeb10982472a148baac34a9300)
+ + agent-comms==0.1.0 (from git+https://github.com/OpenHCSDev/agent-comms.git@2ccfaed4ce22406c71391da1db2d962b951742f4)
+ - batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@8b5f410e55aba5f9f8a75463751adf908734eb9d)
+ + batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@5923395c93e7c56d65e1cb0e527954b2759f3622)
