@@ -4,7 +4,7 @@ _ ERROR at teardown of test_retired_native_cleanup_failure_is_reported_once_with
 
     def finalizer() -> None:
         """Yield again, to finalize."""
-    
+
         async def async_finalizer() -> None:
             try:
                 await gen_obj.__anext__()
@@ -14,11 +14,11 @@ _ ERROR at teardown of test_retired_native_cleanup_failure_is_reported_once_with
                 msg = "Async generator fixture didn't stop."
                 msg += "Yield only once."
                 raise ValueError(msg)
-    
+
 >       runner.run(async_finalizer(), context=context)
 
-../toad-agent-tab-state-latency-20260929/.venv-stream-worker/lib/python3.14/site-packages/pytest_asyncio/plugin.py:424: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../toad-agent-tab-state-latency-20260929/.venv-stream-worker/lib/python3.14/site-packages/pytest_asyncio/plugin.py:424:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 ../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
     return self._loop.run_until_complete(task)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -32,7 +32,7 @@ tests/test_backend_native_lifecycle.py:157: in native_backend
 ../toad-agent-tab-state-latency-20260929/.venv-stream-worker/lib/python3.14/site-packages/agent_comms/backend.py:143: in close
     self.custody = await self.custody.closed()
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = RetiringNative(task=<Task finished name='Task-45' coro=<test_retired_native_cleanup_failure_is_reported_once_without_p...custody.py:140> exception=TimeoutError()>, successor=<agent_comms.native_custody.EmptyNative object at 0x7f9d26bff750>)
 
@@ -52,18 +52,18 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9d2788e520>
     ):
         """Inject a cleanup IO fault after the real pinned child has actually exited."""
         from agent_comms.native_custody import PiSessionChild
-    
+
         owner = native_backend
         assert (await owner.run("Before retirement IO failure"))[-1].ok
         previous = owner.persistent.custody.child.proc
         close = PiSessionChild.close
-    
+
         async def failed_pipe_join(child):
             await close(child)
             if child.proc is previous:
                 assert not child.proc.alive()
                 raise TimeoutError
-    
+
         monkeypatch.setattr(PiSessionChild, "close", failed_pipe_join)
         with pytest.raises(Exception):
             await owner.persistent.close_idle()
@@ -72,8 +72,8 @@ monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9d2788e520>
         # a failed task which still claims custody over an already retired child.
 >       await owner.persistent.close_idle()
 
-tests/test_backend_native_custody.py:152: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_backend_native_custody.py:152:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 ../toad-agent-tab-state-latency-20260929/.venv-stream-worker/lib/python3.14/site-packages/agent_comms/backend.py:147: in close_idle
     await self.close()
 ../toad-agent-tab-state-latency-20260929/.venv-stream-worker/lib/python3.14/site-packages/agent_comms/backend.py:143: in close
@@ -81,7 +81,7 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ../toad-agent-tab-state-latency-20260929/.venv-stream-worker/lib/python3.14/site-packages/agent_comms/native_custody.py:134: in closed
     await asyncio.shield(self.task)
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 child = PiSessionChild(proc=<agent_comms.child_process.AttachedChild object at 0x7f9d26c792b0>, reader=<agent_comms.pi_rpc.PiR...off', message_count=0, pending_message_count=0, is_streaming=False, is_compacting=False)), sensitive_diagnostics=False)
 
