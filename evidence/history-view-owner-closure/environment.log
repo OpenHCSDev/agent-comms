@@ -1,0 +1,3 @@
+Using CPython 3.14.2 interpreter at: /home/ts/.local/share/agent-comms/runtime-indexed-proof-context-20260929/bin/python
+Creating virtual environment at: .artifacts/history-installed
+Activate with: source .artifacts/history-installed/bin/activate

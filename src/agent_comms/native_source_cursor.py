@@ -8,6 +8,7 @@ under wire→bus→registry→SQL locks. Reads recheck both owner and SQL after 
 from __future__ import annotations
 
 import sqlite3
+import time
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -59,6 +60,24 @@ class NativeSourceCursor:
             generation=owner_generation,
             admission_generation=owner_admission_generation,
         )
+        if committed_input_id is None:
+            return self._advance_proven(identity, committed_input_id)
+        # The native result is already settled. A competing wire reader must
+        # not permanently erase its auxiliary cursor proof. Retry only a lock
+        # refusal; no input, claim, or provider operation is repeated here.
+        deadline = time.monotonic() + 2.0
+        while True:
+            try:
+                return self._advance_proven(identity, committed_input_id)
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise
+                time.sleep(min(remaining, 0.025))
+
+    def _advance_proven(
+        self, identity: CursorOwner, committed_input_id: str | None
+    ) -> CurrentNativeCursor | None:
         sources = self._coverage(identity.lookup)
         witness = sources.witness()
         coverage = sources.prefix()
@@ -81,8 +100,8 @@ class NativeSourceCursor:
             if prior is None and coverage.covered_seq == 0:
                 return None  # A blocked first source is not a zero-valued cursor.
             if prior is not None and (
-                prior.owner_thread != owner.name
-                or prior.owner_generation != owner_generation
+                prior.owner_thread != identity.thread.name
+                or prior.owner_generation != identity.generation
                 or coverage.covered_seq < prior.covered_seq
                 or injected < prior.injected_seq
             ):

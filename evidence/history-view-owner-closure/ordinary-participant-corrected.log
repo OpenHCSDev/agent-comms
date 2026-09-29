@@ -1,0 +1,59 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-wire-receipt-identity-20260929
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 6 items
+
+tests/test_history_view_declaration.py .F                                [ 33%]
+tests/test_message_notifications.py ....                                 [100%]
+
+=================================== FAILURES ===================================
+_ test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-629/test_ordinary_coordination_sna0')
+
+    def test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant(tmp_path):
+        from test_coordinated_runtime import _root
+    
+        _path, _root_id, comms, _initial, _people = _root(tmp_path)
+        lease = comms.agents.begin_turn("beta", "ordinary-snapshot-active-participant")
+        try:
+>           snapshot = comms.views.coordination_snapshot()
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_history_view_declaration.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.history_views.HistoryViews object at 0x7fea093fb390>
+actor = '', show_stopped = True, show_archived = False
+
+    def coordination_snapshot(
+        self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
+    ) -> CoordinationSnapshot:
+        channels = self.channel_views(show_stopped=show_stopped, show_archived=show_archived)
+        unread = self.bus.pending_counts(actor) if actor in self.registry else {}
+        channel_unread: dict[str, int] = {}
+        catalog = self.channels.catalog.read()
+        for view in channels:
+            targets = catalog.history_targets(view.channel.name)
+            channel_unread[view.channel.name] = sum(
+                count for target, count in unread.items() if targets is None or target in targets
+            )
+>       return CoordinationSnapshot(
+            threads=self.thread_views(show_stopped=show_stopped, show_archived=show_archived),
+            channels=channels,
+            unread=unread,
+            sent_times=self.last_sent_timestamps(),
+            channel_unread=channel_unread,
+            channel_order=catalog.list_order,
+            show_stopped=show_stopped,
+            show_archived=show_archived,
+        )
+E       TypeError: CoordinationSnapshot.__init__() got an unexpected keyword argument 'sent_times'
+
+src/agent_comms/history_views.py:318: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_history_view_declaration.py::test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant
+========================= 1 failed, 5 passed in 1.29s ==========================

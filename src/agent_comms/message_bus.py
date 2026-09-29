@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .bus_activity_index import BusActivityIndex, ChannelActivity
+from .bus_activity_index import ActivitySnapshot, BusActivityIndex, ChannelActivity
 from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
@@ -56,8 +56,8 @@ class MessageBus:
         self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
         self._pending_cache: dict[str, PendingCounts] = {}
         self._view_unread_cache: dict[str, ViewUnread] = {}
-        self._channel_activity_revision: tuple | None = None
-        self._channel_activity: dict[str, ChannelActivity] = {}
+        self._activity_revision: tuple | None = None
+        self._activity_snapshot: ActivitySnapshot = ({}, {})
         self.publisher = Publisher(
             self.log,
             registry,
@@ -102,29 +102,29 @@ class MessageBus:
         self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
         return dict(counts)
 
+    def _activity_clocks_unlocked(self) -> ActivitySnapshot:
+        """The existing activity cache owns both clocks from one verified wire boundary."""
+        revision = file_revision(self.log.path)
+        if revision != self._activity_revision:
+            projection = BusActivityIndex(self.log.path).snapshot(revision, self._bus_activity_fields)
+            if projection is None:
+                channels: dict[str, ChannelActivity] = {}
+                sent: dict[str, float] = {}
+                for message in self.log._iter_log_unlocked():
+                    channels[message.target] = channels.get(message.target, ChannelActivity()).observe(message)
+                    if message.membership is None and not message.notice:
+                        sent[message.sender] = max(sent.get(message.sender, 0.0), message.timestamp)
+                projection = ({name: (item.last_message, item.last_user_input)
+                               for name, item in channels.items()}, sent)
+            self._activity_snapshot = projection
+            self._activity_revision = revision
+        return self._activity_snapshot
+
     def channel_activity(self) -> Mapping[str, ChannelActivity]:
-        """Aggregate channel history clocks once per wire revision, not per viewer."""
+        """Aggregate clocks from the single existing append-aware source cache."""
         with self.log.locked():
-            revision = file_revision(self.log.path)
-            if revision != self._channel_activity_revision:
-                projection = BusActivityIndex(self.log.path).snapshot(
-                    revision, self._bus_activity_fields
-                )
-                if projection is None:
-                    activity: dict[str, ChannelActivity] = {}
-                    for message in self.log._iter_log_unlocked():
-                        activity[message.target] = activity.get(
-                            message.target, ChannelActivity()
-                        ).observe(message)
-                else:
-                    channels, _ = projection
-                    activity = {
-                        target: ChannelActivity(last_message, last_user)
-                        for target, (last_message, last_user) in channels.items()
-                    }
-                self._channel_activity = activity
-                self._channel_activity_revision = revision
-            return dict(self._channel_activity)
+            channels, _ = self._activity_clocks_unlocked()
+            return {name: ChannelActivity(*clocks) for name, clocks in channels.items()}
 
     @staticmethod
     def _bus_activity_fields(record: Mapping[str, object]) -> tuple[str, str, float, bool, bool]:
@@ -416,18 +416,10 @@ class MessageBus:
         ).read(self.log)
 
     def last_sent_timestamps(self) -> Mapping[str, float]:
-        """Aggregate sent times without retaining message bodies."""
+        """Reuse the same verified activity source; no second projection or body cache."""
         with self.log.locked():
-            projection = BusActivityIndex(self.log.path).snapshot(
-                file_revision(self.log.path), self._bus_activity_fields
-            )
-            if projection is not None:
-                return projection[1]
-            latest: dict[str, float] = {}
-            for message in self.log._iter_log_unlocked():
-                if message.membership is None and not message.notice:
-                    latest[message.sender] = max(latest.get(message.sender, 0.0), message.timestamp)
-        return latest
+            _, sent = self._activity_clocks_unlocked()
+            return dict(sent)
 
     def full_history_page(
         self,

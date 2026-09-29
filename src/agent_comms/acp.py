@@ -440,7 +440,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             cursor = self._private_cursor_metadata(thread_name, session_id, defer_busy=True)
         except BlockingIOError:
-            # A busy poll is not a new fact; trusted loads own invalidation.
+            # A busy poll is not a new fact. A settled native turn, however,
+            # may have advanced its durable cursor while this read was busy.
+            # Keep the displayed snapshot and make the idle observer fetch it.
+            if selected_status is not None:
+                self._private_cursor_announced.pop(session_id, None)
             return
         announced = self._private_cursor_announced.get(session_id)
         if selected_status is None and announced is not None and cursor.same_observation(announced):
