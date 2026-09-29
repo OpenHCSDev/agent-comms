@@ -1,50 +1,32 @@
-# Retained-history checkpoint cutover
+# Retained-history checkpoint closure
 
-## State and cause
+289 operator lines deleted; no src changes. One-use archived data cutover completed live by the parent using reviewed bb36a974; the converter is deleted. Current regressions/evidence are ready to merge. See LIVE-APPLICATION.md for the precise installed/live boundary and parent receipt.
 
-0 product lines added; no runtime compatibility mechanism. One-use tool and affected installed pilot are reviewable. Authoritative NRA and exact current refactor-audit archive reread; TIME-9, BOUND-1, IMPL-1/4/5/14, IDEN-1/3 and AGENT-8 applied. Publisher variants and CLI operations own their declarations; original metadata/proof identities compare as values.
+## Verified cause and completed ownership
 
-Reported live core3f06022 accepts its main checkpoint. Both attached archived sources contain predecessor `initials` and `addressed REFERENCES initials`; the current declared tables require `delivery_sources`. A fresh installed process reaches the exact user schema error from ordinary historical paging. No live store was changed.
+Reported live core3f06022 accepted the main checkpoint; both attached archived sources still declared initials/addressed REFERENCES initials while the current declaration derives delivery_sources. Ordinary historical-page access failed at the canonical checkpoint barrier. The parent completed the one-use cutover without runtime compatibility: the same source roots/keys retain original provenance, public history, audiences and archived admission floor, while strict canonical indexes and inode bindings are current. Full original proof-bearing directories remain durable off the active manifest.
 
-## Cutover scope
+The removed operator validated the ten response-only receipts, preserved their original proofs and published only their identical public envelopes because no historical audience existed. Ten initial-only records gained the declaration-owned policy tag with exact original audience/decisions/digest. No historical audience, active wake, admission or uncertain-input disposition was created.
 
-`tools/retained_history_cutover.py` prepares outside src, validates current canonical publication/metadata readers, rebuilds strict sealed checkpoints, and activates immutable snapshots at their SAME root/key. It updates only snapshot bus/registry inode bindings. Original root IDs, source bus identity/size, registry, archived access and admission floor remain unchanged. Complete original directories remain under `<source>-retained-original`, off the active manifest, including all proof/native/transcript files. The prepared output also retains complete originals.
+Authoritative NRA and exact refactor-audit archive used: TIME-9, BOUND-1, IMPL-1/4/5/14, IDEN-1/3 and AGENT-8. Retired-format translation existed only in the now-deleted one-use operator; current regression fixtures use canonical owners, not an alternative decoder.
 
-10 initial-only records acquire the name derived from InitialDeliveryPolicy, preserving original audience/decisions/digest. 10 response-only receipts validate against their original public messages; because no audience was captured, their new display rows contain the identical public envelope and full original proof stays in the retained original. No historical audience, active wake, admission or UNKNOWN outcome is created.
+## Evidence boundaries
 
-Preparation and all proof validation precede activation. Archive leaf locks coordinate directory replacement; revision fences reject changes since prepare. Same-filesystem adjacent directories are recertified before rename. Failure rolls activated directories and manifest back. Directory names and manifest are fsynced. Neither live root files nor active owners are touched.
+- canonical-ui-red.log: original unmodified installed reader reproduced the exact user schema error on saved copies.
+- cutover-ui-final.log: both complete representative directories, 8,420 public rows, original audiences/proofs; installed fresh-fork DM and actual archived channel-message compositor paint; no test live bus writes or pending delivery. This was the pre-removal acceptance at bb36's implementation lineage.
+- activation-rollback.log: historical operator acceptance, including actual directory rollback on injected ENOSPC. This operator is deleted; no test imports its former code.
+- LIVE-APPLICATION.md: parent's actual successful installed-core archive application and 56 original-file preservation receipt; live #comms/#nra/#openhcs reads pass. Live UI entry fix remains separately owned.
+- post-cutover-current-history.log: surviving current-format saved-state regression using canonical schema/snapshot/history projection; no live archive mutation.
+- one-use-census.json: historical operator ownership census; zero chain/codec/foreign-absence/raw-key growth. No product changes.
 
-## Actual affected evidence
+Both archived transcript annotation schemas already matched current declarations and were preserved. No additional data converter was needed.
 
-`canonical-ui-red.log`: unmodified installed canonical reader against copies raises the exact Private bus checkpoint schema is unavailable error.
+## Current reproduction
 
-`cutover-ui-fourth.log`: both actual copied archives converted, 8400 + 20 public rows; canonical fresh-fork navigation metadata loads; installed Toad fresh-fork DM opens without schema error; original archived #comms public message PAINTS in the cropped compositor; historical row has no turn authority; original bus and SQLite checkpoint proof bytes remain byte-identical in the retained directory. Current core wheel, own Toad154 wheel and Textual1738 wheel were installed noneditable. No patched transport or provider call.
-
-This does not prove the separate missing CommsScreen.prepare_navigation caller on live142. Carver/Tesla own that fix and parent owns the final paired live application/native acceptance. `cutover-ui-final.log`: the same installed journey repeated with COMPLETE representative retained directories (231MB original source), all original files/proofs compared, EVERY public row and original initial audience unchanged, no live test bus writes or pending fork delivery. Copies and prepared output cleaned on exit.
-
-`activation-rollback.log`: two affected operator checks pass (actual archived files; only ENOSPC injection is synthetic). Actual directory swaps roll back with original manifest/bus bindings on manifest disk full; an archived marker with a nonsealed admission range is rejected unchanged. These are explicit saved-state pilot checks, not provider/UI mocks.
-
-Read-only current declaration comparison also confirms BOTH existing transcript annotation SQLite schemas are already current; those bytes are copied unchanged. Only private bus checkpoint/runtime index and obsolete bus publisher sideband needed this cutover.
-
-No archive implementation blocker remains. Parent still owns actual LIVE application and affected live entrypoint, including the independent Carver/Tesla navigation caller fix. This is ready for that review/application, not a claim that live142 is already fixed. CI is deferred.
-
-`one-use-census.json`: changed operator has zero type identity checks, long Boolean chains/terms, codec subclasses, foreign absence probes and raw key subscripts. No src changes.
-
-## Operator use (parent review/application)
-
-Use the Python from the current staged runtime. Preparation output must be new and persistent under ~/wt, with room for full archive copies. Stop competing cutover operators, not active owners.
-
-    PYTHON tools/retained_history_cutover.py prepare --root ROOT --output NEW_OUTPUT
-    PYTHON tools/retained_history_cutover.py apply --root ROOT --output NEW_OUTPUT
-
-Apply once after reviewing prepared.json and actual copied-source acceptance. Do not attach retained-original directories as active sources. Remove the one-use tool after successful installation; original proofs remain durable. No schema reader exception retry, old decoder or converter is added to src.
-
-## Reproduction commands
-
-    TMPDIR=$PWD/.artifacts ACTUAL_COMMS_SOURCE_ROOT=REPORTED_LIVE_ROOT \
-      TOAD_TEST_HELPERS=OWN_TOAD_TREE/tests PREPARE_HISTORY_CUTOVER=1 \
-      timeout 90s .venv/bin/python tests/attached_history_installed_pilot.py
     ACTUAL_COMMS_SOURCE_ROOT=REPORTED_LIVE_ROOT .venv/bin/python -m pytest \
       tests/retained_history_cutover_pilot.py -q -o addopts=''
+    TMPDIR=$PWD/.artifacts ACTUAL_COMMS_SOURCE_ROOT=REPORTED_LIVE_ROOT \
+      TOAD_TEST_HELPERS=OWN_TOAD_TREE/tests \
+      timeout 90s .venv/bin/python tests/attached_history_installed_pilot.py
 
-The exact live root is used read-only as a representative saved-state input. Test roots, preparations and rebuilt indexes reside only under this owned ~/wt. The live root’s main bus/registry/native files are outside operator write scope. Parent should run its affected live open after applying with the paired fixed UI; do not replace it with this isolated acceptance.
+Current saved inputs are read-only; all fixture copying, registry/checkpoint inode binding and ordinary snapshotter writes stay in the owned persistent ~/wt. The installed UI pilot needs the paired Workspace/CommsScreen entry fix. Parent owns that actual affected live entrypoint and deployment gate; this receipt does not waive it. CI deferred.

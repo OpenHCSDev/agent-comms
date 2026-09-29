@@ -1,14 +1,15 @@
 """Normal installed fresh-fork wire view against copied actual saved history.
 
 No Node/provider call, source/store reset, patched transport or live write.
-The two source snapshots are copied without changing bus or checkpoint bytes.
-Only their destination-owned registry/snapshot inode bindings are recreated.
+The supplied current checkpoint schema is checked read-only before copying.
+Only destination-owned registry/checkpoint inode seals are rebuilt by their
+canonical owners; public/private publication bytes remain unchanged.
 """
 import asyncio
+from contextlib import closing
 from dataclasses import replace
 from importlib.resources import files
 import json
-import filecmp
 import os
 from pathlib import Path
 import shutil
@@ -18,18 +19,17 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, os.environ['TOAD_TEST_HELPERS'])
 from runtime_fixture import ToadApp
 from sidebar_retirement_pilot import until, viewport_text
-from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import HistorySource
 from agent_comms.private_registry_guard import PrivateRegistryGuard
+from agent_comms.private_bus_checkpoint import _connect, _saved, install_private_bus_checkpoint
+from agent_comms.wire_log import WireLog
 from agent_comms.store_files import file_revision
 from agent_comms.threads import Thread
 from toad.navigation_target import DirectTarget, channel_target
 from toad.navigation_preparation import ThreadNavigationRequest
 from toad.widgets.comms_chat import CommsChatView
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from retained_history_cutover import prepare, apply
 
 
 class InstalledApp(ToadApp):
@@ -42,13 +42,23 @@ def copy_actual_history(destination, live):
     for index, raw in enumerate(json.loads((live/'history_sources.json').read_text())):
         source=FieldCodec.decode(HistorySource, raw)
         original=Path(source.root)
+        with closing(_connect(original/'private_bus_checkpoint.sqlite3',readonly=True)) as db:
+            _saved(db)
         copied=destination/'history'/f'copied-{index}'
         shutil.copytree(original,copied)
         (copied/'.registry-owner-guard').unlink(missing_ok=True)
-        originals[copied]=((copied/'bus.jsonl').read_bytes(),(copied/'private_bus_checkpoint.sqlite3').read_bytes())
+        originals[copied]=(original,(original/'bus.jsonl').read_bytes(),
+                           (original/'private_bus_checkpoint.sqlite3').read_bytes())
         guard=PrivateRegistryGuard(copied/'registry.json',source.wire_root_id)
         guard.create_pending()
         guard.commit_initial()
+        log=WireLog(copied/'bus.jsonl')
+        marker=log.read_metadata_unlocked(required=True)
+        marker.checkpoint_version=None
+        marker.checkpoint_seal=None
+        (copied/'private_bus_checkpoint.sqlite3').unlink()
+        log.write_metadata_unlocked(marker)
+        install_private_bus_checkpoint(log)
         result.append(replace(source,root=str(copied),snapshot_bus_revision=file_revision(copied/'bus.jsonl'),
                               snapshot_registry_revision=file_revision(copied/'registry.json')))
     (destination/'history_sources.json').write_text(json.dumps([FieldCodec.encode(s) for s in result]))
@@ -67,11 +77,6 @@ async def main():
             comms.threads.register(Thread(name,frozenset({'openhcs','comms'}),str(root),parent=parent,
                                           process_identity=None))
         originals=copy_actual_history(comms.root,live)
-        if os.environ.get('PREPARE_HISTORY_CUTOVER') == '1':
-            prepared=root/'prepared'
-            receipts=prepare(comms.root,prepared)
-            apply(comms.root,prepared)
-            print('CANONICAL_ARCHIVE_CUTOVER',[(r.rows,r.initial_proofs,r.response_proofs) for r in receipts],flush=True)
         navigation=ThreadNavigationRequest(str(comms.root),'openhcs-pr159-viewer-bind-owner',root,()).read()
         assert navigation.thread.name=='openhcs-pr159-viewer-bind-owner'
         print('CANONICAL_FRESH_FORK_NAVIGATION_METADATA_LOADED',flush=True)
@@ -84,44 +89,28 @@ async def main():
             await asyncio.get_running_loop().shutdown_default_executor()
         assert (comms.root/'bus.jsonl').read_bytes()==live_bus_before
         assert not comms.bus.incoming_page('openhcs-pr159-viewer-bind-owner',after=0).messages
-        for copied,(bus,checkpoint) in originals.items():
-            retained=copied.with_name(copied.name+'-retained-original')
-            assert (retained/'bus.jsonl').read_bytes()==bus
-            assert (retained/'private_bus_checkpoint.sqlite3').read_bytes()==checkpoint
-            with (retained/'bus.jsonl').open() as old,(copied/'bus.jsonl').open() as current:
-                for old_line,current_line in zip(old,current,strict=True):
-                    original=json.loads(old_line);converted=json.loads(current_line)
-                    old_proof=original.pop(PRIVATE_WIRE_FIELD,None)
-                    new_proof=converted.pop(PRIVATE_WIRE_FIELD,None)
-                    assert original==converted
-                    if old_proof is not None and 'initial' in old_proof:
-                        assert new_proof['initial']==old_proof['initial']
-                    elif old_proof is not None:
-                        assert new_proof is None
-        for index,copied in enumerate(originals):
-            retained=copied.with_name(copied.name+'-retained-original')
-            proof=root/'prepared'/'originals'/str(index)
-            for original_file in proof.rglob('*'):
-                if original_file.is_file():
-                    assert filecmp.cmp(original_file,retained/original_file.relative_to(proof),shallow=False)
-        print('ALL_PUBLIC_ROWS_INITIAL_AUDIENCES_AND_ORIGINAL_PROOFS_PRESERVED',flush=True)
+        for copied,(original,bus,checkpoint) in originals.items():
+            assert (copied/'bus.jsonl').read_bytes()==bus
+            assert (original/'bus.jsonl').read_bytes()==bus
+            assert (original/'private_bus_checkpoint.sqlite3').read_bytes()==checkpoint
+        print('CURRENT_PUBLIC_AND_PRIVATE_HISTORY_BYTES_PRESERVED',flush=True)
         print('NO_LIVE_BUS_WRITES_OR_HISTORICAL_WAKE_AUTHORITY',flush=True)
 
 
 async def exercise_ui(app,root,me):
     async with app.run_test(size=(139,35)) as pilot:
         await pilot.pause(.05)
-        owner=app.current_mode
+        owner=app.selected_mode
         await app.open_comms_session(owner_mode=owner,project_path=root,me=me,
                                     target=DirectTarget('openhcs-pr159-viewer-bind-owner'))
-        chat=app.screen.query_one(CommsChatView)
+        chat=app.selected_session.query_one(CommsChatView)
         await until(pilot,lambda: chat._history_initialized or 'Wire error:' in chat.status)
         assert 'Wire error:' not in chat.status,chat.status
         assert chat._history_initialized and chat.prompt.prompt_text_area.has_focus
         print('INSTALLED_FRESH_FORK_WIRE_LOAD_NO_SCHEMA_ERROR',flush=True)
         await app.open_comms_session(owner_mode=owner,project_path=root,me=me,
                                     target=channel_target('#comms'))
-        historical=app.screen.query_one(CommsChatView)
+        historical=app.selected_session.query_one(CommsChatView)
         await until(pilot,lambda: bool(historical._history) or 'Wire error:' in historical.status)
         assert 'Wire error:' not in historical.status,historical.status
         historical.window.scroll_end(animate=False,immediate=True)
