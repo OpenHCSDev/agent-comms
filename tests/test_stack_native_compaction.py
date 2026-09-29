@@ -205,7 +205,11 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
                                     else (
                                         "FINAL_OWNER_REPLY"
                                         if case == "acp_success" and reasoning_efforts[-1] == "high"
-                                        else "summary"
+                                        else (
+                                            "PR401_COMMITTED_SUMMARY"
+                                            if case == "acp_success"
+                                            else "summary"
+                                        )
                                     )
                                 ),
                             },
@@ -443,16 +447,45 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
             assert not any("[agent error]" in text for text in texts)
             saved_entries = [json.loads(line) for line in session.read_text().splitlines()]
             committed = [entry["summary"] for entry in saved_entries if entry.get("type") == "compaction"]
-            assert committed == ["summary"]
-            completions = [
-                field.event
+            assert committed == ["PR401_COMMITTED_SUMMARY"]
+            completion_updates = [
+                update
                 for update in updates
                 for field in decode_updates(update.field_meta or {})
                 if isinstance(field, CompactionChangedUpdate)
                 and isinstance(field.event, ae.CompactionEnd)
             ]
-            assert len(completions) == 1
-            assert completions[0].publication_summary == committed[0]
+            assert len(completion_updates) == 1
+            completion = completion_updates[0]
+            event = next(
+                field.event
+                for field in decode_updates(completion.field_meta)
+                if isinstance(field, CompactionChangedUpdate)
+            )
+            assert event.publication_summary == committed[0]
+            if capture := os.environ.get("AC_PR401_CAPTURE_PACKET"):
+                publication_updates = [
+                    update
+                    for update in updates
+                    if any(
+                        isinstance(field, CompactionChangedUpdate)
+                        and isinstance(field.event, (ae.CompactionStart, ae.CompactionEnd))
+                        for field in decode_updates(update.field_meta or {})
+                    )
+                ]
+                assert len(publication_updates) == 2
+                Path(capture).write_text(
+                    json.dumps(
+                        [
+                            {
+                                "sessionUpdate": update.session_update,
+                                "content": update.content.model_dump(by_alias=True),
+                                "_meta": update.field_meta,
+                            }
+                            for update in publication_updates
+                        ]
+                    )
+                )
             return
         assert ae.InputStarted in kinds, [(type(event).__name__, getattr(event, "text", None)) for event in events]
         assert isinstance(events[-1], ae.Done)
