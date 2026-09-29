@@ -79,9 +79,7 @@ class DeliverySources(CheckpointTable, TypedTable):
 @dataclass(frozen=True)
 class Addressed(CheckpointTable, TypedTable):
     lookup: str = field(metadata={"sql": Column(primary_key=True)})
-    seq: int = field(
-        metadata={"sql": Column(primary_key=True, references=(DeliverySources, "seq"))}
-    )
+    seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
 
 
 @dataclass(frozen=True)
