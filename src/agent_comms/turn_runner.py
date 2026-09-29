@@ -8,7 +8,6 @@ import shlex
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from acp import RequestError
 from acp.schema import (
     ContentToolCallContent,
     PermissionOption,
@@ -78,16 +77,6 @@ REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
 REPLY_POLL = 0.25
 ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
 IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
-
-
-def _goal_attempt_unavailable() -> RequestError:
-    return RequestError.invalid_params(
-        {
-            "reason": "goal_attempt_unavailable",
-            "details": "The goal has no launchable attempt. Inspect its state and use "
-            "Retry for a failed attempt; no prompt was sent to Pi.",
-        }
-    )
 
 
 class TurnRunner:
