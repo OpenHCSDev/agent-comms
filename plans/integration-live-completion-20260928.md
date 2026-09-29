@@ -4,7 +4,38 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core8ad034a6 (322 native catalog/admission/typed compaction
+## Current urgent fixes and shipping batch
+
+- Automatic channel replies: actual native A question -> B reply reproduces the
+  missing return notification. Boyle owns canonical reply admission; Dalton owns
+  PR330's real A -> B -> A regression, ACP feedback, awareness and no replay/loop.
+  Initial-only admission and awareness currently exclude keyed responses. Not fixed.
+- Toad recursion: user supplied an authentic trace from the installed 9830 runtime:
+  ViewportPresentation.prepare calls _refresh_layout while preparing paint, which
+  reenters SessionView/Textual layout. Carver owns the urgent root fix and real UI
+  reproduction; Tesla coordinates the overlapping PR142 viewport sites. Not fixed.
+- Comms323 merged658b9a89: turn observation/goal settlement; 494 production lines
+  deleted. Comms325 merged6bd8c423: native custody/partial snapshot ownership;
+  445 production lines deleted. No stored schema change or compatibility path.
+- Toad148 mergedb5a40ce: saves escaping/retained terminal traceback in existing
+  diagnostics, exits unsuccessfully; this is capture, not a recursion fix.
+- Paired noneditable stage: actual native success/failure 2 passed17.09s;
+  selected observation/cancellation/strict reopen 1 passed6.59s; actual retained
+  owner socket/attached ACP compaction 1 passed23.18s. Initial local-path build
+  used a stale cached wheel; explicit uncached rebuild corrected that setup.
+  Stage and live activation verified: runtime-native-custody-terminal-20260928
+  selects core6bd8c423, Toadb5a40ce4, Textualc974/native5fde. All five launchers
+  select it; four idle owners restarted preserving settings/native sessions.
+  Four fresh ACP attachments pass. Actual installed PR95 saved history paints
+  105 matching phrases/679 nonspace characters, Ready with no app/delivery error.
+- Toad149 merged1ea4f954: nominal block/menu/copy/context disclosure ownership,
+  163 product lines deleted. Review and actual private X11 interaction passed;
+  this newest UI change is pending the next paired UI installation.
+
+PR142 recent-source return and latency acceptance remain Tesla's independent work.
+The full original/round-two refactor goal remains active.
+
+Previous installed pair: core8ad034a6 (322 native catalog/admission/typed compaction
 integration, includes326 channel fix), Toad9830cb24 (145 typed tool output and
 shared permission renderer), Textualc974/native5fde. Allfive launchers andfour
 idle-restarted owners use runtime-native-tool-owners-20260928. Fresh actualACP

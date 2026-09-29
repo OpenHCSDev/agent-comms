@@ -1,0 +1,72 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+____ test_actual_native_stream_reaches_current_consumer_and_settlement[200] ____
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7ff7b0f2d400>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff7b0f30fc0>
+provider_status = 200
+
+    @pytest.mark.parametrize("provider_status", [200, 503])
+    async def test_actual_native_stream_reaches_current_consumer_and_settlement(
+        native_backend, monkeypatch, provider_status
+    ):
+        native = native_backend
+        native.provider.status = provider_status
+        comms = Comms(native.root)
+        owner = CommsAgent(
+            comms,
+            agent_bin="pi",
+            private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+            private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+        )
+        session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
+        name = owner.sessions.bindings[session.session_id]
+        execution = OwnedTurn(
+            owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
+        )
+        assert execution.admit()
+        execution.begin()
+        execution.prepare_prompt()
+        execution.open_stream()
+>       progress = execution.progress
+                   ^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'OwnedTurn' object has no attribute 'progress'
+
+tests/test_s1_event_behavior.py:300: AttributeError
+____ test_actual_native_stream_reaches_current_consumer_and_settlement[503] ____
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7ff7b03f4cd0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff7b10e7ac0>
+provider_status = 503
+
+    @pytest.mark.parametrize("provider_status", [200, 503])
+    async def test_actual_native_stream_reaches_current_consumer_and_settlement(
+        native_backend, monkeypatch, provider_status
+    ):
+        native = native_backend
+        native.provider.status = provider_status
+        comms = Comms(native.root)
+        owner = CommsAgent(
+            comms,
+            agent_bin="pi",
+            private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+            private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+        )
+        session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
+        name = owner.sessions.bindings[session.session_id]
+        execution = OwnedTurn(
+            owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
+        )
+        assert execution.admit()
+        execution.begin()
+        execution.prepare_prompt()
+        execution.open_stream()
+>       progress = execution.progress
+                   ^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'OwnedTurn' object has no attribute 'progress'
+
+tests/test_s1_event_behavior.py:300: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_s1_event_behavior.py::test_actual_native_stream_reaches_current_consumer_and_settlement[200]
+FAILED tests/test_s1_event_behavior.py::test_actual_native_stream_reaches_current_consumer_and_settlement[503]
+2 failed, 14 deselected in 11.53s

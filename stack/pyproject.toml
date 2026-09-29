@@ -15,6 +15,6 @@ package = false
 override-dependencies = ["agent-comms[acp]", "textual[syntax]==8.2.8"]
 
 [tool.uv.sources]
-agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "8ad034a60d91b0bcb8e90bbeca326e01d2dfb7cc" }
-batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "9830cb2473e5aacbf19df53582e63ab8a63f3d1f" }
+agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "6bd8c423acc8d6cf3c4a004c8fdaa672dbae3bc8" }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "b5a40ce4895c718a5572e3739a32dac362628b52" }
 textual = { git = "https://github.com/OpenHCSDev/textual.git", rev = "c9743801c98dc570f82f82e25915ecce89800f4b" }
