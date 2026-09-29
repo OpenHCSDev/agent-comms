@@ -8,6 +8,23 @@ No feature is complete merely because a draft exists or a PR was merged.
 
 ### Latest verified checkpoint, 2026-09-29
 
+- LIVE configuration-lifecycle checkpoint: core361/d7745d0e and Toad167/5059d4aa,
+  unchanged Textual1738/native d396. Actual installed normalApp/native physical
+  model/thinking selection, persisted high, reconnect, saved reply and original
+  draft/Document/undo PASSexit0. Actual installed two-owner saved history, channel
+  reply, guarded restart and one new explicit input PASS25.39s with no replay.
+  Nine idle owners canonically restarted with full metadata retained except
+  ProcessIdentity; five launchers aligned, READYgeneration12, zero reset or
+  interrupted turn. Fresh nine live ACP loads and actual default App saved-wire
+  navigation PASS; typed configuration matches the registered selection.
+  Previous warm-cache/adaptive/fork checkpoint below is included. Whole goal
+  remains active: current inexpensive AST census still finds12 core and6 Toad
+  classes over500lines. Dalton is reconciling every authoritative requirement;
+  Boyle/Wegener scheduler and selected owners, Carver/Noether T4, and Tesla
+  source activation/raw-read performance remain assigned in parallel.
+
+### Earlier checkpoint receipts (historical)
+
 - LIVE warm-native checkpoint: merged core357/359 at12bd75ca, Toad160/166
   at3031869c, unchanged Textual1738/native d396. Existing canonical idle restart
   moved all nine idle owners and five launchers to the immutable installation;
