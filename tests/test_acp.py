@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from agent_comms.goal_attempts import ProviderUsageTotal
 from pathlib import Path
 
 import pytest
@@ -544,7 +545,9 @@ class TestAgentTurn:
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, goal)
         await agent.turns.run_agent_turn("proj", "proj", "work")
-        failures = [fact for update in sent for fact in facts(update.field_meta, RequestFailedUpdate)]
+        failures = [
+            fact for update in sent for fact in facts(update.field_meta, RequestFailedUpdate)
+        ]
         assert len(failures) == 1 and failures[0].failure.detail == message
         goal = wired.registry.require("proj").goal
         assert goal is not None and goal.state.declared_name == "blocked"
@@ -553,14 +556,14 @@ class TestAgentTurn:
         assert not wired.registry.require("proj").executing
 
     @pytest.mark.parametrize(
-        "event",
+        ("event", "expected_state"),
         [
-            ae.Error("Pi preflight ended before attestation"),
-            ae.Done("Pi preflight ended before attestation", False),
+            (ae.Error("Pi preflight ended before attestation"), "reserved"),
+            (ae.Done("Pi preflight ended before attestation", False), "not_sent"),
         ],
     )
     async def test_unstarted_user_input_failure_carries_exact_text_for_restore(
-        self, wired, tmp_path, event
+        self, wired, tmp_path, event, expected_state
     ):
         agent = self._agent_with_events(tmp_path, wired)
         sent: list = []
@@ -573,14 +576,22 @@ class TestAgentTurn:
         agent.inputs.dispositions.record(
             key, seq=None, owner="proj", admission=1, target="proj", text="lost prompt"
         )
-        agent.inputs.turn_original_input_keys["proj"] = (key,)
-        agent.inputs.turn_input_text["proj"] = "lost prompt"
+        from input_source_cases import owner_original
+
+        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt")
         await agent._emit_event("proj", event, FakeClient())
         update = sent[-1]
         (failed,) = facts(update.field_meta, InputFailedUpdate)
         assert failed.text == "lost prompt"
         assert failed.failure.description == "Pi preflight ended before attestation"
-        assert agent.inputs.dispositions.read().rows[key].declared_name == "reserved"
+        first = agent.inputs.dispositions.read().rows[key]
+        assert first.declared_name == expected_state
+        # A later explicit input is a new reservation, never a replay of NotSent.
+        key = "acp:new-explicit-input"
+        agent.inputs.dispositions.record(
+            key, seq=None, owner="proj", admission=1, target="proj", text="lost prompt"
+        )
+        agent.inputs.original_sources["proj"] = owner_original((key,), "lost prompt")
         agent.inputs.dispositions.bind(
             key, admission=1, turn_id="turn", native_id="a" * 32, text="lost prompt"
         )
@@ -589,6 +600,7 @@ class TestAgentTurn:
         )
         await agent._emit_event("proj", ae.Error(text="later steering failure"), FakeClient())
         assert not facts(sent[-1].field_meta, InputFailedUpdate)
+        assert agent.inputs.dispositions.read().rows[first.key] == first
 
     @pytest.mark.parametrize("completed_in_turn", [False, True])
     async def test_missing_terminal_blocks_only_still_active_goal(
@@ -830,10 +842,13 @@ class TestAgentTurn:
             if superseding is None:
                 superseding = wire(wired.root).goals.update_goal(
                     name,
-                    SetGoalAction(text="New objective")
-                    if transition is SetGoalAction
-                    else transition(
-                        expect=GoalPrecondition(goal_id=original.id), progress="explicit decision"
+                    (
+                        SetGoalAction(text="New objective")
+                        if transition is SetGoalAction
+                        else transition(
+                            expect=GoalPrecondition(goal_id=original.id),
+                            progress="explicit decision",
+                        )
                     ),
                 )
             return original_block(name, **kwargs)
@@ -971,7 +986,7 @@ class TestAgentTurn:
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
         assert wired.registry.require("proj").goal.state.declared_name == "completed"
         assert GoalAttemptStore(private).snapshot(goal.id).lifecycle == CompletedGeneration()
-        assert GoalAttemptStore(private).provider_usage_total(goal.id).responses == 1
+        assert ProviderUsageTotal.for_goal(GoalAttemptStore(private), goal.id).responses == 1
         await agent.shutdown()
 
     @pytest.mark.parametrize("owner_paused", [False, True])
@@ -1022,8 +1037,8 @@ class TestAgentTurn:
         store = GoalAttemptStore(wired.root / "goal-private")
         assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
         assert store.snapshot(goal.id).number == 2
-        assert store.provider_usage_total(goal.id).responses == 2
-        assert str(store.provider_usage_total(goal.id).cost_total) == "0.03"
+        assert ProviderUsageTotal.for_goal(store, goal.id).responses == 2
+        assert str(ProviderUsageTotal.for_goal(store, goal.id).cost_total) == "0.03"
         grant = agent.turns.goals.goal_store.ready_grant(goal.id, 2)
         assert grant not in repr(updates)
         assert grant not in repr(goal)
@@ -1122,7 +1137,7 @@ class TestAgentTurn:
         store.create_goal(goal.id)
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
-        store.record_failed(reservation, "The previous turn failed")
+        reservation.fail(store, "The previous turn failed")
         blocked = wired.goals.update_goal(
             "proj",
             BlockedGoalAction(
@@ -1166,7 +1181,7 @@ class TestAgentTurn:
         store.create_goal(goal.id)
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
-        store.record_failed(reservation, "Previous turn failed")
+        reservation.fail(store, "Previous turn failed")
         blocked = wired.goals.update_goal(
             "proj",
             BlockedGoalAction(
@@ -1213,7 +1228,7 @@ class TestAgentTurn:
         if failed:
             reservation = store.reserve(goal.id, 1)
             store.claim_launch(reservation)
-            store.record_failed(reservation, "Interrupted by owner")
+            reservation.fail(store, "Interrupted by owner")
         paused = await agent.turns.goals.update_goal("proj", "paused", goal.id, goal.revision)
         updates.clear()
         try:
@@ -1351,7 +1366,9 @@ class TestAgentTurn:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         monkeypatch.setattr("agent_comms.backend.terminate_task_process", terminate)
-        monkeypatch.setattr(agent.turns.goals.goal_store, "record_provider_usage", fail_usage)
+        from agent_comms.goal_attempts import LaunchPermit
+
+        monkeypatch.setattr(LaunchPermit, "record_provider_usage", fail_usage)
         with pytest.raises(StorageUncertainError):
             await agent.turns.run_agent_turn("proj", "proj", "continue")
         assert terminated
@@ -1433,9 +1450,9 @@ class TestWireProtocol:
                     deadline = _time.monotonic() + 30
                     while True:
                         if b"\n" not in pending:
-                            assert selector.select(max(0, deadline - _time.monotonic())), (
-                                "ACP timeout"
-                            )
+                            assert selector.select(
+                                max(0, deadline - _time.monotonic())
+                            ), "ACP timeout"
                             chunk = os.read(proc.stdout.fileno(), 65536)
                             assert chunk, "ACP closed before response"
                             pending += chunk

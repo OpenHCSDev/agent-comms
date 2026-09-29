@@ -152,7 +152,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
         )
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
-        store.record_failed(reservation, "Earlier goal attempt failed")
+        reservation.fail(store, "Earlier goal attempt failed")
         blocked = comms.goals.update_goal(
             session,
             BlockedGoalAction(

@@ -45,6 +45,12 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
             raise IntegrityViolationError("only published obligations may have a receipt")
         return cls()
 
+    def require_nonpublication(self) -> None:
+        from .coordination_errors import IdentityConflict
+
+        if not self.retryable:
+            raise IdentityConflict("wire completion requires nonpublication obligation")
+
     def validate_publication(self, intent, receipt) -> None:
         if intent is not None and not self.allows_intent:
             raise IntegrityViolationError("publication intent is invalid for obligation state")

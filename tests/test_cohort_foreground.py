@@ -12,8 +12,6 @@ import sys
 import threading
 import time
 from pathlib import Path
-
-from native_proof_cases import write_proof_rows
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -36,9 +34,11 @@ from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 from agent_comms.native_prompt_send import _enter_admission
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_sidecar import native_request_digest
+from agent_comms.selected_actions import SelectedExistingFileWrite
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
+from native_proof_cases import write_proof_rows
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -222,7 +222,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
             opt_in=True,
             wait_seconds=0,
             ready=ready,
-            selected_existing_file_write=runtime.SelectedExistingFileWrite(
+            selected_existing_file_write=SelectedExistingFileWrite(
                 ExistingFileClaim(Path(resource)), b"after selected claim\n"
             ),
         )
@@ -251,7 +251,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
         root.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True)
         root_id = "0" * 32  # No issuer has initialized this root yet.
-        plan = runtime.SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"forbidden\n")
+        plan = SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"forbidden\n")
         with pytest.raises(RelationViolationError, match="no durable protocol marker"):
             await foreground.run_foreground_once(
                 root,
@@ -276,7 +276,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
                 tags=frozenset(),
                 native_package=Path(package),
                 wait_seconds=0,
-                selected_existing_file_write=runtime.SelectedExistingFileWrite(
+                selected_existing_file_write=SelectedExistingFileWrite(
                     ExistingFileClaim(Path(external)), b"forbidden\n"
                 ),
             )
@@ -320,9 +320,7 @@ def test_foreground_cli_passes_bounded_source_to_explicit_selected_write_entry(
         ]
         assert foreground.main(argv) == 0
         assert observed == [
-            runtime.SelectedExistingFileWrite(
-                ExistingFileClaim(Path(resource)), b"operator bytes\n"
-            )
+            SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"operator bytes\n")
         ]
         assert resource.read_bytes() == b"before\n"  # Parser alone never writes.
         assert "NO_SELECTED_CLAIM" in capsys.readouterr().out
@@ -396,7 +394,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
             native_package=tmp_path,
             wait_seconds=0,
             ready=ready,
-            selected_existing_file_write=runtime.SelectedExistingFileWrite(
+            selected_existing_file_write=SelectedExistingFileWrite(
                 ExistingFileClaim(Path(resource)), b"forbidden\n"
             ),
         )
@@ -630,7 +628,7 @@ def test_two_real_recipient_processes_emit_selected_and_typed_no_wake(tmp_path: 
         base = Path(dirname)
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
-        script = """import sys
+        script = r"""import sys
 import threading
 import time
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
@@ -640,6 +638,19 @@ f._trusted_package = _fake_package
 r._trusted_package = _fake_package
 from agent_comms.tracked_turn import TrackedTurnSession
 TrackedTurnSession.execute = _fake_pi([])
+original_run = f.run_foreground_once
+async def wait_for_committed_source(*args, ready=None, **kwargs):
+    def registered(thread):
+        ready(thread)
+        if sys.stdin.readline() != "committed\n":
+            raise RuntimeError("parent did not release committed-source barrier")
+    try:
+        return await original_run(*args, ready=registered, **kwargs)
+    except Exception:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        raise
+f.run_foreground_once = wait_for_committed_source
 raise SystemExit(f.main(sys.argv[1:]))
 """
         env = {
@@ -673,6 +684,7 @@ raise SystemExit(f.main(sys.argv[1:]))
                         "--wait-seconds",
                         "1",
                     ],
+                    stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -707,10 +719,19 @@ raise SystemExit(f.main(sys.argv[1:]))
                 env=env,
             )
             assert json.loads(sender.stdout)["wire_seq"] == 1
+            # Both frozen recipients exist at commit. Finish alpha's original
+            # passive observation before beta publishes a NEW reply: that reply
+            # correctly gives alpha a triage wake, covered by the native roundtrip
+            # test rather than this original-cohort NO_WAKE fixture.
             outcomes: dict[str, dict[str, object]] = {}
             for name, child in children.items():
+                assert child.stdin is not None
+                child.stdin.write("committed\n")
+                child.stdin.flush()
+                child.stdin.close()
+                child.stdin = None
                 out, err = child.communicate(timeout=12)
-                assert child.returncode == 0, (name, out, err)
+                assert child.returncode == 0, f"{name}: {out}\n{err}"
                 outcomes[name] = json.loads(out.strip())
             assert outcomes["alpha"] == {"disposition": "NO_WAKE", "wire_seq": 1}
             assert outcomes["beta"]["response_message_id"]

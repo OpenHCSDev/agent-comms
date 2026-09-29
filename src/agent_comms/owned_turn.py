@@ -158,8 +158,6 @@ class OwnedTurn:
         self.runner.inputs.turn_input_keys.setdefault(self.session_id, set()).update(
             self.original_keys
         )
-        self.runner.inputs.steering_input_keys.setdefault(self.session_id, {})
-        self.runner.inputs.steering_goal_ids.setdefault(self.session_id, {})
 
         self.batch = InputBatch.capture(
             self.origins,
@@ -240,10 +238,6 @@ class OwnedTurn:
         if self.controller is UNBOUND_CONTROLLER:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
         self.runner.active_turns[self.session_id] = self.turn_id
-        if self.original_owner_input and self.original_keys:
-            self.runner.inputs.turn_original_input_keys[self.session_id] = tuple(self.original_keys)
-            self.runner.inputs.turn_input_text[self.session_id] = self.original_display or self.task
-
         if self.original_owner_input:
             permission = OwnerGoalPermission(self.goal)
         elif self.goal is not None and self.goal.state.active:
@@ -270,6 +264,7 @@ class OwnedTurn:
             ),
             batch=self.batch,
         )
+        self.runner.inputs.original_sources[self.session_id] = self.original
         self.progress = TurnProgress(
             comms=self.runner.comms,
             sessions=self.runner.sessions,

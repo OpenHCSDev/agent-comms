@@ -56,3 +56,42 @@ def test_private_send_does_not_rebuild_identity_tuples_or_compare_bare_pids():
                     isinstance(value, ast.Attribute) and value.attr == "pid"
                     for value in ast.walk(node)
                 ), (name, node.lineno)
+
+
+def test_selected_lifetime_cannot_reintroduce_partial_runner_authority():
+    """Reserved input/attempt authority must not become nullable runner scratch again."""
+    from dataclasses import fields
+
+    from agent_comms.coordinated_runtime import SelectedExecution
+
+    retired = {
+        "native_input",
+        "progress",
+        "owned_turn_lease",
+        "assignment",
+        "execution_id",
+        "selected_write_plan_loader",
+        "selected_write_plan_check",
+        "selected_write_plan_applied",
+    }
+    assert retired.isdisjoint(field.name for field in fields(SelectedExecution))
+    tree = ast.parse(inspect.getsource(SelectedExecution))
+    writes = {
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.ctx, ast.Store)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+    }
+    assert retired.isdisjoint(writes)
+    assert writes <= {field.name for field in fields(SelectedExecution)}
+    for module in ("selected_participant", "selected_session", "selected_request", "selected_turn"):
+        body = ast.parse((SOURCE / f"{module}.py").read_text())
+        assert not any(
+            isinstance(node, ast.Name) and node.id == "SelectedExecution" for node in ast.walk(body)
+        ), module
+        assert not any(
+            isinstance(node, ast.ImportFrom) and node.module == "coordinated_runtime"
+            for node in ast.walk(body)
+        ), module

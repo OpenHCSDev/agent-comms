@@ -12,7 +12,7 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
-## Current remaining mapping — PR381 native owner checkpoint
+## Current remaining mapping — selected lifetime checkpoint
 
 Parent reports361 merged at `d7745d0e` and the paired installed saved-history
 ACP/channel reply/guarded restart/new input journey passed25.39s with Toad167
@@ -28,10 +28,22 @@ this document does not promote an activation-in-progress claim to completed.
   [PR365 receipt](../evidence/s14-goal-scheduler/README.md):328 production lines
   deleted,35 chain terms removed; actual installed socket retry/native and selected
   handoff paths passed before parent merge. Boyle371 journal
-  enrollment/publication identities and376 transaction ownership are merged;381 continues native authority/settlement closure; neither slice completes all S14.
-- Wegener retains current SelectedExecution/coordinated-runtime/startup work.
-  Carver retains failure/T4 work. Dalton's broad requirement audit is read-only.
-  Do not create competing work in those files.
+  enrollment/publication identities,376 transaction ownership and381 native
+  authority/settlement closure are merged; these do not complete all S14.
+-376 journal transaction custody and381 native witness/CAS/admission ownership are
+  merged (parent main13d92f80). Boyle384 owns the whole SelectedExecution lifetime:
+  selected lease/source, fresh enrollment, triage/full stages, tools, terminal/UNKNOWN
+  settlement and caller deletion. [PR384 receipt](../evidence/q8-selected-execution/README.md)
+  records actual installed native and saved ACP reply journeys; parent owns integration/live.
+- Current ownership supersedes earlier snapshots:383 InputDrain and382/182
+  MessageBus are merged;384 SelectedExecution passed bounded peer review and is
+  integrating current main.183 Agent377 and181 App442 are merged. Parent owns
+  the next matched installation; these are not yet in the live19e5/262e pair.
+  Dalton continues HistoryViews, Wegener387 attempt stores, Boyle386 process
+  custody, Carver channel-history/painted ACK, Noether185 CommsSidebar and
+  Tesla184/core388 witnessed loaded-history/terminal latency. All retain their
+  independent whole-surface closure and actual affected-path gates. Parent owns
+  full plan reconciliation and paired shipping.
 - Workspace156 mapping was superseded by160(+163 proof); first-open153,154 and345
   cutover were reported complete. Later Toad167 is in the parent's paired test
   above. The historical T4 and UI rows below are not fresh outstanding assignments;
@@ -301,3 +313,7 @@ The ratchet patch is source/tooling only. Its affected installed entrypoint is
 matrix. This census neither changes the live stack nor asserts all current open
 PRs are installed. Parent owns integration/activation. Owned disposable `.scratch`
 and test environment are retired after receipts; source/history remain in `~/wt`.
+
+## Assigned attempt ownership closure — 2026-09-29
+
+Parent reassigned remaining GoalAttemptStore/AttemptStore to Wegener (replaces prior parent ownership). Existing goal reservation/permit, schema records, attempt phases, replay proof and recovery snapshot own their behavior; stores retain actual transaction/capability custody. Whole caller/deletion batch in `refactor/attempt-journal-ownership-20260929`; [working receipt](../evidence/review384-attempt-ownership/README.md). Boyle owns SelectedExecution/coordinated_runtime; Dalton owns MessageBus/history. No live edit or duplicate mechanism. PR387 is ready after153 focused checks, two installed saved-native goal/UNKNOWN journeys, and11 final installed checks including the goal journey on merged383. Existing declarations own outcomes and replay;657 production lines deleted/649 added. Parent owns merge and paired live acceptance.

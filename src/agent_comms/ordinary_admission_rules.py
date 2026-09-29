@@ -5,9 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .goal_attempt_phase import ClaimedAttempt
-from .goal_attempts import Generation
-from .goal_generation import ReservedGeneration
 from .reservation_rules import ReservationRule, RuleCheck
 from .thread_identity import TurnId
 
@@ -128,7 +125,7 @@ class AcceptedInputCheck(RuleCheck):
     wait: GoalWait | None
     input_id: str
     keys: tuple[str, ...]
-    steering_key: str | None
+    accepted_source: TurnInputSource | None
 
 
 class AcceptedInputAuthorityRule(ReservationRule):
@@ -144,15 +141,15 @@ class AcceptedInputKeyRule(ReservationRule):
     explanation = "The input does not name its exact accepted ACP receipt."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return check.keys != (f"acp:{check.input_id}",)
+        return (check.input_id, check.keys) != (check.receipt.input_id, (check.receipt.key,))
 
 
-class AcceptedInputSteeringRule(ReservationRule):
+class AcceptedInputSourceRule(ReservationRule):
     check_type = AcceptedInputCheck
-    explanation = "The accepted receipt is not the currently queued steering input."
+    explanation = "The captured accepted input source is no longer live."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return check.steering_key != f"acp:{check.input_id}"
+        return check.accepted_source != check.receipt.source()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -220,14 +217,7 @@ class OrdinaryGoalGrantRule(ReservationRule):
     explanation = "The captured autonomous goal launch is no longer claimed."
 
     def violated(self, check: OrdinaryGoalGrantCheck) -> bool:
-        attempt = check.permit.reservation
-        return not check.store._is_attempt(
-            attempt,
-            ClaimedAttempt(),
-            Generation(
-                attempt.goal_id, attempt.generation, ReservedGeneration(), attempt.attempt_id
-            ),
-        )
+        return not check.permit.is_claimed(check.store)
 
 
 class UnboundOrdinaryInputCheck(RuleCheck):
