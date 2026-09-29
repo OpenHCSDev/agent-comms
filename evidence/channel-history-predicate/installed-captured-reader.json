@@ -1,0 +1,31 @@
+{
+  "#comms": {
+    "captured_archive_rows": 20,
+    "unfiltered_diagnostic_rows": 20,
+    "actual_installed_initial_rows": 8,
+    "actual_initial_targets": [
+      "codex-bootstrap",
+      "opencode-toad-maintenance"
+    ],
+    "has_older": true
+  },
+  "#nra": {
+    "captured_archive_rows": 20,
+    "unfiltered_diagnostic_rows": 20,
+    "actual_installed_initial_rows": 8,
+    "actual_initial_targets": [
+      "#nra"
+    ],
+    "has_older": true
+  },
+  "#openhcs": {
+    "captured_archive_rows": 0,
+    "unfiltered_diagnostic_rows": 20,
+    "actual_installed_initial_rows": 0,
+    "actual_initial_targets": [],
+    "has_older": false
+  },
+  "bus_registry_metadata_checkpoint_unchanged": true,
+  "prompts_sent": 0,
+  "owners_restarted": 0
+}
