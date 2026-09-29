@@ -20,6 +20,7 @@ from agent_comms.native_pi import read_tracked_input_digest
 from agent_comms.native_prompt_binding import read_expected_prompt_binding
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
+from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -49,6 +50,7 @@ async def test_native_full_four_tools_publish_and_release(
             accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level="low"))
+    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
     requests = []
     failures = []
@@ -84,6 +86,11 @@ async def test_native_full_four_tools_publish_and_release(
                     delta = {"role": "assistant", "content": '{"decision":"FULL"}'}
                     reason = "stop"
                 elif len(requests) == 1 + triage:
+                    if not triage:
+                        context = json.dumps(request["messages"])
+                        assert "Selected source decisions through " in context
+                        assert "Optional non-authoritative awareness" in context
+                        assert initial.message.message_id in context
                     assert {t["function"]["name"] for t in request["tools"]} == {
                         name for name, _ in calls
                     }

@@ -1,0 +1,293 @@
+FF.....................................................Fs.FF             [100%]
+=================================== FAILURES ===================================
+___ test_ready_recovery_rechecks_executing_owner_before_rotating[admission] ____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-551/test_ready_recovery_rechecks_e0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1305d248a0>
+changed = 'admission'
+
+    @pytest.mark.parametrize("changed", ["admission", "pid"])
+    async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+        tmp_path, monkeypatch, changed
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+>       await agent.new_session(str(tmp_path / "parent"))
+
+tests/test_goal_standby.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7f1307604980>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:486: PublicationActivationBlocked
+______ test_ready_recovery_rechecks_executing_owner_before_rotating[pid] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-551/test_ready_recovery_rechecks_e1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f13060205f0>
+changed = 'pid'
+
+    @pytest.mark.parametrize("changed", ["admission", "pid"])
+    async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+        tmp_path, monkeypatch, changed
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+        agent = CommsAgent(comms, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+>       await agent.new_session(str(tmp_path / "parent"))
+
+tests/test_goal_standby.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7f1306006c10>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:486: PublicationActivationBlocked
+____ test_selected_handoff_rechecks_authority_at_native_write[foreign_key] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-tfot23at')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f13075d7540>
+change = 'foreign_key'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        agent.turns.adaptive_compaction_enabled = False
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.steering_input_keys["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original_keys = ("acp:historical-uncertain",)
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+>           await asyncio.wait_for(turn, 8)
+
+tests/test_selected_owner_followup.py:256: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:286: in drain_inbox
+    return await self.drain_owned_inbox(session_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:322: in drain_owned_inbox
+    pushed = await self._drain_private_if_changed(session_id, private_root)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/input_drain.py:313: in _drain_private_if_changed
+    result = await self.effects._drain_private_nk(session_id, root_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:594: in _drain_private_nk
+    result = await self.turns.run_selected(session_id, execution)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:507: in run_selected
+    await self.run_agent_turn(
+.venv/lib/python3.14/site-packages/agent_comms/turn_runner.py:544: in run_agent_turn
+    await OwnedTurn(
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:449: in run
+    await self.stream()
+.venv/lib/python3.14/site-packages/agent_comms/owned_turn.py:384: in stream
+    async for event in backend.stream_agent_events(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ('pi', ('--provider', 'openai-codex', '--model', 'gpt-6-sol'), 'Coordination context: you are thread \'beta\'; parent=...: 'beta', 'PI_AGENT_ID': 'beta', 'AGENT_COMMS_ROOT': '/var/tmp/ac-sealed-test-tfot23at/wire', 'PI_PARENT_ID': '', ...})
+kwargs = {'session_file': None, 'steering_queue': <Queue at 0x7f13077c93d0 maxsize=0 tasks=1>, 'finish_event': <asyncio.locks.E...3074662d0>, batch=<agent_comms.channel_input_batch.SingleInputBatch object at 0x7f1305777250>), goal_permit=None), ...}
+
+    async def native(*args, **kwargs):
+        with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+>           assert allowed is False
+E           assert True is False
+
+tests/test_selected_owner_followup.py:239: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.coordinated_runtime:coordinated_runtime.py:208 Optional awareness omitted; original delivered alone (ValueError)
+___________ test_ui_set_goal_creates_ledger_before_reporting_success ___________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-551/test_ui_set_goal_creates_ledge0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f1304715f60>
+
+    async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, monkeypatch):
+>       comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_ui_creation.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_ui_creation.py:36: in _owner
+    session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7f130469d2e0>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:486: PublicationActivationBlocked
+__________ test_explicit_retry_cannot_invent_missing_launch_authority __________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-551/test_explicit_retry_cannot_inv0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f130465a660>
+
+    async def test_explicit_retry_cannot_invent_missing_launch_authority(tmp_path, monkeypatch):
+>       comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_ui_creation.py:59: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_ui_creation.py:36: in _owner
+    session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:193: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/agent_comms/session_lifecycle.py:159: in new_session
+    self.effects._private_nk_marker()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.acp.CommsAgent object at 0x7f130469dff0>
+
+    def _private_nk_marker(self) -> str:
+        """Require the configured, certified root before any selected request."""
+        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
+    
+        if self._private_nk_wire_root_id is None or self._private_nk_native_package is None:
+>           raise PublicationActivationBlocked(
+                "private N/K ACP session requires explicit matching root and package"
+            )
+E           agent_comms.coordination_errors.PublicationActivationBlocked: private N/K ACP session requires explicit matching root and package
+
+.venv/lib/python3.14/site-packages/agent_comms/acp.py:486: PublicationActivationBlocked
+=========================== short test summary info ============================
+FAILED tests/test_goal_standby.py::test_ready_recovery_rechecks_executing_owner_before_rotating[admission]
+FAILED tests/test_goal_standby.py::test_ready_recovery_rechecks_executing_owner_before_rotating[pid]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[foreign_key]
+FAILED tests/test_goal_ui_creation.py::test_ui_set_goal_creates_ledger_before_reporting_success
+FAILED tests/test_goal_ui_creation.py::test_explicit_retry_cannot_invent_missing_launch_authority
+5 failed, 54 passed, 1 skipped in 17.75s
