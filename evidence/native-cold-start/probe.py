@@ -20,6 +20,8 @@ from agent_comms.native_startup import NativeStartupAdmission
 from agent_comms.session_fence import session_writer_fence
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
+from agent_comms.acp import CommsAgent
+from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from contextlib import aclosing
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,6 +35,8 @@ class ObservedPreparation(NativeSessionPreparation):
         self.marks.append({'phase':'get_state_written','at':time.monotonic()-self.begin})
         async for event in super().initialize_rpc():
             yield event
+        if self.subscribe is not None:
+            self.subscription = asyncio.create_task(self.subscribe())
     async def receive_record(self):
         if self.loop_pause:
             pause, self.loop_pause = self.loop_pause, 0
@@ -90,10 +94,33 @@ async def main():
         c.threads.register(Thread(name,frozenset(),original.worktree,session_file=fork.session_file,model=original.model,thinking_level=original.thinking_level,process_identity=ProcessIdentity.capture(os.getpid())))
         env=dict(os.environ,AGENT_COMMS_THREAD=name,PI_AGENT_ID=name,AGENT_COMMS_MANAGED='1',PI_TIMING='1',PI_WORKTREE=original.worktree)
         arguments=NativeArguments.parse(['--no-tools','--no-extensions','--no-skills','--no-context-files','--no-prompt-templates']).with_model(original.model).with_thinking(original.thinking_level).argv
+        owner = CommsAgent(c, agent_bin=COMMAND, agent_args=list(arguments), runtime_enabled=True, auto_wake=False, private_nk_native_package=PACKAGE, private_nk_wire_root_id=rid)
+        await owner.sessions.bind_owned(c.registry.require(name), name)
+        async def subscribe():
+            started=time.monotonic()
+            reader, writer=await asyncio.open_unix_connection(owner._runtime.path)
+            observed={'frames':0,'bytes':0,'ready':False}
+            try:
+                writer.write((json.dumps(SubscribeRuntimeRequest(thread=name).to_wire())+'\n').encode())
+                await writer.drain()
+                async with asyncio.timeout(30):
+                    while line:=await reader.readline():
+                        observed['frames']+=1;observed['bytes']+=len(line)
+                        frame=json.loads(line)
+                        if 'error' in frame: raise RuntimeError(frame['error'])
+                        if 'ready' in frame:
+                            observed['ready']=True
+                            break
+                observed['elapsed']=round(time.monotonic()-started,3)
+                return observed
+            finally:
+                writer.close();await writer.wait_closed()
         for ordinal in range(int(os.environ.get("PROBE_COUNT", "3"))):
             persistent=backend.PersistentPiSession();startup=NativeStartupAdmission(c.root)
             launch=await asyncio.to_thread(NativePiRpcLaunch.managed,COMMAND,arguments,worktree=Path(original.worktree),environment=env,session_file=fork.session_file)
             preparation=ObservedPreparation(launch,'',session_file=fork.session_file,persistent_session=persistent,startup=startup)
+            preparation.subscribe=subscribe if os.environ.get("PROBE_SUBSCRIBE") else None
+            preparation.subscription=None
             preparation.loop_pause=float(os.environ.get("PROBE_LOOP_PAUSE", "0"))
             begin=preparation.begin=time.monotonic();preparation.marks=[];samples=[];done=asyncio.Event()
             probe=asyncio.create_task(observe_loop(done,samples,begin,preparation))
@@ -105,11 +132,16 @@ async def main():
                             result.setdefault('events',[]).append(type(event).__name__)
                 state=preparation.native.attestation.state
                 assert state is not None and state.identity.session_file==fork.session_file
+                if preparation.subscription is not None:
+                    result["subscription"]=await preparation.subscription
                 result.update(passed=True,streaming=state.is_streaming,pending_messages=state.pending_message_count)
             except Exception as error:
                 result['error']=f'{type(error).__name__}: {error}'
                 result['diagnostic']=preparation.output.diagnostic
             finally:
+                if preparation.subscription is not None:
+                    if not preparation.subscription.done():preparation.subscription.cancel()
+                    await asyncio.gather(preparation.subscription,return_exceptions=True)
                 done.set();await probe
                 startup.release();await persistent.close()
                 result["native_stderr"]=await preparation.native.stderr_task
@@ -118,6 +150,7 @@ async def main():
                 receipt['attempts'].append(result)
                 (EVIDENCE/(SUFFIX+'.json')).write_text(json.dumps(receipt,indent=2)+'\n')
                 print(json.dumps({k:v for k,v in result.items() if k not in ('samples',)}),flush=True)
+        await owner._runtime.close()
     after=Path(original.session_file).stat()
     receipt['original_history_stat_unchanged']=(before.st_size,before.st_mtime_ns)==(after.st_size,after.st_mtime_ns)
     (EVIDENCE/(SUFFIX+'.json')).write_text(json.dumps(receipt,indent=2)+'\n')

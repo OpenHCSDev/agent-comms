@@ -20,6 +20,14 @@ The native stdin request, correlated `PendingAttestation`, saved identity, retai
 
 ## Remaining acceptance
 
-Actual pinned local-provider regression verifies ready-pipe starvation and genuinely unresponsive native child; source run pending at first checkpoint. Initial test-launch attempts lacked pytest/metaclass-registry and stopped before behavior; logs preserved. Parent final installed App-fork path remains separate. Need identify the original worker's blocking operation, not infer it from this controlled reproduction.
+Actual pinned local-provider regression: source ready-pipe/silent-child checks **2 passed10.26s**; pending-read starvation **1 passed4.63s**. Noneditable wheel with unchanged production fix: all three affected actual native cases **3 passed14.60s** (`installed-native-regression.log`). Initial test-launch attempts lacked pytest/metaclass-registry and stopped before behavior; logs preserved. Parent final installed App-fork path remains separate. Need identify the original worker's blocking operation, not infer it from this controlled reproduction.
 
 Read-only trace: `TranscriptReplay.replay` already offloads saved-page reading with `asyncio.to_thread`; its typed metadata encoding/socket JSON serialization runs on the owner loop. Normal tail pages are bounded, so this does not establish a41MB synchronous serialization. Continue measuring actual ACP subscription rather than assuming full-history loading blocks.
+
+## Actual concurrent owner subscription
+
+`actual-owner-subscription.json`: real `CommsAgent` owner and Unix socket `SubscribeRuntimeRequest`, simultaneously with actual saved-native preparation on the same Python event loop. PASS5frames/79,674bytes, ready4.899s; native attested1.598s, maximum sampled loop gap97ms. No prompts/provider calls; private config/session/socket cleaned, source stat unchanged. This exercises the actual subscription handler and saved transcript/metadata projection but **not** the separate installed Toad App or a fresh worker entrypoint. Parent owns that final path. It did not reproduce the original intermittency.
+
+## Delivery
+
+PR359. Configured real history remains only in the original source and temporary diagnostic forks, all diagnostic forks removed after their runs. Source tests seeded new small histories using loopback responses. Global immutable d396 package untouched. Carver directly notified about preserving captured stderr on timeout; his presentation files were not edited here. Initial interpreter/setup failures remain failed receipts, not counted as tests.

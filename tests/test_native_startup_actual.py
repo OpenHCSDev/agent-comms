@@ -28,10 +28,19 @@ class BusyOwnerPreparation(NativeSessionPreparation):
         # native initialization, its response, or the tracked reader.
         time.sleep(max(0, self.watchdog.preflight_deadline - time.monotonic()) + 0.02)
 
+
+class BeforeReadPreparation(BusyOwnerPreparation):
     async def receive_record(self):
         self.wait_for_native_pipe()
         async for event in super().receive_record():
             yield event
+
+
+class DuringReadPreparation(BusyOwnerPreparation):
+    async def initialize_rpc(self):
+        async for event in super().initialize_rpc():
+            yield event
+        self.loop.call_later(0.01, self.wait_for_native_pipe)
 
 
 class StoppedNativePreparation(NativeSessionPreparation):
@@ -56,19 +65,29 @@ async def prepare(owner, preparation_type, monkeypatch):
         startup=admission,
     )
     try:
-        async with asyncio.timeout(12), session_writer_fence(str(owner.session)), owner.persistent.lock:
-            async with aclosing(preparation.run()) as stream:
-                async for _ in stream:
-                    pass
+        async with (
+            asyncio.timeout(12),
+            session_writer_fence(str(owner.session)),
+            owner.persistent.lock,
+            aclosing(preparation.run()) as stream,
+        ):
+            async for _ in stream:
+                pass
     finally:
         admission.release()
         assert owner.provider.posts == len(owner.starts) == len(owner.saved_inputs()) == 1
-        assert owner.saved_inputs()[0]["content"][0]["text"] == "Saved history, never replay this input"
+        assert (
+            owner.saved_inputs()[0]["content"][0]["text"]
+            == "Saved history, never replay this input"
+        )
     return preparation
 
 
-async def test_actual_saved_native_ready_pipe_survives_busy_owner(native_backend, monkeypatch):
-    preparation = await prepare(native_backend, BusyOwnerPreparation, monkeypatch)
+@pytest.mark.parametrize("preparation_type", [BeforeReadPreparation, DuringReadPreparation])
+async def test_actual_saved_native_ready_pipe_survives_busy_owner(
+    native_backend, monkeypatch, preparation_type
+):
+    preparation = await prepare(native_backend, preparation_type, monkeypatch)
     assert preparation.pipe_ready
     assert preparation.native.attestation.observed
     assert preparation.native.attestation.identity.session_file == str(native_backend.session)
