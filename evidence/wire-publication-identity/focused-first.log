@@ -1,0 +1,101 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-wire-receipt-identity-20260929
+configfile: pyproject.toml
+plugins: anyio-4.14.2, asyncio-1.4.0, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 35 items
+
+tests/test_publication_snapshot_identity.py ..FF                         [ 11%]
+tests/test_keyed_response_delivery.py .................                  [ 60%]
+tests/test_coordination_response.py ..............                       [100%]
+
+=================================== FAILURES ===================================
+_ test_valid_durable_receipt_cannot_substitute_different_publication_content[type-only] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/focused/test_valid_durable_receipt_can0')
+notice = False
+
+    @pytest.mark.parametrize("notice", [False, True], ids=["type-only", "notice-only"])
+    def test_valid_durable_receipt_cannot_substitute_different_publication_content(tmp_path, notice):
+        """A fully self-consistent receipt still must match its frozen SQL intent.
+    
+        Type and notice are deliberately outside the old hash-derived message ID.
+        No forged certificate or partial envelope is used to reach the owned check.
+        """
+        case = _ready(tmp_path, direct=True)
+        try:
+            intent = prepare_fenced_response(
+                case.store, case.bus, case.fence, "answer @sender", owner_witness=case.witness
+            ).value
+            publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            response = case.bus.log.read_keyed_response(intent)
+            assert intent.matches_publication(response)
+            with case.bus.log.locked():
+                conversation = ResponseConversation.capture(case.bus, case.store.snapshots.get("exec"))
+                changed = (
+                    replace(response, notice=True)
+                    if notice
+                    else replace(response, type=MessageType.QUESTION)
+                )
+                assert changed.message_id == response.message_id
+                record = conversation.record(case.root_id, changed, intent)
+                rows = case.bus.log.path.read_bytes().splitlines(keepends=True)
+                case.bus.log.path.write_bytes(b"".join(rows[:-1]) + json.dumps(record).encode() + b"\n")
+                marker = case.bus.log._private_marker_unlocked()
+                verified = list(case.bus.log._verified_private_rows_unlocked(marker))
+                assert verified[-1][0] == changed  # Full strict durable receipt validation succeeds.
+            before = case.bus.log.path.read_bytes()
+>           with pytest.raises(RelationViolationError, match="Response publication intent conflicts"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'Response publication intent conflicts'
+E             Actual message: 'Private bus checkpoint prefix tail changed.'
+
+tests/test_publication_snapshot_identity.py:79: AssertionError
+_ test_valid_durable_receipt_cannot_substitute_different_publication_content[notice-only] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts/focused/test_valid_durable_receipt_can1')
+notice = True
+
+    @pytest.mark.parametrize("notice", [False, True], ids=["type-only", "notice-only"])
+    def test_valid_durable_receipt_cannot_substitute_different_publication_content(tmp_path, notice):
+        """A fully self-consistent receipt still must match its frozen SQL intent.
+    
+        Type and notice are deliberately outside the old hash-derived message ID.
+        No forged certificate or partial envelope is used to reach the owned check.
+        """
+        case = _ready(tmp_path, direct=True)
+        try:
+            intent = prepare_fenced_response(
+                case.store, case.bus, case.fence, "answer @sender", owner_witness=case.witness
+            ).value
+            publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            response = case.bus.log.read_keyed_response(intent)
+            assert intent.matches_publication(response)
+            with case.bus.log.locked():
+                conversation = ResponseConversation.capture(case.bus, case.store.snapshots.get("exec"))
+                changed = (
+                    replace(response, notice=True)
+                    if notice
+                    else replace(response, type=MessageType.QUESTION)
+                )
+                assert changed.message_id == response.message_id
+                record = conversation.record(case.root_id, changed, intent)
+                rows = case.bus.log.path.read_bytes().splitlines(keepends=True)
+                case.bus.log.path.write_bytes(b"".join(rows[:-1]) + json.dumps(record).encode() + b"\n")
+                marker = case.bus.log._private_marker_unlocked()
+                verified = list(case.bus.log._verified_private_rows_unlocked(marker))
+                assert verified[-1][0] == changed  # Full strict durable receipt validation succeeds.
+            before = case.bus.log.path.read_bytes()
+>           with pytest.raises(RelationViolationError, match="Response publication intent conflicts"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'Response publication intent conflicts'
+E             Actual message: 'Private bus checkpoint prefix tail changed.'
+
+tests/test_publication_snapshot_identity.py:79: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_publication_snapshot_identity.py::test_valid_durable_receipt_cannot_substitute_different_publication_content[type-only]
+FAILED tests/test_publication_snapshot_identity.py::test_valid_durable_receipt_cannot_substitute_different_publication_content[notice-only]
+======================== 2 failed, 33 passed in 14.30s =========================
