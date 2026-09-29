@@ -498,11 +498,9 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     late = comms.registry.require("late-owner")
     lookup = stable_thread_lookup(late.created_at)
     message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
-    with (
-        Coordination(str(root / "coordination.sqlite3")) as store,
-        pytest.raises(IdentityConflict, match="not registered"),
-    ):
-        store.participants.get(lookup)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        participant = store.participants.get(lookup)
+        assert participant.committed and participant.owner_thread == "late-owner"
 
     class StopBeforeSpawnError(Exception):
         pass

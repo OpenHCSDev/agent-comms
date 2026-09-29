@@ -7,9 +7,10 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.active_route import ActiveRoute, LocalRoute, resolve_comms_route
+from agent_comms.active_route import ActiveRoute, LocalRoute, read_active_route, resolve_comms_route
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.wire_log import WireLog
@@ -96,3 +97,49 @@ def test_service_factory_uses_selection_and_retains_private_pin(tmp_path, monkey
     assert service.root == root
     assert service.owners._private_nk_launch == (root, root_id, tmp_path)
     assert wire(root).owners._private_nk_launch is None
+
+
+def test_route_record_retains_the_external_format_and_private_marker(tmp_path):
+    tmp_path.chmod(0o700)
+    root = tmp_path / "private"
+    root.mkdir(mode=0o700)
+    root_id = Comms(root).messaging.initialize_private_initial_protocol()
+    selected = ActiveRoute(root, root_id, tmp_path)
+    encoded = FieldCodec.encode(selected)
+    assert encoded == {
+        "version": 1, "root": str(root), "wire_root_id": root_id,
+        "native_package": str(tmp_path),
+    }
+    route_file = tmp_path / "active-route.json"
+    route_file.write_text(json.dumps(encoded))
+    route_file.chmod(0o600)
+    assert read_active_route(route_file) == selected
+    assert read_active_route(route_file).observe_root() == root
+    assert not (root / "registry.json").exists()
+
+
+@pytest.mark.parametrize("change", [
+    {"version": True}, {"version": "1"}, {"version": 2}, {"version": None},
+    {"root": ""}, {"root": "relative"}, {"root": "/tmp/../private"}, {"root": None},
+    {"native_package": 7}, {"native_package": "relative"},
+    {"native_package": "/tmp/../package"}, {"wire_root_id": 9},
+    {"wire_root_id": "A" * 32}, {"wire_root_id": "a" * 31}, {"unexpected": True},
+])
+def test_malformed_route_identity_is_denied_at_the_real_file_boundary(tmp_path, change):
+    tmp_path.chmod(0o700)
+    route_file = tmp_path / "active-route.json"
+    value = FieldCodec.encode(ActiveRoute(tmp_path, "a" * 32, tmp_path))
+    value.update(change)
+    route_file.write_text(json.dumps(value))
+    route_file.chmod(0o600)
+    with pytest.raises(ValueError):
+        read_active_route(route_file)
+    assert not (tmp_path / "registry.json").exists()
+
+
+@pytest.mark.parametrize("missing", ["version", "root", "wire_root_id", "native_package"])
+def test_route_fields_remain_required_even_with_constructor_defaults(tmp_path, missing):
+    value = FieldCodec.encode(ActiveRoute(tmp_path, "a" * 32, tmp_path))
+    value.pop(missing)
+    with pytest.raises(ValueError):
+        ActiveRoute.from_record(value)

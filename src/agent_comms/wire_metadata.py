@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import Literal
@@ -10,6 +11,21 @@ from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import TextRepresentation
+
+
+class WireRootIdText(TextRepresentation):
+    """The private bus declaration owns its external root identity spelling."""
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if re.fullmatch(r"[0-9a-f]{32}", value) is None:
+            raise ValueError("Invalid private bus root identity")
+        return value
 
 
 class WireAccess(DeclaredFamily, affix="Access"):
@@ -55,11 +71,8 @@ class WireMetadata:
             raise ValueError("Admission floor is outside the durable source range")
         if self.private != (self.wire_root_id is not None):
             raise ValueError("Private bus protocol needs its root identity")
-        if self.wire_root_id is not None and (
-            len(self.wire_root_id) != 32
-            or any(c not in "0123456789abcdef" for c in self.wire_root_id)
-        ):
-            raise ValueError("Invalid private bus root identity")
+        if self.wire_root_id is not None:
+            WireRootIdText.from_text(self.wire_root_id)
         if self.claims and not self.private:
             raise ValueError("Claim marker requires private protocol")
         if (self.checkpoint_version is not None) != (self.checkpoint_seal is not None):
