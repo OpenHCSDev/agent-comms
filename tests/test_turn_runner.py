@@ -9,9 +9,10 @@ from acp.agent.router import build_agent_router
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from delivery_owner_fixture import canonical_agent
+from agent_comms.config_options import ModelConfigOption
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_runner import TurnRunner
+from delivery_owner_fixture import canonical_agent
 
 
 @pytest.fixture
@@ -19,7 +20,7 @@ async def owner(comms, monkeypatch):
     async def models(*args):
         return []
 
-    monkeypatch.setattr(backend, "discover_models", models)
+    monkeypatch.setattr(ModelConfigOption, "discover", models)
     agent = canonical_agent(comms, agent_bin="pi", agent_args=[], auto_wake=False)
     try:
         yield agent

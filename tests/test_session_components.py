@@ -6,10 +6,14 @@ import pytest
 from acp.agent.router import build_agent_router
 from acp.schema import SessionConfigSelectOption
 
-from agent_comms import backend
 from agent_comms.acp import CommsClient
 from agent_comms.comms import wire
-from agent_comms.config_options import ConfigOption
+from agent_comms.config_options import (
+    ConfigOption,
+    Model,
+    ModelConfigOption,
+    ThinkingLevelConfigOption,
+)
 from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from delivery_owner_fixture import canonical_agent
 
@@ -17,13 +21,13 @@ from delivery_owner_fixture import canonical_agent
 @pytest.fixture
 async def owner(tmp_path, monkeypatch):
     async def models(*args):
-        return [backend.Model("test/one", "One"), backend.Model("test/two", "Two")]
+        return [Model("test/one", "One"), Model("test/two", "Two")]
 
     async def levels(*args):
         return ["low", "medium", "high"]
 
-    monkeypatch.setattr(backend, "discover_models", models)
-    monkeypatch.setattr(backend, "discover_thinking_levels", levels)
+    monkeypatch.setattr(ModelConfigOption, "discover", models)
+    monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
     agent = canonical_agent(
         wire(tmp_path / "wire"),
         agent_bin="pi",

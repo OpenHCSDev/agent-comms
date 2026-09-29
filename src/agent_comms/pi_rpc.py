@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from typing import Any
 from uuid import uuid4
 
@@ -74,6 +75,29 @@ class PiRpcChannel:
         if not raw:
             return None
         return self.decode_record(raw, strict=strict, max_bytes=max_bytes)
+
+    async def request(self, command: PiCommand, writer: asyncio.StreamWriter) -> Response:
+        """Complete one exchange through the same typed pending correlation as turns.
+
+        The caller owns exclusive reading and the child deadline. Unrelated
+        events cannot complete this request; EOF and cancellation discard only
+        this request, without leaving pending futures or retrying its write.
+        """
+        command = replace(command, id=command.id or uuid4().hex)
+        future = self.track(command)
+        try:
+            writer.write(self.command_bytes(command))
+            await writer.drain()
+            while not future.done():
+                event = await self.receive()
+                if event is None:
+                    raise EOFError("Pi RPC ended before the requested response")
+                if isinstance(event, Response):
+                    self.correlate(event)
+            return future.result()
+        finally:
+            self.pending.discard(type(command), command.id)
+            future.cancel()
 
     def encode(self, command: PiCommand) -> bytes:
         """Register before writing; correlated proof still requires its native input ID."""

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from abc import abstractmethod
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import uuid4
 
@@ -18,16 +20,33 @@ from acp.schema import (
 
 from . import agent_events as events
 from . import backend
+from .child_process import BoundedRun
 from .comms import Comms
 from .declared_family import DeclaredFamily
+from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .pending_requests import PendingRequests
-from .pi_commands import PiCommand, SetModel, SetThinkingLevel
+from .pi_commands import (
+    GetAvailableModels,
+    GetAvailableThinkingLevels,
+    PiCommand,
+    SetModel,
+    SetThinkingLevel,
+)
+from .pi_payloads import PiResponseData
+from .pi_rpc import PiRpcChannel
 from .runtime import RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
 
 if TYPE_CHECKING:
     from .session_lifecycle import SessionLifecycle
+
+
+@dataclass(frozen=True, slots=True)
+class Model:
+    id: str
+    name: str
+    description: str | None = None
 
 
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
@@ -85,6 +104,24 @@ class ModelConfigOption(ConfigOption):
         )
 
     @classmethod
+    async def discover(cls, owner: ConfigOptions, selected: str | None) -> list[Model]:
+        values = [
+            value.strip()
+            for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
+            if value.strip()
+        ]
+        if not values:
+            data = await owner.discover(GetAvailableModels(), owner.agent_args)
+            values = (
+                [model.display_name for model in data.models if model.provider and model.id]
+                if data is not None
+                else []
+            )
+        if selected and selected not in values:
+            values.insert(0, selected)
+        return [Model(value, value) for value in dict.fromkeys(values)]
+
+    @classmethod
     async def change(
         cls, owner: ConfigOptions, session_id: str, thread: Thread, value: str
     ) -> None:
@@ -109,6 +146,15 @@ class ThinkingLevelConfigOption(ConfigOption):
     @classmethod
     def current_value(cls, thread: Thread) -> str | None:
         return thread.thinking_level
+
+    @classmethod
+    async def discover(cls, owner: ConfigOptions, model: str | None) -> list[str]:
+        if os.environ.get("AGENT_COMMS_AGENT_MODELS"):
+            return ["off", "minimal", "low", "medium", "high"]
+        data = await owner.discover(
+            GetAvailableThinkingLevels(), backend.args_for_model(owner.agent_args, model)
+        )
+        return list(data.levels) if data is not None and data.levels else ["off"]
 
     @classmethod
     async def selection(cls, owner: ConfigOptions, thread: Thread) -> tuple[str, list[str]]:
@@ -157,7 +203,7 @@ class ConfigOptions:
     ):
         self.comms, self.agent_bin, self.agent_args = comms, agent_bin, agent_args
         self.runtime, self.sessions, self.effects = runtime, sessions, effects
-        self.model_catalog: list[backend.Model] | None = None
+        self.model_catalog: list[Model] | None = None
         self.model_catalog_auth: tuple[int, int] | None = None
         self.model_catalog_lock = asyncio.Lock()
         self.catalog_publish_lock = asyncio.Lock()
@@ -166,6 +212,30 @@ class ConfigOptions:
         self.session_config_signature: dict[str, tuple[tuple[str, str | None], ...]] = {}
         self.setting_requests = PendingRequests()
         self.thinking_catalog: dict[tuple[str | None, tuple[int, int]], list[str]] = {}
+
+    async def discover(self, command: PiCommand, arguments: list[str]) -> PiResponseData | None:
+        """Read a native catalog without creating a saved session or sending input."""
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.managed,
+                self.agent_bin,
+                (
+                    *arguments,
+                    "--no-extensions",
+                    "--no-skills",
+                    "--no-context-files",
+                    "--no-session",
+                ),
+                worktree=Path.cwd(),
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=10
+            ) as child:
+                channel = PiRpcChannel(child.stdout)
+                response = await channel.request(command, child.stdin)
+                return response.data if response.success is True else None
+        except (TimeoutError, EOFError, ValueError, OSError, NativePiUnavailable):
+            return None
 
     def ensure_thread_model(self, thread_name: str) -> str | None:
         thread = self.comms.registry.require(thread_name)
@@ -178,25 +248,21 @@ class ConfigOptions:
             self.comms.threads.set_thread_model(thread.name, selected)
         return selected
 
-    async def models_for(self, thread_name: str) -> list[backend.Model]:
+    async def models_for(self, thread_name: str) -> list[Model]:
         selected = self.ensure_thread_model(thread_name)
         async with self.model_catalog_lock:
             if self.model_catalog is None or self.model_catalog_auth != backend.auth_revision():
-                self.model_catalog = await backend.discover_models(
-                    self.agent_bin, self.agent_args, selected
-                )
+                self.model_catalog = await ModelConfigOption.discover(self, selected)
                 self.model_catalog_auth = backend.auth_revision()
                 self.catalog_generation += 1
         if selected and all(model.id != selected for model in self.model_catalog):
-            return [backend.Model(selected, selected), *self.model_catalog]
+            return [Model(selected, selected), *self.model_catalog]
         return self.model_catalog
 
     async def thinking_levels_for(self, model: str | None) -> list[str]:
         key = (model, backend.auth_revision())
         if key not in self.thinking_catalog:
-            self.thinking_catalog[key] = await backend.discover_thinking_levels(
-                self.agent_bin, self.agent_args, model
-            )
+            self.thinking_catalog[key] = await ThinkingLevelConfigOption.discover(self, model)
         return self.thinking_catalog[key]
 
     async def options(self, thread_name: str) -> list[Any]:
