@@ -12,6 +12,19 @@ responsibilities to move. S14's identity/absence/decoder chains remain in live
 core paths. PR50 has no identified unique unmerged implementation; PR116's unique
 remaining workspace behavior belongs to Tesla156. Do not merge their old pins.
 
+## S14 followthrough checkpoint — PR350 / PR351
+
+PR347 is merged. PR350 implements the admission/response identity slice with
+actual owner/state authorities and full caller migration; its
+[deletion/installed-native receipt](../evidence/s14-admission-response/README.md)
+records42 real lifecycle checks and one actual selected native journey.
+PR351 independently owns awareness decode/provenance and bounded batched reads;
+PR350 contains no awareness rewrite. Parent owns their integration/live acceptance.
+The scheduler/selected-execution remainder below remains open, as does whole T4.
+Per parent update, Toad153/154 and core345 are merged; Tesla156 still owns
+source watchers/reused bodies, Noether the #openhcs empty display issue. Earlier
+rows below remain the dated census, not current unmerged-status assertions.
+
 ## Action checklist and actual ownership
 
 - [x] Read global AGENTS, NRA, exact latest refactor-audit archive, patterns and

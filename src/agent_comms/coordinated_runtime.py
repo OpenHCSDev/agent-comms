@@ -510,13 +510,7 @@ class SelectedExecution:
             f"Preparing {self.initial.message.target} message"[:200],
         )
         self.owner_witness = LiveResponseOwner(
-            self.owner.name,
-            self.lookup,
-            self.owner.pid,
-            self.owner.created_at,
-            self.owner.worktree,
-            self.owner.active_turn,
-            self.owner_admission_generation,
+            thread=self.owner, admission_generation=self.owner_admission_generation,
         )
 
     def _session(self):

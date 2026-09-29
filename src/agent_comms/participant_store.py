@@ -40,6 +40,13 @@ class ParticipantSnapshot:
     participant_generation: int = field(metadata={"wire_name": "generation"})
     pointer: CurrentExecutions
 
+    @property
+    def owner_identity(self) -> OwnerGenerations:
+        return OwnerGenerations(
+            owner_lookup=self.lookup, owner_thread=self.owner_thread,
+            generation=self.participant_generation,
+        )
+
 
 class ParticipantStore:
     def __init__(self, session: CoordinationSession) -> None:

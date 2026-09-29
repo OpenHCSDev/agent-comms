@@ -25,6 +25,14 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
 
+    @property
+    def tool_admission_open(self) -> bool:
+        return self.allows_tool_admission and not (self.backend_done or self.process_dead)
+
+    @property
+    def publication_ready(self) -> bool:
+        return False
+
     @classmethod
     @abstractmethod
     def successors(cls) -> tuple[type[AttemptState], ...]: ...
@@ -142,6 +150,10 @@ class CompactionAttempt(LiveAttempt):
 
 class SettlingAttempt(LiveAttempt):
     settling = True
+
+    @property
+    def publication_ready(self) -> bool:
+        return self.backend_done and self.process_dead
 
     @classmethod
     def successors(cls):

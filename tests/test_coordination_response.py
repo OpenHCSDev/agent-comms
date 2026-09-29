@@ -140,15 +140,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     owner, admission = comms.registry.lease_live_turn_with_admission(
         owner, "fixture-response-turn", expected_generation=admission
     )
-    witness = LiveResponseOwner(
-        owner.name,
-        recipient.recipient_lookup,
-        owner.pid,
-        owner.created_at,
-        owner.worktree,
-        owner.active_turn,
-        admission,
-    )
+    witness = LiveResponseOwner(thread=owner, admission_generation=admission)
     return Fixture(
         comms,
         bus,
@@ -472,7 +464,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
         case.close()
 
 
-@pytest.mark.parametrize("change", ["finish", "stop", "pid", "turn", "recipient"])
+@pytest.mark.parametrize("change", ["finish", "stop", "pid", "pid_reuse", "turn", "recipient"])
 def test_response_requires_current_exact_live_turn(tmp_path, change):
     """No PID-only or omitted-witness path can turn SQL finality into publication."""
     from agent_comms.coordination_errors import StaleFence
@@ -486,11 +478,16 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
         elif change == "stop":
             case.comms.registry.unregister("owner")
         elif change == "pid":
-            witness = replace(witness, pid=os.getpid() + 1)
+            witness = replace(witness, thread=replace(witness.thread, process_identity=ProcessIdentity(os.getpid() + 1, 1), active_turn=replace(witness.thread.active_turn, owner_pid=os.getpid() + 1)))
+        elif change == "pid_reuse":
+            process = witness.thread.process_identity
+            witness = replace(witness, thread=replace(
+                witness.thread, process_identity=ProcessIdentity(process.pid, process.start_time + 1)
+            ))
         elif change == "turn":
-            witness = replace(witness, active_turn=None)
+            witness = replace(witness, thread=replace(witness.thread, active_turn=None))
         else:
-            witness = replace(witness, recipient_lookup="f" * 32)
+            witness = replace(witness, thread=replace(witness.thread, created_at=witness.thread.created_at + 1))
         with pytest.raises(StaleFence):
             prepare_fenced_response(
                 case.store, case.bus, case.fence, "must not publish", owner_witness=witness
