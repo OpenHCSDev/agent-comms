@@ -21,11 +21,7 @@ from .native_pi import NativePiRpcLaunch
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import OwnerSummaryOutcome
-from .owner_compaction_runtime import (
-    SelectedNativeSummary,
-    SelectedSummaryDecline,
-    compact_owner_once,
-)
+from .owner_compaction_runtime import compact_owner_once
 from .owner_compaction_settings import (
     PiCompactionDecision,
     PiSettingsEvidenceError,
