@@ -1968,12 +1968,6 @@ class TestNativeConfiguration:
             "claude-sonnet",
         ]
 
-    def test_tool_kind_mapping(self):
-        assert backend.tool_kind("bash") == "execute"
-        assert backend.tool_kind("read") == "read"
-        assert backend.tool_kind("weird") == "other"
-
-
 # Native per-input proof tests retained from the PR#1 parent.
 class TestNativeInputBinding:
     async def test_owner_revoked_after_preflight_never_writes_prompt(self, tmp_path):

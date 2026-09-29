@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -22,16 +21,12 @@ from .claim_admission import (
     verify_selected_wake,
 )
 from .comms import Comms
-from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
     ClaimOwner,
-    ExistingFileClaim,
-    FileClaimPath,
     WakeAdmission,
-    WritableFileClaim,
 )
-from .field_codec import FieldCodec
 from .native_tool_call import NativeToolCall, SelectedToolDenied
+from .native_tools import CodingTool
 from .selected_tool_broker import (
     NativeToolMode,
     OwnerToolSocket,
@@ -39,47 +34,6 @@ from .selected_tool_broker import (
     record_selected_terminal,
     verify_sent_full_input,
 )
-
-
-@dataclass(frozen=True)
-class CodingTool(DeclaredFamily, affix="Tool"):
-    """Pi owns argument schemas; this family owns only cooperative claim behavior."""
-
-    arguments: dict[str, Any]
-    claim: FileClaimPath | None = field(init=False, compare=False)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "claim", self._parse_resource())
-
-    @abstractmethod
-    def _parse_resource(self) -> FileClaimPath | None: ...
-
-    @classmethod
-    def from_call(cls, name: str, arguments: dict[str, Any]) -> CodingTool:
-        # The native tool validates its full schema. Preserve it exactly for
-        # event/socket correlation, without maintaining a second Pi schema.
-        FieldCodec.encode(arguments)
-        return cls.decode(name)(arguments)
-
-
-class ReadTool(CodingTool):
-    def _parse_resource(self) -> None:
-        return None
-
-
-class BashTool(CodingTool):
-    def _parse_resource(self) -> None:
-        return None
-
-
-class EditTool(CodingTool):
-    def _parse_resource(self) -> FileClaimPath:
-        return ExistingFileClaim(Path(self.arguments["path"]))
-
-
-class WriteTool(CodingTool):
-    def _parse_resource(self) -> FileClaimPath:
-        return WritableFileClaim(Path(self.arguments["path"]))
 
 
 @dataclass
