@@ -490,15 +490,23 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
         await agent._refresh_private_cursor("beta")
         assert len(updates) == before, "Unchanged trusted reads republished the same cursor"
     with _store_lock(comms.root / "wire"):
+        await agent._publish_private_cursor("beta", "beta")
+    await agent._publish_private_cursor("beta", "beta")
+    assert len(updates) == before, "Periodic contention forgot unchanged announced authority"
+    with _store_lock(comms.root / "wire"):
         # This is an actual contended flock in the canonical read path, not a
         # mocked error. A new attachment cannot claim an unread observation.
-        loaded = agent._private_cursor_metadata("beta", "beta")
+        loaded = next(
+            update.envelope
+            for update in agent._session_runtime_metadata("beta", "beta")
+            if isinstance(update, CursorAdvancedUpdate)
+        )
         assert loaded.status == "unavailable"
         await agent._publish_private_cursor("beta", "beta")
     assert len(updates) == before
     await agent._publish_private_cursor("beta", "beta")
-    # PR299 invalidates the local announcement on contention so a trusted load
-    # that observed unavailable receives a fresh projection after the lock clears.
+    # The trusted load invalidates a different announced observation, so the
+    # recovered proof must still publish after the lock clears.
     assert len(updates) == before + 1
     assert updates[-1].same_observation(updates[-2])
     assert updates[-1].revision > loaded.revision
@@ -507,6 +515,10 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     await agent._publish_private_cursor("beta", "beta")
     assert updates[-1].status == "unavailable"
     assert updates[-1].scope == loaded.scope
+    before = len(updates)
+    await agent._refresh_private_cursor("beta")
+    await agent._refresh_private_cursor("beta")
+    assert len(updates) == before, "Unchanged unavailable observation was republished"
     assert len(calls) == 1  # Observation never initiates or replays an input.
 
 
