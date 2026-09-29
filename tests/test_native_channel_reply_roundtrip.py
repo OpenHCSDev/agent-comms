@@ -16,8 +16,8 @@ from agent_comms.acp_extension import (
     VerifiedCursorObservation,
     decode_updates,
 )
-from agent_comms.comms import Comms
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.comms import Comms
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -26,7 +26,10 @@ from test_coordinated_runtime import tmp_path as private_root_fixture
 tmp_path = private_root_fixture
 
 
-async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch):
+@pytest.mark.parametrize("restart_after_reply", [False, True], ids=["reply", "saved-restart"])
+async def test_native_channel_reply_automatically_reaches_original_sender(
+    tmp_path, monkeypatch, restart_after_reply
+):
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:
         pytest.skip("Actual immutable native bundle required")
@@ -40,7 +43,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 assert self.headers["Authorization"] == "Bearer local-only"
                 requests.append(request)
-                assert len(requests) <= 2, "Reply observation caused replay or ping-pong"
+                assert len(requests) <= 2 + restart_after_reply, "Reply observation caused replay or ping-pong"
                 text = (
                     '{"decision":"IGNORE"}'
                     if "bounded triage" in json.dumps(request)
@@ -238,6 +241,45 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         await asyncio.sleep(1.2)  # Beyond the watcher fallback interval; no recursive wake/replay.
         assert len(requests) == 2 and not failures
         assert len(comms.views.channel_history("#team")) == 2
+        if restart_after_reply:
+            # Continue the same real owner/ACP/native journey from saved state.
+            await until(
+                lambda: all(not comms.registry.require(name).executing for name in projects),
+                "Both native turns released before guarded restart",
+            )
+            before = comms.registry.snapshot()
+            saved = {
+                name: Path(before.threads[name].session_file).read_bytes() for name in projects
+            }
+            await attachment.shutdown()
+            await asyncio.to_thread(comms.owners.restart_owners, list(projects))
+            after = comms.registry.snapshot()
+            for name in projects:
+                old, current = before.threads[name], after.threads[name]
+                assert current.incarnation == old.incarnation
+                assert current.process_identity != old.process_identity
+                assert after.admission_generations[name] > before.admission_generations[name]
+                assert current.session_file == old.session_file
+                assert Path(current.session_file).read_bytes() == saved[name]
+            assert len(requests) == 2, "Restart replayed saved input"
+            attachment = CommsClient(
+                comms, runtime_enabled=True, private_nk_native_package=package,
+                private_nk_wire_root_id=root_id,
+            )
+            attachment.on_connect(Client())
+            await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")
+            async with asyncio.timeout(35):
+                answer = await attachment.prompt(
+                    session_id="questioner",
+                    prompt=[{"type": "text", "text": "EXPLICIT_POST_RESTART_INPUT"}],
+                )
+            assert answer.stop_reason == "end_turn"
+            assert len(requests) == 3
+            assert not failures, failures
+            entries = [json.loads(line) for line in Path(after.threads['questioner'].session_file).read_text().splitlines()]
+            inputs = [row['message'] for row in entries if row['type'] == 'message' and row['message']['role'] == 'user']
+            assert sum('EXPLICIT_POST_RESTART_INPUT' in json.dumps(row['content']) for row in inputs) == 1
+            assert Path(after.threads['questioner'].session_file).read_bytes().startswith(saved['questioner'])
     finally:
         await attachment.shutdown()
         for name in projects:
