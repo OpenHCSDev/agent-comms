@@ -90,7 +90,6 @@ class UnknownPiEvent(PiEvent):
 @dataclass(frozen=True, kw_only=True)
 class AgentEnd(PiEvent):
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
-    pass
     accepts_prompt = True
 
     @property
@@ -124,7 +123,6 @@ class AgentSettled(PiEvent):
 
 
 class AgentStart(PiEvent):
-    pass
     accepts_prompt = True
 
     @property
@@ -288,7 +286,6 @@ class CompactionStart(ReasonedCompaction):
 @dataclass(frozen=True, kw_only=True)
 class ContextCommitted(PiEvent):
     input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
-    pass
     session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
     session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
     request_generation: int | None = field(
@@ -508,7 +505,6 @@ class EditorUiRequest(DialogUiRequest):
 @dataclass(frozen=True, kw_only=True)
 class InputCommitted(PiEvent):
     input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
-    pass
     session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
     session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
 
