@@ -1,0 +1,42 @@
+{
+  "finding_count": 22,
+  "finding_counts": {
+    "by_pattern": [
+      {
+        "pattern_id": 1,
+        "count": 21,
+        "pattern_name": "Nominal Boundary Over Sentinel Simulation"
+      },
+      {
+        "pattern_id": 14,
+        "count": 1,
+        "pattern_name": "Authoritative Projection Schema"
+      }
+    ],
+    "by_detector": [
+      {
+        "detector_id": "repeated_builder_calls",
+        "count": 1
+      },
+      {
+        "detector_id": "semantic_mirror_without_descent",
+        "count": 21
+      }
+    ]
+  },
+  "supporting_raw_finding_count": 22,
+  "timing": {
+    "parse_seconds": 2.125,
+    "analysis_seconds": 33.085,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.105,
+    "analysis_cache_status": "miss",
+    "total_seconds": 35.315
+  },
+  "scan_status": null,
+  "coverage_limit": "Full src/agent_comms report scope and src dependency context; CLI emits no analyzed/omitted detector counts or scan_status.",
+  "raw_detector_ids": [
+    "repeated_builder_calls",
+    "semantic_mirror_without_descent"
+  ]
+}
