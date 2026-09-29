@@ -20,7 +20,6 @@ from acp.schema import (
     TerminalAuthMethod,
 )
 
-from . import backend
 from .acp_extension import (
     ContextUsage,
     CoordinationChangedUpdate,
@@ -29,6 +28,7 @@ from .acp_extension import (
 )
 from .comms import Comms
 from .config_options import ConfigOptions
+from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
@@ -41,7 +41,7 @@ class SessionLifecycle:
         self,
         comms: Comms,
         agent_bin: str,
-        agent_args: list[str],
+        agent_args: NativeArguments,
         runtime: RuntimeServer,
         runtime_enabled: bool,
         effects: SessionEffects,
@@ -128,8 +128,8 @@ class SessionLifecycle:
             worktree=cwd,
             pid=owner_pid,
             start_at_latest=True,
-            model=backend.configured_model(self.agent_args),
-            thinking_level=backend.configured_thinking_level(self.agent_args),
+            model=self.agent_args.model,
+            thinking_level=self.agent_args.thinking,
             auto_title_pending=True,
         )
 
@@ -308,6 +308,6 @@ class AttachedSessionLifecycle(SessionLifecycle):
             self.comms.owners.ensure_owner,
             thread.name,
             agent_bin=self.agent_bin,
-            agent_args=self.agent_args,
+            agent_args=list(self.agent_args.argv),
         )
         return await self.attach_owner(owner, session_id)

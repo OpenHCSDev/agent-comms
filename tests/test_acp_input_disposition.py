@@ -20,6 +20,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_delivery_owner
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -100,7 +101,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(tmp_p
     child, _session, received, _release = rpc_process(tmp_path, capability=False)
     async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, _message, _root):
         owner.inputs.auto_wake = False
-        owner.turns.agent_bin, owner.turns.agent_args = str(child), []
+        owner.turns.agent_bin, owner.turns.agent_args = str(child), NativeArguments.parse(())
         updates = Updates()
         owner.on_connect(updates)
         await asyncio.wait_for(
@@ -124,7 +125,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
     child, session_file, received, release = rpc_process(tmp_path, second_start=second_start)
     async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, _message, root_id):
         owner.inputs.auto_wake = False
-        owner.turns.agent_bin, owner.turns.agent_args = str(child), []
+        owner.turns.agent_bin, owner.turns.agent_args = str(child), NativeArguments.parse(())
         started = asyncio.Event()
         original_emit = owner._emit_event
 
