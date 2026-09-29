@@ -26,6 +26,16 @@ class RegistryOwner:
     thread: Thread
     admission_generation: int
 
+    @classmethod
+    def capture(cls, snapshot: RegistrySnapshot, name: str, reason: str) -> RegistryOwner:
+        thread = snapshot.threads.get(name)
+        admission = snapshot.admission_generations.get(name)
+        if thread is None or admission is None:
+            raise StaleFence(reason)
+        owner = cls(thread=thread, admission_generation=admission)
+        owner.require_snapshot(snapshot, reason)
+        return owner
+
     def _require_current(self, actual: Thread, admission: int | None, reason: str) -> None:
         if (
             admission != self.admission_generation
