@@ -145,9 +145,17 @@ class CursorObservation(DeclaredFamily, affix="CursorObservation"):
     def validate_scope(self, scope: CursorScope | None) -> None:
         pass
 
+    @property
+    def needs_refresh(self) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class UnavailableCursorObservation(CursorObservation):
+    @property
+    def needs_refresh(self) -> bool:
+        return True
+
     @property
     def status(self) -> str:
         return "unavailable"
@@ -194,6 +202,10 @@ class CursorEnvelope:
     @property
     def status(self) -> str:
         return self.observation.status
+
+    def same_observation(self, other: CursorEnvelope) -> bool:
+        """Publication equality excludes only the local observation revision."""
+        return self.scope == other.scope and self.observation == other.observation
 
     @property
     def digest(self) -> str:

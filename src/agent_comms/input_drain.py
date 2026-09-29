@@ -269,15 +269,21 @@ class InputDrain(FutureInputQueue):
                     except asyncio.CancelledError:
                         raise
                     except (
-                        OSError, ValueError, sqlite3.Error, CoordinationError, RequestError
+                        OSError,
+                        ValueError,
+                        sqlite3.Error,
+                        CoordinationError,
+                        RequestError,
                     ) as error:
                         self.comms.agents.set_drain_diagnostic(
-                            thread, owner,
+                            thread,
+                            owner,
                             UnavailableDrainDiagnostic(owner, type(error).__name__, str(error)),
                         )
                     except Exception as error:
                         self.comms.agents.set_drain_diagnostic(
-                            thread, owner,
+                            thread,
+                            owner,
                             StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
                         )
                         raise
@@ -334,6 +340,7 @@ class InputDrain(FutureInputQueue):
         # ordinary loop still synchronizes configuration and schedules goals.
         before = self._private_observation_revision(session_id, root_id)
         if self._idle_private_revisions.get(session_id) == before:
+            await self.effects._refresh_private_cursor(session_id)
             return 0
         self._idle_private_revisions.pop(session_id, None)
         result = await self.effects._drain_private_nk(session_id, root_id)
@@ -592,9 +599,7 @@ class InputDrain(FutureInputQueue):
             (
                 item.text
                 if item and item.echo
-                else initial_display_text
-                if input_id is None
-                else None
+                else initial_display_text if input_id is None else None
             ),
             input_id,
             queued_item=item,
