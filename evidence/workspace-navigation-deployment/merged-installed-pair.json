@@ -1,0 +1,36 @@
+{
+  "packages": {
+    "agent-comms": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "77c2ac671e80018e75e97d9f8c5643cffe1dd39e",
+        "requested_revision": "77c2ac671e80018e75e97d9f8c5643cffe1dd39e"
+      }
+    },
+    "batrachian-toad": {
+      "url": "https://github.com/OpenHCSDev/toad.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "51fdf2b856963b62d3d569ed110d4581ba8a1bf0",
+        "requested_revision": "51fdf2b856963b62d3d569ed110d4581ba8a1bf0"
+      }
+    },
+    "textual": {
+      "url": "https://github.com/OpenHCSDev/textual.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "1738abd8e3524b7e86171b70256d7f7e52fdb724",
+        "requested_revision": "1738abd8e3524b7e86171b70256d7f7e52fdb724"
+      }
+    }
+  },
+  "complete_native_package_verified": true,
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent",
+  "activated": true,
+  "fresh_acp_attachments": 8,
+  "configured_native_attestations": 8,
+  "actual_default_live_navigation": "passed",
+  "actual_toad_comms_pty_launch_and_quit": "exit0",
+  "operator_deleted": true
+}
