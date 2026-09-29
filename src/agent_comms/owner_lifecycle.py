@@ -262,12 +262,12 @@ class OwnerLifecycle:
         agent_bin: str,
         agent_args: Sequence[str] | None = None,
         *,
-        prompt: str | None = None,
+        startup_input_key: str | None = None,
     ) -> Thread:
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
         env = os.environ.copy()
-        for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK"):
+        for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_TASK", "AGENT_COMMS_STARTUP_INPUT_KEY"):
             env.pop(key, None)
         private_launch = self._private_nk_launch
         if private_launch is not None:
@@ -311,8 +311,8 @@ class OwnerLifecycle:
             env["PI_PARENT_ID"] = thread.parent
         if thread.task is not None:
             env["PI_TASK"] = thread.task
-        if prompt is not None:
-            env["PI_PROMPT"] = prompt
+        if startup_input_key is not None:
+            env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
         if agent_args is not None:
             env["AGENT_COMMS_AGENT_ARGS"] = shlex.join(agent_args)
         owned: Thread | None = None
