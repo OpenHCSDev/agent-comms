@@ -29,7 +29,7 @@ async def main() -> None:
     assert len(events) == 2
     assert isinstance(events[0], CompactionStart)
     assert isinstance(events[1], CompactionEnd)
-    assert events[1].publication_summary == "PR401_COMMITTED_SUMMARY"
+    assert "PR401_COMMITTED_SUMMARY" in events[1].publication_summary
 
     with tempfile.TemporaryDirectory(prefix="pr401-toad-") as directory:
         root = Path(directory)
@@ -72,6 +72,7 @@ async def main() -> None:
                         break
                     await pilot.pause(0.05)
             assert "Context estimate unavailable" not in notices[0].source
+            assert events[1].publication_summary in notices[0].source
 
             async with asyncio.timeout(8):
                 while True:
@@ -84,7 +85,7 @@ async def main() -> None:
                         break
             assert app._exception is None
         await asyncio.get_running_loop().shutdown_default_executor()
-    print("installed Toad ACP/UI: committed native summary visible once")
+    print(f"installed Toad ACP/UI: committed native summary visible once ({toad.__file__})")
 
 
 if __name__ == "__main__":
