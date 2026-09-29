@@ -13,6 +13,7 @@ from .bus_display_index import BusDisplayIndex
 from .channels import Channel
 from .display_order import ChannelSort
 from .goal_presentation import GoalExecution
+from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .messages import Message
 from .read_basis import ChannelDisplayScope, ViewUnread
@@ -24,7 +25,10 @@ from .thread_status import ThreadStatus
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .agent_activity import AgentActivity
+    from .goal_waits import GoalWait
     from .messages import Message
+    from .registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +173,45 @@ class ThreadView:
     runtime: AgentRuntimeInfo | None
     last_seen: float
     goal_execution: GoalExecution | None = None
+
+    @staticmethod
+    def visible(
+        thread: Thread, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
+    ) -> bool:
+        return thread.role.executable and snapshot.statuses[thread.name].in_view(
+            show_stopped=show_stopped, show_archived=show_archived
+        )
+
+    @classmethod
+    def capture(
+        cls, thread: Thread, snapshot: RegistrySnapshot, activity: Activity,
+        runtime: AgentRuntimeInfo | None, waits: dict[str, GoalWait],
+    ) -> ThreadView:
+        """Roster and individual readers join the same captured authorities."""
+        return cls(
+            thread, snapshot.statuses[thread.name], activity, runtime,
+            snapshot.last_seen.get(thread.name, 0),
+            GoalWaits.execution(thread.goal, waits, snapshot),
+        )
+
+    @classmethod
+    def roster(
+        cls, snapshot: RegistrySnapshot, agents: AgentActivity, goal_waits: GoalWaits,
+        *, show_stopped: bool, show_archived: bool,
+    ) -> tuple[ThreadView, ...]:
+        runtime = agents.runtime_info.read()
+        activities = agents.all_activity(snapshot=snapshot)
+        waits = goal_waits.read()
+        return tuple(
+            cls.capture(
+                thread, snapshot,
+                activities.get(name, Activity(name, ActivityState.IDLE, timestamp=0)),
+                runtime.get(name), waits,
+            )
+            for name, thread in snapshot.threads.items()
+            if cls.visible(thread, snapshot,
+                           show_stopped=show_stopped, show_archived=show_archived)
+        )
 
     @property
     def presentation(self) -> ThreadPresentation:
