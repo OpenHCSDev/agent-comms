@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .goal_attempt_identity import FailureNotObserved
 from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
@@ -30,6 +31,9 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     def validate_attempt(self, attempt_id: str | None) -> None:
         if not attempt_id:
             raise ValueError("This generation requires an attempt identity.")
+
+    def require_failure(self) -> None:
+        raise FailureNotObserved("missing_binding")
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return False
@@ -85,6 +89,9 @@ class ReservedGeneration(GenerationState):
 @dataclass(frozen=True)
 class BlockedGeneration(GenerationState):
     failed = True
+
+    def require_failure(self) -> None:
+        return None
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return isinstance(phase, FailedAttempt)

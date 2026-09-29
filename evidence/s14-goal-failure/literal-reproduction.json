@@ -1,0 +1,17 @@
+{
+  "literal": {
+    "source": "from typing import Literal\ntransport: Literal[\"stdio\"]\n",
+    "packaged": 1,
+    "archive_classifier": 1
+  },
+  "dictionary": {
+    "source": "value = payload[\"transport\"]\n",
+    "packaged": 1,
+    "archive_classifier": 1
+  },
+  "annotation_with_runtime_read": {
+    "source": "from typing import Literal\ntransport: Literal[\"stdio\"] = payload[\"transport\"]\n",
+    "packaged": 2,
+    "archive_classifier": 2
+  }
+}

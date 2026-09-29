@@ -27,6 +27,7 @@ from typing import Literal, TypeVar
 from uuid import uuid4
 
 from .compaction_states import sql_names
+from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
     FailedAttempt,
@@ -86,6 +87,11 @@ class Generation(GoalLedgerTable, TypedTable):
         f"json_extract(lifecycle,'$.kind') IN {sql_names(GenerationState)}",
     )
 
+    def failure_identity(self) -> GoalAttemptIdentity:
+        self.lifecycle.require_failure()
+        assert self.attempt_id is not None
+        return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id)
+
     def __post_init__(self) -> None:
         self.lifecycle.validate_attempt(self.attempt_id)
         if self.number < 1:
@@ -98,6 +104,10 @@ class Reservation:
     generation: int
     attempt_id: str
     token: str
+
+    @property
+    def identity(self) -> GoalAttemptIdentity:
+        return GoalAttemptIdentity(self.goal_id, self.generation, self.attempt_id)
 
 
 @dataclass(frozen=True)
@@ -735,8 +745,7 @@ class GoalAttemptStore:
                 goal_id, expected_generation, ReservedGeneration(), attempt_id
             ) or (
                 attempt is None
-                or attempt.reservation.goal_id != goal_id
-                or attempt.reservation.generation != expected_generation
+                or attempt.reservation.identity != GoalAttemptIdentity(goal_id, expected_generation, attempt_id)
                 or not attempt.phase.may_become(FailedAttempt())
             ):
                 raise StaleAttemptError("Attempt changed before human abandonment decision.")
@@ -839,8 +848,7 @@ class GoalAttemptStore:
             attempt = self._attempt(conn, attempt_id)
             if (
                 attempt is None
-                or attempt.reservation.goal_id != goal_id
-                or attempt.reservation.generation != expected_generation
+                or attempt.reservation.identity != GoalAttemptIdentity(goal_id, expected_generation, attempt_id)
                 or not isinstance(attempt.phase, FailedAttempt)
             ):
                 raise UnresolvedAttemptError(
@@ -944,8 +952,7 @@ class GoalAttemptStore:
             attempt = self._attempt(conn, attempt_id) if attempt_id is not None else None
             if attempt_id is not None and (
                 attempt is None
-                or attempt.reservation.goal_id != goal_id
-                or attempt.reservation.generation != expected_generation
+                or attempt.reservation.identity != GoalAttemptIdentity(goal_id, expected_generation, attempt_id)
             ):
                 raise StaleAttemptError("Unresolved goal has no matching attempt to retire.")
             if not current.lifecycle.permits_retirement(attempt.phase if attempt else None):

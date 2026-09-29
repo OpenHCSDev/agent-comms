@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .declared_family import DeclaredFamily
+from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
 
 if TYPE_CHECKING:
@@ -50,6 +51,9 @@ class RuntimePause(PauseSource):
 class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     active: ClassVar[bool] = False
     terminal: ClassVar[bool] = False
+
+    def failure_projection(self, reason: str) -> tuple[str, str]:
+        raise FailureNotObserved("owner_or_goal_changed")
 
     @property
     @abstractmethod
@@ -126,6 +130,9 @@ class ActiveGoal(OpenGoal, FromOpenGoal):
 class PausedGoal(OpenGoal, FromOpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
 
+    def failure_projection(self, reason: str) -> tuple[str, str]:
+        return self.source.failure_projection()
+
     @property
     def toggle(self) -> type[GoalAction]:
         from .goal_actions import ActiveGoalAction
@@ -158,6 +165,9 @@ class PausedGoal(OpenGoal, FromOpenGoal):
 
 
 class BlockedState(GoalState, FromOpenGoal):
+    def failure_projection(self, reason: str) -> tuple[str, str]:
+        return "backend_suspended", reason
+
     @property
     def toggle(self) -> type[GoalAction]:
         from .goal_actions import RetryGoalAction
