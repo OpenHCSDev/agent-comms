@@ -231,9 +231,14 @@ class ConfigOptions:
             async with BoundedRun.session(
                 launch.argv, cwd=launch.cwd, env=launch.env, timeout=10
             ) as child:
-                channel = PiRpcChannel(child.stdout)
-                response = await channel.request(command, child.stdin)
-                return response.data if response.success is True else None
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    channel = PiRpcChannel(child.stdout)
+                    response = await channel.request(command, child.stdin)
+                    return response.data if response.success is True else None
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
         except (TimeoutError, EOFError, ValueError, OSError, NativePiUnavailable):
             return None
 

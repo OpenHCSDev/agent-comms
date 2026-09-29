@@ -5,6 +5,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.config_options import Model, ModelConfigOption
 from agent_comms.login import run_login
+from delivery_owner_fixture import canonical_agent
 
 
 async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
@@ -51,7 +52,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
         return models
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
-    agent = CommsAgent(wire(tmp_path), agent_args=["--model", "test/base"])
+    agent = canonical_agent(wire(tmp_path), agent_args=["--model", "test/base"])
     # Exercise the explicit refresh path without the background drain racing it.
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session_id: None)
     updates = []
@@ -61,7 +62,9 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
             updates.append(kwargs["update"])
 
     agent.on_connect(Client())
-    session = (await agent.new_session("/tmp/project")).session_id
+    project = tmp_path / "project"
+    project.mkdir()
+    session = (await agent.new_session(str(project))).session_id
     try:
         await agent.sessions.config.refresh_auth_models()
         assert not updates, "The session response already supplied this catalogue"
