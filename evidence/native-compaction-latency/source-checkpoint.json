@@ -24,5 +24,6 @@
   ],
   "native_slot_dependency": "210/426 then214 capture; direct owners notified",
   "paid_calls": 0,
-  "live_sessions_mutated": false
+  "live_sessions_mutated": false,
+  "superseded_by": "acceptance.json"
 }
