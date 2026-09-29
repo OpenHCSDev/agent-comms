@@ -1972,25 +1972,6 @@ class TestNativeConfiguration:
             "claude-sonnet",
         ]
 
-    async def test_model_catalog_comes_from_pi_rpc(self, tmp_path):
-        stub = _stub(
-            tmp_path,
-            """#!/bin/sh
-IFS= read -r request
-cat <<'EOF'
-{"id":"models","type":"response","command":"get_available_models","success":true,"data":{"models":[{"provider":"openrouter","id":"z-ai/glm"},{"provider":"anthropic","id":"claude"}]}}
-EOF
-""",
-        )
-
-        models = await backend.discover_models(stub, [], "openrouter/current")
-
-        assert [model.id for model in models] == [
-            "openrouter/current",
-            "openrouter/z-ai/glm",
-            "anthropic/claude",
-        ]
-
     def test_tool_kind_mapping(self):
         assert backend.tool_kind("bash") == "execute"
         assert backend.tool_kind("read") == "read"

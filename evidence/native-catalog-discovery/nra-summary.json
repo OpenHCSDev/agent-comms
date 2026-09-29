@@ -1,0 +1,38 @@
+{
+  "base": "0a1f126d; source equals prior fc73cb8d audited custody checkpoint",
+  "base_raw_count": 21,
+  "head_raw_count": 21,
+  "counts": {
+    "by_pattern": [
+      {
+        "pattern_id": 1,
+        "count": 20,
+        "pattern_name": "Nominal Boundary Over Sentinel Simulation"
+      },
+      {
+        "pattern_id": 14,
+        "count": 1,
+        "pattern_name": "Authoritative Projection Schema"
+      }
+    ],
+    "by_detector": [
+      {
+        "detector_id": "repeated_builder_calls",
+        "count": 1
+      },
+      {
+        "detector_id": "semantic_mirror_without_descent",
+        "count": 20
+      }
+    ]
+  },
+  "timing": {
+    "parse_seconds": 2.126,
+    "analysis_seconds": 32.53,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 0.103,
+    "analysis_cache_status": "miss",
+    "total_seconds": 34.759
+  },
+  "limitations": "CLI emits no analyzed or omitted counts or scan_status. Counts are detector output, not zero debt or full proof of coverage. Authored owner refactor, not NRA replay-proved equivalence."
+}

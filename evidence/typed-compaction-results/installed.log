@@ -1,0 +1,287 @@
+..............................F.F.........FFFF.................          [100%]
+=================================== FAILURES ===================================
+__ test_current_root_compact_refuses_unjournaled_writer_for_every_launch_form __
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-476/test_current_root_compact_refu0')
+
+    async def test_current_root_compact_refuses_unjournaled_writer_for_every_launch_form(tmp_path):
+        """Actual ACP request uses root authority, never executable-name inference."""
+        comms = wire(tmp_path / "wire")
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        package = tmp_path / "native-package"
+        agent = CommsAgent(
+            comms,
+            auto_wake=False,
+            private_nk_native_package=package,
+            private_nk_wire_root_id=root_id,
+        )
+        session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
+        saved = tmp_path / "native.jsonl"
+        saved.write_text('{"type":"session","version":3,"id":"preserved"}\n')
+        comms.threads.attach_session(session, str(saved), pid=os.getpid())
+        before = saved.read_bytes()
+        alias = tmp_path / "renamed-native"
+        alias.symlink_to(package / "dist/cli.js")
+    
+        try:
+            for command in ("pi", str(package / "dist/cli.js"), str(alias)):
+                agent.turns.agent_bin = command
+                with pytest.raises(RequestError, match="requires the current selected native session"):
+>                   await build_agent_router(agent)(
+                        "session/prompt",
+                        {"sessionId": session, "prompt": [{"type": "text", "text": "/compact"}]},
+                        False,
+                    )
+
+tests/test_acp_compact_command.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/agent-comms/runtime-round2-final-20260928/lib/python3.14/site-packages/acp/router.py:184: in __call__
+    return await route.handle(params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/agent-comms/runtime-round2-final-20260928/lib/python3.14/site-packages/acp/router.py:73: in handle
+    result = await self.func(params)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/agent-comms/runtime-round2-final-20260928/lib/python3.14/site-packages/acp/router.py:107: in wrapper
+    return await func(**params)  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:217: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: in dispatch
+    replacement = await handler(value)
+                  ^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:55: in compact
+    self.response = await self.agent._compact_request(self.session_id, request.instructions)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/acp.py:229: in _compact_request
+    result = await manual_compaction_bridge.compact_context(
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/manual_compaction_bridge.py:74: in compact_context
+    info = await runner.prepare_selected_session(session_id, thread)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/turn_runner.py:170: in prepare_selected_session
+    state = await NativeSessionPreparation.open(
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/native_session_prepare.py:67: in open
+    launch = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.artifacts/paired-installed/lib/python3.14/site-packages/agent_comms/native_pi.py:330: in managed
+    cwd = worktree.resolve(strict=True)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: in resolve
+    return self.with_segments(os.path.realpath(self, strict=strict))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+filename = '/tmp/pytest-of-ts/pytest-476/test_current_root_compact_refu0/work'
+strict = True
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pytest-of-ts/pytest-476/test_current_root_compact_refu0/work'
+
+<frozen posixpath>:457: FileNotFoundError
+__________ test_owner_prompt_rejection_preserves_reason_and_rpc_code ___________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-476/test_owner_prompt_rejection_pr0')
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
+    async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
+        from acp.exceptions import RequestError
+    
+        comms = wire(tmp_path / "wire")
+        owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+        client = canonical_agent(comms)
+        response = await owner.new_session(str(tmp_path / "project"))
+        proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
+        request = {
+            "prompt": [{"type": "text", "text": "Do not launch"}],
+            "meta": {"agentComms": {"request": {"kind": "invalid"}}},
+        }
+        try:
+            with pytest.raises(RequestError) as caught:
+                await proxy.request("prompt", **request)
+            assert caught.value.code == -32602
+            assert "invalid" in caught.value.data["reason"]
+            # The older, already-running proxy reads only the string field.
+            reader, writer = await asyncio.open_unix_connection(proxy.path)
+            try:
+                writer.write(
+                    (
+                        json.dumps({"action": "prompt", "thread": response.session_id, **request})
+                        + "\n"
+                    ).encode()
+                )
+                await writer.drain()
+                result = json.loads(await reader.readline())
+>               assert "invalid" in result.error
+                                    ^^^^^^^^^^^^
+E               AttributeError: 'dict' object has no attribute 'error'
+
+tests/test_runtime.py:91: AttributeError
+______ test_explicit_manual_selected_commit_never_invents_original_input _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-476/test_explicit_manual_selected_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3cde3dc7c0>
+
+    async def test_explicit_manual_selected_commit_never_invents_original_input(tmp_path, monkeypatch):
+>       async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+
+tests/test_canonical_manual_compaction.py:27: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:338: in helper
+    return _AsyncGeneratorContextManager(func, args, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <contextlib._AsyncGeneratorContextManager object at 0x7f3cde7d62b0>
+func = <function owner_fixture at 0x7f3ce548d4e0>
+args = (PosixPath('/tmp/pytest-of-ts/pytest-476/test_explicit_manual_selected_0'), <_pytest.monkeypatch.MonkeyPatch object at 0x7f3cde3dc7c0>)
+kwds = {'real_host': True, 'goal': False}
+
+    def __init__(self, func, args, kwds):
+>       self.gen = func(*args, **kwds)
+                   ^^^^^^^^^^^^^^^^^^^
+E       TypeError: owner_fixture() got an unexpected keyword argument 'real_host'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:109: TypeError
+____ test_explicit_manual_recovers_known_refusal_without_replaying_unknown _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-476/test_explicit_manual_recovers_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3cde383700>
+
+    async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
+        tmp_path, monkeypatch
+    ):
+>       async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+
+tests/test_canonical_manual_compaction.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:338: in helper
+    return _AsyncGeneratorContextManager(func, args, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <contextlib._AsyncGeneratorContextManager object at 0x7f3ce6ea4e10>
+func = <function owner_fixture at 0x7f3ce548d4e0>
+args = (PosixPath('/tmp/pytest-of-ts/pytest-476/test_explicit_manual_recovers_0'), <_pytest.monkeypatch.MonkeyPatch object at 0x7f3cde383700>)
+kwds = {'real_host': True, 'goal': False}
+
+    def __init__(self, func, args, kwds):
+>       self.gen = func(*args, **kwds)
+                   ^^^^^^^^^^^^^^^^^^^
+E       TypeError: owner_fixture() got an unexpected keyword argument 'real_host'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:109: TypeError
+______ test_manual_does_not_retire_or_repeat_uncertain_provider[reserved] ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-476/test_manual_does_not_retire_or0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3cde7caac0>
+uncertain = False
+
+    @pytest.mark.parametrize("uncertain", [False, True], ids=["reserved", "unknown"])
+    async def test_manual_does_not_retire_or_repeat_uncertain_provider(
+        tmp_path, monkeypatch, uncertain
+    ):
+        from agent_comms.compaction_journal import CompactionJournalError
+    
+>       async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+
+tests/test_canonical_manual_compaction.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:338: in helper
+    return _AsyncGeneratorContextManager(func, args, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <contextlib._AsyncGeneratorContextManager object at 0x7f3ce6ea49b0>
+func = <function owner_fixture at 0x7f3ce548d4e0>
+args = (PosixPath('/tmp/pytest-of-ts/pytest-476/test_manual_does_not_retire_or0'), <_pytest.monkeypatch.MonkeyPatch object at 0x7f3cde7caac0>)
+kwds = {'real_host': True, 'goal': False}
+
+    def __init__(self, func, args, kwds):
+>       self.gen = func(*args, **kwds)
+                   ^^^^^^^^^^^^^^^^^^^
+E       TypeError: owner_fixture() got an unexpected keyword argument 'real_host'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:109: TypeError
+______ test_manual_does_not_retire_or_repeat_uncertain_provider[unknown] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-476/test_manual_does_not_retire_or1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3cde7cb5b0>
+uncertain = True
+
+    @pytest.mark.parametrize("uncertain", [False, True], ids=["reserved", "unknown"])
+    async def test_manual_does_not_retire_or_repeat_uncertain_provider(
+        tmp_path, monkeypatch, uncertain
+    ):
+        from agent_comms.compaction_journal import CompactionJournalError
+    
+>       async with owner_fixture(tmp_path, monkeypatch, real_host=True, goal=False) as (
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            persistent,
+            registry,
+            inputs,
+            file,
+            launcher,
+            info,
+        ):
+
+tests/test_canonical_manual_compaction.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:338: in helper
+    return _AsyncGeneratorContextManager(func, args, kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <contextlib._AsyncGeneratorContextManager object at 0x7f3ce5347920>
+func = <function owner_fixture at 0x7f3ce548d4e0>
+args = (PosixPath('/tmp/pytest-of-ts/pytest-476/test_manual_does_not_retire_or1'), <_pytest.monkeypatch.MonkeyPatch object at 0x7f3cde7cb5b0>)
+kwds = {'real_host': True, 'goal': False}
+
+    def __init__(self, func, args, kwds):
+>       self.gen = func(*args, **kwds)
+                   ^^^^^^^^^^^^^^^^^^^
+E       TypeError: owner_fixture() got an unexpected keyword argument 'real_host'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:109: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_acp_compact_command.py::test_current_root_compact_refuses_unjournaled_writer_for_every_launch_form
+FAILED tests/test_runtime.py::test_owner_prompt_rejection_preserves_reason_and_rpc_code
+FAILED tests/test_canonical_manual_compaction.py::test_explicit_manual_selected_commit_never_invents_original_input
+FAILED tests/test_canonical_manual_compaction.py::test_explicit_manual_recovers_known_refusal_without_replaying_unknown
+FAILED tests/test_canonical_manual_compaction.py::test_manual_does_not_retire_or_repeat_uncertain_provider[reserved]
+FAILED tests/test_canonical_manual_compaction.py::test_manual_does_not_retire_or_repeat_uncertain_provider[unknown]
+6 failed, 57 passed in 123.32s (0:02:03)
