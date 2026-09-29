@@ -1,0 +1,1199 @@
+{
+  "process_refs": [],
+  "unreadable_process_details": [
+    {
+      "pid": 1,
+      "name": "systemd"
+    },
+    {
+      "pid": 2,
+      "name": "kthreadd"
+    },
+    {
+      "pid": 3,
+      "name": "pool_workqueue_release"
+    },
+    {
+      "pid": 4,
+      "name": "kworker/R-rcu_gp"
+    },
+    {
+      "pid": 5,
+      "name": "kworker/R-sync_wq"
+    },
+    {
+      "pid": 6,
+      "name": "kworker/R-kvfree_rcu_reclaim"
+    },
+    {
+      "pid": 7,
+      "name": "kworker/R-slub_flushwq"
+    },
+    {
+      "pid": 8,
+      "name": "kworker/R-netns"
+    },
+    {
+      "pid": 11,
+      "name": "kworker/0:0H-kblockd"
+    },
+    {
+      "pid": 12,
+      "name": "kworker/u64:0-events_unbound"
+    },
+    {
+      "pid": 13,
+      "name": "kworker/u64:1-ipv6_addrconf"
+    },
+    {
+      "pid": 14,
+      "name": "kworker/R-mm_percpu_wq"
+    },
+    {
+      "pid": 15,
+      "name": "ksoftirqd/0"
+    },
+    {
+      "pid": 16,
+      "name": "rcu_preempt"
+    },
+    {
+      "pid": 17,
+      "name": "rcub/0"
+    },
+    {
+      "pid": 18,
+      "name": "rcu_exp_par_gp_kthread_worker/0"
+    },
+    {
+      "pid": 19,
+      "name": "rcu_exp_gp_kthread_worker"
+    },
+    {
+      "pid": 20,
+      "name": "migration/0"
+    },
+    {
+      "pid": 21,
+      "name": "kprobe-optimizer"
+    },
+    {
+      "pid": 22,
+      "name": "idle_inject/0"
+    },
+    {
+      "pid": 23,
+      "name": "cpuhp/0"
+    },
+    {
+      "pid": 24,
+      "name": "cpuhp/1"
+    },
+    {
+      "pid": 25,
+      "name": "idle_inject/1"
+    },
+    {
+      "pid": 26,
+      "name": "migration/1"
+    },
+    {
+      "pid": 27,
+      "name": "ksoftirqd/1"
+    },
+    {
+      "pid": 29,
+      "name": "kworker/1:0H-kblockd"
+    },
+    {
+      "pid": 30,
+      "name": "cpuhp/2"
+    },
+    {
+      "pid": 31,
+      "name": "idle_inject/2"
+    },
+    {
+      "pid": 32,
+      "name": "migration/2"
+    },
+    {
+      "pid": 33,
+      "name": "ksoftirqd/2"
+    },
+    {
+      "pid": 35,
+      "name": "kworker/2:0H-kblockd"
+    },
+    {
+      "pid": 36,
+      "name": "cpuhp/3"
+    },
+    {
+      "pid": 37,
+      "name": "idle_inject/3"
+    },
+    {
+      "pid": 38,
+      "name": "migration/3"
+    },
+    {
+      "pid": 39,
+      "name": "ksoftirqd/3"
+    },
+    {
+      "pid": 41,
+      "name": "kworker/3:0H-kblockd"
+    },
+    {
+      "pid": 42,
+      "name": "cpuhp/4"
+    },
+    {
+      "pid": 43,
+      "name": "idle_inject/4"
+    },
+    {
+      "pid": 44,
+      "name": "migration/4"
+    },
+    {
+      "pid": 45,
+      "name": "ksoftirqd/4"
+    },
+    {
+      "pid": 47,
+      "name": "kworker/4:0H-kblockd"
+    },
+    {
+      "pid": 48,
+      "name": "cpuhp/5"
+    },
+    {
+      "pid": 49,
+      "name": "idle_inject/5"
+    },
+    {
+      "pid": 50,
+      "name": "migration/5"
+    },
+    {
+      "pid": 51,
+      "name": "ksoftirqd/5"
+    },
+    {
+      "pid": 53,
+      "name": "kworker/5:0H-kblockd"
+    },
+    {
+      "pid": 54,
+      "name": "cpuhp/6"
+    },
+    {
+      "pid": 55,
+      "name": "idle_inject/6"
+    },
+    {
+      "pid": 56,
+      "name": "migration/6"
+    },
+    {
+      "pid": 57,
+      "name": "ksoftirqd/6"
+    },
+    {
+      "pid": 59,
+      "name": "kworker/6:0H-kblockd"
+    },
+    {
+      "pid": 60,
+      "name": "cpuhp/7"
+    },
+    {
+      "pid": 61,
+      "name": "idle_inject/7"
+    },
+    {
+      "pid": 62,
+      "name": "migration/7"
+    },
+    {
+      "pid": 63,
+      "name": "ksoftirqd/7"
+    },
+    {
+      "pid": 65,
+      "name": "kworker/7:0H-kblockd"
+    },
+    {
+      "pid": 66,
+      "name": "cpuhp/8"
+    },
+    {
+      "pid": 67,
+      "name": "idle_inject/8"
+    },
+    {
+      "pid": 68,
+      "name": "migration/8"
+    },
+    {
+      "pid": 69,
+      "name": "ksoftirqd/8"
+    },
+    {
+      "pid": 71,
+      "name": "kworker/8:0H-kblockd"
+    },
+    {
+      "pid": 72,
+      "name": "cpuhp/9"
+    },
+    {
+      "pid": 73,
+      "name": "idle_inject/9"
+    },
+    {
+      "pid": 74,
+      "name": "migration/9"
+    },
+    {
+      "pid": 75,
+      "name": "ksoftirqd/9"
+    },
+    {
+      "pid": 77,
+      "name": "kworker/9:0H-kblockd"
+    },
+    {
+      "pid": 78,
+      "name": "cpuhp/10"
+    },
+    {
+      "pid": 79,
+      "name": "idle_inject/10"
+    },
+    {
+      "pid": 80,
+      "name": "migration/10"
+    },
+    {
+      "pid": 81,
+      "name": "ksoftirqd/10"
+    },
+    {
+      "pid": 83,
+      "name": "kworker/10:0H"
+    },
+    {
+      "pid": 84,
+      "name": "cpuhp/11"
+    },
+    {
+      "pid": 85,
+      "name": "idle_inject/11"
+    },
+    {
+      "pid": 86,
+      "name": "migration/11"
+    },
+    {
+      "pid": 87,
+      "name": "ksoftirqd/11"
+    },
+    {
+      "pid": 89,
+      "name": "kworker/11:0H-kblockd"
+    },
+    {
+      "pid": 90,
+      "name": "cpuhp/12"
+    },
+    {
+      "pid": 91,
+      "name": "idle_inject/12"
+    },
+    {
+      "pid": 92,
+      "name": "migration/12"
+    },
+    {
+      "pid": 93,
+      "name": "ksoftirqd/12"
+    },
+    {
+      "pid": 95,
+      "name": "kworker/12:0H-kblockd"
+    },
+    {
+      "pid": 96,
+      "name": "cpuhp/13"
+    },
+    {
+      "pid": 97,
+      "name": "idle_inject/13"
+    },
+    {
+      "pid": 98,
+      "name": "migration/13"
+    },
+    {
+      "pid": 99,
+      "name": "ksoftirqd/13"
+    },
+    {
+      "pid": 101,
+      "name": "kworker/13:0H-kblockd"
+    },
+    {
+      "pid": 102,
+      "name": "cpuhp/14"
+    },
+    {
+      "pid": 103,
+      "name": "idle_inject/14"
+    },
+    {
+      "pid": 104,
+      "name": "migration/14"
+    },
+    {
+      "pid": 105,
+      "name": "ksoftirqd/14"
+    },
+    {
+      "pid": 107,
+      "name": "kworker/14:0H-kblockd"
+    },
+    {
+      "pid": 108,
+      "name": "cpuhp/15"
+    },
+    {
+      "pid": 109,
+      "name": "idle_inject/15"
+    },
+    {
+      "pid": 110,
+      "name": "migration/15"
+    },
+    {
+      "pid": 111,
+      "name": "ksoftirqd/15"
+    },
+    {
+      "pid": 113,
+      "name": "kworker/15:0H-kblockd"
+    },
+    {
+      "pid": 116,
+      "name": "kdevtmpfs"
+    },
+    {
+      "pid": 117,
+      "name": "kworker/R-inet_frag_wq"
+    },
+    {
+      "pid": 118,
+      "name": "rcu_tasks_kthread"
+    },
+    {
+      "pid": 119,
+      "name": "rcu_tasks_rude_kthread"
+    },
+    {
+      "pid": 120,
+      "name": "kauditd"
+    },
+    {
+      "pid": 121,
+      "name": "khungtaskd"
+    },
+    {
+      "pid": 123,
+      "name": "oom_reaper"
+    },
+    {
+      "pid": 125,
+      "name": "kworker/R-writeback"
+    },
+    {
+      "pid": 126,
+      "name": "kcompactd0"
+    },
+    {
+      "pid": 127,
+      "name": "ksmd"
+    },
+    {
+      "pid": 128,
+      "name": "khugepaged"
+    },
+    {
+      "pid": 129,
+      "name": "kworker/R-kblockd"
+    },
+    {
+      "pid": 130,
+      "name": "kworker/R-blkcg_punt_bio"
+    },
+    {
+      "pid": 131,
+      "name": "kworker/R-kintegrityd"
+    },
+    {
+      "pid": 132,
+      "name": "irq/9-acpi"
+    },
+    {
+      "pid": 135,
+      "name": "kworker/8:1-events"
+    },
+    {
+      "pid": 136,
+      "name": "kworker/R-tpm_dev_wq"
+    },
+    {
+      "pid": 137,
+      "name": "kworker/R-ata_sff"
+    },
+    {
+      "pid": 138,
+      "name": "kworker/R-edac-poller"
+    },
+    {
+      "pid": 139,
+      "name": "kworker/R-devfreq_wq"
+    },
+    {
+      "pid": 140,
+      "name": "watchdogd"
+    },
+    {
+      "pid": 141,
+      "name": "kworker/R-quota_events_unbound"
+    },
+    {
+      "pid": 142,
+      "name": "irq/26-AMD-Vi0-Evt"
+    },
+    {
+      "pid": 143,
+      "name": "irq/27-AMD-Vi0-PPR"
+    },
+    {
+      "pid": 144,
+      "name": "irq/28-AMD-Vi0-GA"
+    },
+    {
+      "pid": 146,
+      "name": "kswapd0"
+    },
+    {
+      "pid": 147,
+      "name": "kworker/R-kthrotld"
+    },
+    {
+      "pid": 148,
+      "name": "kworker/u67:0"
+    },
+    {
+      "pid": 149,
+      "name": "kworker/R-acpi_thermal_pm"
+    },
+    {
+      "pid": 162,
+      "name": "scsi_eh_0"
+    },
+    {
+      "pid": 163,
+      "name": "kworker/R-scsi_tmf_0"
+    },
+    {
+      "pid": 164,
+      "name": "scsi_eh_1"
+    },
+    {
+      "pid": 165,
+      "name": "kworker/R-scsi_tmf_1"
+    },
+    {
+      "pid": 166,
+      "name": "scsi_eh_2"
+    },
+    {
+      "pid": 167,
+      "name": "kworker/R-scsi_tmf_2"
+    },
+    {
+      "pid": 168,
+      "name": "scsi_eh_3"
+    },
+    {
+      "pid": 169,
+      "name": "kworker/R-scsi_tmf_3"
+    },
+    {
+      "pid": 171,
+      "name": "scsi_eh_4"
+    },
+    {
+      "pid": 172,
+      "name": "kworker/R-scsi_tmf_4"
+    },
+    {
+      "pid": 173,
+      "name": "scsi_eh_5"
+    },
+    {
+      "pid": 174,
+      "name": "kworker/R-scsi_tmf_5"
+    },
+    {
+      "pid": 175,
+      "name": "scsi_eh_6"
+    },
+    {
+      "pid": 176,
+      "name": "kworker/R-scsi_tmf_6"
+    },
+    {
+      "pid": 177,
+      "name": "scsi_eh_7"
+    },
+    {
+      "pid": 178,
+      "name": "kworker/R-scsi_tmf_7"
+    },
+    {
+      "pid": 179,
+      "name": "scsi_eh_8"
+    },
+    {
+      "pid": 180,
+      "name": "kworker/R-scsi_tmf_8"
+    },
+    {
+      "pid": 181,
+      "name": "scsi_eh_9"
+    },
+    {
+      "pid": 182,
+      "name": "kworker/R-scsi_tmf_9"
+    },
+    {
+      "pid": 188,
+      "name": "scsi_eh_10"
+    },
+    {
+      "pid": 189,
+      "name": "kworker/R-scsi_tmf_10"
+    },
+    {
+      "pid": 191,
+      "name": "scsi_eh_11"
+    },
+    {
+      "pid": 192,
+      "name": "kworker/R-scsi_tmf_11"
+    },
+    {
+      "pid": 193,
+      "name": "scsi_eh_12"
+    },
+    {
+      "pid": 194,
+      "name": "kworker/R-scsi_tmf_12"
+    },
+    {
+      "pid": 195,
+      "name": "scsi_eh_13"
+    },
+    {
+      "pid": 196,
+      "name": "kworker/R-scsi_tmf_13"
+    },
+    {
+      "pid": 197,
+      "name": "scsi_eh_14"
+    },
+    {
+      "pid": 198,
+      "name": "kworker/R-scsi_tmf_14"
+    },
+    {
+      "pid": 199,
+      "name": "scsi_eh_15"
+    },
+    {
+      "pid": 200,
+      "name": "kworker/R-scsi_tmf_15"
+    },
+    {
+      "pid": 201,
+      "name": "scsi_eh_16"
+    },
+    {
+      "pid": 202,
+      "name": "kworker/R-scsi_tmf_16"
+    },
+    {
+      "pid": 211,
+      "name": "kworker/R-mld"
+    },
+    {
+      "pid": 212,
+      "name": "kworker/R-ipv6_addrconf"
+    },
+    {
+      "pid": 213,
+      "name": "kworker/R-kstrp"
+    },
+    {
+      "pid": 217,
+      "name": "kworker/R-zswap-shrink"
+    },
+    {
+      "pid": 218,
+      "name": "kworker/u68:0"
+    },
+    {
+      "pid": 219,
+      "name": "kworker/u69:0-uvcvideo"
+    },
+    {
+      "pid": 303,
+      "name": "kworker/R-nvme-wq"
+    },
+    {
+      "pid": 304,
+      "name": "kworker/R-nvme-reset-wq"
+    },
+    {
+      "pid": 305,
+      "name": "kworker/R-nvme-delete-wq"
+    },
+    {
+      "pid": 306,
+      "name": "kworker/R-nvme-auth-wq"
+    },
+    {
+      "pid": 313,
+      "name": "kworker/13:1H-kblockd"
+    },
+    {
+      "pid": 315,
+      "name": "kworker/14:1H-kblockd"
+    },
+    {
+      "pid": 332,
+      "name": "kworker/9:1H-kblockd"
+    },
+    {
+      "pid": 333,
+      "name": "kworker/7:1H-kblockd"
+    },
+    {
+      "pid": 334,
+      "name": "kworker/2:1H-kblockd"
+    },
+    {
+      "pid": 335,
+      "name": "kworker/0:1H-kblockd"
+    },
+    {
+      "pid": 336,
+      "name": "kworker/3:1H-kblockd"
+    },
+    {
+      "pid": 337,
+      "name": "kworker/10:1H-kblockd"
+    },
+    {
+      "pid": 338,
+      "name": "kworker/4:1H-kblockd"
+    },
+    {
+      "pid": 341,
+      "name": "kworker/15:3-mm_percpu_wq"
+    },
+    {
+      "pid": 343,
+      "name": "jbd2/sdc3-8"
+    },
+    {
+      "pid": 344,
+      "name": "kworker/R-ext4-rsv-conversion"
+    },
+    {
+      "pid": 348,
+      "name": "scsi_eh_17"
+    },
+    {
+      "pid": 349,
+      "name": "kworker/R-scsi_tmf_17"
+    },
+    {
+      "pid": 350,
+      "name": "usb-storage"
+    },
+    {
+      "pid": 351,
+      "name": "kworker/R-uas"
+    },
+    {
+      "pid": 366,
+      "name": "kworker/8:1H-kblockd"
+    },
+    {
+      "pid": 388,
+      "name": "kworker/15:1H-kblockd"
+    },
+    {
+      "pid": 390,
+      "name": "kworker/11:1H-kblockd"
+    },
+    {
+      "pid": 433,
+      "name": "kworker/12:1H-kblockd"
+    },
+    {
+      "pid": 444,
+      "name": "kworker/1:1H-kblockd"
+    },
+    {
+      "pid": 636,
+      "name": "nv_queue"
+    },
+    {
+      "pid": 637,
+      "name": "nv_mem_pool_scrubber_queue"
+    },
+    {
+      "pid": 638,
+      "name": "nv_mem_pool_scrubber_queue"
+    },
+    {
+      "pid": 639,
+      "name": "nv_mem_pool_scrubber_queue"
+    },
+    {
+      "pid": 640,
+      "name": "nv_queue"
+    },
+    {
+      "pid": 641,
+      "name": "nv_open_q"
+    },
+    {
+      "pid": 671,
+      "name": "kworker/R-iprt-VBoxWQueue"
+    },
+    {
+      "pid": 680,
+      "name": "nvidia-modeset/kthread_q"
+    },
+    {
+      "pid": 681,
+      "name": "nvidia-modeset/deferred_close_kthread_q"
+    },
+    {
+      "pid": 687,
+      "name": "kworker/5:1H-kblockd"
+    },
+    {
+      "pid": 688,
+      "name": "UVM global queue"
+    },
+    {
+      "pid": 689,
+      "name": "UVM deferred release queue"
+    },
+    {
+      "pid": 690,
+      "name": "UVM Tools Event Queue"
+    },
+    {
+      "pid": 691,
+      "name": "kworker/6:1H-kblockd"
+    },
+    {
+      "pid": 696,
+      "name": "irq/137-nvidia"
+    },
+    {
+      "pid": 697,
+      "name": "nvidia"
+    },
+    {
+      "pid": 698,
+      "name": "nv_queue"
+    },
+    {
+      "pid": 700,
+      "name": "iprt-VBoxTscThread"
+    },
+    {
+      "pid": 727,
+      "name": "mount.ntfs-3g"
+    },
+    {
+      "pid": 731,
+      "name": "mount.ntfs-3g"
+    },
+    {
+      "pid": 751,
+      "name": "mount.ntfs-3g"
+    },
+    {
+      "pid": 762,
+      "name": "jbd2/sdc4-8"
+    },
+    {
+      "pid": 763,
+      "name": "kworker/R-ext4-rsv-conversion"
+    },
+    {
+      "pid": 779,
+      "name": "dbus-broker-launch"
+    },
+    {
+      "pid": 781,
+      "name": "dbus-broker"
+    },
+    {
+      "pid": 782,
+      "name": "NetworkManager"
+    },
+    {
+      "pid": 786,
+      "name": "systemd-logind"
+    },
+    {
+      "pid": 832,
+      "name": "httpd"
+    },
+    {
+      "pid": 837,
+      "name": "xrdp-sesman"
+    },
+    {
+      "pid": 845,
+      "name": "login"
+    },
+    {
+      "pid": 847,
+      "name": "ntpd"
+    },
+    {
+      "pid": 862,
+      "name": "httpd"
+    },
+    {
+      "pid": 863,
+      "name": "httpd"
+    },
+    {
+      "pid": 865,
+      "name": "httpd"
+    },
+    {
+      "pid": 1181,
+      "name": "flaresolverr"
+    },
+    {
+      "pid": 1185,
+      "name": "xrdp"
+    },
+    {
+      "pid": 1198,
+      "name": "teamviewerd"
+    },
+    {
+      "pid": 1453,
+      "name": "Xvfb"
+    },
+    {
+      "pid": 2532,
+      "name": "polkitd"
+    },
+    {
+      "pid": 2579,
+      "name": "udisksd"
+    },
+    {
+      "pid": 2695,
+      "name": "upowerd"
+    },
+    {
+      "pid": 4031,
+      "name": "login"
+    },
+    {
+      "pid": 10748,
+      "name": "login"
+    },
+    {
+      "pid": 43562,
+      "name": "rtkit-daemon"
+    },
+    {
+      "pid": 404514,
+      "name": "kworker/12:0-memcg"
+    },
+    {
+      "pid": 508766,
+      "name": "vidmem lazy free"
+    },
+    {
+      "pid": 508767,
+      "name": "UVM GPU1 BH"
+    },
+    {
+      "pid": 508768,
+      "name": "UVM GPU1 KC"
+    },
+    {
+      "pid": 604540,
+      "name": "kworker/11:1-memcg"
+    },
+    {
+      "pid": 714621,
+      "name": "kworker/6:1-memcg"
+    },
+    {
+      "pid": 851738,
+      "name": "kworker/2:1-mm_percpu_wq"
+    },
+    {
+      "pid": 887977,
+      "name": "kworker/u69:1"
+    },
+    {
+      "pid": 975417,
+      "name": "mount.ntfs"
+    },
+    {
+      "pid": 1239420,
+      "name": "kworker/4:2-cgroup_free"
+    },
+    {
+      "pid": 1323006,
+      "name": "kworker/4:0-mm_percpu_wq"
+    },
+    {
+      "pid": 1786010,
+      "name": "systemd"
+    },
+    {
+      "pid": 1786012,
+      "name": "(sd-pam)"
+    },
+    {
+      "pid": 1787273,
+      "name": "nvidia-drm/timeline-29"
+    },
+    {
+      "pid": 1860463,
+      "name": "kworker/9:0-mm_percpu_wq"
+    },
+    {
+      "pid": 2026812,
+      "name": "kworker/1:2-mm_percpu_wq"
+    },
+    {
+      "pid": 2039301,
+      "name": "kworker/14:1-mm_percpu_wq"
+    },
+    {
+      "pid": 2076368,
+      "name": "kworker/13:1-mm_percpu_wq"
+    },
+    {
+      "pid": 2154952,
+      "name": "kworker/10:1-events"
+    },
+    {
+      "pid": 2182956,
+      "name": "kworker/5:1-events"
+    },
+    {
+      "pid": 2262889,
+      "name": "kworker/7:1-mm_percpu_wq"
+    },
+    {
+      "pid": 2986202,
+      "name": "kworker/14:2"
+    },
+    {
+      "pid": 3225869,
+      "name": "kworker/5:0"
+    },
+    {
+      "pid": 3274685,
+      "name": "kworker/1:1"
+    },
+    {
+      "pid": 3598642,
+      "name": "kworker/12:2"
+    },
+    {
+      "pid": 3641744,
+      "name": "kworker/0:1-events"
+    },
+    {
+      "pid": 3652265,
+      "name": "kworker/u65:5-thermal_events"
+    },
+    {
+      "pid": 3689664,
+      "name": "kworker/u66:3-events_unbound"
+    },
+    {
+      "pid": 3698865,
+      "name": "nvidia-drm/timeline-2c"
+    },
+    {
+      "pid": 3699396,
+      "name": "fusermount3"
+    },
+    {
+      "pid": 3728404,
+      "name": "kworker/u65:3-events_unbound"
+    },
+    {
+      "pid": 3728919,
+      "name": "gpg-agent"
+    },
+    {
+      "pid": 3729772,
+      "name": "kworker/u66:2-events_unbound"
+    },
+    {
+      "pid": 3763115,
+      "name": "psimon"
+    },
+    {
+      "pid": 3763121,
+      "name": "kworker/10:0-mm_percpu_wq"
+    },
+    {
+      "pid": 3763180,
+      "name": "kworker/0:2-events"
+    },
+    {
+      "pid": 3763182,
+      "name": "kworker/3:3-mm_percpu_wq"
+    },
+    {
+      "pid": 3763186,
+      "name": "systemd-machined"
+    },
+    {
+      "pid": 3763187,
+      "name": "systemd-resolved"
+    },
+    {
+      "pid": 3763189,
+      "name": "kworker/8:2-cgroup_free"
+    },
+    {
+      "pid": 3763192,
+      "name": "systemd-udevd"
+    },
+    {
+      "pid": 3763193,
+      "name": "kworker/2:0-rcu_gp"
+    },
+    {
+      "pid": 3763194,
+      "name": "systemd-journald"
+    },
+    {
+      "pid": 3763374,
+      "name": "psimon"
+    },
+    {
+      "pid": 3768097,
+      "name": "kworker/7:0"
+    },
+    {
+      "pid": 3783526,
+      "name": "kworker/15:0"
+    },
+    {
+      "pid": 3796428,
+      "name": "sshd"
+    },
+    {
+      "pid": 3796430,
+      "name": "kworker/13:3-cgroup_free"
+    },
+    {
+      "pid": 3796476,
+      "name": "crond"
+    },
+    {
+      "pid": 3814566,
+      "name": "kworker/3:0"
+    },
+    {
+      "pid": 3816056,
+      "name": "kworker/u65:6-events_unbound"
+    },
+    {
+      "pid": 3826539,
+      "name": "kworker/9:2"
+    },
+    {
+      "pid": 3830004,
+      "name": "nvidia-drm/timeline-2d"
+    },
+    {
+      "pid": 3840558,
+      "name": "kworker/11:0"
+    },
+    {
+      "pid": 3866377,
+      "name": "kworker/u66:4-flush-8:32"
+    },
+    {
+      "pid": 3872253,
+      "name": "kworker/6:2-events"
+    },
+    {
+      "pid": 3876334,
+      "name": "kworker/u65:0-events_unbound"
+    },
+    {
+      "pid": 3925227,
+      "name": "kworker/u66:0-events_unbound"
+    },
+    {
+      "pid": 3925229,
+      "name": "kworker/u66:1-events_unbound"
+    }
+  ],
+  "removed": [
+    {
+      "path": ".artifacts/native-launch-options/installed",
+      "bytes": 25488664
+    },
+    {
+      "path": ".artifacts/native-launch-options/installed-case",
+      "bytes": 455522
+    },
+    {
+      "path": "stack/.pi-native-d3967e8b6ee0cf28",
+      "bytes": 138390712
+    }
+  ],
+  "preserved": [
+    "source",
+    "saved evidence",
+    "wheel",
+    "global canonical d396"
+  ],
+  "authorization": "Parent verified global d396 manifest with noneditable core942; explicit derivative cleanup authorized.",
+  "removed_bytes": 164334898
+}

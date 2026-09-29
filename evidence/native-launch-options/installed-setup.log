@@ -1,0 +1,28 @@
+Using CPython 3.14.2 interpreter at: /home/ts/.local/share/agent-comms/runtime-workspace-navigation-20260929/bin/python
+Creating virtual environment at: .artifacts/native-launch-options/installed
+Activate with: source .artifacts/native-launch-options/installed/bin/activate
+Using Python 3.14.2 environment at: .artifacts/native-launch-options/installed
+Resolved 1 package in 6ms
+Prepared 1 package in 9ms
+Installed 1 package in 5ms
+ + agent-comms==0.1.0 (from file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-launch-options/wheel/agent_comms-0.1.0-py3-none-any.whl)
+Using Python 3.14.2 environment at: .artifacts/native-launch-options/installed
+Resolved 6 packages in 1ms
+Installed 6 packages in 7ms
+ + iniconfig==2.3.0
+ + packaging==26.3
+ + pluggy==1.6.0
+ + pygments==2.21.0
+ + pytest==9.1.1
+ + pytest-asyncio==1.4.0
+Using Python 3.14.2 environment at: .artifacts/native-launch-options/installed
+Resolved 8 packages in 10ms
+Installed 8 packages in 3ms
+ + agent-client-protocol==0.12.1
+ + annotated-types==0.8.0
+ + metaclass-registry==0.2.1
+ + psutil==7.2.2
+ + pydantic==2.13.5
+ + pydantic-core==2.46.5
+ + typing-extensions==4.15.0
+ + typing-inspection==0.4.4
