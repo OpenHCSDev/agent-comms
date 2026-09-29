@@ -1,0 +1,17 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-t2-boundary-sol-20260928
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, anyio-4.14.2, typeguard-4.5.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 103 items
+
+tests/test_read_ledger.py ..............                                 [ 13%]
+tests/test_continued_private_session.py .......................          [ 35%]
+tests/test_coordination_nominal.py .........                             [ 44%]
+tests/test_selected_summary_failure_native.py ...                        [ 47%]
+tests/test_agent_events.py ........                                      [ 55%]
+tests/test_pi_rpc_nominal.py ........................................... [ 97%]
+...                                                                      [100%]
+
+============================= 103 passed in 24.48s =============================

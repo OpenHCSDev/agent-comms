@@ -6,11 +6,23 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
+from agent_comms.input_attempt import NotSentInput, ReservedInput
 from test_acp_private_nk_delivery import _session
 from test_acp_private_nk_delivery import tmp_path as private_root_fixture
 from test_coordinated_runtime import _fake_model
 
 tmp_path = private_root_fixture
+
+
+def accepted_input(response):
+    receipt = next(
+        update
+        for update in decode_updates(response.field_meta)
+        if isinstance(update, InputDeliveryChangedUpdate)
+    )
+    assert receipt.input_id is not None
+    return receipt
 
 
 @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
@@ -64,13 +76,14 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         response = await asyncio.wait_for(
             agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
         )
-        receipt = response.field_meta["agentComms"]["inputDisposition"]
-        assert receipt["status"] == "accepted_not_started"
+        receipt = accepted_input(response)
+        accepted = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
+        assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
         assert not starts
         release.set()
         await asyncio.wait_for(turn, 8)
         assert len(starts) == 1 and "Fresh owner input" in starts[0]
-        row = agent.inputs.dispositions.read().rows[f"acp:{receipt['inputId']}"]
+        row = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
         assert not row.unresolved and row.native_id == "b" * 32
         assert not agent.inputs.queued_inputs.get("beta")
         assert "beta" not in agent.inputs.backend_inboxes
@@ -118,7 +131,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
         response = await asyncio.wait_for(
             agent.prompt("beta", [{"type": "text", "text": "Fresh input"}]), 2
         )
-        input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+        input_id = accepted_input(response).input_id
         if change == "clear":
             await agent.inputs.clear_queued_inputs("beta")
         elif change == "missing_key":
@@ -135,7 +148,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
             await asyncio.wait_for(turn, 8)
         rows = agent.inputs.dispositions.read().rows
         assert rows[old_key] == old_row
-        assert rows[f"acp:{input_id}"].unattempted
+        assert rows[f"acp:{input_id}"].accepts_reservation
         assert "beta" not in agent.inputs.backend_inboxes
         assert "beta" not in agent.turns.turn_tasks
     finally:
@@ -236,10 +249,22 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         response = await asyncio.wait_for(
             agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
         )
-        input_id = response.field_meta["agentComms"]["inputDisposition"]["inputId"]
+        input_id = accepted_input(response).input_id
         release.set()
         await asyncio.wait_for(turn, 8)
-        assert agent.inputs.dispositions.read().rows[f"acp:{input_id}"].unattempted
+        refused = agent.inputs.dispositions.read().rows[f"acp:{input_id}"]
+        assert isinstance(refused, NotSentInput)
+        assert refused.public_status == "not_sent" and refused.unresolved
+        assert not refused.has_native_binding and not refused.has_started
+        assert (
+            refused.bind(
+                admission=refused.admission,
+                turn_id="retry",
+                native_id="f" * 32,
+                text=refused.source_text,
+            )
+            is None
+        )
         assert comms.registry.require("beta").goal == expected["goal"]
         assert comms.goals.goal_wait("beta") == expected["wait"]
         assert not (comms.root / "goal-private").exists()
@@ -364,12 +389,13 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
             agent.prompt("beta", [{"type": "text", "text": "Exactly one fresh owner instruction"}]),
             2,
         )
-        receipt = response.field_meta["agentComms"]["inputDisposition"]
-        assert receipt["status"] == "accepted_not_started"
+        receipt = accepted_input(response)
+        accepted = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
+        assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
         assert len(requests) == 1
         release.set()
         await asyncio.wait_for(turn, 18)
-        row = agent.inputs.dispositions.read().rows[f"acp:{receipt['inputId']}"]
+        row = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
         assert not row.unresolved and row.native_id
         assert len(requests) == 2
         assert "Exactly one fresh owner instruction" in json.dumps(requests[1])
@@ -457,10 +483,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
             ],
         )
         second = await agent.prompt("beta", [{"type": "text", "text": "Second fresh input"}])
-        expected = [
-            response.field_meta["agentComms"]["inputDisposition"]["inputId"]
-            for response in (first, second)
-        ]
+        expected = [accepted_input(response).input_id for response in (first, second)]
         release.set()
         await asyncio.wait_for(turn, 8)
         assert started == expected

@@ -46,7 +46,7 @@ App edits. Wegener owns native lifecycle288; parent owns released Toad caller fi
 | S4 randomized display/read/mode/rebind/crash property | Existing test_shown_only_property plus new test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen, seeds7/31/99. Sparse membership and incarnation-sensitive reads checked after every operation. Scope is painted-page ACK; deliberate human Mark Read is a distinct existing operation. |
 | S4 known characterization and new view mode | test_read_ledger existing any-mode hidden-message, bounded-page, process-exit/rebind, bus replacement, partial-paint and AlternateMessages tests. |
 | S4 retired scalar marker conversion | Durable reset/rewrite was already authorized/deployed and converters deleted. No compatibility/migration fixtures reinstated. |
-| S4 installed Toad calls | Earlier287 menu used the older paired Toad wheel, not released main. Exact installed source matches09b8a507, receipt previous-menu-provenance.json. Parent owns the newly found released-main thread_actions consumer; no current-main Toad-launch claim in this PR. |
+| S4 installed Toad calls | Earlier287 menu used the older paired Toad wheel, not released main. Exact installed source matches09b8a507, receipt previous-menu-provenance.json. Parent completed released-main thread_actions migration in Toad132 b4bdae1 and deployed paired core4510; this PR does not redo that fix or claim a new Toad-launch check. |
 
 ## Verification
 
@@ -64,3 +64,30 @@ App edits. Wegener owns native lifecycle288; parent owns released Toad caller fi
 Universal size/benchmark claims and historical differential equivalence remain
 qualified, not newly claimed complete. Retained/live history, configured provider
 transport and parent deployment are untouched.
+
+## Wegener baseline29 closure
+
+Exact baseline node IDs and original receipts are preserved in wegener-handoff.json
+(from PR287 comment5880931529). These failures predated PR288. Current tests now:
+
+- Decode ACP metadata with existing decode_updates, CursorAdvancedUpdate,
+  CursorEnvelope and InputDeliveryChangedUpdate; retain scope, admission, delayed
+  old-owner race, real lock contention and no-model delivery assertions.
+- Inspect canonical ReservedInput and NotSentInput rather than the deleted scalar
+  inputDisposition projection. Eight refused handoffs assert not_sent, no native
+  binding/start, retained unresolved notice and refusal to bind a retry. Fresh
+  input, controller/image retention and unknown no-replay checks remain.
+- Run the selected-file preflight against the actual pinned native package and an
+  actually uninitialized root; retain refusal before registration or file mutation.
+- Assert explicit STOP leaves no executions/attempts in the canonical store, whose
+  creation now belongs to registration, rather than assuming the file is absent.
+
+Deleted four copied cursor-v1 reducer tests and the 247-line retired JSON fixture.
+They simulated a removed projection instead of exercising the maintained owner.
+Backend scope/race tests remain and decode the canonical typed extension. The
+paired mounted consumer migration was separately completed by parent Toad132.
+
+wegener-final.log records 45 passes and one missing-import test failure, corrected
+before the final installed run; it is not a green receipt. wegener-installed.log
+records 46 passed in 35.50s against the installed package, with actual pinned Pi child/local HTTP
+fresh-input lifetime acceptance enabled (no paid provider, no mocked child).
