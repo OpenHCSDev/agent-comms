@@ -402,12 +402,12 @@ def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) ->
 
 def _as_response(row, root_id, execution_id):
     """Build current declared response shape for raw-writer corruption tests."""
-    from agent_comms.bus_publication import initial_sideband, validate_delivery_record
+    from agent_comms.bus_publication import initial_sideband, CommittedDelivery
     from agent_comms.delivery_policy import KeyedResponseReceipt, ResponseDeliveryPolicy
     from agent_comms.field_codec import FieldCodec
     from agent_comms.wake import ControlClassification
 
-    delivery = validate_delivery_record(row, root_id)
+    delivery = CommittedDelivery.from_wire(row, root_id)
     public = delivery.message.to_wire()
     policy = ResponseDeliveryPolicy(
         version=1,

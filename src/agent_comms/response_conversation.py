@@ -21,9 +21,9 @@ class ResponseConversation:
     def capture(cls, bus, snapshot):
         marker = bus.log._private_marker_unlocked()
         committed = {
-            message.seq: delivery
-            for message, _, delivery in bus.log._verified_private_rows_unlocked(marker)
-            if delivery is not None
+            delivery.message.seq: delivery
+            for record in bus.log.verified_records_unlocked(marker)
+            for delivery in record.deliveries()
         }
         sources = tuple(committed[assignment.wire_seq] for assignment in snapshot.assignments)
         if not sources:

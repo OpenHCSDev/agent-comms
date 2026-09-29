@@ -19,17 +19,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from .bus_publication import (
-    PRIVATE_WIRE_FIELD,
-    _canonical,
-    has_private_wire_fields,
-    public_envelope_digest,
     unique_wire_object,
-    validate_delivery_record,
 )
 from .delivery_policy import KeyedResponseReceipt
 from .errors import RelationViolationError
 from .message_bus import MessageBus
-from .messages import Message
 from .typed_table import Column, Index, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 from .wake import NoWakeDecision, WakeDecision
 
@@ -218,18 +212,14 @@ class WakeCandidateIndex:
     @staticmethod
     def _parse_row(record: dict[str, Any], root_id: str, last_seq: int) -> _ParsedRow:
         """Interpret one raw bus object without mistaking its sideband for authority."""
-        message = Message.from_wire(record)
-        public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
-        if (
-            type(record.get("seq")) is not int
-            or message.seq <= last_seq
-            or _canonical(public) != _canonical(message.to_wire())
-        ):
-            raise ProjectionUnavailableError("candidate bus envelope is not canonical")
-        public_envelope_digest(public)
-        if has_private_wire_fields(record):
-            initial = validate_delivery_record(record, root_id)
-            rows: list[Candidate] = []
+        from .wire_record import WireRecord
+
+        verified = WireRecord.from_wire(record, root_id)
+        message = verified.message
+        if message.seq <= last_seq:
+            raise ProjectionUnavailableError("candidate bus sequence is not increasing")
+        rows: list[Candidate] = []
+        for initial in verified.deliveries():
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             ):
@@ -247,8 +237,7 @@ class WakeCandidateIndex:
                         else None,
                     )
                 )
-            return _ParsedRow(message.seq, tuple(rows), initial.receipt)
-        return _ParsedRow(message.seq, (), None)
+        return _ParsedRow(message.seq, tuple(rows), verified.receipt)
 
     @classmethod
     def _replay_prefix(

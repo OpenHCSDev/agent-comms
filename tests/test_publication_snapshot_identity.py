@@ -74,8 +74,8 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
             rows = case.bus.log.path.read_bytes().splitlines(keepends=True)
             case.bus.log.path.write_bytes(b"".join(rows[:-1]) + json.dumps(record).encode() + b"\n")
             marker = case.bus.log._private_marker_unlocked()
-            verified = list(case.bus.log._verified_private_rows_unlocked(marker))
-            assert verified[-1][0] == changed  # Full strict durable receipt validation succeeds.
+            verified = list(case.bus.log.verified_records_unlocked(marker))
+            assert verified[-1].message == changed  # Full strict durable receipt validation succeeds.
             with pytest.raises(
                 RelationViolationError, match="Response publication intent conflicts"
             ):

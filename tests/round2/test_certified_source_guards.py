@@ -15,7 +15,7 @@ def test_source_coverage_has_no_whole_bus_reader_or_hashed_tuple():
         tree = ast.parse(source)
         assert not any(
             isinstance(node, ast.Attribute)
-            and node.attr in {"_verified_private_rows_unlocked", "sha256", "read_bytes"}
+            and node.attr in {"verified_records_unlocked", "sha256", "read_bytes"}
             for node in ast.walk(tree)
         )
         assert "_MAX_SOURCE_BYTES" not in source

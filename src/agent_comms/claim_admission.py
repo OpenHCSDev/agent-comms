@@ -150,8 +150,9 @@ def _selected_claim_boundary(
         initial = next(
             (
                 row
-                for _message, _receipt, row in bus.log._verified_private_rows_unlocked(metadata)
-                if row is not None and row.message.seq == admission.source_seq
+                for record in bus.log.verified_records_unlocked(metadata)
+                for row in record.deliveries()
+                if row.message.seq == admission.source_seq
             ),
             None,
         )
@@ -193,8 +194,8 @@ def publish_selected_resource_claim(
             ):
                 return existing
             raise ClaimConflict(existing)
-        for prior, _receipt, _initial in bus.log._verified_private_rows_unlocked(metadata):
-            transition = prior.claim_transition
+        for record in bus.log.verified_records_unlocked(metadata):
+            transition = record.message.claim_transition
             if (
                 transition is not None
                 and transition.admission is not None
@@ -378,8 +379,9 @@ def write_selected_claimed_file(
         initial = next(
             (
                 row
-                for _message, _receipt, row in bus.log._verified_private_rows_unlocked(marker)
-                if row is not None and row.message.seq == admission.source_seq
+                for record in bus.log.verified_records_unlocked(marker)
+                for row in record.deliveries()
+                if row.message.seq == admission.source_seq
             ),
             None,
         )

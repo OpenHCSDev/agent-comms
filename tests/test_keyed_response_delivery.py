@@ -85,11 +85,11 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
         ("unexpected", "not permitted"),
     ],
 )
-@pytest.mark.parametrize("reader", ["full", "certified"])
+@pytest.mark.parametrize("reader", ["full", "certified", "uncertified"])
 def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, value, reader):
     import json
 
-    from agent_comms.bus_publication import validate_delivery_record
+    from agent_comms.bus_publication import CommittedDelivery
     from agent_comms.errors import RelationViolationError
     from agent_comms.private_bus_checkpoint import (
         certified_delivery_page_unlocked,
@@ -107,7 +107,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         rows[-1]["_agent_comms_private_v1"]["response"][field] = value
         # The semantic decoder shared by both readers rejects each invalid receipt.
         with pytest.raises((ValueError, TypeError)):
-            validate_delivery_record(rows[-1], case.root_id)
+            CommittedDelivery.from_wire(rows[-1], case.root_id)
         case.bus.log.path.write_text("".join(json.dumps(row) + "\n" for row in rows))
         if reader == "certified":
             # A real certified index refuses tampered bytes at its earlier prefix
@@ -128,7 +128,10 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         marker.checkpoint_seal = None
         case.bus.log.write_metadata_unlocked(marker)
         with pytest.raises((ValueError, RelationViolationError)):
-            install_private_bus_checkpoint(case.bus.log)
+            if reader == "uncertified":
+                case.bus.log.full_history()
+            else:
+                install_private_bus_checkpoint(case.bus.log)
     finally:
         case.close()
 
@@ -171,7 +174,7 @@ def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
 def test_delivery_requires_declaration_tag_not_field_shape(tmp_path, kind):
     import json
 
-    from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, validate_delivery_record
+    from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, CommittedDelivery
 
     case = _ready(tmp_path, direct=True)
     try:
@@ -186,6 +189,76 @@ def test_delivery_requires_declaration_tag_not_field_shape(tmp_path, kind):
         else:
             private["kind"] = kind
         with pytest.raises(ValueError):
-            validate_delivery_record(record, case.root_id)
+            CommittedDelivery.from_wire(record, case.root_id)
+    finally:
+        case.close()
+
+
+def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path):
+    import json
+
+    from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
+    from agent_comms.delivery_policy import DeliveryPolicy, InitialDeliveryPolicy
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.private_bus_checkpoint import (
+        certified_delivery_page_unlocked,
+        install_private_bus_checkpoint,
+    )
+
+    class ExtendedDeliveryPolicy(InitialDeliveryPolicy):
+        pass
+
+    case = _ready(tmp_path, direct=True)
+    try:
+        marker = case.bus.log._private_marker_unlocked()
+        raw = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
+        policy = FieldCodec.decode(DeliveryPolicy, raw[PRIVATE_WIRE_FIELD])
+        raw[PRIVATE_WIRE_FIELD] = FieldCodec.encode(
+            ExtendedDeliveryPolicy(version=policy.version, initial=policy.initial)
+        )
+        # Explicit cold setup on this disposable root. No old seal is claimed
+        # for changed bytes; the real installation scans and certifies them.
+        (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+        marker.checkpoint_version = None
+        marker.checkpoint_seal = None
+        case.bus.log.write_metadata_unlocked(marker)
+        case.bus.log.path.write_text(json.dumps(raw) + "\n")
+        public = case.bus.log.full_history()
+        assert len(public) == 1
+        install_private_bus_checkpoint(case.bus.log)
+        with case.bus.log.locked():
+            marker = case.bus.log._private_marker_unlocked()
+            full = tuple(case.bus.log.verified_records_unlocked(marker))
+            assert full[0].message == public[0]
+            delivery, = full[0].deliveries()
+            recipient = delivery.audience.recipients[0].recipient_lookup
+            _, certified, more = certified_delivery_page_unlocked(
+                case.bus.log, marker, recipient
+            )
+            assert certified == (delivery,)
+            assert not more
+    finally:
+        case.close()
+
+
+def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path):
+    import json
+
+    from agent_comms.bus_publication import DuplicateWireKeyError
+
+    case = _ready(tmp_path, direct=True)
+    try:
+        marker = case.bus.log._private_marker_unlocked()
+        row = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
+        (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+        marker.checkpoint_version = None
+        marker.checkpoint_seal = None
+        case.bus.log.write_metadata_unlocked(marker)
+        raw = '{"seq":' + str(row["seq"]) + ',' + json.dumps(row)[1:] + '\n'
+        case.bus.log.path.write_text(raw)
+        before = case.bus.log.path.read_bytes()
+        with pytest.raises(DuplicateWireKeyError, match="Duplicate bus object key"):
+            case.bus.log.full_history()
+        assert case.bus.log.path.read_bytes() == before
     finally:
         case.close()

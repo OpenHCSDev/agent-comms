@@ -17,14 +17,10 @@ from agent_comms.coordination_tables.publications import (
 )
 
 from .bus_publication import (
-    PRIVATE_WIRE_FIELD,
     CommittedDelivery,
     has_private_wire_fields,
-    public_envelope_digest,
     unique_wire_object,
-    validate_delivery_record,
 )
-from .delivery_policy import KeyedResponseReceipt
 from .envelope_claim_transitions import (
     ClaimProjection,
     apply_transition,
@@ -42,6 +38,7 @@ from .store_files import (
     file_revision,
 )
 from .wire_metadata import WireMetadata
+from .wire_record import WireRecord, WireScan
 
 if TYPE_CHECKING:
 
@@ -125,7 +122,8 @@ class WireLog:
         """Project claims and return the verified bus high-water in one scan."""
         projection = ClaimProjection()
         verified_sequence = 0
-        for previous, _, _ in self._verified_private_rows_unlocked(metadata):
+        for record in self.verified_records_unlocked(metadata):
+            previous = record.message
             verified_sequence = previous.seq
             if previous.claim_transition is not None:
                 projection = apply_transition(projection, previous.claim_transition)
@@ -163,100 +161,26 @@ class WireLog:
             raise RelationViolationError("Private bus writer has no durable protocol marker.")
         return metadata
 
-    def _verified_private_rows_unlocked(
+    def verified_records_unlocked(
         self,
         metadata: WireMetadata,
         *,
-        on_row: (
-            Callable[
-                [int, bytes, Message, KeyedResponseReceipt | None, CommittedDelivery | None], None
-            ]
-            | None
-        ) = None,
-    ) -> Iterator[tuple[Message, KeyedResponseReceipt | None, CommittedDelivery | None]]:
-        """Validate the ENTIRE append-only log before any new append or trusted read.
-
-        A later corrupt row cannot be skipped to attest an earlier row. No
-        incomplete tail or quarantine is silently discarded on the private path.
-        """
-
-        from .audience_manifest import MAX_WIRE_SEQ
-        from .bus_publication import _canonical
-
-        previous_sequence = 0
-        seen_keys: set[str] = set()
+        on_row: Callable[[int, bytes, WireRecord], None] | None = None,
+    ) -> Iterator[WireRecord]:
+        """Entire strict stream; later corruption cannot certify an earlier append."""
+        scan = WireScan(metadata)
         if not self.path.exists():
             return
         with self.path.open("rb") as stream:
             while True:
                 offset = stream.tell()
-                line = stream.readline(8 * 1024 * 1024 + 1)
+                line = stream.readline(scan.max_row_bytes + 1)
                 if not line:
                     break
-                if len(line) > 8 * 1024 * 1024:
-                    raise RelationViolationError("Oversized private bus row.")
-                if not line.endswith(b"\n"):
-                    raise RelationViolationError("Incomplete bus row blocks keyed publication.")
-                try:
-                    record = json.loads(line, object_pairs_hook=unique_wire_object)
-                    if not isinstance(record, dict):
-                        raise ValueError("Bus row is not an object.")
-                    existing = Message.from_wire(record)
-                    public = existing.to_wire()
-                    raw_public = {
-                        key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD
-                    }
-                    if (
-                        type(record.get("seq")) is not int
-                        or not previous_sequence < record["seq"]
-                        or record["seq"] > MAX_WIRE_SEQ  # never cap by a stale marker hint
-                        or any(
-                            type(record.get(field)) is not str
-                            for field in ("id", "from", "to", "text", "type", "sender_role")
-                        )
-                        or _canonical(raw_public) != _canonical(public)
-                    ):
-                        raise ValueError("Noncanonical public bus envelope or sequence.")
-                    public_envelope_digest(public)
-                    previous_sequence = existing.seq
-                    if not has_private_wire_fields(record):
-                        if (
-                            existing.claim_transition is None
-                            and existing.seq > metadata.admission_after_seq
-                        ):
-                            raise RelationViolationError(
-                                "Unattested public initial exceeds the retained history boundary."
-                            )
-                        if on_row is not None:
-                            on_row(offset, line, existing, None, None)
-                        yield existing, None, None
-                        continue
-                    if set(key for key in record if key.startswith("_agent_comms_private")) != {
-                        PRIVATE_WIRE_FIELD
-                    }:
-                        raise ValueError("Unknown private bus namespace.")
-                    private = record[PRIVATE_WIRE_FIELD]
-                    if (
-                        not isinstance(private, dict)
-                        or type(private.get("version")) is not int
-                        or private["version"] != 1
-                    ):
-                        raise ValueError("Unsupported private bus record.")
-                    initial = validate_delivery_record(record, metadata.root_id)
-                    receipt = initial.receipt
-                    if receipt is not None:
-                        receipt.add_unique(seen_keys)
-                    if on_row is not None:
-                        on_row(offset, line, existing, receipt, initial)
-                    yield existing, receipt, initial
-                except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
-                    if isinstance(error, RelationViolationError):
-                        raise
-                    if "Duplicate bus object key" in str(error):
-                        raise
-                    raise RelationViolationError(
-                        "Malformed public bus row blocks publication."
-                    ) from error
+                record = scan.read(line)
+                if on_row is not None:
+                    on_row(offset, line, record)
+                yield record
 
     def _append_private_unlocked(self, metadata: WireMetadata, row: Mapping[str, object]) -> None:
         """Durably reserve a sequence, append one row, then sync its parent.
@@ -297,18 +221,9 @@ class WireLog:
         )
 
         if certificate_enabled(self.path):
-            private = row.get(PRIVATE_WIRE_FIELD)
-            initial = (
-                validate_delivery_record(row, metadata.root_id)
-                if isinstance(private, dict) and "initial" in private
-                else None
-            )
-            receipt = initial.receipt if initial is not None else None
-            public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
+            record = WireRecord.from_wire(row, metadata.root_id)
             try:
-                append_private_bus_checkpoint_unlocked(
-                    self, metadata, encoded, Message.from_wire(public), receipt, initial
-                )
+                append_private_bus_checkpoint_unlocked(self, metadata, encoded, record)
             except Exception as error:
                 # The bus may already contain this fsynced row. Never retry an
                 # uncertain input or report publication as definitely absent.
@@ -327,9 +242,10 @@ class WireLog:
             if wire_root_id != metadata.root_id:
                 raise RelationViolationError("Initial wire root does not match the bus marker.")
             matched: CommittedDelivery | None = None
-            for _message, _receipt, initial in self._verified_private_rows_unlocked(metadata):
-                if initial is not None and initial.message.seq == wire_seq:
-                    matched = initial
+            for record in self.verified_records_unlocked(metadata):
+                for delivery in record.deliveries():
+                    if delivery.message.seq == wire_seq:
+                        matched = delivery
             if matched is None:
                 raise RelationViolationError(
                     "No committed initial sideband for this wire sequence."
@@ -349,7 +265,8 @@ class WireLog:
         metadata = self._private_marker_unlocked()
         matched: Message | None = None
         previous_sequence = 0
-        for existing, receipt, _initial in self._verified_private_rows_unlocked(metadata):
+        for record in self.verified_records_unlocked(metadata):
+            existing, receipt = record.message, record.receipt
             previous_sequence = existing.seq
             if receipt is not None and receipt.publication_key == intent.publication_key:
                 if receipt.execution_id != intent.execution_id:
@@ -373,10 +290,7 @@ class WireLog:
         message = Message.from_wire(record)
         if has_private_wire_fields(record):
             return message, len(json.dumps(message.to_wire()).encode()) + 1
-        if message.claim_transition is None and message.seq > metadata.admission_after_seq:
-            raise RelationViolationError(
-                "Unattested public initial exceeds the retained history boundary."
-            )
+        message.require_retained_admission(metadata.admission_after_seq)
         return message, raw_size
 
     @contextmanager
@@ -477,8 +391,8 @@ class WireLog:
     def _iter_log_unlocked(self) -> Iterator[Message]:
         if self.path.exists():
             marker = self._private_marker_unlocked()
-            for message, _receipt, _initial in self._verified_private_rows_unlocked(marker):
-                yield message
+            for record in self.verified_records_unlocked(marker):
+                yield record.message
 
     def _max_sequence_unlocked(self) -> int:
         return max(
@@ -593,26 +507,9 @@ class WireLog:
                             os.close(directory_fd)
                         verify_private_bus_checkpoint_unlocked(self, private_marker)
                         return
-                    while line := stream.readline(8 * 1024 * 1024 + 1):
-                        if len(line) > 8 * 1024 * 1024 or not line.endswith(b"\n"):
-                            raise RelationViolationError("Incomplete or oversized claim bus row.")
-                        try:
-                            row = json.loads(line, object_pairs_hook=unique_wire_object)
-                        except (ValueError, UnicodeError) as error:
-                            raise RelationViolationError("Malformed claim bus row.") from error
-                        if not isinstance(row, dict):
-                            raise RelationViolationError("Claim bus row must be an object.")
-                        if "claim_transition" in row:
-                            try:
-                                public = Message.from_wire(row).to_wire()
-                            except (KeyError, TypeError, ValueError, AttributeError) as error:
-                                raise RelationViolationError("Malformed claim envelope.") from error
-                            if {
-                                key: value
-                                for key, value in row.items()
-                                if key != PRIVATE_WIRE_FIELD
-                            } != public:
-                                raise RelationViolationError("Noncanonical claim envelope.")
+                    scan = WireScan(private_marker)
+                    while line := stream.readline(scan.max_row_bytes + 1):
+                        scan.read(line)
             directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
             try:
                 os.fsync(directory_fd)

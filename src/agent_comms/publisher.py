@@ -17,10 +17,10 @@ from agent_comms.coordination_tables.publications import (
 
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
+    CommittedDelivery,
     HumanOrigin,
     initial_sideband,
     stable_thread_lookup,
-    validate_delivery_record,
 )
 from .channel_targets import BuiltinChannel, is_channel_target
 from .envelope_claim_transitions import (
@@ -406,7 +406,8 @@ class Publisher:
                 # availability until explicit operator reconciliation exists.
                 expected_sequence = 1
                 duplicate = False
-                for previous, _, _ in self.log._verified_private_rows_unlocked(metadata):
+                for record in self.log.verified_records_unlocked(metadata):
+                    previous = record.message
                     if previous.seq != expected_sequence:
                         raise HumanAdmissionBlockedError(
                             "Private bus sequence gap has UNKNOWN outcome; "
@@ -469,7 +470,7 @@ class Publisher:
                 ),
             }
             # Check the exact bytes and one coherent source revision before any append.
-            validate_delivery_record(row, metadata.root_id)
+            CommittedDelivery.from_wire(row, metadata.root_id)
             if before_revisions != tuple(file_revision(path) for path in source_paths):
                 raise RelationViolationError("Send-time registry/catalog revision changed.")
             # Every frozen subscriber needs an identity, including stopped
@@ -537,6 +538,6 @@ class Publisher:
         if not intent.matches_publication(stored):
             raise RelationViolationError("Stored response does not match publication intent.")
         row = conversation.record(metadata.root_id, stored, intent)
-        validate_delivery_record(row, metadata.root_id)
+        CommittedDelivery.from_wire(row, metadata.root_id)
         self.log._append_private_unlocked(metadata, row)
         return stored
