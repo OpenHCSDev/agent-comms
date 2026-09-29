@@ -96,3 +96,13 @@ Universal performance/size claims likewise remain unproved.
 
 No new runtime format/schema conversion or reset required by this candidate.
 No live installed-state acceptance or full-suite/clean-NRA claim. Parent deploys.
+
+## Parent merged288/294 follow-through
+
+Synced parent main04707495 into the integration branch. The resulting tracked
+file tree is identical to a3ed3034; installed/native receipts remain applicable,
+with no rebuild needed for an ancestry-only merge. read-legality-installed.log:
+23 passed in10.40s, including randomized painted-page/display/read/mode/DM-rebind/
+abrupt-reopen property and current nominal legality constraints after292 table
+owner extraction. No broad suite expansion or UI paint claim; Carver/parent own
+ConversationBlock leaf fix and actual mounted paint/install separately.
