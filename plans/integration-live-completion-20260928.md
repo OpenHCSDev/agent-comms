@@ -31,7 +31,10 @@ No feature is complete merely because a draft exists or a PR was merged.
   follow-up, with actual A/B/A identity/work/reader/editor checks. Also implement
   authorized velocity/direction-adaptive history lookahead in the same existing
   viewport/preparation owners: grow for fast scroll, shrink on slow/idle, cancel
-  obsolete work, bound resources and verify actual fast/reverse/idle paint.
+  obsolete work, bound resources and verify actual fast/reverse/idle paint. End
+  triggers a brief bottom-viewport preparation burst even without earlier scroll
+  samples, then returns to idle budget; skipped intermediate blocks are not all
+  prepared. Verify the actual End key in the continuous large-history journey.
 
 - Strategy correction2026-09-29: Tesla156 owns one coherent navigation/presentation
   integration, Carver153 first-open implementation and shared caller coordination.
