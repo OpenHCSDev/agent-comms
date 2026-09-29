@@ -1,0 +1,21 @@
+{
+  "leaf": "2cab0ff7",
+  "settings": {
+    "model": {
+      "provider": "openai-codex",
+      "modelId": "gpt-6-sol"
+    },
+    "thinkingLevel": "high"
+  },
+  "contextMessages": 237,
+  "contextBytes": 921607,
+  "nativeUsage": {
+    "tokens": 145167,
+    "usageTokens": 145167,
+    "trailingTokens": 0,
+    "lastUsageIndex": 236
+  },
+  "usagePercent": 53.3702205882353,
+  "byteLimit": 191712,
+  "fits": false
+}

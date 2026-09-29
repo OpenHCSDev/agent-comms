@@ -1,0 +1,12 @@
+{
+  "mode": "fork",
+  "nativeParentLeaf": "a28e8312",
+  "parentPercent": 35,
+  "contextWindow": 100000,
+  "nativeTokens": 35000,
+  "capturedBytes": 343152,
+  "providerRequests": 1,
+  "compactionEntries": 0,
+  "firstReply": "FIRST_CHILD_REPLY",
+  "parentAfterForkExcluded": true
+}
