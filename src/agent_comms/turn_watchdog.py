@@ -94,9 +94,7 @@ class ProgressWatchdog:
     def read_timeout(self, session: TurnSession) -> float | None:
         if session.stats.requested:
             timeout: float | None = 5.0
-        elif session.require_input_id and not (
-            not session.require_input_id or session.native.attestation.state is not None
-        ):
+        elif session.require_input_id and session.native.attestation.state is None:
             timeout = max(0.0, self.preflight_deadline - self.clock())
         elif session.active_tools or self.model_wait_timeout is None:
             timeout = None
@@ -166,11 +164,7 @@ class ProgressWatchdog:
             if finish_task is not None and finish_task in done:
                 read_task.cancel()
                 await asyncio.gather(read_task, return_exceptions=True)
-                if session.require_input_id and (
-                    not (
-                        not session.require_input_id or session.native.attestation.state is not None
-                    )
-                ):
+                if session.require_input_id and (session.native.attestation.state is None):
                     return b""
                 await session.stats.request(session)
             return b"\n"
@@ -181,9 +175,7 @@ class ProgressWatchdog:
             await asyncio.gather(*tasks, return_exceptions=True)
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if session.require_input_id and (
-            not (not session.require_input_id or session.native.attestation.state is not None)
-        ):
+        if session.require_input_id and (session.native.attestation.state is None):
             elapsed_ms = round((self.clock() - self.launch_started_at) * 1000)
             wait_ms = round((self.clock() - self.preflight_wait_started_at) * 1000)
             session.output.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT

@@ -141,7 +141,7 @@ def _session_revision(
 
 
 class PersistentPiSession:
-    """One idle Pi RPC child, owned by one ACP session in one owner process.
+    """One Pi RPC child through launch, attested turn use, and idle retention.
 
     A turn borrows the child only under the saved-session writer fence. The
     revision check detects a separate writer between turns, so its in-memory
@@ -176,13 +176,10 @@ class PersistentPiSession:
         watchdog: ProgressWatchdog,
     ) -> None:
         key = (launch, auth_revision())
-        self.reused = reuse and self.reusable(key, session_file)
-        if not self.reused:
+        reused = reuse and self.reusable(key, session_file)
+        if not reused:
             await self.close()
-        self.validated_session_id = None
-        expected = (
-            NativeSessionIdentity(self.session_id, self.session_file) if self.reused else None
-        )
+        expected = NativeSessionIdentity(self.session_id, self.session_file) if reused else None
         if self.reopen_required is not None:
             if session_file != self.reopen_required or not require_input_id:
                 raise SavedSessionReopenError(
@@ -191,7 +188,7 @@ class PersistentPiSession:
             from .native_session_reopen import validate_native_reopen
 
             try:
-                self.validated_session_id = await asyncio.to_thread(
+                validated_session_id = await asyncio.to_thread(
                     validate_native_reopen,
                     launch.package,
                     session_file,
@@ -201,35 +198,40 @@ class PersistentPiSession:
                 raise SavedSessionReopenError(
                     "Saved native session failed strict reopen validation."
                 ) from error
-            expected = NativeSessionIdentity(self.validated_session_id, session_file)
+            expected = NativeSessionIdentity(validated_session_id, session_file)
         self.attestation = NativeAttestation(expected)
-        if not self.reused and require_input_id and startup is not None:
+        if not reused and require_input_id and startup is not None:
             await startup.acquire(finish_event)
         watchdog.launching(asyncio.get_running_loop().time, session_file)
-        if not self.reused:
+        if not reused:
             self.proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=launch.env)
             assert self.proc.stdout is not None and self.proc.stderr is not None
             self.reader = PiRpcChannel(self.proc.stdout)
-            self.stderr_task = asyncio.create_task(self.stderr_tail())
+            self.stderr_task = asyncio.create_task(self.stderr_tail(self.proc.stderr))
         self.launch_key = key
-        watchdog.spawned(self.reused)
+        watchdog.spawned(reused)
 
-    async def stderr_tail(self) -> str:
+    @staticmethod
+    async def stderr_tail(stream: asyncio.StreamReader) -> str:
         tail = b""
-        assert self.proc is not None and self.proc.stderr is not None
-        stream = self.proc.stderr
         while chunk := await stream.read(4096):
             tail = (tail + chunk)[-16000:]
         return tail.decode(errors="replace").strip()
 
-    def retain(self, session_file: str, session_id: str, revision, *, sensitive: bool) -> None:
+    def retain(
+        self,
+        session_file: str,
+        session_id: str,
+        revision: tuple[_FileRevision, _FileRevision | None],
+        *,
+        sensitive: bool,
+    ) -> None:
         self.session_file = session_file
         self.session_id = session_id
         self.revision = revision
         self.sensitive_diagnostics = sensitive
-        if self.validated_session_id is not None:
-            self.reopen_required = None
-            self.reopen_session_id = None
+        self.reopen_required = None
+        self.reopen_session_id = None
 
     def reusable(
         self, launch_key: tuple[NativePiRpcLaunch, tuple[int, int]], session_file: str | None
@@ -687,7 +689,6 @@ class TurnSession:
     ):
         self.launch = launch
         self.task = task
-        self.cwd = str(launch.cwd)
         self.session_file = session_file
         self.steering_queue = steering_queue
         self.finish_event = finish_event
@@ -845,9 +846,7 @@ class TurnSession:
                 yield event
             return
         if not self.line:
-            if self.require_input_id and (
-                not (not self.require_input_id or self.native.attestation.state is not None)
-            ):
+            if self.require_input_id and (self.native.attestation.state is None):
                 self.output.preflight_failure = FailureReason.PREFLIGHT_EXIT
                 self.output.diagnostic = {
                     "elapsed_ms": round(
@@ -874,9 +873,7 @@ class TurnSession:
             self.skip = True
             return
         except (ValueError, TypeError) as error:
-            if self.require_input_id and not (
-                not self.require_input_id or self.native.attestation.state is not None
-            ):
+            if self.require_input_id and self.native.attestation.state is None:
                 self.output.record_failure(
                     failures.InputIdUnavailable(
                         f"Invalid Pi capability preflight response: {error}"

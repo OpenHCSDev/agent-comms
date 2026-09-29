@@ -345,7 +345,7 @@ class ExtensionUiRequest(PiEvent):
                 and (not session.agent_settled_seen)
                 and (not session.stats.requested)
                 and session.require_input_id
-                and (not session.require_input_id or session.native.attestation.state is not None)
+                and session.native.attestation.state is not None
                 and session.initial_prompt_acknowledged
                 and session.initial_input_started
                 and session.initial_session_observed
