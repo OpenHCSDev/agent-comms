@@ -1,0 +1,31 @@
+{
+  "removed_owned_copies": [
+    {
+      "path": ".artifacts/tracked-baseline",
+      "bytes": 9624143
+    },
+    {
+      "path": ".artifacts/tracked-native-source",
+      "bytes": 4625152
+    },
+    {
+      "path": ".artifacts/tracked-native-installed",
+      "bytes": 4625176
+    },
+    {
+      "path": ".artifacts/tracked-native-merged",
+      "bytes": 4625152
+    },
+    {
+      "path": ".artifacts/tracked-turn-installed",
+      "bytes": 4729492
+    }
+  ],
+  "preserved": [
+    "branch and source",
+    "matched final wheel and installed candidate",
+    "canonical native5fde",
+    "both Sol receipts with original outcomes",
+    "all verification logs"
+  ]
+}

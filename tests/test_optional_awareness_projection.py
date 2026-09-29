@@ -24,6 +24,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.threads import Thread
+from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_coordinated_runtime import _fake_model
 
@@ -246,7 +247,7 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
             store.close()
         monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
         runner, calls = _fake_model()
-        monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+        monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         outcome = await runtime.SelectedExecution(
             root=comms.root,
             wire_root_id=root_id,
@@ -511,7 +512,7 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
             store.close()
         monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
         runner, calls = _fake_model()
-        monkeypatch.setattr(runtime, "run_native_pi_turn", runner)
+        monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         outcome = await runtime.SelectedExecution(
             root=comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
         ).run()

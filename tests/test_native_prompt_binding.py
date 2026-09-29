@@ -27,7 +27,6 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_initial_cohort
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordination_store import IdentityConflict, MutationStore, StaleFence
-from agent_comms.errors import RelationViolationError
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable, read_tracked_input_digest
 from agent_comms.native_prompt_binding import (
@@ -42,6 +41,7 @@ from agent_comms.native_source_cursor import (
 )
 from agent_comms.proven_source_coverage import read_proven_source_coverage
 from agent_comms.threads import Thread
+from agent_comms.tracked_turn import TrackedTurnSession
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatc
     root, root_id, _, _, _ = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     original = binding.sidecar_connection
 
     @contextmanager
@@ -128,7 +128,7 @@ async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, m
     root, root_id, _, _, _ = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     publish = private_sidecar._publish
 
     def uncertain(*args, **kwargs):
@@ -241,7 +241,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
+    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     ).run()
@@ -283,7 +283,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     root, root_id, comms, first, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     second = comms.messaging.send_initial_cohort("sender", "#team", "Second source.")
     lookup = stable_thread_lookup(people[1].created_at)
     bus = comms.bus
@@ -328,7 +328,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     bad, _ = _fake_model(decision="IGNORE", digest_override="b" * 64)
     good, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", bad)
+    monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -336,7 +336,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
     second = comms.messaging.send_initial_cohort("sender", "alpha", "Second selected source.")
     with MutationStore(str(root / "coordination.sqlite3")) as store:
         accept_initial_cohort(comms.bus, root_id, second.seq, store)
-    monkeypatch.setattr(runtime, "run_native_pi_turn", good)
+    monkeypatch.setattr(TrackedTurnSession, "execute", good)
     later = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -366,13 +366,11 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
             )
 
 
-
-
 async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     beta = Thread(
         "beta",
         frozenset({"team"}),
@@ -417,7 +415,7 @@ async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, m
             return await fake(package, **kwargs)
         raise NativePiUnavailable("full launch failed after triage")
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fail_full)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fail_full)
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -439,7 +437,7 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -465,7 +463,7 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
     root, root_id, comms, _, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -519,7 +517,7 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
     root, root_id, comms, first, _ = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -538,7 +536,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     root, root_id, comms, first, people = _root(tmp_path)
     monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     old_turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -580,7 +578,7 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
-    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
+    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     ).run()
@@ -609,7 +607,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, _ = _fake_model(digest_override="b" * 64)
-    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
+    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
             root=root,
@@ -657,7 +655,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
         bad, _ = _fake_model(digest_override="b" * 64)
         return await bad(package, **kwargs)
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", corrupt_full)
+    monkeypatch.setattr(TrackedTurnSession, "execute", corrupt_full)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -719,7 +717,7 @@ async def test_live_binding_rejects_tampered_owner_and_attempt_before_proof(
         binding = real_read(store, input_id, **kwargs)
         return replace(binding, **{field: bad}) if tampered and binding is not None else binding
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", fake_then_tamper)
+    monkeypatch.setattr(TrackedTurnSession, "execute", fake_then_tamper)
     monkeypatch.setattr(runtime, "read_expected_prompt_binding", changed_binding)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
@@ -784,7 +782,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
                 db.execute(binding_module.PromptBinding.triggers()["prompt_binding_update_guard"])
         return result
 
-    monkeypatch.setattr(runtime, "run_native_pi_turn", mutate_after_admitted_send)
+    monkeypatch.setattr(TrackedTurnSession, "execute", mutate_after_admitted_send)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
@@ -813,7 +811,7 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
     root, root_id, comms, initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
-    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", fake)
+    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
 
     real_bind = runtime.bind_expected_prompt
 
@@ -850,7 +848,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
     async def dying(package, **_):
         raise NativePiUnavailable("fake backend died after the prelaunch binding")
 
-    monkeypatch.setattr("agent_comms.coordinated_runtime.run_native_pi_turn", dying)
+    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", dying)
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
             root=root,

@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms.tracked_turn import TrackedTurnSession
 from test_acp_private_nk_delivery import _session
 from test_acp_private_nk_delivery import tmp_path as private_root_fixture
 from test_coordinated_runtime import _fake_model
@@ -54,7 +55,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         yield events.StreamSettled()
         yield events.Done(ok=native_ok, text="Fresh owner input completed")
 
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", blocked)
+    monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
     comms.messaging.send_message("sender", "beta", "Selected direct message")
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
@@ -103,7 +104,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
         raise AssertionError("Revoked or historical input reached native execution")
         yield
 
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", blocked)
+    monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden)
     admission = comms.registry.snapshot().admission_generations["beta"]
     old_key = "acp:historical-uncertain"
@@ -227,7 +228,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         yield events.Done(ok=False, text="Authority changed before send")
 
     monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", blocked)
+    monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
     comms.messaging.send_message("sender", "beta", "Selected DM")
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
@@ -443,7 +444,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         yield events.StreamSettled()
         yield events.Done(ok=True, text="Both fresh inputs handled")
 
-    monkeypatch.setattr(coordinated_runtime, "run_native_pi_turn", blocked)
+    monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
     comms.messaging.send_message("sender", "beta", "Selected DM")
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
