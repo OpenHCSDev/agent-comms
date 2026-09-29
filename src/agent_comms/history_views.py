@@ -56,6 +56,7 @@ from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock, file_revision
 from .threads import current_thread
+from .thread_presentation import ThreadPresentation
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
@@ -816,31 +817,25 @@ class HistoryViews:
     def thread_views(
         self, *, show_stopped: bool = True, show_archived: bool = False
     ) -> tuple[ThreadView, ...]:
-        return self._thread_views_for(
-            self.registry.snapshot(), show_stopped=show_stopped, show_archived=show_archived
+        return ThreadView.roster(
+            self.registry.snapshot(), self.agents, GoalWaits(self.root / GoalWaits.filename),
+            show_stopped=show_stopped, show_archived=show_archived
         )
 
-    def _thread_views_for(
-        self, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
-    ) -> tuple[ThreadView, ...]:
-        runtime = self.agents.runtime_info.read()
-        activities = self.agents.all_activity(snapshot=snapshot)
-        waits = GoalWaits(self.root / GoalWaits.filename).read()
-        return tuple(
-            ThreadView(
-                thread,
-                snapshot.statuses[name],
-                activities.get(name, Activity(name, ActivityState.IDLE, timestamp=0)),
-                runtime.get(name),
-                snapshot.last_seen.get(name, 0),
-                GoalWaits.execution(thread.goal, waits, snapshot),
-            )
-            for name, thread in snapshot.threads.items()
-            if snapshot.statuses[name].in_view(
-                show_stopped=show_stopped, show_archived=show_archived
-            )
-            and thread.role.executable
+    def thread_presentation(self, name: str) -> ThreadPresentation | None:
+        """Read one current executable thread, including its assigned messages."""
+        snapshot = self.registry.snapshot()
+        thread = snapshot.threads.get(snapshot.aliases.get(name, name))
+        if thread is None:
+            return None
+        if not ThreadView.visible(thread, snapshot, show_stopped=True, show_archived=False):
+            return None
+        view = ThreadView.capture(
+            thread, snapshot, self.agents.activity_of(thread.name, snapshot=snapshot),
+            self.agents.runtime_info.read().get(thread.name),
+            GoalWaits(self.root / GoalWaits.filename).read(),
         )
+        return replace(view.presentation, notifications=self.recent_notifications(thread.name))
 
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
@@ -887,8 +882,9 @@ class HistoryViews:
                 show_archived=show_archived,
                 display_activity=display_activity,
             )
-            threads = self._thread_views_for(
-                registry, show_stopped=show_stopped, show_archived=show_archived
+            threads = ThreadView.roster(
+                registry, self.agents, GoalWaits(self.root / GoalWaits.filename),
+                show_stopped=show_stopped, show_archived=show_archived
             )
             snapshot = CoordinationSnapshot(
                 threads,
