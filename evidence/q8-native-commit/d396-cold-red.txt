@@ -1,0 +1,230 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_cold_context_decline_refuses_before_original_binding[ordinary] ______
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-native-commit-20260929/.scratch/d396-cold-red/test_cold_context_decline_refu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77ebcd7bb0>
+private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    async def test_cold_context_decline_refuses_before_original_binding(tmp_path, monkeypatch, private_session):
+        monkeypatch.setenv("PR95_COLD_DECLINE", "1")
+>       await test_acp_selected_summary_handoff_uses_final_prompt_once(
+            tmp_path, monkeypatch, correction=False, future_queued=False,
+            queue_revoked=False, clean_decline=True, private_session=private_session,
+        )
+
+tests/test_selected_owner_compaction_integration.py:997: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tmp_path = PosixPath('/home/ts/wt/comms-q8-native-commit-20260929/.scratch/d396-cold-red/test_cold_context_decline_refu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f77ebcd7bb0>
+correction = False, future_queued = False, queue_revoked = False
+clean_decline = True, private_session = False
+
+    @pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+    @pytest.mark.parametrize(
+        "correction,future_queued,queue_revoked",
+        [(False, False, False), (True, False, False), (False, True, False), (False, True, True)],
+        ids=["unchanged", "correction", "future-queued", "queue-revoked"],
+    )
+    @pytest.mark.parametrize("clean_decline", [False, True], ids=["summary", "decline"])
+    async def test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction, future_queued, queue_revoked, clean_decline, private_session
+    ):
+        original_key = "acp:original-proj" if private_session else "acp:original"
+        from dataclasses import replace
+    
+        from agent_comms.acp import CommsAgent
+        from agent_comms.acp_extension import (
+            CompactionPublishedUpdate,
+            InputDeliveryChangedUpdate,
+            QueuePromptRequest,
+            decode_updates,
+            encode_request,
+        )
+        from agent_comms.comms import wire
+        from agent_comms.compaction_identity import SelectedCommitReference
+        from agent_comms.compaction_records import SelectedSummarySource
+        from agent_comms.errors import RelationViolationError
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.goal_attempts import GoalAttemptStore
+        from agent_comms.selected_pi_summary_rpc import SelectedSummarySlot
+    
+        if private_session:
+            monkeypatch.setenv("PR95_PRIVATE_SESSION", "1")
+        if clean_decline:
+            monkeypatch.setenv("PR95_DECLINE_SUMMARY", "1")
+        async with owner_fixture(tmp_path, monkeypatch) as (
+            persistent,
+            _registry,
+            _inputs,
+            file,
+            launcher,
+            info,
+        ):
+            root = tmp_path if private_session else tmp_path / "acp-wire"
+            comms = wire(root)
+            root_id = comms.messaging.initialize_private_initial_protocol()
+            project = tmp_path / "proj"
+            project.mkdir()
+    
+            updates = []
+            publications = []
+    
+            class Client:
+                async def session_update(self, **kwargs):
+                    updates.append(kwargs)
+                    for event in decode_updates(kwargs["update"].field_meta):
+                        if isinstance(event, CompactionPublishedUpdate):
+                            # Actual ACP delivery must precede binding/writing this exact
+                            # selected original. Read its authority from the journal owner.
+                            journal = CompactionJournal(root / "compaction-commits.sqlite3")
+                            operation = journal.operations.get(event.publication.commit_id)
+                            reference = SelectedCommitReference.from_intent(json.loads(operation.intent_json))
+                            attempt = journal.summaries.get(reference.operation_id)
+                            source = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json)).source
+                            assert source.pending_input_key is not None
+                            original = dispositions.read().lookup(source.pending_input_key)
+                            assert original.exists and not original.has_native_binding
+                            publications.append(event.publication.commit_id)
+    
+            agent = CommsAgent(
+                comms,
+                agent_bin=launcher,
+                agent_args=[],
+                runtime_enabled=True,
+                auto_wake=False,
+                private_nk_native_package=Path(PACKAGE).resolve(),
+                private_nk_wire_root_id=root_id,
+            )
+            agent.on_connect(Client())
+            await agent.new_session(cwd=str(project), mcp_servers=[])
+            agent.inputs.drain_tasks["proj"].cancel()
+            await asyncio.gather(agent.inputs.drain_tasks["proj"], return_exceptions=True)
+            comms.registry.register(
+                replace(
+                    comms.registry.require("proj"),
+                    goal=Goal("retain history", "goal-acp"),
+                    session_file=file,
+                    model=info.model,
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.set_agent_info(
+                "proj",
+                model=info.model,
+                context_used=info.context_used,
+                context_size=info.context_size,
+            )
+            private = root / "goal-private"
+            private.mkdir(mode=0o700)
+            store = GoalAttemptStore.initialize(private)
+            store.create_goal("goal-acp")
+            agent.turns.goals.goal_store = store
+            agent.turns.persistent_backends["proj"] = persistent
+            dispositions = InputDispositions(root / InputDispositions.filename)
+            if private_session:
+                with Coordination(str(root / "coordination.sqlite3")) as coordination:
+                    install_native_runtime_schema(coordination)
+                record_fixture_history(
+                    dispositions, "proj", comms.registry.snapshot().admission_generations["proj"]
+                )
+            dispositions.record(
+                original_key,
+                seq=None,
+                owner="proj",
+                admission=comms.registry.snapshot().admission_generations["proj"],
+                target="proj",
+                text="Continue",
+            )
+            selected_exchange = SelectedSummarySlot.run_selected_summary
+            summary_ids = []
+            queued_keys = []
+    
+            async def selected_with_correction(self, *args, **kwargs):
+                if future_queued:
+                    response = await agent.prompt(
+                        "proj",
+                        [{"type": "text", "text": "Fresh followup"}],
+                        _meta=encode_request(QueuePromptRequest(defer_display=True)),
+                    )
+                    (receipt,) = decode_updates(response.field_meta)
+                    assert isinstance(receipt, InputDeliveryChangedUpdate)
+                    key = "acp:" + receipt.input_id
+                    queued_keys.append(key)
+                    row = dispositions.read().lookup(key)
+                    assert row.accepts_reservation and not row.has_native_binding
+                    if queue_revoked:
+                        await agent.inputs.clear_queued_inputs("proj")
+                        assert dispositions.read().lookup(key) == row
+                result = await selected_exchange(self, *args, **kwargs)
+                summary_ids.append(result.operation_id)
+                if correction:
+                    dispositions.record(
+                        "acp:correction",
+                        seq=None,
+                        owner="proj",
+                        admission=comms.registry.snapshot().admission_generations["proj"],
+                        target="proj",
+                        text="Changed requirement before native commit",
+                    )
+                return result
+    
+            monkeypatch.setattr(SelectedSummarySlot, "run_selected_summary", selected_with_correction)
+            managed = NativePiRpcLaunch.managed
+    
+            def offline_launch(command, arguments, **kwargs):
+                launch = managed(command, arguments, **kwargs)
+                environment = dict(launch.env, PR95_OWNER_FIXTURE_ROOT=str(tmp_path))
+                return replace(
+                    launch,
+                    argv=(
+                        "node",
+                        str(
+                            Path(__file__).resolve().parents[1]
+                            / "stack/test-native-selected-owner-host.mjs"
+                        ),
+                        "--session",
+                        launch.session_file,
+                    ),
+                    env=environment,
+                )
+    
+            monkeypatch.setattr(NativePiRpcLaunch, "managed", offline_launch)
+            try:
+                before = Path(file).read_bytes()
+                turn = agent.turns.run_agent_turn(
+                    "proj",
+                    "proj",
+                    "Continue",
+                    original_keys=(original_key,),
+                    original_owner_input=True,
+                    original_goal_id="goal-acp",
+                )
+                if queue_revoked:
+                    with pytest.raises(RelationViolationError, match="Unsettled"):
+                        await turn
+                    assert summary_ids == []
+                    assert not CompactionJournal(
+                        root / "compaction-commits.sqlite3"
+                    ).summaries.history(file)
+                    assert Path(file).read_bytes() == before
+                    assert not (tmp_path / "provider-requests.json").exists()
+                    for key in (original_key, *queued_keys):
+                        row = dispositions.read().lookup(key)
+                        assert row.exists and not row.has_native_binding and not row.has_started
+                    assert "proj" not in agent.inputs.selected_summary_admissions
+                    return
+                if os.environ.get("PR95_COLD_DECLINE") == "1":
+                    from agent_comms.owner_compaction_settings import PiSettingsEvidenceError
+>                   with pytest.raises(PiSettingsEvidenceError, match="context_requires_compaction"):
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   Failed: DID NOT RAISE PiSettingsEvidenceError
+
+tests/test_selected_owner_compaction_integration.py:477: Failed
+------------------------------ Captured log call -------------------------------
+WARNING  asyncio:unix_events.py:897 child process pid 339678 exit status already read:  will report returncode 255
+=========================== short test summary info ============================
+FAILED tests/test_selected_owner_compaction_integration.py::test_cold_context_decline_refuses_before_original_binding[ordinary]
+1 failed in 6.89s

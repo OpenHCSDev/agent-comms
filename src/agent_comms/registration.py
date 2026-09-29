@@ -10,7 +10,6 @@ from pathlib import Path
 from .catalog_store import ChannelCatalog
 from .compaction_publication_lease import publication_identity_fence
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
@@ -223,43 +222,9 @@ class Registration:
             edit.commit()
             return result
 
-    def attest_owner_compaction(
-        self,
-        expected: Thread,
-        expected_owner_generation: int,
-        turn_id: str,
-        *,
-        expected_goal_id: str | None,
-        expected_goal_revision: int | None,
-        session_file: str,
-        session_leaf: str,
-        session_revision: str,
-    ) -> OwnerCompactionAttestation:
-        """Return an audit snapshot, NOT authority for a later native mutation."""
-        with self.guard_owner_compaction(
-            expected,
-            expected_owner_generation,
-            turn_id,
-            expected_goal_id=expected_goal_id,
-            expected_goal_revision=expected_goal_revision,
-            session_file=session_file,
-            session_leaf=session_leaf,
-            session_revision=session_revision,
-        ) as (attestation, _):
-            return attestation
-
     @contextmanager
     def guard_owner_compaction(
-        self,
-        expected: Thread,
-        expected_owner_generation: int,
-        turn_id: str,
-        *,
-        expected_goal_id: str | None,
-        expected_goal_revision: int | None,
-        session_file: str,
-        session_leaf: str,
-        session_revision: str,
+        self, expected: Thread, receipt: OwnerCompactionAttestation,
     ) -> Iterator[tuple[OwnerCompactionAttestation, int]]:
         """Hold canonical authority through the caller's native mutation.
 
@@ -277,22 +242,6 @@ class Registration:
         authority for those values.
         """
         Thread.require_declaration(expected)
-        # Decode the existing attestation declaration once at this call boundary.
-        # The registry revision is filled only under the held canonical lock.
-        receipt = FieldCodec.decode(
-            OwnerCompactionAttestation,
-            dict(
-                thread=expected.name,
-                owner_epoch=expected_owner_generation,
-                turn_id=turn_id,
-                goal_id=expected_goal_id,
-                goal_revision=expected_goal_revision,
-                session_file=session_file,
-                session_leaf=session_leaf,
-                session_revision=session_revision,
-                registry_revision=None,
-            ),
-        )
         with self.store.locked() as authority_fd:
             snapshot = self.store._read_unlocked().snapshot()
             owner = RegistryOwner.capture_local(snapshot, expected.name)
