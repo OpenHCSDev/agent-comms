@@ -1,0 +1,19 @@
+{
+  "process_references": {
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline": [],
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/native-second": [],
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/native-baseline": [],
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/native-baseline-complete": [],
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/lifecycle": [],
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/runtime-case": []
+  },
+  "removed_owned_derivatives": [
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/baseline",
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/native-second",
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/native-baseline",
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/native-baseline-complete",
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/lifecycle",
+    "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/owner-startup-attachment/runtime-case"
+  ],
+  "preserved": "installed candidate/wheel, source, receipts, global d396, all other worktrees"
+}
