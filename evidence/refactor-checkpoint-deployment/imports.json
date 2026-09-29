@@ -1,0 +1,26 @@
+{
+  "agent-comms": {
+    "url": "https://github.com/OpenHCSDev/agent-comms.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "1dbb318dabc67866d282c97478877e44adf99a2a",
+      "requested_revision": "1dbb318dabc67866d282c97478877e44adf99a2a"
+    }
+  },
+  "batrachian-toad": {
+    "url": "https://github.com/OpenHCSDev/toad.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "16cfcb18d9eaacc2d280b04530c65094279280da",
+      "requested_revision": "16cfcb18d9eaacc2d280b04530c65094279280da"
+    }
+  },
+  "textual": {
+    "url": "https://github.com/OpenHCSDev/textual.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "1738abd8e3524b7e86171b70256d7f7e52fdb724",
+      "requested_revision": "1738abd8e3524b7e86171b70256d7f7e52fdb724"
+    }
+  }
+}
