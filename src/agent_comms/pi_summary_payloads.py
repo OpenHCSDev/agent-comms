@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -33,6 +34,9 @@ class SummaryFiles(PiPayload):
             if any(not p or "\0" in p or len(p.encode()) > 4096 for p in paths):
                 raise ValueError("Invalid selected native file operations")
 
+    def commit_metadata(self) -> list[list[str]]:
+        return [[path.encode("utf-8").hex() for path in paths] for paths in (self.read_files, self.modified_files)]
+
 
 @dataclass(frozen=True)
 class SummaryCost(PiCost):
@@ -44,6 +48,11 @@ class SummaryCost(PiCost):
             for v in (self.input, self.output, self.cache_read, self.cache_write, self.total)
         ):
             raise ValueError("Invalid selected native cost")
+
+    def commit_metadata(self) -> list[str]:
+        return [struct.pack(">d", float(value)).hex() for value in (
+            self.input, self.output, self.cache_read, self.cache_write, self.total,
+        )]
 
 
 @dataclass(frozen=True)
@@ -70,6 +79,12 @@ class SummaryUsage(PiUsage):
             )
         ):
             raise ValueError("Invalid selected native usage")
+
+    def commit_metadata(self) -> list[int | str | None]:
+        return [
+            self.input, self.output, self.cache_read, self.cache_write, self.total_tokens,
+            self.reasoning, self.cache_write_1h, *self.cost.commit_metadata(),
+        ]
 
 
 @dataclass(frozen=True)

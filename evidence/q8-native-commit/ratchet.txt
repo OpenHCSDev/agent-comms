@@ -1,0 +1,28 @@
+{
+  "root": "src/agent_comms/",
+  "base_revision": "69be56053990d0d6ea89139b03e6423e555c2691",
+  "head_revision": "69221b33400b981c4b13bb6ea7662107f8c0724c",
+  "paths": [
+    "src/agent_comms/compaction_boundary.py",
+    "src/agent_comms/compaction_records.py",
+    "src/agent_comms/compaction_source.py",
+    "src/agent_comms/compaction_states.py",
+    "src/agent_comms/compaction_summaries.py",
+    "src/agent_comms/native_compaction_request.py",
+    "src/agent_comms/native_compaction_writer.py",
+    "src/agent_comms/owner_compaction_commit.py",
+    "src/agent_comms/owner_compaction_gate.py",
+    "src/agent_comms/owner_compaction_prepare.py",
+    "src/agent_comms/owner_compaction_provider.py",
+    "src/agent_comms/owner_compaction_runtime.py",
+    "src/agent_comms/pi_summary_payloads.py",
+    "src/agent_comms/registration.py",
+    "src/agent_comms/selected_summary_admission.py",
+    "src/agent_comms/threads.py"
+  ],
+  "nonzero_delta": {
+    "GodClassExcess:src/agent_comms/owner_compaction_commit.py::OwnerCompactionCommit": -42,
+    "ForeignAbsenceProbe:src/agent_comms/owner_compaction_commit.py": -6,
+    "StringSubscript": -7
+  }
+}
