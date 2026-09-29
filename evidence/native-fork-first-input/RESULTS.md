@@ -28,3 +28,17 @@ usage corroborated, ordinary firstsend answers, zero compaction, parent unchange
 child physical session preserved, original at most once, truthful refusal if any and
 no UNKNOWN replay. Child selected-leaf evidence still requires authoritative route.
 Boyle owns CORE fixes, Carver first-fork paint. No product/live edits here.
+
+## Matched candidate250da7, normal24% physical parent
+
+Candidate250da7f929e93751696fda8d5c19c7b26bdb69bf merged and noneditable installed;
+matched complete native candidate at Boyle's .native-candidate. Source actual
+GetSessionStats7888/32768=24.07%, two messages, physical session and selected model
+captured in candidate.log. No inflated budget or post-parent model reduction.
+Normal fork creates captured child history now, but still passes nonempty task via
+PI_PROMPT and real worker refuses before ACP attachment. This is actual normal
+fork RED on candidate, not proof of selected first-send budget behavior yet.
+Boyle339 notified with exact retained stderr; Carver confirms same Toad ForkAction
+surface. Must fix caller without bypassing startup guard. Parent unchanged; user
+UNKNOWN untouched. First-send/no compaction/answer/no replay and child usage/leaf
+proof remain unexecuted behind this concrete caller defect.

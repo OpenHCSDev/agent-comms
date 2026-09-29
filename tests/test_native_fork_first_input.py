@@ -41,7 +41,7 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
             }
         )
     )
-    parent_text = "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * 500
+    parent_text = "PHYSICAL_PARENT_CONTEXT " + "Retained architecture observation. " * 900
     result = await native.run(parent_text)
     assert result[-1].ok, result[-1]
     assert native.provider.posts == 1
@@ -57,6 +57,8 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
 
     state = await probe(GetState(id="parent-state"))
     stats = await probe(GetSessionStats(id="parent-stats"))
+    assert stats.context_usage.tokens is not None
+    assert 0.20 < stats.context_usage.tokens / state.model.context_window < 0.27
     print("PHYSICAL_PARENT_STATS", repr(stats), flush=True)
     assert state.model.context_window == 32768
     print("PHYSICAL_PARENT_STATE", repr(state), flush=True)
