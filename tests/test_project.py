@@ -12,10 +12,12 @@ from acp import RequestError
 
 from agent_comms import agent_events as ae
 from delivery_owner_fixture import canonical_agent
+from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.threads import Thread
+from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.tools import invoke_tool
 
 
@@ -78,12 +80,20 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     agent.on_connect(Client())
     comms.threads.set_project(session, str(new))
     await agent.sessions.sync_identity(session)
-    assert updates[-1].field_meta["agentComms"]["worktree"] == str(new)
+    assert next(
+        update.worktree
+        for update in decode_updates(updates[-1].field_meta)
+        if isinstance(update, CoordinationChangedUpdate)
+    ) == str(new)
     await agent.shutdown()
     resumed = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
     try:
         result = await resumed.load_session(str(old), session)
-        assert result.field_meta["agentComms"]["worktree"] == str(new)
+        assert next(
+            update.worktree
+            for update in decode_updates(result.field_meta)
+            if isinstance(update, CoordinationChangedUpdate)
+        ) == str(new)
         with pytest.raises(RequestError):
             await resumed.load_session(str(tmp_path / "unrelated"), session)
         assert len(comms.registry.all_threads()) == 1
@@ -114,7 +124,7 @@ async def test_owner_automatically_continues_same_session_in_new_project(tmp_pat
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.prompt(session, [{"type": "text", "text": "Change projects"}])
-        agent.inputs.schedule_wake(session)
+        WakeScheduleCheck(session_id=session, inputs=agent.inputs).schedule()
         await asyncio.wait_for(agent.inputs.wake_tasks[session], timeout=2)
         assert len(calls) == 2
         assert calls[0][0] == str(old)
@@ -178,14 +188,20 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
             client.on_connect(Client(values))
             proxy = RuntimeProxy(client, session, socket_path(comms.root, os.getpid()))
             proxies.append(proxy)
-            assert (await proxy.subscribe())["agentComms"]["worktree"] == str(old)
+            assert next(
+                update.worktree
+                for update in decode_updates(await proxy.subscribe())
+                if isinstance(update, CoordinationChangedUpdate)
+            ) == str(old)
         comms.threads.set_project(session, str(new))
         await owner.sessions.sync_identity(session)
         async with asyncio.timeout(2):
             while not all(
                 any(
-                    u.get("_meta", {}).get("agentComms", {}).get("worktree") == str(new)
-                    for u in values
+                    update.worktree == str(new)
+                    for value in values
+                    for update in decode_updates(value.get("_meta"))
+                    if isinstance(update, CoordinationChangedUpdate)
                 )
                 for values in updates
             ):

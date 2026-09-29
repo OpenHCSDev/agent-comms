@@ -440,7 +440,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             cursor = self._private_cursor_metadata(thread_name, session_id, defer_busy=True)
         except BlockingIOError:
-            return  # Same-owner contention retains the last announced snapshot.
+            # A busy poll is not a new fact; trusted loads own invalidation.
+            return
         announced = self._private_cursor_announced.get(session_id)
         if selected_status is None and announced is not None and cursor.same_observation(announced):
             return

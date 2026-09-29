@@ -12,6 +12,7 @@ import json
 import os
 import secrets
 import tempfile
+from collections.abc import Coroutine
 from contextlib import suppress
 from contextvars import ContextVar
 from pathlib import Path
@@ -147,6 +148,14 @@ class RuntimeServer:
             "runtime_permission_controller", default=UNBOUND_CONTROLLER
         )
         self.path = socket_path(agent._comms.root, os.getpid())
+
+    def background(self, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
+        """Launch owner work without inheriting an attached human controller."""
+        token = self.controller.set(UNBOUND_CONTROLLER)
+        try:
+            return asyncio.create_task(work)
+        finally:
+            self.controller.reset(token)
 
     async def start(self) -> None:
         if self.server is not None or os.name == "nt":

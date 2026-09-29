@@ -8,10 +8,8 @@ import signal
 import sys
 from pathlib import Path
 
-import pytest
-
 from agent_comms.acp import CommsClient
-from agent_comms.child_process import DetachedProcess, Platform
+from agent_comms.child_process import ParentedProcess, Platform
 from agent_comms.comms import Comms
 from agent_comms.runtime import socket_path
 from agent_comms.thread_management import ForkSpec
@@ -59,7 +57,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         )
     )
     launched = []
-    launch = DetachedProcess.launch
+    launch = ParentedProcess.launch
 
     def hold_worker(*args, **kwargs):
         child = launch(*args, **kwargs)
@@ -68,7 +66,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
             launched.append(child)
         return child
 
-    monkeypatch.setattr(DetachedProcess, "launch", hold_worker)
+    monkeypatch.setattr(ParentedProcess, "launch", hold_worker)
     client = CommsClient(
         comms,
         agent_bin=launcher,

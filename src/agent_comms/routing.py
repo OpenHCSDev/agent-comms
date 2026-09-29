@@ -68,6 +68,19 @@ class ScheduledTurn:
     goal_id: str | None = None
     goal_wait_id: str | None = None
 
+    @property
+    def autonomous_goal(self) -> bool:
+        return self.goal_id is not None and self.origin is None
+
+    def require_dependency_wake(self, error: Exception) -> None:
+        """Only dependency launches use standby refusal settlement."""
+        if self.goal_wait_id is None:
+            raise error
+
+    @property
+    def origins(self) -> tuple[Message, ...]:
+        return (self.origin,) if self.origin is not None else ()
+
     @classmethod
     def incoming(
         cls, message: Message, *, aliases: Mapping[str, str] | None = None
@@ -113,13 +126,13 @@ class DeliveryMessage:
 
     @classmethod
     def from_wire(cls, record: Mapping, root_id: str | None) -> DeliveryMessage:
-        from .bus_publication import PRIVATE_WIRE_FIELD, validate_delivery_record
+        from .wire_record import WireRecord
 
-        private = record.get(PRIVATE_WIRE_FIELD, {})
-        if "initial" in private:
-            initial = validate_delivery_record(record, root_id)
-            return cls(initial.message, initial.audience.sender_lookup)
-        return cls(Message.from_wire(record))
+        verified = WireRecord.from_wire(record, root_id)
+        for delivery in verified.deliveries():
+            return cls(delivery.message, delivery.audience.sender_lookup)
+        return cls(verified.message)
+
 
 
 @dataclass(frozen=True, slots=True)

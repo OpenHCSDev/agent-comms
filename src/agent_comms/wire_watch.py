@@ -8,6 +8,9 @@ configuration that can change outside the wire directory.
 from __future__ import annotations
 
 import asyncio
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
+from contextlib import suppress
 import ctypes
 import os
 import struct
@@ -32,13 +35,57 @@ _AUTHORITY_FILES = {
 }
 
 
-class WireChangeWatch:
+class WireWatch(ABC):
+    """One observation cadence and its resources, including notification loss."""
+
+    @abstractmethod
+    async def prepare(self) -> None: ...
+
+    @abstractmethod
+    async def wait(self) -> WireWatch: ...
+
+    def close(self) -> None:
+        pass
+
+    @staticmethod
+    async def observations(root: Path) -> AsyncIterator[None]:
+        watcher = open_wire_watcher(root)
+        try:
+            while True:
+                await watcher.prepare()
+                yield None
+                watcher = await watcher.wait()
+        finally:
+            watcher.close()
+
+
+class PollingWireWatch(WireWatch):
+    async def prepare(self) -> None:
+        await asyncio.sleep(0.05)
+
+    async def wait(self) -> WireWatch:
+        return self
+
+
+class WireChangeWatch(WireWatch):
     def __init__(self, fd: int, loop: asyncio.AbstractEventLoop):
         self.fd = fd
         self.loop = loop
         self.changed = asyncio.Event()
         self.invalid = False
         loop.add_reader(fd, self._on_ready)
+
+    async def prepare(self) -> None:
+        self.changed.clear()
+
+    async def wait(self) -> WireWatch:
+        if self.invalid:
+            self.close()
+            return PollingWireWatch()
+        with suppress(TimeoutError):
+            async with asyncio.timeout(1.0):
+                await self.changed.wait()
+        return self
 
     def _on_ready(self) -> None:
         try:
@@ -68,28 +115,28 @@ class WireChangeWatch:
             self.fd = -1
 
 
-def open_wire_watcher(root: Path) -> WireChangeWatch | None:
+def open_wire_watcher(root: Path) -> WireWatch:
     """Use Linux notifications when available; callers retain periodic polling."""
     if sys.platform != "linux":
-        return None
+        return PollingWireWatch()
     try:
         libc = ctypes.CDLL(None, use_errno=True)
         init = libc.inotify_init1
         add = libc.inotify_add_watch
     except (AttributeError, OSError):
-        return None
+        return PollingWireWatch()
     init.argtypes = [ctypes.c_int]
     init.restype = ctypes.c_int
     add.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
     add.restype = ctypes.c_int
     fd = init(os.O_NONBLOCK | os.O_CLOEXEC)
     if fd < 0:
-        return None
+        return PollingWireWatch()
     if add(fd, os.fsencode(root), _MASK) < 0:
         os.close(fd)
-        return None
+        return PollingWireWatch()
     try:
         return WireChangeWatch(fd, asyncio.get_running_loop())
     except (NotImplementedError, OSError):
         os.close(fd)
-        return None
+        return PollingWireWatch()

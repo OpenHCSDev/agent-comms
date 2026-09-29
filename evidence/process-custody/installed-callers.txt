@@ -1,0 +1,45 @@
+F....sF......................                                            [100%]
+=================================== FAILURES ===================================
+____________ test_real_owner_start_restart_and_stop_preserve_thread ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-process-custody-closure-20260929/.scratch/callers/test_real_owner_start_restart_0')
+
+    def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> None:
+        comms = Comms(tmp_path)
+>       package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_owner_process.py:23: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'..., 'PYTEST_CURRENT_TEST': 'tests/test_owner_process.py::test_real_owner_start_restart_and_stop_preserve_thread (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____ test_new_thread_survives_client_loss_and_reattaches_without_duplicate _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-process-custody-closure-20260929/.scratch/callers/test_new_thread_survives_clien0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f313540dc70>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX detached owner")
+    async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(tmp_path, monkeypatch):
+>       package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_detached_owner.py:19: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...T_TEST': 'tests/test_detached_owner.py::test_new_thread_survives_client_loss_and_reattaches_without_duplicate (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_owner_process.py::test_real_owner_start_restart_and_stop_preserve_thread
+FAILED tests/test_detached_owner.py::test_new_thread_survives_client_loss_and_reattaches_without_duplicate
+2 failed, 26 passed, 1 skipped in 4.87s

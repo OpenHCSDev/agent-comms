@@ -1,0 +1,39 @@
+SIM117 [*] Use a single `with` statement with multiple contexts instead of nested `with` statements
+   --> tests/test_child_process.py:458:5
+    |
+457 |   def test_parent_pipe_custody_closes_after_real_exception():
+458 | /     with pytest.raises(ValueError, match="caller failed"):
+459 | |         with Platform.current().launch(
+460 | |             (sys.executable, "-c", "import time; time.sleep(60)"), ()
+461 | |         ) as launch:
+    | |____________________^
+462 |               with launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
+463 |                   launch.release(child.identity)
+    |
+help: Combine `with` statements
+    |
+457 | def test_parent_pipe_custody_closes_after_real_exception():
+    -     with pytest.raises(ValueError, match="caller failed"):
+    -         with Platform.current().launch(
+    -             (sys.executable, "-c", "import time; time.sleep(60)"), ()
+    -         ) as launch:
+    -             with launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
+    -                 launch.release(child.identity)
+    -                 launch.verify()
+    -                 identity = child.identity
+    -                 stdout, stderr = child.process.stdout, child.process.stderr
+    -                 raise ValueError("caller failed")
+458 +     with pytest.raises(ValueError, match="caller failed"), Platform.current().launch(
+459 +         (sys.executable, "-c", "import time; time.sleep(60)"), ()
+460 +     ) as launch:
+461 +         with launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child:
+462 +             launch.release(child.identity)
+463 +             launch.verify()
+464 +             identity = child.identity
+465 +             stdout, stderr = child.process.stdout, child.process.stderr
+466 +             raise ValueError("caller failed")
+467 |     assert not identity.alive()
+    |
+
+Found 1 error.
+[*] 1 fixable with the `--fix` option.

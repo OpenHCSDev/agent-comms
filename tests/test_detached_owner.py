@@ -9,13 +9,16 @@ from pathlib import Path
 import pytest
 
 from agent_comms.acp import CommsClient
-from agent_comms.child_process import DetachedProcess
+from agent_comms.acp_extension import CoordinationChangedUpdate, TurnSettledUpdate, decode_updates
+from agent_comms.child_process import ParentedProcess
 from agent_comms.comms import wire
 from compaction_loopback import LoopbackProvider
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX detached owner")
-async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(tmp_path, monkeypatch):
+async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
+    tmp_path, monkeypatch
+):
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     project = tmp_path / "project"
     project.mkdir()
@@ -30,13 +33,24 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
     server = await asyncio.start_server(handle, "127.0.0.1", 0)
     profile = tmp_path / "profile"
     profile.mkdir(mode=0o700)
-    model = {"providers": {"openrouter": {
-        "baseUrl": f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/v1",
-        "apiKey": "local-fixture", "api": "openai-completions",
-        "models": [{"id": "fake-compact", "contextWindow": 128000,
-                    "maxTokens": 4096, "reasoning": False,
-                    "compat": {"supportsUsageInStreaming": False}}],
-    }}}
+    model = {
+        "providers": {
+            "openrouter": {
+                "baseUrl": f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}/v1",
+                "apiKey": "local-fixture",
+                "api": "openai-completions",
+                "models": [
+                    {
+                        "id": "fake-compact",
+                        "contextWindow": 128000,
+                        "maxTokens": 4096,
+                        "reasoning": False,
+                        "compat": {"supportsUsageInStreaming": False},
+                    }
+                ],
+            }
+        }
+    }
     for name, content in {
         "models.json": model,
         "auth.json": {},
@@ -45,28 +59,32 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         path = profile / name
         path.write_text(json.dumps(content))
         path.chmod(0o600)
-    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(profile))
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/fake-compact")
     monkeypatch.setenv("PI_OFFLINE", "1")
     owner_output = (tmp_path / "owner-output.log").open("wb")
-    launch = DetachedProcess.launch
+    launch = ParentedProcess.launch
 
     def logged_launch(*args, **kwargs):
         return launch(*args, **{**kwargs, "output": owner_output})
 
-    monkeypatch.setattr(DetachedProcess, "launch", logged_launch)
+    monkeypatch.setattr(ParentedProcess, "launch", logged_launch)
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    options = dict(agent_bin=str(package / "dist/cli.js"),
-                   agent_args=["--provider", "openrouter", "--model", "fake-compact"],
-                   private_nk_native_package=package, private_nk_wire_root_id=root_id)
+    options = dict(
+        agent_bin=str(package / "dist/cli.js"),
+        agent_args=["--provider", "openrouter", "--model", "fake-compact"],
+        private_nk_native_package=package,
+        private_nk_wire_root_id=root_id,
+    )
     first, second, third = (CommsClient(comms, **options) for _ in range(3))
 
     class Client:
         async def session_update(self, session_id, update):
-            if update.get("_meta", {}).get("agentComms", {}).get("turnSettled"):
+            if any(
+                isinstance(fact, TurnSettledUpdate) for fact in decode_updates(update.get("_meta"))
+            ):
                 settled.set()
 
     first.on_connect(Client())
@@ -85,7 +103,13 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         attachments = await asyncio.gather(
             second.load_session(str(project), name), third.load_session(str(project), name)
         )
-        assert all(item.field_meta["agentComms"]["ownerPid"] == owner for item in attachments)
+        for item in attachments:
+            observation = next(
+                fact
+                for fact in decode_updates(item.field_meta)
+                if isinstance(fact, CoordinationChangedUpdate)
+            )
+            assert observation.owner_pid == owner
         settled.clear()
         release.set()
         await asyncio.wait_for(settled.wait(), 15)
