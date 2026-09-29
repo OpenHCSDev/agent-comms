@@ -1,0 +1,13 @@
+{
+  "owner": "nra-architecture",
+  "ready": true,
+  "initial_cursor_status": "unavailable",
+  "final_cursor_status": "none",
+  "history_height": 56,
+  "viewport_height": 31,
+  "history_overlaps_viewport": true,
+  "matching_saved_five_word_phrases": 110,
+  "painted_nonspace_characters": 969,
+  "prompts_sent": 0,
+  "exception": "None"
+}
