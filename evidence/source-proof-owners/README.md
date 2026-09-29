@@ -64,7 +64,7 @@ source, used for each recorded native run.
   require exactly one renewed projection, identical observation and later revision.
 - native-digest-and-rename.log preserves the first native digest failure: it called
   a real prototype method with a fake partial session object, so current Pi correctly
-  lacked its entryStore. Deleted that obsolete48-line test. The same assertion now
+  lacked its entryStore. Deleted that obsolete37-line test. The same assertion now
   executes in the real native selected-execution test: recorded request digest must
   equal the durable prelaunch binding and the corroborated input must establish
   prompt equality. No extra fake context or native implementation change.
