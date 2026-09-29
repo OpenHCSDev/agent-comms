@@ -224,7 +224,7 @@ class Transcripts:
             )
         else:
             source = next(
-                (item for item in self.bus.history_sources() if item.key == historical_source), None
+                (item for item in self.bus.history.sources() if item.key == historical_source), None
             )
             if source is None:
                 raise ValueError("Historical source detached; refresh history")

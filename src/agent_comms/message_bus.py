@@ -4,20 +4,16 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import BusActivityIndex, ChannelActivity
-from .bus_page_index import BusPageIndex, StaleBusPageIndexError
 from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
-from .message_page import MessagePage
+from .historical_views import HistoryArchive
+from .message_page import MessagePage, MessagePageRequest
 from .messages import Message
 from .read_basis import (
     ChannelDisplayScope,
@@ -27,22 +23,17 @@ from .read_basis import (
 )
 from .routing import DeliveryMessage, DeliveryScope, PendingCounts
 from .store_files import (
-    _atomic_write_text,
     _iter_jsonl_records,
-    _store_lock,
     file_revision,
 )
 
 if TYPE_CHECKING:
-    from .historical_views import HistorySource, HistoryView
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
-from .private_registry_guard import PrivateRegistryGuard
 from .publisher import Publisher
 from .wire_log import WireLog
-from .wire_metadata import ArchivedAccess, WireMetadata
 
 
 class MessageBus:
@@ -60,6 +51,7 @@ class MessageBus:
 
         self.reads = ReadLedger(bus_path.parent / ReadLedger.filename)
         self.log = WireLog(bus_path)
+        self.history = HistoryArchive(bus_path)
         self._registry = registry
         self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
         self._pending_cache: dict[str, PendingCounts] = {}
@@ -74,156 +66,6 @@ class MessageBus:
             private_initial_writes=private_initial_writes,
             private_claim_writes=private_claim_writes,
         )
-
-    @property
-    def history_manifest(self) -> Path:
-        return self.log.path.with_name("history_sources.json")
-
-    def history_sources(self) -> tuple[HistorySource, ...]:
-        from .historical_views import HistorySource
-
-        try:
-            raw = json.loads(self.history_manifest.read_text())
-        except FileNotFoundError:
-            return ()
-        return tuple(FieldCodec.decode(HistorySource, item) for item in raw)
-
-    def attach_history(self, source_root: Path) -> HistorySource:
-        """Snapshot a preserved source, then publish it for ordinary display.
-
-        Only destination files are written. No Comms constructor, source locks,
-        inboxes, execution inputs, or source sequence allocator are touched.
-        A source is attached once. Its original bytes and identity survive.
-        """
-        import shutil
-        import tempfile
-
-        from .catalog_store import ChannelCatalog
-        from .historical_views import HistorySource
-        from .transcript_routes import TranscriptRoutes
-
-        source_root = source_root.resolve()
-        if source_root == self.log.path.parent.resolve():
-            raise ValueError("The live bus cannot be its own history source")
-        with _store_lock(self.history_manifest):
-            sources = self.history_sources()
-            existing = next((s for s in sources if s.original_root == str(source_root)), None)
-            if existing is not None:
-                return existing
-            parent = self.log.path.parent / "history"
-            parent.mkdir(mode=0o700, exist_ok=True)
-            stage = Path(tempfile.mkdtemp(prefix="source-", dir=parent))
-            try:
-                paths = [
-                    source_root / name
-                    for name in (
-                        "bus.jsonl",
-                        "registry.json",
-                        ChannelCatalog.filename,
-                        "bus_meta.json",
-                    )
-                ]
-                revisions = tuple(file_revision(path) for path in paths)
-                for path in paths:
-                    if path.exists():
-                        shutil.copy2(path, stage / path.name)
-                TranscriptRoutes(source_root).snapshot(stage)
-                if revisions != tuple(file_revision(path) for path in paths):
-                    raise ValueError("Historical source changed during snapshot; retry")
-                bus_info = paths[0].stat() if paths[0].exists() else None
-                if bus_info is None:
-                    (stage / "bus.jsonl").touch()
-                # One current marker format; snapshots retain source identity
-                # and explicitly prohibit publication or historical admission.
-                archived = WireLog(stage / "bus.jsonl")
-                marker = archived.read_metadata_unlocked(required=True)
-                marker.admission_after_seq = marker.last_seq
-                marker.access = ArchivedAccess()
-                marker.checkpoint_version = None
-                marker.checkpoint_seal = None
-                guard = PrivateRegistryGuard(stage / "registry.json", marker.root_id)
-                guard.create_pending()
-                archived.write_metadata_unlocked(marker)
-                guard.commit_initial()
-                source = HistorySource(
-                    str(stage.resolve()),
-                    str(source_root),
-                    marker.root_id,
-                    (bus_info.st_dev, bus_info.st_ino) if bus_info else (0, 0),
-                    bus_info.st_size if bus_info else 0,
-                    file_revision(stage / "bus.jsonl"),
-                    file_revision(stage / "registry.json"),
-                )
-                registry = source.registry().snapshot()
-                previous = 0
-                for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
-                    message, _ = archived._public_page_record(record, size, marker)
-                    if message.seq <= previous:
-                        raise ValueError("Historical source has nonascending sequences")
-                    previous = message.seq
-                if not registry.threads:
-                    raise ValueError("Historical source has no identity declarations")
-                _atomic_write_text(
-                    self.history_manifest,
-                    json.dumps([FieldCodec.encode(item) for item in (*sources, source)]),
-                )
-                return source
-            except BaseException:
-                shutil.rmtree(stage)
-                raise
-
-    def historical_page(
-        self, view: HistoryView, *, before=None, after=None, limit=100, max_bytes=256 * 1024
-    ):
-        """Page one original source at a time, with source-bound cursors.
-
-        The caller owns live pages. None means the oldest live boundary;
-        a historical cursor can travel in either direction across snapshots.
-        """
-        from .historical_views import HistoricalMessage
-
-        sources = self.history_sources()
-        cursor = before or after
-        if before is not None and after is not None:
-            raise ValueError("Choose one history paging direction")
-        start = next(
-            (i for i, source in enumerate(sources) if cursor and source.key == cursor.source),
-            len(sources) - 1 if cursor is None else -1,
-        )
-        if cursor is not None and start < 0:
-            raise ValueError("Historical source detached; reload history")
-        indexes = range(start, len(sources)) if after else range(start, -1, -1)
-        for index in indexes:
-            source = sources[index]
-            registry = source.registry()
-            snapshot = registry.snapshot()
-            source.validate()
-            scope = view.capture(snapshot)
-            historical_bus = MessageBus(Path(source.root) / "bus.jsonl", registry)
-            page = historical_bus.display_page(
-                scope,
-                before=cursor.sequence if before and index == start else None,
-                after=cursor.sequence if after and index == start else (0 if after else None),
-                limit=limit,
-                max_bytes=max_bytes,
-            )
-
-            page = replace(
-                page,
-                messages=tuple(
-                    HistoricalMessage.project(message, source, index, snapshot)
-                    for message in page.messages
-                ),
-            )
-            if page.messages:
-                # Cross-source availability is resolved by the next bounded read;
-                # false-positive edges terminate on an empty page without replay.
-                return replace(
-                    page,
-                    has_older=page.has_older or index > 0,
-                    has_newer=page.has_newer or index < len(sources) - 1,
-                )
-        return MessagePage((), False, False)
 
     def view_unread_counts(
         self,
@@ -320,14 +162,14 @@ class MessageBus:
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
         snapshot = self._registry.snapshot()
         delivery = self._delivery_scope(name, snapshot)
-        matches = self._scope_filter(delivery, target)
+        selection = delivery.selection(target, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
         with self.log.locked():
             return [
                 item.message
                 for item in self._iter_delivery_messages_unlocked()
                 if delivery.current(item, snapshot)
-                and matches(item.message)
+                and selection.includes(item.message)
                 and item.message.seq not in seen
             ]
 
@@ -342,17 +184,6 @@ class MessageBus:
                 count for scope, count in counts.items() if targets is None or scope in targets
             )
         return counts.get(self._registry.require(target).name, 0)
-
-    def _scope_filter(
-        self, delivery: DeliveryScope, target: str | None
-    ) -> Callable[[Message], bool]:
-        if target is None:
-            return lambda message: True
-        if is_channel_target(target):
-            targets = self._channels.read().history_targets(target)
-            return lambda message: targets is None or message.target in targets
-        peer = self._registry.require(target).name
-        return lambda message: delivery.conversation(message.sender, message.target) == peer
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
         return self._pending_projection([name])[name]
@@ -473,24 +304,18 @@ class MessageBus:
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
         """Full conversation between two threads, in seq order."""
-        a = self._registry.require(a).name
-        b = self._registry.require(b).name
-        return [
-            msg
-            for msg in self.log.full_history()
-            if {
-                self._registry.canonical_name(msg.sender),
-                self._registry.canonical_name(msg.target),
-            }
-            == {a, b}
-        ]
+        scope = DMDisplayScope.capture(
+            self._registry.require(a).name, self._registry.require(b).name,
+            self._registry.snapshot(),
+        )
+        return [message for message in self.log.full_history() if scope.includes(message)]
 
     def channel_history(self, target: str) -> Sequence[Message]:
-        """Full history of one channel (``#all`` or a tag channel)."""
-        if not (is_channel_target(target)):
+        """Full target-owned channel history, independent of delivery membership."""
+        if not is_channel_target(target):
             raise ValueError(f"{target!r} is not a channel target.")
-        targets = self._channels.read().history_targets(target)
-        return [msg for msg in self.log.full_history() if targets is None or msg.target in targets]
+        scope = ChannelDisplayScope(target, self._channels.read().history_targets(target))
+        return [message for message in self.log.full_history() if scope.includes(message)]
 
     def awareness_prompt(self, owner: Thread) -> str:
         """Bounded pointers to addressed sources, independent of UI read state.
@@ -535,14 +360,7 @@ class MessageBus:
         """A bounded delivery stream independent of UI read acknowledgments."""
         thread = self._registry.require(name)
         delivery = self._delivery_scope(thread.name)
-        return self._history_page(
-            lambda message: delivery.delivers(message.sender, message.target),
-            before=None,
-            after=after,
-            limit=limit,
-            max_bytes=256 * 1024,
-            targets=frozenset(delivery.channels | self._registry.aliases_for(delivery.actor)),
-        )
+        return self.display_page(delivery, after=after, limit=limit)
 
     def dm_history_page(
         self,
@@ -593,176 +411,9 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Browse a captured presentation scope, not a delivery/history authority."""
-        return self._history_page(
-            scope.includes,
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
-            targets=scope.index_targets,
-        )
-
-    def _history_page(
-        self,
-        matches: Callable[[Message], bool],
-        *,
-        before: int | None,
-        after: int | None,
-        limit: int,
-        max_bytes: int,
-        targets: frozenset[str] | None = None,
-    ) -> MessagePage:
-        with self.log.locked():
-            try:
-                with BusPageIndex(self.log.path) as index:
-                    if index.sync():
-                        return self._indexed_history_page(
-                            index,
-                            matches,
-                            before=before,
-                            after=after,
-                            limit=limit,
-                            max_bytes=max_bytes,
-                            targets=targets,
-                        )
-            except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
-                # The JSONL bus remains authoritative if the disposable
-                # index is unavailable or its selected offsets disagree.
-                pass
-            metadata = (
-                self.log._private_marker_unlocked() if self.log.path.exists() else WireMetadata()
-            )
-            return self._collect_history_page(
-                (
-                    self.log._public_page_record(record, size, metadata)
-                    for record, size in _iter_jsonl_records(self.log.path)
-                ),
-                matches,
-                before=before,
-                after=after,
-                limit=limit,
-                max_bytes=max_bytes,
-            )
-
-    def _indexed_history_page(
-        self,
-        index: BusPageIndex,
-        matches: Callable[[Message], bool],
-        *,
-        before: int | None,
-        after: int | None,
-        limit: int,
-        max_bytes: int,
-        targets: frozenset[str] | None,
-    ) -> MessagePage:
-        if before is not None and after is not None:
-            raise ValueError("History pages accept either before or after, not both.")
-        if (before is not None and before < 0) or (after is not None and after < 0):
-            raise ValueError("History cursors cannot be negative.")
-        if limit <= 0:
-            raise ValueError("History page limit must be positive.")
-        if max_bytes <= 0:
-            raise ValueError("History page byte budget must be positive.")
-        page: deque[tuple[Message, int]] = deque()
-        page_bytes = 0
-        metadata = self.log._private_marker_unlocked()
-        with self.log.path.open("rb") as stream:
-
-            def has_match(*, lower: int | None, upper: int | None) -> bool:
-                with closing(
-                    index.offsets(lower=lower, upper=upper, descending=True, targets=targets)
-                ) as rows:
-                    for row in rows:
-                        message, _ = self.log._public_page_record(
-                            *index.record(stream, row), metadata
-                        )
-                        if matches(message):
-                            return True
-                return False
-
-            if after is not None:
-                has_older = has_match(lower=None, upper=after + 1)
-                has_newer = False
-                rows = index.offsets(lower=after, upper=None, descending=False, targets=targets)
-            else:
-                has_older = False
-                has_newer = has_match(lower=before - 1, upper=None) if before is not None else False
-                rows = index.offsets(lower=None, upper=before, descending=True, targets=targets)
-            with closing(rows):
-                for row in rows:
-                    message, encoded_size = self.log._public_page_record(
-                        *index.record(stream, row), metadata
-                    )
-                    if not matches(message):
-                        continue
-                    if len(page) >= limit or (page and page_bytes + encoded_size > max_bytes):
-                        if after is not None:
-                            has_newer = True
-                        else:
-                            has_older = True
-                        break
-                    if after is not None:
-                        page.append((message, encoded_size))
-                    else:
-                        page.appendleft((message, encoded_size))
-                    page_bytes += encoded_size
-        return MessagePage(
-            messages=tuple(message for message, _ in page),
-            has_older=has_older,
-            has_newer=has_newer,
-        )
-
-    @staticmethod
-    def _collect_history_page(
-        records: Iterator[tuple[Message, int]],
-        matches: Callable[[Message], bool],
-        *,
-        before: int | None,
-        after: int | None,
-        limit: int,
-        max_bytes: int,
-    ) -> MessagePage:
-        if before is not None and after is not None:
-            raise ValueError("History pages accept either before or after, not both.")
-        if (before is not None and before < 0) or (after is not None and after < 0):
-            raise ValueError("History cursors cannot be negative.")
-        if limit <= 0:
-            raise ValueError("History page limit must be positive.")
-        if max_bytes <= 0:
-            raise ValueError("History page byte budget must be positive.")
-        page: deque[tuple[Message, int]] = deque()
-        page_bytes = 0
-        has_older = has_newer = False
-        for message, encoded_size in records:
-            if not matches(message):
-                continue
-            if before is not None and message.seq >= before:
-                has_newer = True
-                continue
-            if after is not None and message.seq <= after:
-                has_older = True
-                continue
-            if after is not None:
-                if len(page) >= limit or (page and page_bytes + encoded_size > max_bytes):
-                    has_newer = True
-                    # Forward cursors must never jump over an eligible row.
-                    # Leave this row for the next page, even if a later,
-                    # smaller row would fit in the remaining byte budget.
-                    break
-                page.append((message, encoded_size))
-                page_bytes += encoded_size
-                continue
-            page.append((message, encoded_size))
-            page_bytes += encoded_size
-            while len(page) > limit or (len(page) > 1 and page_bytes > max_bytes):
-                _, removed_size = page.popleft()
-                page_bytes -= removed_size
-                has_older = True
-        return MessagePage(
-            messages=tuple(message for message, _ in page),
-            has_older=has_older,
-            has_newer=has_newer,
-        )
+        return MessagePageRequest.capture(
+            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
+        ).read(self.log)
 
     def last_sent_timestamps(self) -> Mapping[str, float]:
         """Aggregate sent times without retaining message bodies."""
