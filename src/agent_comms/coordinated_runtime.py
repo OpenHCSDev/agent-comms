@@ -30,7 +30,6 @@ from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.owner_fence import OwnerFence, prepare_fence_token
-from agent_comms.tracked_turn import TrackedTurnSession
 
 from .activity import ActivityState
 from .assignment_states import (
@@ -66,9 +65,6 @@ from .native_pi import (
     NativeTurnResult,
     _private_session_dir,
     _trusted_package,
-)
-from .native_prompt_binding import (
-    bind_expected_prompt,
 )
 from .optional_awareness_projection import OptionalAwarenessProjection
 from .private_registry_guard import _require_no_private_owner_rename
@@ -112,10 +108,6 @@ class SelectedExistingFileWrite:
             raise TypeError("selected write needs an existing-file claim and bytes")
         if len(self.contents) > 1024 * 1024:
             raise ValueError("selected write exceeds 1 MiB")
-
-
-def _token_digest(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def _execution_id(assignment: WakeAssignment) -> str:
@@ -195,7 +187,11 @@ class SelectedExecution:
 
     owned_turn_lease: TurnLeaseFence | None = field(init=False, default=None)
     progress: DurableTurn | None = field(init=False, default=None)
-    input_id: str | None = field(init=False, default=None)
+    native_input: PrivateSendAdmission | None = field(init=False, default=None)
+
+    @property
+    def input_id(self) -> str | None:
+        return self.native_input.input_id if self.native_input is not None else None
 
     @property
     def fence(self) -> OwnerFence | None:
@@ -217,10 +213,18 @@ class SelectedExecution:
                 return triaged
             self._engage()
             await self._prompt()
-            self._reserve()
+            self._reserve(FullNativeSend(self.assignment, self.progress))
+            self.progress.input_id = self.input_id
             self._tools()
-            result = await self._execute()
-            self._verify(result)
+            result = await self.native_input.execute(
+                self.native_package,
+                provider=self.provider,
+                model=self.model,
+                observe_event=self.progress.dispatch,
+                selected_tool_mode=self.tool_mode,
+            )
+            if not result.text:
+                raise IdentityConflict("successful model produced no publishable response")
             self._apply_write()
             return self._publish(result)
         except NativePiTerminalFailure as error:
@@ -430,50 +434,18 @@ class SelectedExecution:
                 raise IdentityConflict("triage prompt exceeds the bounded model context")
             self.token = prepare_fence_token()
             stage = TriageNativeSend(self.assignment)
-            participant = ParticipantOwner(self.owner, self.participant.participant_generation)
-            self.input_id = stage.reserve(self.store, participant, _token_digest(self.token))
-            # Prelaunch binding: exact expected prompt bytes before Pi starts.
-            bind_expected_prompt(
-                self.store,
-                input_id=self.input_id,
-                stage=TriageNativeSend(self.assignment),
-                owner=self.owner,
-                generation=self.participant.participant_generation,
-                prompt=self.prompt,
-            )
-            result = await TrackedTurnSession.execute(
+            self._reserve(stage)
+            result = await self.native_input.execute(
                 self.native_package,
-                input_id=self.input_id,
-                prompt=self.prompt,
-                worktree=self.worktree,
-                session_dir=self.session_dir,
-                session_file=self.session_file,
                 provider=self.provider,
                 model=self.model,
-                thinking_level=self.owner.thinking_level,
-                maintenance_root=self.root,
-                fresh_selected=self.first_selected,
-                prompt_send_boundary=self._prepare_send(TriageNativeSend(self.assignment)),
             )
-            stage.verify(
-                self.store,
-                participant,
-                self.input_id,
-                _token_digest(self.token),
-                result.context,
-                session_dir=self.session_dir,
-                wire_root_id=self.wire_root_id,
-                prompt=self.prompt,
-            )
-            RegistryOwner(
-                thread=self.owner, admission_generation=self.owner_admission_generation
-            ).require_registry(self.comms.registry)
             decision = _parse_triage(result.text)
             stage.commit(
                 self.store,
-                participant,
+                self.native_input.participant,
                 self.input_id,
-                _token_digest(self.token),
+                self.native_input.token_digest,
                 result.context,
                 decision,
             )
@@ -612,22 +584,22 @@ class SelectedExecution:
         )
         self.prompt = frame + optional_awareness + original_suffix
 
-    def _reserve(self):
-        self.input_id = FullNativeSend(self.assignment, self.fence).reserve(
-            self.store,
-            ParticipantOwner(self.owner, self.participant.participant_generation),
-            _token_digest(self.token),
-        )
-        bind_expected_prompt(
-            self.store,
-            input_id=self.input_id,
-            stage=FullNativeSend(self.assignment, self.fence),
-            owner=self.owner,
-            generation=self.participant.participant_generation,
+    def _reserve(self, stage: NativeSendStage) -> None:
+        self.native_input = PrivateSendAdmission.reserve(
+            bus=self.bus,
+            store=self.store,
+            wire_root_id=self.wire_root_id,
+            owner=RegistryOwner(
+                thread=self.owner,
+                admission_generation=self.owner_admission_generation,
+            ),
+            participant=ParticipantOwner(self.owner, self.participant.participant_generation),
+            stage=stage,
+            token=self.token,
             prompt=self.prompt,
+            expected_session=self.session_file,
+            fresh_selected=self.first_selected,
         )
-
-        self.progress.input_id = self.input_id
 
     def _tool_admission(self, operation_id: str) -> WakeAdmission:
         turn = self.owner.active_turn
@@ -684,41 +656,6 @@ class SelectedExecution:
             if not isinstance(self.tool_mode, NativeToolMode):
                 raise IdentityConflict("selected tool mode did not bind to the owner")
 
-    async def _execute(self):
-        return await TrackedTurnSession.execute(
-            self.native_package,
-            observe_event=self.progress.dispatch,
-            input_id=self.input_id,
-            prompt=self.prompt,
-            worktree=self.worktree,
-            session_dir=self.session_dir,
-            session_file=self.session_file,
-            provider=self.provider,
-            model=self.model,
-            thinking_level=self.owner.thinking_level,
-            maintenance_root=self.root,
-            fresh_selected=self.first_selected,
-            **({"selected_tool_mode": self.tool_mode} if self.tool_mode is not None else {}),
-            prompt_send_boundary=self._prepare_send(FullNativeSend(self.assignment, self.fence)),
-        )
-
-    def _verify(self, result: NativeTurnResult):
-        FullNativeSend(self.assignment, self.fence).verify(
-            self.store,
-            ParticipantOwner(self.owner, self.participant.participant_generation),
-            self.input_id,
-            _token_digest(self.token),
-            result.context,
-            session_dir=self.session_dir,
-            wire_root_id=self.wire_root_id,
-            prompt=self.prompt,
-        )
-        RegistryOwner(
-            thread=self.owner, admission_generation=self.owner_admission_generation
-        ).require_registry(self.comms.registry)
-        if not result.text:
-            raise IdentityConflict("successful model produced no publishable response")
-
     def _apply_write(self):
         if self.selected_existing_file_write is not None:
             if self.selected_operation_id is not None:
@@ -755,13 +692,7 @@ class SelectedExecution:
                 )
 
     def _publish(self, result: NativeTurnResult):
-        FullNativeSend(self.assignment, self.fence).commit(
-            self.store,
-            ParticipantOwner(self.owner, self.participant.participant_generation),
-            self.input_id,
-            _token_digest(self.token),
-            result.context,
-        )
+        self.native_input.commit(self.store, result.context)
         self.progress.finish()
         RegistryOwner(
             thread=self.owner, admission_generation=self.owner_admission_generation
@@ -793,44 +724,8 @@ class SelectedExecution:
         )
 
     def _terminal_failure(self, error: NativePiTerminalFailure):
-        # The native adapter observed agent_settled, verified its input proof,
-        # and reaped its own child before raising this nominal final outcome.
-        # Retire only this failed attempt; future messages remain serviceable.
-        RegistryOwner(
-            thread=self.owner, admission_generation=self.owner_admission_generation
-        ).require_registry(self.comms.registry)
-        stage = (
-            TriageNativeSend(self.assignment)
-            if self.fence is None
-            else FullNativeSend(self.assignment, self.fence)
-        )
-        stage.verify(
-            self.store,
-            ParticipantOwner(self.owner, self.participant.participant_generation),
-            self.input_id,
-            _token_digest(self.token),
-            error.context,
-            session_dir=self.session_dir,
-            wire_root_id=self.wire_root_id,
-            prompt=self.prompt,
-        )
-        if self.fence is not None:
-            snapshot = self.store.snapshots.get(self.fence.execution_id)
-            assert snapshot.attempt is not None
-            final = self.store.attempts.advance(
-                self.fence,
-                type(snapshot.attempt.lifecycle),
-                expected_pointer_revision=snapshot.pointer_revision,
-                backend_done=True,
-                process_dead=True,
-                reason_code="native_terminal_failure",
-            ).value
-            self.store.attempts.settle_nonpublication(
-                final.fence,
-                expected_pointer_revision=final.snapshot.pointer_revision,
-                success=False,
-                reason_code="native_terminal_failure",
-            )
+        # PrivateSendAdmission already corroborated the actual native failure
+        # and settled its exact stage after native child/tool cleanup.
         _publish_native_failure(
             self.comms, self.owner, self.initial, error.context.input_id, error.public_message
         )
@@ -870,23 +765,6 @@ class SelectedExecution:
                     f"{error}; the input is uncertain.",
                     native_response=error.rejected_response,
                 )
-
-    def _prepare_send(self, stage: NativeSendStage) -> PrivateSendAdmission:
-        return PrivateSendAdmission(
-            bus=self.bus,
-            store_path=self.store.session.path,
-            wire_root_id=self.wire_root_id,
-            owner=RegistryOwner(
-                thread=self.owner, admission_generation=self.owner_admission_generation
-            ),
-            participant=ParticipantOwner(self.owner, self.participant.participant_generation),
-            stage=stage,
-            input_id=self.input_id,
-            token_digest=_token_digest(self.token),
-            prompt=self.prompt,
-            expected_session=self.session_file,
-            fresh_selected=self.first_selected,
-        )
 
     def _selected_source(self, root_id: str) -> CommittedDelivery:
         initial = self.bus.log.read_delivery_cohort(root_id, self.assignment.wire_seq)

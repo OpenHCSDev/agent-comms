@@ -46,7 +46,7 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
             comms.registry.unregister(owner.name)
         return await fake(*args, **kwargs)
 
-    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", race)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
     with pytest.raises(StaleFence):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
@@ -175,7 +175,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         patch.setattr(runtime, "_trusted_package", lambda _: None)
         patch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
         patch.setattr(native_prompt_send, "_MAX_SEND_SECONDS", 0.35)
-        native_turn = runtime.TrackedTurnSession.execute
+        native_turn = TrackedTurnSession.execute
 
         async def bounded_turn(*args, **kwargs):
             return await native_turn(*args, **kwargs, timeout=0.35)

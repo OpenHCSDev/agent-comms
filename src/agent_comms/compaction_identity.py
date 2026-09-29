@@ -43,11 +43,13 @@ class SelectedCommitReference:
         return FieldCodec.decode(cls, {
             wire: intent[wire] for _, wire in FieldCodec._fields(cls) if wire in intent
         })
+
     def identity(self, session_file: str) -> SummaryOperationIdentity:
         return SummaryOperationIdentity(session_file, self.operation_id)
+
     def require_source(self, source_json: str) -> None:
         if self.source_digest != TextDigest.of(source_json).value:
-                raise CompactionJournalError("Selected native intent source digest required")
+            raise CompactionJournalError("Selected native intent source digest required")
 
 
 @dataclass(frozen=True)

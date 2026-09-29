@@ -1,0 +1,12 @@
+{
+  "source_head": null,
+  "actual_canonical_fork": true,
+  "physical_open_before_rpc_socket": true,
+  "pending_after_old_five_second_expiry": true,
+  "same_owner_process_through_first_reply": true,
+  "first_new_message_physical_enter": true,
+  "new_child_response_painted_once": true,
+  "one_logical_tab": true,
+  "title_without_at_placeholder": "immediate-fork",
+  "provider_inputs": 3
+}
