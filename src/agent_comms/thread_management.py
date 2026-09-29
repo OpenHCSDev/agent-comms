@@ -222,54 +222,7 @@ class ThreadManagement:
                     turn_generation=existing.turn_generation,
                     last_finished_turn_id=existing.last_finished_turn_id,
                 )
-            tags = thread.tags
-            session_file = thread.session_file
-            model = thread.model
-            thinking_level = thread.thinking_level
-            goal = thread.goal
-            previous_worktrees = thread.previous_worktrees
-            auto_title_pending = (
-                existing.auto_title_pending if existing is not None else thread.auto_title_pending
-            )
-            title = (
-                thread.title if thread.title is not None else existing.title if existing else None
-            )
-            if existing is not None:
-                if not tags:
-                    tags = existing.tags
-                if session_file is None:
-                    session_file = existing.session_file
-                if model is None:
-                    model = existing.model
-                if thinking_level is None:
-                    thinking_level = existing.thinking_level
-                if goal is None:
-                    goal = existing.goal
-                if not previous_worktrees:
-                    previous_worktrees = existing.previous_worktrees
-            if (
-                canonical != thread.name
-                or tags != thread.tags
-                or session_file != thread.session_file
-                or model != thread.model
-                or thinking_level != thread.thinking_level
-                or goal != thread.goal
-                or previous_worktrees != thread.previous_worktrees
-                or auto_title_pending != thread.auto_title_pending
-                or title != thread.title
-            ):
-                thread = replace(
-                    thread,
-                    name=canonical,
-                    tags=tags,
-                    session_file=session_file,
-                    model=model,
-                    thinking_level=thinking_level,
-                    goal=goal,
-                    previous_worktrees=previous_worktrees,
-                    auto_title_pending=auto_title_pending,
-                    title=title,
-                )
+            thread = thread.for_registration(canonical, existing)
             self.channels._require_available_new_tags(thread.tags)
             # A fresh public registration is a new owner admission even when
             # the OS has reused its PID and the project path is unchanged.
@@ -281,7 +234,7 @@ class ThreadManagement:
                 and not existing.executing
                 and existing.process_identity is not None
                 and thread.process_identity is not None
-                and thread.created_at != existing.created_at
+                and thread.incarnation != existing.incarnation
             )
             self.registry.register(thread, new_owner=new_owner)
 

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import os
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 
 from .channel_targets import Tag
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .goals import Goal, GoalRevision
+from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
     OwnerIdentity,
     ThreadIncarnation,
@@ -35,20 +36,28 @@ class Thread:
     """Declares one agent thread's identity and provenance."""
 
     name: str
-    tags: frozenset[str]
+    tags: frozenset[str] = field(metadata={"registration_inheritance": InheritEmpty})
     worktree: str
     parent: str | None = None
     task: str | None = None
     process_identity: ProcessIdentity | None = None
-    session_file: str | None = None
-    model: str | None = None
-    thinking_level: str | None = None
-    goal: Goal | None = None
+    session_file: str | None = field(
+        default=None, metadata={"registration_inheritance": InheritMissing}
+    )
+    model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
+    thinking_level: str | None = field(
+        default=None, metadata={"registration_inheritance": InheritMissing}
+    )
+    goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     created_at: float = field(default_factory=_thread_creation_time)
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
-    previous_worktrees: tuple[str, ...] = ()
-    auto_title_pending: bool = False
-    title: str | None = None
+    previous_worktrees: tuple[str, ...] = field(
+        default=(), metadata={"registration_inheritance": InheritEmpty}
+    )
+    auto_title_pending: bool = field(
+        default=False, metadata={"registration_inheritance": InheritPrevious}
+    )
+    title: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     role: ThreadRole = ThreadRole.AGENT
     active_turn: ActiveTurn | None = None
     last_goal_report_turn: str | None = None
@@ -203,6 +212,25 @@ class Thread:
                 ),
             )
         return result
+
+    def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:
+        """Resolve metadata once from its field declarations, retaining exact identity.
+
+        An unchanged declaration is returned intact: replacing it would discard
+        the transient generated-creation marker used by the locked registry to
+        resolve clock collisions. Executor and turn authority are not metadata.
+        """
+        inherited = {}
+        if previous is not None:
+            inherited = {
+                declared.name: policy.choose(
+                    getattr(self, declared.name), getattr(previous, declared.name)
+                )
+                for declared in fields(self)
+                if (policy := declared.metadata.get("registration_inheritance")) is not None
+            }
+        resolved = replace(self, name=canonical_name, **inherited)
+        return self if resolved == self else resolved
 
     @property
     def incarnation(self) -> ThreadIncarnation:

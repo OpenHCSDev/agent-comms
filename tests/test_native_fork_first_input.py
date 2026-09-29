@@ -19,7 +19,6 @@ from agent_comms.acp_extension import (
     RequestFailedUpdate,
     decode_updates,
 )
-from agent_comms.child_process import DetachedProcess
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.input_disposition import InputDispositions
@@ -214,14 +213,6 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
 
     attachment.on_connect(Client())
     child = None
-    launch = DetachedProcess.launch
-    worker_log = native.project / "worker.log"
-    output = worker_log.open("wb")
-
-    def logged_launch(*args, **kwargs):
-        return launch(*args, output=output, **kwargs)
-
-    monkeypatch.setattr(DetachedProcess, "launch", logged_launch)
     first_send_started = time.monotonic()
     try:
         child = await case.create(comms)
@@ -311,14 +302,13 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         assert native.provider.posts == 2  # No uncertain original replay or unsolicited retry.
     finally:
         await attachment.shutdown()
-        output.flush()
-        print("ACTUAL_WORKER_LOG", worker_log.read_text(), flush=True)
+        for worker_log in sorted((comms.root / "diagnostics").glob("owner-*.log")):
+            print("ACTUAL_WORKER_LOG", worker_log.name, worker_log.read_text(), flush=True)
         print(
             "ACTUAL_RUNTIME_DEBUG",
             debug_log.read_text() if debug_log.exists() else "",
             flush=True,
         )
-        output.close()
         if child is not None:
             await asyncio.to_thread(comms.owners.stop, child.name)
             assert not comms.registry.require(child.name).process_alive
