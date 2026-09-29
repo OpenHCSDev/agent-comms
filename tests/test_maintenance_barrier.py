@@ -75,7 +75,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     comms = Comms(tmp_path / "wire")
     gate = comms.owners.maintenance
     assert gate.read() is None
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="owner",
             tags=frozenset(),
@@ -167,7 +167,7 @@ def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path:
     proc = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
     proc.start()
     assert proc.pid is not None
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="owner",
             tags=frozenset(),
@@ -225,7 +225,7 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
         worktree=str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
-    comms.threads.register(owner)
+    comms.registry.declare(owner)
     comms.registry.rename("owner", "renamed")
     comms.registry.unregister("renamed")
     FixtureMaintenanceControl(comms.owners.maintenance).begin("operator")
@@ -244,7 +244,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     child = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
     child.start()
     assert child.pid is not None
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="owner",
             tags=frozenset(),

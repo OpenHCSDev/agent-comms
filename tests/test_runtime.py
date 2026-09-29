@@ -192,7 +192,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     comms = wire(tmp_path / "wire")
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
     client = canonical_agent(comms)
     updates = []
 
@@ -289,7 +289,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         comms.registry.unregister("renamed")
         comms.registry.begin_delete("renamed")
         comms.registry.remove("renamed")
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 "worker", frozenset(), str(tmp_path), process_identity=ProcessIdentity(901003, 1)
             )
@@ -319,7 +319,7 @@ async def test_request_only_proxy_never_replays_after_request_was_received(
     comms = wire(tmp_path / "wire")
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
     old_path = socket_path(comms.root, old_pid)
     new_path = socket_path(comms.root, new_pid)
     old_path.parent.mkdir(parents=True, exist_ok=True)
@@ -513,10 +513,10 @@ def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
     comms = wire(tmp_path)
     session = tmp_path / "parent.jsonl"
     session.write_text("")
-    comms.threads.register(
+    comms.registry.declare(
         Thread(name="parent", tags=frozenset(), worktree=str(tmp_path), session_file=str(session))
     )
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="child",
             tags=frozenset(),

@@ -41,7 +41,7 @@ def seed_unknown(comms, count, text):
 @pytest.fixture
 def inbox_comms(comms):
     for name in ("a", "b"):
-        comms.threads.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree="/wt"))
     return comms
 
 
@@ -224,7 +224,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     monkeypatch.setenv("PI_AGENT_ID", "b")
     # The reviewed standby liveness gate refuses a declared dependency with
     # no active turn. Give "a" a live in-process turn for this fixture only.
-    comms.threads.register(
+    comms.registry.declare(
         replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.agents.begin_turn("a", "a-review-in-flight")

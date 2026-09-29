@@ -13,8 +13,8 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
     QueuePromptRequest,
-    SteerPromptRequest,
     SendNowRequest,
+    SteerPromptRequest,
     decode_updates,
     encode_request,
 )
@@ -23,6 +23,7 @@ from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_compaction_writer import NativeCompactionWriter
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.threads import Thread
@@ -31,7 +32,7 @@ from agent_comms.threads import Thread
 @pytest.fixture
 async def owner(tmp_path, monkeypatch):
     comms = Comms(tmp_path)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "owner",
             frozenset(),
@@ -63,7 +64,7 @@ async def owner(tmp_path, monkeypatch):
     )
     # Only native package verification is outside this source-boundary fixture.
     # The actual registry, wire, disposition, session locks and source CAS run.
-    monkeypatch.setattr(OwnerCompactionCommit, "_verify_native", lambda self: None)
+    monkeypatch.setattr(NativeCompactionWriter, "verify", lambda self: None)
     bridge = OwnerCompactionCommit(comms.registry.store.path, tmp_path, future_queue=agent.inputs)
     witness = NativeWitness(
         session_id="saved",
@@ -79,24 +80,20 @@ async def owner(tmp_path, monkeypatch):
     await agent.shutdown()
 
 
-async def queue(agent, text="future", request=QueuePromptRequest(defer_display=True)):
+async def queue(agent, text="future", delivery=QueuePromptRequest):
     response = await agent.prompt(
         "owner",
         [{"type": "text", "text": text}],
-        field_meta=encode_request(request),
+        _meta=encode_request(delivery(defer_display=True)),
     )
-    public = next(
-        update
-        for update in decode_updates(response.field_meta)
-        if isinstance(update, InputDeliveryChangedUpdate)
-    )
-    key = "acp:" + public.input_id
+    (receipt,) = decode_updates(response.field_meta)
+    assert isinstance(receipt, InputDeliveryChangedUpdate)
+    key = "acp:" + receipt.input_id
     assert (
-        InputDispositions(agent._comms.root / InputDispositions.filename)
+        not InputDispositions(agent._comms.root / InputDispositions.filename)
         .read()
-        .rows.get(key)
+        .lookup(key)
         .has_native_binding
-        is False
     )
     return key
 
@@ -113,8 +110,8 @@ async def test_live_future_queue_and_foreign_ingress_do_not_change_summary_sourc
     key = await queue(agent)
     assert capture(owner) == source
     comms = agent._comms
-    comms.threads.register(Thread("foreign", frozenset(), str(comms.root)))
-    comms.threads.register(Thread("another", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("foreign", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("another", frozenset(), str(comms.root)))
     comms.messaging.send("foreign", "another", "unrelated")
     agent.inputs.dispositions.record(
         "acp:foreign",
@@ -150,15 +147,15 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
     agent, current, admission_generation, bridge, witness, source = owner
     key = await queue(agent)
     if change == "steer":
-        await queue(agent, request=SteerPromptRequest(defer_display=True))
+        await queue(agent, delivery=SteerPromptRequest)
     elif change == "clear":
         await agent.inputs.clear_queued_inputs("owner")
     elif change == "promote":
-        await agent.prompt("owner", [], field_meta=encode_request(SendNowRequest()))
+        await agent.prompt("owner", [], _meta=encode_request(SendNowRequest()))
     elif change == "shutdown":
         await agent.inputs.stop_wakes()
     elif change == "lost_owner":
-        bridge.future_queue = CommsAgent(agent._comms).inputs
+        bridge.boundary = replace(bridge.boundary, future_queue=CommsAgent(agent._comms).inputs)
     elif change in {"changed_queue", "deleted_queue"}:
 
         def mutate(document):
@@ -187,6 +184,14 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
             target="owner",
             text="old",
         )
+        assert agent.inputs.dispositions.bind(
+            "acp:old",
+            admission=current.active_turn.admission_generation,
+            turn_id="earlier",
+            native_id="b" * 32,
+            text="old",
+        )
+        assert agent.inputs.dispositions.read().rows["acp:old"].declared_name == "bound_unknown"
     with pytest.raises(RelationViolationError):
         capture(owner)
     assert agent.inputs.dispositions.read().rows["acp:original"].declared_name == "reserved"
@@ -215,7 +220,7 @@ async def test_relevant_source_and_owner_fences_remain(owner, change):
         )
         assert capture(owner) != source
     elif change == "bus":
-        comms.threads.register(Thread("peer", frozenset(), str(comms.root)))
+        comms.registry.declare(Thread("peer", frozenset(), str(comms.root)))
         comms.messaging.send("peer", "owner", "correction")
         assert capture(owner) != source
     elif change == "owner":

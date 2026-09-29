@@ -1,0 +1,14 @@
+{
+  "owned_artifacts": [
+    {
+      "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.artifacts",
+      "removed_bytes": 69558787
+    },
+    {
+      "path": "/home/ts/wt/toad-registration-authority-callers-20260929/.artifacts",
+      "removed_bytes": 379
+    }
+  ],
+  "process_references": [],
+  "durable_source_and_evidence_preserved": true
+}

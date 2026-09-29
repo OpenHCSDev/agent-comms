@@ -25,7 +25,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="worker",
             tags=frozenset({"test"}),

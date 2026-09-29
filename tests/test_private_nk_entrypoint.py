@@ -165,7 +165,7 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     saved = tmp_path / "saved-session.jsonl"
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "resumable", frozenset(), str(tmp_path), process_identity=None, session_file=str(saved)
         )
@@ -283,7 +283,7 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     root, root_id, _, _, _ = _root(tmp_path)
     legacy = Comms(tmp_path / ".agent-comms")
     for name in ("sender", "receiver"):
-        legacy.threads.register(
+        legacy.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -494,15 +494,13 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
 def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
     root, root_id, comms, _, _ = _root(tmp_path)
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
-    comms.threads.register(Thread("late-owner", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("late-owner", frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")
     lookup = stable_thread_lookup(late.created_at)
     message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
-    with (
-        Coordination(str(root / "coordination.sqlite3")) as store,
-        pytest.raises(IdentityConflict, match="not registered"),
-    ):
-        store.participants.get(lookup)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        participant = store.participants.get(lookup)
+        assert participant.committed and participant.owner_thread == "late-owner"
 
     class StopBeforeSpawnError(Exception):
         pass

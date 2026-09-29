@@ -7,21 +7,24 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
+from .catalog_store import ChannelCatalog
 from .compaction_publication_lease import publication_identity_fence
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .owner_compaction_gate import OwnerCompactionAttestation
+from .registration_change import RegistrationChange
 from .registry_document import RegistrySnapshot
-from .registry_store import RegistryStore
+from .registry_store import RegistryEdit, RegistryStore
 from .routing import TurnRouting
-from .store_files import file_revision
+from .store_files import _store_lock, file_revision
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
+
+_RUNNING_STATUS = RunningThreadStatus()
 
 
 class Registration:
@@ -34,29 +37,64 @@ class Registration:
     def register(
         self,
         thread: Thread,
-        status: ThreadStatus = RunningThreadStatus(),
+        status: ThreadStatus = _RUNNING_STATUS,
         *,
         new_owner: bool = False,
     ) -> None:
         with self.store.editing() as edit:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
-            if change.needs_maintenance_admission:
-                MaintenanceBarrier(self.store.path).assert_open_unlocked()
-            with (
-                publication_identity_fence(self.store.path.parent, nonblocking=True)
-                if change.changes_identity
-                else nullcontext()
-            ):
-                before = change.prior_goal
-                history = None
-                intent = None
-                if before != change.thread.goal:
-                    history = GoalHistoryStore(self.store.path)
-                    intent = history.begin(change.thread.created_at, before, change.thread.goal)
-                change.apply(edit.document)
-                edit.commit()
-                if history is not None and intent is not None:
-                    history.commit(intent)
+            self._commit_registration(edit, change)
+
+    def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
+        """Operational declaration and channel provenance use one locked current owner.
+
+        Internal register remains exact state replacement; worker/public declaration
+        preserves omitted provenance and a current executor before applying the same
+        registration effects. No pre-read can authorize a stale owner replacement.
+        """
+        with _store_lock(self.store.path.parent / "wire"):
+            return self._declare_unlocked(thread, status)
+
+    def _declare_unlocked(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
+        """Cross-store callers already holding wire use the same registry transaction."""
+        with self.store.editing() as edit:
+            return self._declare_in(edit, thread, status)
+
+    def _claim_unlocked(self, thread: Thread) -> Thread:
+        """The wire caller holds inbox authority; namespace allocation stays registry-owned."""
+        with self.store.editing() as edit:
+            requested = thread.for_claim(edit.document.claim_name(thread.name))
+            return self._declare_in(edit, requested, RunningThreadStatus())
+
+    def _declare_in(self, edit: RegistryEdit, thread: Thread, status: ThreadStatus) -> Thread:
+        root = self.store.path.parent
+        catalog = ChannelCatalog(root / ChannelCatalog.filename)
+        change = edit.document.prepare_declaration(thread, status)
+        with catalog.editing() as channels:
+            for tag in change.thread.tags - channels.all_tags(edit.document.threads):
+                channels.require_available_tag_name(tag, edit.document.threads)
+            self._commit_registration(edit, change)
+            channels.remember_tags(change.thread.tags, change.thread.created_at)
+        return change.installed_thread
+
+    def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> None:
+        if change.needs_maintenance_admission:
+            MaintenanceBarrier(self.store.path).assert_open_unlocked()
+        with (
+            publication_identity_fence(self.store.path.parent, nonblocking=True)
+            if change.changes_identity
+            else nullcontext()
+        ):
+            before = change.prior_goal
+            history = None
+            intent = None
+            if before != change.thread.goal:
+                history = GoalHistoryStore(self.store.path)
+                intent = history.begin(change.thread.created_at, before, change.thread.goal)
+            change.apply(edit.document)
+            edit.commit()
+            if history is not None and intent is not None:
+                history.commit(intent)
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         with self.store.editing() as edit:
@@ -184,43 +222,9 @@ class Registration:
             edit.commit()
             return result
 
-    def attest_owner_compaction(
-        self,
-        expected: Thread,
-        expected_owner_generation: int,
-        turn_id: str,
-        *,
-        expected_goal_id: str | None,
-        expected_goal_revision: int | None,
-        session_file: str,
-        session_leaf: str,
-        session_revision: str,
-    ) -> OwnerCompactionAttestation:
-        """Return an audit snapshot, NOT authority for a later native mutation."""
-        with self.guard_owner_compaction(
-            expected,
-            expected_owner_generation,
-            turn_id,
-            expected_goal_id=expected_goal_id,
-            expected_goal_revision=expected_goal_revision,
-            session_file=session_file,
-            session_leaf=session_leaf,
-            session_revision=session_revision,
-        ) as (attestation, _):
-            return attestation
-
     @contextmanager
     def guard_owner_compaction(
-        self,
-        expected: Thread,
-        expected_owner_generation: int,
-        turn_id: str,
-        *,
-        expected_goal_id: str | None,
-        expected_goal_revision: int | None,
-        session_file: str,
-        session_leaf: str,
-        session_revision: str,
+        self, expected: Thread, receipt: OwnerCompactionAttestation,
     ) -> Iterator[tuple[OwnerCompactionAttestation, int]]:
         """Hold canonical authority through the caller's native mutation.
 
@@ -238,19 +242,6 @@ class Registration:
         authority for those values.
         """
         Thread.require_declaration(expected)
-        # Decode the existing attestation declaration once at this call boundary.
-        # The registry revision is filled only under the held canonical lock.
-        receipt = FieldCodec.decode(OwnerCompactionAttestation, dict(
-            thread=expected.name,
-            owner_epoch=expected_owner_generation,
-            turn_id=turn_id,
-            goal_id=expected_goal_id,
-            goal_revision=expected_goal_revision,
-            session_file=session_file,
-            session_leaf=session_leaf,
-            session_revision=session_revision,
-            registry_revision=None,
-        ))
         with self.store.locked() as authority_fd:
             snapshot = self.store._read_unlocked().snapshot()
             owner = RegistryOwner.capture_local(snapshot, expected.name)

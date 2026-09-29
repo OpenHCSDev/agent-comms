@@ -23,7 +23,7 @@ def setup_thread(tmp_path):
     source = tmp_path / "session.jsonl"
     source.touch()
     comms = wire(tmp_path / "wire")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("worker", frozenset({"ci"}), str(tmp_path), session_file=str(source))
     )
     return comms, source
@@ -183,7 +183,7 @@ def test_rename_preserves_reads_and_fresh_fork_does_not_count_parent_history(tmp
         "worker", worktree=str(tmp_path), through=comms.transcripts.transcript_checkpoint("worker")
     )
     comms.registry.rename("worker", "renamed")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("child", frozenset(), str(tmp_path), parent="renamed", task="New task")
     )
     assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread == {"renamed": 0, "child": 0}

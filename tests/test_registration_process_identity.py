@@ -39,7 +39,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     comms = wire(tmp_path)
     identity = ProcessIdentity.capture(os.getpid())
     owner = Thread("owner", frozenset(), str(tmp_path), process_identity=identity)
-    comms.threads.register(owner)
+    comms.registry.declare(owner)
     before = comms.registry.snapshot()
     stale = replace(identity, start_time=identity.start_time + 1)
     comms.registry.register(replace(owner, process_identity=stale))
@@ -69,9 +69,9 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     leased, _ = comms.registry.lease_local_turn(owner.name, "active-turn")
     stale = replace(identity, start_time=identity.start_time + 1)
     with pytest.raises(RelationViolationError, match="replace an executor"):
-        comms.threads.register(replace(owner, process_identity=stale))
+        comms.registry.declare(replace(owner, process_identity=stale))
     assert comms.registry.require(owner.name) == leased
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), title="metadata"))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), title="metadata"))
     current = comms.registry.require(owner.name)
     assert current.process_identity == identity and current.active_turn == leased.active_turn
     comms.registry.release_turn(current.turn_lease)

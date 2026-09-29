@@ -284,7 +284,7 @@ class TestHandlers:
 
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
         agent = canonical_agent(wire(tmp_path / "wire"), no_reply_window=0.1)
-        agent._comms.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        agent._comms.registry.declare(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         agent._comms.messaging.send("peer", "#all", "old message")
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         assert agent._comms.bus.inbox(response.session_id) == []
@@ -404,7 +404,7 @@ class TestHandlers:
     async def test_cancel_drains_inbox(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        agent._comms.registry.declare(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         agent._comms.messaging.send("peer", "proj", "hello")
         await agent.cancel(session_id="proj")
         assert agent._comms.bus.pending_count("proj") == 0
@@ -1504,8 +1504,8 @@ class TestFullHistory:
         from agent_comms.comms import wire
 
         comms = wire(tmp_path / "wire")
-        comms.threads.register(Thread(name="a", tags=frozenset({"x"}), worktree="/wt"))
-        comms.threads.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="a", tags=frozenset({"x"}), worktree="/wt"))
+        comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         comms.messaging.send("a", "#all", "one")
         comms.messaging.send("a", "b", "dm")
         comms.messaging.send("b", "#x", "tagged")
@@ -1736,7 +1736,7 @@ class TestTargetPrefix:
 
     async def test_dm_prompt_reaches_only_target(self, wired):
         agent = canonical_agent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
-        wired.threads.register(Thread(name="peer", tags=frozenset(), worktree="/wt"))
+        wired.registry.declare(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
         assert wired.bus.pending_count("peer") == 1
@@ -1761,7 +1761,7 @@ class TestFailureFeedback:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.threads.register(
+        wired.registry.declare(
             Thread(name="peer", tags=frozenset({"team"}), worktree=str(tmp_path / "proj"))
         )
         origin = Message(sender="peer", target="#team", body="do the work", type=MessageType.INFO)
@@ -1787,7 +1787,7 @@ class TestFailureFeedback:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         if channel:
-            wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+            wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin_target = "#team" if channel else "proj"
         reply_target = "#team" if channel else human.name
         origin = Message(human.name, origin_target, "please help", MessageType.INFO)
@@ -1886,7 +1886,7 @@ class TestFailureFeedback:
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
-        wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+        wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin = Message(human.name, "#team", "please help", MessageType.INFO)
 
         async def events(*args, **kwargs):
@@ -1924,7 +1924,7 @@ class TestFailureFeedback:
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
-        wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+        wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin = Message(human.name, "#team", "please help", MessageType.INFO)
         original = backend.stream_agent_events
 
@@ -1955,7 +1955,7 @@ class TestFailureFeedback:
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
-        wired.threads.register(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
+        wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin = Message(human.name, "#team", "please help", MessageType.INFO)
 
         async def events(*args, **kwargs):
@@ -2028,7 +2028,7 @@ class TestLiveConfigSync:
             await assert_snapshot_update()
             goal = wired.goals.update_goal("proj", SetGoalAction(text="Handle assigned work"))
             await assert_snapshot_update()
-            wired.threads.register(
+            wired.registry.declare(
                 Thread(
                     "child",
                     frozenset(),
@@ -2070,7 +2070,7 @@ class TestQueueControl:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        wired.threads.register(
+        wired.registry.declare(
             Thread(name="peer", tags=frozenset(), worktree=str(tmp_path / "proj"))
         )
         agent.inputs.backend_inboxes["proj"] = __import__("asyncio").Queue()

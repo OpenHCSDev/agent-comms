@@ -121,7 +121,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
 
     comms = Comms(tmp_path / "wire")
     peer = Thread(name="peer", tags=frozenset(), worktree=str(tmp_path))
-    comms.threads.register(peer)
+    comms.registry.declare(peer)
     peer = comms.registry.require("peer")
     goal = Goal("Wait for peer", "goal")
     message = Message(seq=2, sender="peer", target="owner", body="Result", type=MessageType.INFO)

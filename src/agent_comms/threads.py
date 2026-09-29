@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass, field, fields, replace
+from typing import TYPE_CHECKING
 
 from .channel_targets import Tag
 from .child_process import ProcessIdentity
@@ -21,6 +22,11 @@ from .thread_identity import (
     TurnIdentity,
 )
 from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence
+
+if TYPE_CHECKING:
+    from .owner_compaction_gate import OwnerCompactionAttestation
+    from .owner_compaction_prepare import NativeWitness
+
 
 
 class _GeneratedCreationTime(float):
@@ -146,6 +152,28 @@ class Thread:
             raise RelationViolationError(f"Thread {self.name!r} has no owner process")
         return self.process_identity
 
+    def compaction_attestation(self, owner_generation: int, witness: NativeWitness) -> OwnerCompactionAttestation:
+        """Project this captured owner; registry and native CAS still recheck it."""
+        from pathlib import Path
+
+        from .owner_compaction_gate import OwnerCompactionAttestation
+
+        if self.active_turn is None or self.session_file is None:
+            raise ValueError("Claimed owner with canonical session required")
+        session = str(Path(self.session_file).resolve(strict=True))
+        witness.require_session(session)
+        return OwnerCompactionAttestation(
+            self.name, owner_generation, self.active_turn.id,
+            self.goal.id if self.goal is not None else None,
+            self.goal.revision if self.goal is not None else None,
+            session, witness.leaf_id, witness.revision, None,
+        )
+
+    def require_saved_session(self) -> str:
+        if self.session_file is None:
+            raise ValueError("Canonical saved session required")
+        return self.session_file
+
     def require_idle(self) -> None:
         if self.active_turn is not None:
             raise RelationViolationError("live owner already has an active turn")
@@ -212,6 +240,11 @@ class Thread:
                 ),
             )
         return result
+
+    def for_claim(self, name: str) -> Thread:
+        """Assign an allocated name without turning a generated clock into caller identity."""
+        created = _GeneratedCreationTime(self.created_at) if self._generated_created_at else self.created_at
+        return replace(self, name=name, created_at=created)
 
     def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:
         """Resolve metadata once from its field declarations, retaining exact identity.

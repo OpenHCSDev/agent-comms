@@ -72,7 +72,7 @@ def _root(tmp_path: Path):
         ),
     ]
     for person in people:
-        comms.threads.register(person)
+        comms.registry.declare(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
     message = comms.messaging.send_initial_cohort("sender", "#team", "Compute 17+25.")
     initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
@@ -365,7 +365,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
         str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
-    comms.threads.register(beta)
+    comms.registry.declare(beta)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
             stable_thread_lookup(beta.created_at), "beta", "beta", committed=True

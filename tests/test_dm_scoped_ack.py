@@ -23,7 +23,7 @@ def _thread(root: Path, name: str) -> Thread:
 
 def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_path: Path):
     comms = wire(tmp_path)
-    comms.threads.register(_thread(tmp_path, "peer"))
+    comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for index in range(50):
         comms.messaging.send("peer", viewer, f"old {index}")
@@ -54,7 +54,7 @@ def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_pa
 def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_path: Path):
     comms = wire(tmp_path)
     for name in ("peer", "other", "executor"):
-        comms.threads.register(_thread(tmp_path, name))
+        comms.registry.declare(_thread(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for index in range(50):
         comms.messaging.send("peer", viewer, f"old {index}")
@@ -91,7 +91,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
 def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_path: Path):
     comms = wire(tmp_path)
     for name in ("peer", "other"):
-        comms.threads.register(_thread(tmp_path, name))
+        comms.registry.declare(_thread(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("other", viewer, "OTHER_UNPAINTED_1")
     comms.messaging.send("peer", viewer, "PEER_PAINTED_2")
@@ -125,7 +125,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
     first, second = wire(tmp_path / "first"), wire(tmp_path / "second")
     for comms in (first, second):
         for name in ("peer", "other"):
-            comms.threads.register(_thread(comms.root, name))
+            comms.registry.declare(_thread(comms.root, name))
         viewer = comms.messaging.user_identity(str(comms.root)).name
         comms.messaging.send("peer", viewer, "painted")
     page = first.views.dm_display_page("peer", worktree=str(first.root))
@@ -149,7 +149,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
 
 def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path):
     comms = wire(tmp_path)
-    comms.threads.register(_thread(tmp_path, "peer"))
+    comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
@@ -174,7 +174,7 @@ def durable_root():
 def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root, monkeypatch):
     tmp_path = durable_root
     comms = wire(tmp_path)
-    comms.threads.register(_thread(tmp_path, "peer"))
+    comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))

@@ -133,7 +133,7 @@ async def test_request_correlation_separates_families_and_ignores_late_results()
 async def test_settle_turn_releases_fence_after_publication_even_on_error(
     comms, tmp_path, monkeypatch, publication_fails
 ):
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="bot",
             tags=frozenset(),
@@ -171,7 +171,7 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
 async def test_stream_settlement_defers_waiters_and_preserves_replacement_turn(
     comms, tmp_path, monkeypatch
 ):
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="bot",
             tags=frozenset(),

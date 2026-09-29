@@ -26,7 +26,7 @@ from agent_comms.tools import ToolRequest
 
 def _owner(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None
     return comms, goal
@@ -142,7 +142,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
     from agent_comms.goal_attempts import GoalAttemptStore
 
     comms, original = _owner(tmp_path)
-    comms.threads.register(
+    comms.registry.declare(
         replace(
             comms.registry.require("worker"), process_identity=ProcessIdentity.capture(os.getpid())
         )

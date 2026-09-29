@@ -129,7 +129,7 @@ def _root(
         ),
     ]
     for person in people:
-        comms.threads.register(person)
+        comms.registry.declare(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
@@ -1199,7 +1199,7 @@ async def test_session_file_registration_during_native_triage_keeps_owner(
     async def register_session(*args, **kwargs):
         result = await runner(*args, **kwargs)
         current = comms.registry.require("alpha")
-        comms.threads.register(replace(current, session_file=str(root / "metadata.jsonl")))
+        comms.registry.declare(replace(current, session_file=str(root / "metadata.jsonl")))
         return result
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
@@ -1220,7 +1220,7 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
     async def register_session(*args, **kwargs):
         result = await runner(*args, **kwargs)
         current = comms.registry.require("beta")
-        comms.threads.register(replace(current, session_file=str(root / "metadata.jsonl")))
+        comms.registry.declare(replace(current, session_file=str(root / "metadata.jsonl")))
         return result
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
@@ -1245,7 +1245,7 @@ async def test_project_change_during_native_full_turn_denies_response(
         result = await runner(*args, **kwargs)
         current = comms.registry.require("beta")
         before = comms.registry.snapshot().admission_generations["beta"]
-        comms.threads.register(replace(current, worktree=str(other_project)))
+        comms.registry.declare(replace(current, worktree=str(other_project)))
         assert comms.registry.snapshot().admission_generations["beta"] == before
         return result
 
@@ -1434,7 +1434,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender",
             frozenset(),
@@ -1442,7 +1442,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "beta",
             frozenset({"team"}),

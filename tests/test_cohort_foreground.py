@@ -68,7 +68,7 @@ def _wire(base: Path) -> tuple[Path, str, Comms]:
     root = base / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())
         )
@@ -364,7 +364,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         resource = base / "module.py"
         resource.write_bytes(b"unchanged\n")
         root, root_id, comms = _wire(base)
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 "beta",
                 frozenset({"team"}),
@@ -473,7 +473,7 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
         base = Path(dirname)
         base.chmod(0o700)
         root, root_id, comms = _wire(base)
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 "beta",
                 frozenset(),
@@ -785,7 +785,7 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
 def test_sender_is_enabled_on_an_initialized_private_root() -> None:
     with TemporaryDirectory(prefix="ac-foreground-", dir="/var/tmp") as dirname:
         root, root_id, comms = _wire(Path(dirname))
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 "beta", frozenset(), dirname, process_identity=ProcessIdentity.capture(os.getpid())
             )

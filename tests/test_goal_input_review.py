@@ -23,7 +23,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     monkeypatch.setenv("PI_AGENT_ID", "worker")
     comms = wire(tmp_path / "wire")
     for name in ("worker", "parent", "other"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -125,7 +125,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
 def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, rebound):
     comms = wire(tmp_path)
     for name in ("worker", "parent"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -136,7 +136,7 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     old = comms.messaging.send_message("parent", "worker", "Old incarnation")
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             rebound,
             frozenset(),

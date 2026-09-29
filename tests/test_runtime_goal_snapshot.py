@@ -47,7 +47,7 @@ async def goal_owner(tmp_path, monkeypatch):
 async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(goal_owner):
     comms, owner, proxy, session, scheduled = goal_owner
     assert await proxy.request("goal_snapshot") == {"goal": None, "goalExecution": None}
-    comms.threads.register(Thread("child", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread("child", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.agents.begin_turn("child", "child-work-in-flight")
     goal = comms.goals.update_goal(session, SetGoalAction(text="Review child output"))
     comms.goals.update_goal(
