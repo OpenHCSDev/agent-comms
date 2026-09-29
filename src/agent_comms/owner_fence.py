@@ -15,6 +15,17 @@ from agent_comms.coordination_contracts import (
 
 
 @dataclass(frozen=True, slots=True)
+class AttemptAuthority:
+    """Immutable authority of one attempt; revisions advance within it."""
+
+    execution_id: str
+    ordinal: int
+    owner_thread: str
+    owner_generation: int
+    token_digest: str
+
+
+@dataclass(frozen=True, slots=True)
 class OwnerFence:
     execution_id: str
     attempt_ordinal: int
@@ -22,6 +33,13 @@ class OwnerFence:
     owner_generation: int
     revision: int
     token: str
+
+    @property
+    def authority(self) -> AttemptAuthority:
+        return AttemptAuthority(
+            self.execution_id, self.attempt_ordinal, self.owner_thread,
+            self.owner_generation, _digest(self.token),
+        )
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)

@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from .errors import RelationViolationError
+
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 
@@ -83,3 +85,7 @@ class ThreadRole(StrEnum):
     @property
     def executable(self) -> bool:
         return self is self.AGENT
+
+    def require_executable(self) -> None:
+        if not self.executable:
+            raise RelationViolationError("thread role does not execute owner turns")

@@ -17,6 +17,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 from .errors import RelationViolationError
+from .message_reference import MessageReference
 
 
 class ClaimTransitionError(ValueError):
@@ -118,6 +119,17 @@ def _resource(value: object) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class AssignmentBinding:
+    """Selected claim revision and source, shared by its admission and SQL row."""
+
+    assignment_id: str
+    revision: int
+    recipient_lookup: str
+    source: MessageReference
+    execution_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class WakeAdmission:
     """A selected N/K execution bound into the durable resource-claim row."""
 
@@ -134,6 +146,17 @@ class WakeAdmission:
     participant_generation: int
     attempt_ordinal: int
     version: int = field(default=1, metadata={"wire_required": True})
+
+    @property
+    def binding(self) -> AssignmentBinding:
+        return AssignmentBinding(
+            self.wake_assignment_id, self.wake_revision, self.recipient_lookup,
+            self.source, self.execution_id,
+        )
+
+    @property
+    def source(self) -> MessageReference:
+        return MessageReference(self.source_seq, self.source_message_id)
 
     def __post_init__(self) -> None:
         for label, value, size in (

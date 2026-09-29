@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .coordination_errors import IntegrityViolationError
+from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .typed_table import sql_literal
@@ -36,6 +36,12 @@ class PendingDecision:
 
 @dataclass(frozen=True)
 class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
+    def require_engagement(self) -> Engagement:
+        raise IdentityConflict("wake assignment is not engaged")
+
+    def require_completion(self) -> Engagement:
+        raise IdentityConflict("wake assignment is not completed")
+
     notification_state: ClassVar[str] = "Pending"
     notification_detail: ClassVar[str] = "Awaiting a recorded notification outcome."
     notification_priority: ClassVar[int] = 3
@@ -271,6 +277,9 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(BoundAssignment):
+    def require_engagement(self) -> Engagement:
+        return self.decision
+
     def notification(
         self,
         recipient,
@@ -305,6 +314,9 @@ class EngagedAssignment(BoundAssignment):
 
 
 class CompletedAssignment(BoundAssignment):
+    def require_completion(self) -> Engagement:
+        return self.decision
+
     notification_priority = 2
     notification_state = "Responded"
     notification_detail = "The response workflow completed."
