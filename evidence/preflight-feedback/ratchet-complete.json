@@ -1,0 +1,98 @@
+{
+  "src/agent_comms/agent_event_updates.py": {
+    "before": {
+      "foreign_absence": 2,
+      "chain_terms": 0,
+      "class_excess": 0
+    },
+    "after": {
+      "foreign_absence": 2,
+      "chain_terms": 0,
+      "class_excess": 0
+    }
+  },
+  "src/agent_comms/input_disposition.py": {
+    "before": {
+      "foreign_absence": 6,
+      "chain_terms": 0,
+      "class_excess": 0
+    },
+    "after": {
+      "foreign_absence": 6,
+      "chain_terms": 0,
+      "class_excess": 0
+    }
+  },
+  "src/agent_comms/input_drain.py": {
+    "before": {
+      "foreign_absence": 12,
+      "chain_terms": 13,
+      "class_excess": 108
+    },
+    "after": {
+      "foreign_absence": 12,
+      "chain_terms": 13,
+      "class_excess": 107
+    }
+  },
+  "src/agent_comms/owned_turn.py": {
+    "before": {
+      "foreign_absence": 4,
+      "chain_terms": 0,
+      "class_excess": 0
+    },
+    "after": {
+      "foreign_absence": 4,
+      "chain_terms": 0,
+      "class_excess": 0
+    }
+  },
+  "src/agent_comms/turn_failure.py": {
+    "before": {
+      "foreign_absence": 3,
+      "chain_terms": 0,
+      "class_excess": 0
+    },
+    "after": {
+      "foreign_absence": 3,
+      "chain_terms": 0,
+      "class_excess": 0
+    }
+  },
+  "src/agent_comms/turn_output.py": {
+    "before": {
+      "foreign_absence": 4,
+      "chain_terms": 6,
+      "class_excess": 0
+    },
+    "after": {
+      "foreign_absence": 4,
+      "chain_terms": 6,
+      "class_excess": 0
+    }
+  },
+  "src/agent_comms/turn_progress.py": {
+    "before": {
+      "foreign_absence": 3,
+      "chain_terms": 0,
+      "class_excess": 0
+    },
+    "after": {
+      "foreign_absence": 3,
+      "chain_terms": 0,
+      "class_excess": 0
+    }
+  },
+  "src/agent_comms/turn_runner.py": {
+    "before": {
+      "foreign_absence": 9,
+      "chain_terms": 22,
+      "class_excess": 221
+    },
+    "after": {
+      "foreign_absence": 9,
+      "chain_terms": 22,
+      "class_excess": 221
+    }
+  }
+}

@@ -25,7 +25,7 @@ def test_finished_unbound_input_remains_visible_but_cannot_rebind(tmp_path):
     inputs.record(
         "acp:failed", seq=None, owner="owner", admission=1, target="owner", text="keep me"
     )
-    assert inputs.finish_unbound("acp:failed")
+    assert inputs.settle_unbound(("acp:failed",))
     row = inputs.read().rows["acp:failed"]
     assert row.declared_name == "not_sent" and row.unresolved
     assert row.public()["text"] == "keep me"
@@ -39,7 +39,7 @@ def test_finished_unbound_input_remains_visible_but_cannot_rebind(tmp_path):
     assert inputs.bind(
         "acp:uncertain", admission=1, turn_id="earlier", native_id="b" * 32, text="bound"
     )
-    assert not inputs.finish_unbound("acp:uncertain")
+    assert not inputs.settle_unbound(("acp:uncertain",))
     assert inputs.read().rows["acp:uncertain"].declared_name == "bound_unknown"
 
 
@@ -102,7 +102,7 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
                 text=text,
             )
         else:
-            assert inputs.finish_unbound("acp:original")
+            assert inputs.settle_unbound(("acp:original",))
         original = Path(session).read_bytes()
         dispositions = inputs.path.read_bytes()
         if bound:

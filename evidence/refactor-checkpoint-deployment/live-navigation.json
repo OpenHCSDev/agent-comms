@@ -1,0 +1,34 @@
+{
+  "prompts_sent": 0,
+  "owners_stopped": 0,
+  "channel_clicks": [
+    {
+      "name": "#comms",
+      "saved_rows": 8,
+      "expected_initial_rows": 8,
+      "history_initialized": true,
+      "matching_saved_five_word_phrases_in_viewport": 234
+    },
+    {
+      "name": "#nra",
+      "saved_rows": 8,
+      "expected_initial_rows": 8,
+      "history_initialized": true,
+      "matching_saved_five_word_phrases_in_viewport": 166
+    },
+    {
+      "name": "#openhcs",
+      "saved_rows": 0,
+      "expected_initial_rows": 0,
+      "history_initialized": true,
+      "matching_saved_five_word_phrases_in_viewport": 0
+    }
+  ],
+  "participant_click": "agent-comms-ux",
+  "one_new_logical_tab": true,
+  "saved_native_history": true,
+  "recent_return_draft_document_undo": true,
+  "exception": "None",
+  "bus_size_before": 707378,
+  "bus_size_after": 707378
+}
