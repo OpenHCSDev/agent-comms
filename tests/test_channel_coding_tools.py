@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms.channel_coding_tools import CodingCall, CodingTool, CodingToolSocket
+from agent_comms.channel_coding_tools import CodingCall, CodingToolSocket
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
@@ -15,6 +15,7 @@ from agent_comms.envelope_claim_transitions import (
     ExistingFileClaim,
     WritableFileClaim,
 )
+from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.threads import Thread

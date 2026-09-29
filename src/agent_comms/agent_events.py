@@ -102,6 +102,7 @@ class ToolEvent(AgentEvent):
 class ToolStart(ToolEvent, ActivityEvent):
     title: str = ""
     args: dict[str, Any] | None = None
+    kind: str = "other"
 
     @property
     def activity_state(self) -> ActivityState:

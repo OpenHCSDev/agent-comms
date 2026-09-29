@@ -16,7 +16,6 @@ from acp.schema import (
 )
 
 from . import agent_events as events
-from . import backend
 from .acp_extension import (
     CompactionChangedUpdate,
     GoalChangedUpdate,
@@ -97,7 +96,7 @@ class AcpEventConsumer(MroDispatch):
             session_update="tool_call",
             tool_call_id=event.id,
             title=event.title or event.name or "tool",
-            kind=cast(Any, backend.tool_kind(event.name or "other")),
+            kind=cast(Any, event.kind),
             status="in_progress",
         )
         if event.args is not None:

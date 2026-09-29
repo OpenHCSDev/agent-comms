@@ -745,20 +745,14 @@ class ToolExecutionStart(PiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .backend import _tool_title
+        from .native_tools import NativeTool
 
-        session.name = self.tool_name or "tool"
-        session.args = self.args or {}
-        session.tool_id = self.tool_call_id or session.name
+        name = self.tool_name or "tool"
+        tool_id = self.tool_call_id or name
         session.watchdog.prompt_accepted = True
         session.watchdog.tool_ever_started = True
-        session.active_tools.add(session.tool_id)
-        yield events.ToolStart(
-            id=session.tool_id,
-            name=session.name,
-            title=_tool_title(session.name, session.args),
-            args=session.args,
-        )
+        session.active_tools.add(tool_id)
+        yield NativeTool.start(tool_id, name, self.args or {})
 
     tool_progress = True
 

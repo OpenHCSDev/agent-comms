@@ -62,3 +62,14 @@ mutation/cancellation/reopen and installed private ACP commit/admission cover th
 replacement.340 token policy and339 current-main fork work are retained. See
 `evidence/selected-probe-retirement/HANDOFF.md` for deletion counts, immutable
 package, exact local receipts and their limits. Parent owns final live pairing.
+
+## Native tool declarations — native sidecar, PR344
+
+Existing CodingTool declarations now inherit the native tool presentation contract.
+The coding capability still derives its restricted admitted membership; title and
+ACP kind use those same declarations with shared path behavior. Backend's parallel
+kind roster/title switch and Pi event scratch fields are deleted. No native
+producer, checkpoint schema or Toad AgentProcess changes. Exact scope, physical
+SDK proof and passing post-upgrade native Read acceptance:
+`evidence/native-tool-declarations/HANDOFF.md`. Native Read -> official ACP passed with343 d396. Parent owns final paired
+installation; no CI gate.
