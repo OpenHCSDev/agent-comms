@@ -1,0 +1,9 @@
+Using Python 3.14.2 environment at: .artifacts/attempt-ownership/runtime
+Resolved 1 package in 1ms
+Prepared 1 package in 7ms
+Uninstalled 1 package in 10ms
+warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+Installed 1 package in 31ms
+ ~ agent-comms==0.1.0 (from file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/attempt-ownership/wheel/agent_comms-0.1.0-py3-none-any.whl)
