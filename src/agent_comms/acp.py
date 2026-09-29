@@ -275,8 +275,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 session_id,
                 text=text,
                 display_text=display_text,
-                delivery=request.delivery,
-                defer_display=request.defer_display,
+                request=request,
                 images=images,
             )
         async with self.turns.turn_locks.setdefault(session_id, asyncio.Lock()):

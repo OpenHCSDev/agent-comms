@@ -99,6 +99,14 @@ class OriginalTurnInput(TurnInputSource):
     dependency: InputDependency
     batch: InputBatch
 
+    @property
+    def notice_keys(self) -> tuple[str, ...]:
+        return ()
+
+    @property
+    def notice_text(self) -> str | None:
+        return None
+
     def valid_keys(self, text: str) -> bool:
         return super().valid_keys(text) or (self.batch.admits_multiple and text == self.prompt)
 
@@ -127,6 +135,14 @@ class DirectInput(TurnInputSource):
 
 
 class OwnerOriginalInput(OriginalTurnInput, DirectInput):
+    @property
+    def notice_keys(self) -> tuple[str, ...]:
+        return self.keys
+
+    @property
+    def notice_text(self) -> str:
+        return self.original_display or self.prompt
+
     def compaction_key(self, session_file: str | None) -> str | None:
         return self.keys[0] if session_file is not None and len(self.keys) == 1 else None
 

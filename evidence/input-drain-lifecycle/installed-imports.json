@@ -1,0 +1,7 @@
+{
+  "core": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/input-drain-lifecycle/runtime/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "drain": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/input-drain-lifecycle/runtime/lib/python3.14/site-packages/agent_comms/input_drain.py",
+  "queued": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/input-drain-lifecycle/runtime/lib/python3.14/site-packages/agent_comms/queued_input.py",
+  "native": "/home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20/node_modules/@earendil-works/pi-coding-agent",
+  "manifest": "verified"
+}
