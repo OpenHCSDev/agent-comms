@@ -54,11 +54,14 @@ class PiEvent(PiPayload, DeclaredFamily):
 
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         """Apply shared progress and phase behavior around this event's meaning."""
+        previous = session.watchdog.phase
         async for update in session.watchdog.observe(self, session):
             yield update
         async for event in self.apply(session):
             yield event
         session.watchdog.transition(self, session.active_tools)
+        for update in session.native_phase_changes(previous):
+            yield update
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if False:
