@@ -28,7 +28,7 @@ async def test_actual_native_new_terminal_failure_refuses_success_and_retention(
     assert not result[-1].ok and result[-1].reason_code == MissingAuditEvidence.code
     assert result[-1].text == MissingAuditEvidence.default_text
     assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
-    assert owner.persistent.proc is None
+    assert not owner.persistent.available
     assert all(not child.alive() for child in owner.children)
 
 
@@ -52,7 +52,7 @@ async def test_actual_native_cold_preparation_retains_without_admitting_input(na
     )
     assert state.session_file == str(owner.session) and state.session_id
     assert state.is_streaming is False and state.is_compacting is False
-    assert owner.persistent.proc is not None and owner.persistent.proc.alive()
+    assert owner.persistent.available and owner.persistent.custody.child.proc.alive()
     assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 0
 
 
@@ -129,8 +129,8 @@ async def test_actual_native_retained_image_failure_redacts_provider_text(native
     )
     first = await owner.run("Inspect this diagnostic image", images=(image,))
     assert first[-1].ok, first[-1]
-    retained = owner.persistent.proc
-    assert retained is not None and owner.persistent.sensitive_diagnostics
+    retained = owner.persistent.custody.child.proc
+    assert retained is not None and owner.persistent.custody.child.sensitive_diagnostics
     owner.provider.status = 503
     second = await owner.run("A new diagnostic input after the image")
     assert not second[-1].ok

@@ -1,8 +1,9 @@
-"""The correlated native capability response is the attestation, never a flag."""
+"""Native capability and identity are observed states, never parallel turn flags."""
 
 from __future__ import annotations
 
 import secrets
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -29,45 +30,81 @@ class AttestationError(ValueError):
 
 class IdentityAttestationError(AttestationError):
     async def refuse(self, session: TurnSession) -> None:
-        session.session_identity_uncertain = True
+        session.native.attestation = session.native.attestation.invalidate()
         await super().refuse(session)
 
 
+class NativeAttestation(ABC):
+    @property
+    @abstractmethod
+    def observed(self) -> bool: ...
+
+    uncertain = False
+    state = None
+    identity = None
+
+    def observe(self, data: StateData) -> NativeAttestation:
+        return self
+
+    def invalidate(self) -> NativeAttestation:
+        return LostAttestation()
+
+    def conflicts(self, data) -> bool:
+        return False
+
+
 @dataclass
-class NativeAttestation:
+class PendingAttestation(NativeAttestation):
+    observed = False
     expected: NativeSessionIdentity | None = None
     request: commands.GetState = field(
         default_factory=lambda: commands.GetState(
             id=f"agent-comms-preflight-{secrets.token_hex(16)}"
         )
     )
-    state: StateData | None = None
 
-    def accept(self, event: PiEvent) -> None:
+    def accept(self, event: PiEvent) -> ObservedAttestation:
         if not isinstance(event, Response) or event.command is not commands.GetState:
             raise AttestationError(
                 failures.InputIdUnavailable(
                     "Pi native input-ID capability preflight returned another event."
                 )
             )
-        state = event.data
-        if (
-            event.id != self.request.id
-            or event.success is not True
-            or state is None
-            or state.native_input_proof_capability != CAPABILITY
-        ):
+        if event.id != self.request.id or not event.success:
             raise AttestationError(
                 failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
             )
-        if self.expected is not None and (
-            state.session_id != self.expected.session_id
-            or state.session_file != self.expected.session_file
-        ):
+        if event.data is None or event.data.native_input_proof_capability != CAPABILITY:
+            raise AttestationError(
+                failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+            )
+        observed = self.observe(event.data)
+        if self.expected is not None and observed.identity != self.expected:
             raise IdentityAttestationError(
                 failures.IdentityUncertain("Pi session identity changed during this turn.")
             )
-        self.state = state
+        return observed
+
+    def observe(self, data):
+        return ObservedAttestation(data)
+
+
+@dataclass
+class ObservedAttestation(NativeAttestation):
+    state: StateData
+    observed = True
+
+    @property
+    def identity(self):
+        return self.state.identity
+
+    def conflicts(self, data):
+        return self.state.conflicts(data)
+
+
+class LostAttestation(NativeAttestation):
+    observed = False
+    uncertain = True
 
 
 class SavedSessionReopenError(ValueError):

@@ -1,0 +1,81 @@
+{
+  "base": "fe76c50e",
+  "code_head": "a567b9fc3decf7bcef15eff77442221850b4a3cb",
+  "lines": {
+    "src": {
+      "deleted": 441,
+      "added": 496
+    },
+    "tests": {
+      "deleted": 485,
+      "added": 212
+    }
+  },
+  "ratchet_increases": {},
+  "class_changes": {
+    "ClassSize:src/agent_comms/backend.py::PersistentPiSession": -106,
+    "ClassSize:src/agent_comms/backend.py::TurnSession": -34,
+    "ClassSize:src/agent_comms/native_attestation.py::NativeAttestation": -18,
+    "ClassSize:src/agent_comms/native_session_prepare.py::NativeSessionPreparation": -11,
+    "ClassSize:src/agent_comms/pi_commands.py::SessionSnapshot": -9,
+    "ClassSize:src/agent_comms/pi_commands.py::GetState": -3,
+    "ClassSize:src/agent_comms/pi_events.py::ExtensionUiRequest": -9,
+    "ClassSize:src/agent_comms/pi_events.py::MessageEnd": -1,
+    "ClassSize:src/agent_comms/pi_events.py::MessageStart": -1,
+    "ClassSize:src/agent_comms/selected_pi_summary_rpc.py::SelectedSummarySlot": -10,
+    "ClassSize:src/agent_comms/turn_inputs.py::InputForwarding": -1,
+    "ClassSize:src/agent_comms/selected_pi_route.py::SelectedPiDryRun": -10
+  },
+  "chain_terms": {
+    "src/agent_comms/backend.py": -23,
+    "src/agent_comms/native_attestation.py": -4,
+    "src/agent_comms/native_custody.py": 0,
+    "src/agent_comms/native_session_prepare.py": -12,
+    "src/agent_comms/owner_compaction_adaptive.py": 0,
+    "src/agent_comms/owner_compaction_manual.py": 0,
+    "src/agent_comms/pi_commands.py": -4,
+    "src/agent_comms/pi_events.py": -11,
+    "src/agent_comms/selected_pi_route.py": -15,
+    "src/agent_comms/selected_pi_summary_rpc.py": -12,
+    "src/agent_comms/turn_admission.py": 0,
+    "src/agent_comms/turn_failure.py": 0,
+    "src/agent_comms/turn_inputs.py": 0,
+    "src/agent_comms/turn_output.py": 0,
+    "src/agent_comms/turn_stats.py": 0,
+    "src/agent_comms/turn_watchdog.py": 0
+  },
+  "measures": {
+    "type_identity_check": 0,
+    "long_boolean_chain": -8,
+    "boolean_chain_terms": -81,
+    "codec_subclass": 0,
+    "string_key_subscript": -2,
+    "literal_key_get": 0,
+    "string_equality": 0,
+    "none_identity": -28,
+    "isinstance_call": -7,
+    "attribute_by_name": 0,
+    "getattr_default": 0,
+    "broad_except": 0,
+    "json_loads": 0,
+    "long_function": 0,
+    "class_definition": 15,
+    "abstract_base": 3,
+    "enum_class": 0,
+    "code_lines": -2
+  },
+  "nra": {
+    "source_revision": "b5d22c68 (before final dead dry-run deletion)",
+    "exit_code": 0,
+    "seconds": 40.469,
+    "source_files": 241,
+    "raw_findings": 110,
+    "raw_by_detector": {
+      "unmodeled_record_shape": 31,
+      "repeated_builder_calls": 1,
+      "redundant_type_check": 56,
+      "semantic_mirror_without_descent": 22
+    },
+    "coverage_limit": "Successful full-context CLI output omits scan_status and analyzed/omitted detector counts. No zero-omission claim. No new full scan after deleting the unused dry-run wrapper."
+  }
+}

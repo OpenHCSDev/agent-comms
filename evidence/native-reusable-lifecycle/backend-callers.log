@@ -1,0 +1,47 @@
+.......................F
+=================================== FAILURES ===================================
+___ TestRpcParsing.test_caller_cancellation_reaps_backend_and_steering_task ____
+
+self = <test_backend.TestRpcParsing object at 0x7f315590eb30>
+tmp_path = PosixPath('/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-reusable-lifecycle/backend-callers/test_caller_cancellation_reaps0')
+
+    async def test_caller_cancellation_reaps_backend_and_steering_task(self, tmp_path):
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n" + "import time\ntime.sleep(60)\n",
+        )
+        queue: asyncio.Queue[str] = asyncio.Queue()
+        queue.put_nowait("[peer] pending")
+    
+        async def consume() -> None:
+            async for _ in backend.stream_agent_events(
+                stub,
+                [],
+                "task",
+                str(tmp_path),
+                steering_queue=queue,
+                model_wait_timeout=None,
+            ):
+                pass
+    
+        turn = asyncio.create_task(consume())
+        while turn not in backend._ACTIVE_PROCESSES or not queue.empty():
+            await asyncio.sleep(0)
+        process = backend._ACTIVE_PROCESSES[turn]
+    
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+    
+        assert process.returncode is not None
+        assert turn not in backend._ACTIVE_PROCESSES
+        assert turn not in backend._ACTIVE_STEERING
+>       assert turn not in backend._ACTIVE_INPUT_RESTORERS
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'agent_comms.backend' has no attribute '_ACTIVE_INPUT_RESTORERS'
+
+tests/test_backend.py:383: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_backend.py::TestRpcParsing::test_caller_cancellation_reaps_backend_and_steering_task
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 23 passed in 1.83s

@@ -102,7 +102,7 @@ class ProgressWatchdog:
             timeout = max(0.0, self.last_model_progress + self.model_wait_timeout - self.clock())
         if (
             self.prompt_start_deadline is not None
-            and not session.initial_input_started
+            and not session.admission.started
             and not self.phase.pauses_input_clock
         ):
             start_wait = max(0.0, self.prompt_start_deadline - self.clock())
@@ -201,7 +201,7 @@ class ProgressWatchdog:
             return
         if (
             self.prompt_start_deadline is not None
-            and (not session.initial_input_started)
+            and (not session.admission.started)
             and (not self.phase.pauses_input_clock)
         ):
             session.output.record_failure(
