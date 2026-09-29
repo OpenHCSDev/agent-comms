@@ -180,8 +180,6 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         init=False, compare=False, metadata={"sql": Column(generated="1")}
     )
 
-    checks = ("publication_key = 'publication:v1:' || execution_id || ':' || exact_target",)
-
     @classmethod
     def references(cls):
         from agent_comms.coordination_tables.executions import ExecutionRecord
