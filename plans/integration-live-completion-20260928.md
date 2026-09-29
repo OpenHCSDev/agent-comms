@@ -4,16 +4,20 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: coreb77db612 (306 source cursor/coverage;301/303 owners),
-Toade46f8cb5 (129 functional workspace plus141 saved publication/reconnect and
-143 Project scroll restoration),
-Textualc9743801, native5fde. All five launchers select immutable
-runtime-workspace-20260928. Four idle owners restarted through canonical fenced
-restart; actual installed native queue/reconnect/DM/channel/stopped-reopen passes,
-all four fresh ACP attachments pass; actual PR95 and agent-comms-ux saved text
-paint105/61 matching phrases. No runtime store reset, history rewrite, or input
-replay. Existing Toad loads129/141/143 on its next normal restart. Full116/110
-persistent WorkspaceScreen/rebinding and30–40ms target continue in142.
+Latest installed pair: corec338e8ab (308 terminal-output ownership;307 current
+S4 read acceptance;306/301/303), Toade46f8cb5 (129 functional workspace plus141
+saved publication/reconnect and143 Project scroll restoration), Textualc9743801,
+native5fde. All five launchers select runtime-terminal-output-20260928.
+Four idle owners restarted through canonical fenced restart; four fresh ACP
+attachments pass. Actual PR95 saved text paints105 matching phrases, readytrue,
+no delivery error. Actual installed native output/tool/error/compaction shard:
+5 passed. Fresh copied39MB native session through actual ACP/Toad loads25events,
+paints history and advances the durable read marker; no prompts or original
+source mutation. No state reset, history rewrite, or uncertain input replay.
+The user's still-open Toad maps runtime-coordinator: verified via /proc mapped
+packages and ACP command. Reopening loads installed history/reconnect fixes;
+a fresh installed view is passing, not proof of hot-updating that old process.
+Full116/110 persistent WorkspaceScreen/rebinding and30–40ms target continue142.
 
 Latest integration proof: combined installed203passed/1test-only golden mismatch
 (the corrected extension/nominal set then50passed),23 read/legality cases,16 actual
@@ -230,8 +234,12 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
 - [ ] Carver: next whole planned T4 Conversation ownership/deletion surface,
   independent of Tesla workspace and Noether sidebar; no façade extraction.
   141 saved transcript ownership is now merged/installed; source lifecycle
-  coordination with142 continues. 308 backend output ready for parent review;
-  307 current S4 acceptance continues with mounted read-ACK evidence.
+  coordination with142 continues. 308 backend output and307 S4 acceptance merged and installed;
+  actual native output/compaction and mounted durable read-ACK checks pass.
+  311 native lifecycle and312 send admission remain active; parent review of312
+  requires identity/state-owned comparisons and named failures instead of
+  relocated field-tuple validity chains. Boyle owns that correction before
+  the remaining ordinary OwnedTurn boundary.
 - [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA
   run completed35.94s; its payload lacks detector coverage counts, so it is not
   claimed as complete-detector/zero-debt proof. Domain review rejected schema-index
