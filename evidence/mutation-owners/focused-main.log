@@ -1,0 +1,32 @@
+........................................................................ [ 91%]
+.....F.                                                                  [100%]
+=================================== FAILURES ===================================
+_____________ test_no_mutation_aggregate_or_compatibility_dispatch _____________
+
+    def test_no_mutation_aggregate_or_compatibility_dispatch():
+        assert not (SOURCE / "coordination_store.py").exists()
+        failures = []
+        for path in SOURCE.rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text())):
+                if isinstance(node, ast.Name) and node.id == "Coordination":
+                    failures.append((path, node.lineno))
+                if isinstance(node, ast.ClassDef) and node.name == "Coordination":
+                    failures.append((path, node.lineno))
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    if (
+                        isinstance(node, ast.ImportFrom)
+                        and node.module in {"coordination_store", "agent_comms.coordination_store"}
+                        or any(
+                            alias.name
+                            in {"Coordination", "agent_comms.coordination_store", "coordination_store"}
+                            for alias in node.names
+                        )
+                    ):
+                        failures.append((path, node.lineno))
+>       assert not failures
+E       AssertionError: assert not [(PosixPath('/home/ts/wt/comms-mutation-owners-20260928/src/agent_comms/cohort_foreground.py'), 29), (PosixPath('/home...oordinator.py'), 17), (PosixPath('/home/ts/wt/comms-mutation-owners-20260928/src/agent_comms/publisher.py'), 178), ...]
+
+tests/guards/test_mutation_ownership.py:37: AssertionError
+=========================== short test summary info ============================
+FAILED tests/guards/test_mutation_ownership.py::test_no_mutation_aggregate_or_compatibility_dispatch
+1 failed, 78 passed in 16.87s

@@ -58,4 +58,57 @@ bootstrap, not inside reader entry points.
   This CLI emits no detector omission inventory. Ownership/caller edits are manual,
   not claimed NRA-proven rewrites. Actual behavior evidence is separate above.
 
-Current-main integration and final local receipts follow; no CI wait.
+## Final current-main checkpoint
+
+Source head: cc8140e2. Actual merge base: 03b6f9f4 (combined288/294/292/290
+integration e2191bbe plus already-merged cursor recovery299). Retained current-main
+tracked-turn behavior and its repaired acceptance fixtures. No live root, launcher,
+route, native provider implementation or Dalton candidate edits.
+
+- install-main.log: noneditable wheel installed in this worktree's own virtualenv.
+- focused-main.log: 78 passed,1 failed in16.87s. The failure was our architecture
+  guard accidentally renamed to reject the new Coordination declaration during
+  caller migration. Restored its intended assertion against retired MutationStore.
+- affected-callers.log: 117 passed,2 failed in65.79s. One existing released-owner
+  fixture lacked its ProcessIdentity import; one atomicity injection still patched
+  deleted _settle on the root. Import restored; injection now targets the actual
+  AttemptStore.settle_checked implementation. Assertions and rollback checks stay.
+- caller-closure.log: both ownership guards and both failing caller cases passed,
+  4 passed in1.77s. The initial red receipts above remain; no claim that those
+  complete initial invocations were green.
+- native-main.log: 2 passed in24.57s after current-main integration, using the
+  installed wheel and actual pinned Pi entrypoint/detached production peer.
+  Both fresh protocol and base-only private bootstrap completed send/reply,
+  owner stop/start and another send/reply. Only the model endpoint is local;
+  SQLite, registry, native CLI, owner launch, wake, journal and bus are actual.
+- ratchet.json: source cc8140e2 against actual main merge base03b6f9f4;
+  zero positive deltas, including per-class size. New owners have no prior class
+  baseline; the module/method guard separately enforces their1,000/100 limits.
+- Current executable source/test/evidence callers migrated. Deleted1711-line
+  coordination_store.py and the247-line obsolete historical-format replay script;
+  removed duplicate recovery replay SQL and root domain forwarding entirely.
+  Production diff is+2204/-1951 (net+253), reflecting separate owned dependencies
+  and admission contract rather than pretending the refactor is a net line cut.
+- The NRA MonitorEvidence lead was inspected: the two constructions are distinct
+  observed recovery outcomes (explicit abandonment vs failed terminal), retaining
+  their reason and separate evidence checks. No automatic rewrite/proof claimed.
+
+No diagnosed blocker remains for this MutationStore slice. Other S7 modules remain
+outside this ownership. Parent owns merge and live acceptance/install; CI deferred.
+
+## Reproduction
+
+From this branch, create an owned virtualenv and install the wheel plus dev deps.
+The focused-main invocation selected test_coordination_store,
+ test_coordination_response, test_private_runtime_bootstrap,
+ test_coordination_cohort, test_coordination_nominal and guards/test_mutation_ownership.
+The affected-callers invocation selected test_coordinated_runtime,
+ test_native_send_admission, test_native_failure_recovery and
+ test_native_unknown_recovery. Use `pytest -o addopts='' --basetemp=<owned-root> -q`.
+The native invocation selected test_private_runtime_bootstrap_native with
+`AC_NATIVE_COPIED_PACKAGE=/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent`.
+No external provider calls or live message replay are required.
+
+Owned test roots, scratch/NRA cache and virtualenv removed after all workers exited;
+red/green receipts and the complete source branch preserved.
+
