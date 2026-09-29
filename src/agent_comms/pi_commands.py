@@ -38,9 +38,30 @@ if TYPE_CHECKING:
 class SessionSnapshot:
     """Reports the bound session identity before metadata projection."""
 
+    @classmethod
+    def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
+        data = response.data
+        return bool(
+            response.success
+            and data is not None
+            and session.initial_session_observed
+            and (
+                session.initial_session_id
+                and data.session_id
+                and data.session_id != session.initial_session_id
+                or session.initial_session_file
+                and data.session_file
+                and data.session_file != session.initial_session_file
+            )
+        ) or super().invalidates_identity(response, session)
+
 
 class MutatesSession:
     """A command may change the native session identity before its response."""
+
+    @classmethod
+    def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
+        return True
 
     async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
         session.rejected_commands.append(
@@ -60,6 +81,10 @@ class PiCommand(DeclaredFamily):
     response_payload: ClassVar[type[PiResponseData]] = EmptyData
     strict_response: ClassVar[bool] = False
     id: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+    @classmethod
+    def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
+        return False
 
     async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
         session.stdin.write(session.reader.encode(self))
@@ -155,7 +180,7 @@ class Prompt(PiCommand):
     ) -> AsyncIterator[events.AgentEvent]:
         from . import turn_phase as phases
 
-        if session.initial_prompt_response:
+        if response.id == session.prompt_id:
             session.last_model_progress = session.now
             if response.success:
                 session.initial_prompt_acknowledged = True
@@ -171,10 +196,12 @@ class Prompt(PiCommand):
                 yield events.Error(text=session.error_message)
                 session.finished = True
                 return
+        else:
+            session.inputs.acknowledge(response)
 
 
 @dataclass(frozen=True, kw_only=True)
-class GetState(PiCommand, SessionSnapshot):
+class GetState(SessionSnapshot, PiCommand):
     response_payload = StateData
 
     @classmethod
@@ -202,7 +229,7 @@ class GetState(PiCommand, SessionSnapshot):
 
 
 @dataclass(frozen=True, kw_only=True)
-class GetSessionStats(PiCommand, SessionSnapshot):
+class GetSessionStats(SessionSnapshot, PiCommand):
     response_payload = SessionStatsData
 
     @classmethod
@@ -240,6 +267,13 @@ class Abort(PiCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class InterruptSteering(PiCommand):
+    @classmethod
+    async def on_response(
+        cls, response: Response, session: TurnSession
+    ) -> AsyncIterator[events.AgentEvent]:
+        if response.success is False:
+            yield events.Error(text=str(response.error or "Send now was refused"))
+
     async def steer(self, session: TurnSession, forwarded: ForwardedInput) -> bool:
         return await session.inputs.interrupt(session, forwarded)
 
