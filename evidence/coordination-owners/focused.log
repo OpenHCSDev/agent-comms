@@ -28,7 +28,7 @@ _ test_response_extension_decodes_transitions_and_projects_without_catalog_edits
             @classmethod
             def successors(cls):
                 return (SilentResponse,)
-    
+
         try:
             state = FieldCodec.decode(ResponseState, {"kind": "reviewed"})
             assert state.may_become(SilentResponse())
@@ -55,7 +55,7 @@ tmp_path = PosixPath('/home/ts/wt/comms-coordination-owners-20260928/.test-coord
         from agent_comms.coordination_store import MutationStore, prepare_fence_token
         from agent_comms.durable_turn import DurableTurn
         from agent_comms.pi_events import PiEvent
-    
+
         with MutationStore(tmp_path / "coordination.sqlite3") as store:
             store.register_participant("owner", "owner", "owner", committed=True)
 >           created = store.create_execution("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
@@ -70,39 +70,39 @@ tmp_path = PosixPath('/home/ts/wt/comms-coordination-owners-20260928/.test-coord
     @pytest.mark.asyncio
     async def test_new_response_state_roundtrips_real_store_and_socket(tmp_path):
         from agent_comms.coordination_store import MutationStore
-    
+
         class ReviewedResponse(ResponseState):
             @classmethod
             def successors(cls):
                 return (SilentResponse,)
-    
+
         try:
             with MutationStore(tmp_path / "coordination.sqlite3") as store:
                 store.register_participant("p", "owner", "owner", committed=True)
                 with store._transaction() as db:
                     db.execute(
-    
+
                             "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
                             "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
                             "ms) VALUES ('e','wire',json_object('kind','queued'),'requester','owner','p',"
                             "1,2,NULL,0,0)"
-    
+
                     )
                     db.execute(
-    
+
                             "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
                             "ated_at_ms,updated_at_ms,revision) VALUES ('e','requester',json_object('kind"
                             "','reviewed'),NULL,0,0,1)"
-    
+
                     )
                     db.execute(
-    
+
                             "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
                             "essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,"
                             "updated_at_ms,revision) VALUES ('c','owner','p',1,'m',json_object('kind','en"
                             "gaged','decision',json_object('kind','full','exact_target','requester','exec"
                             "ution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
-    
+
                     )
                     db.execute("INSERT INTO execution_claims VALUES ('e','c',0)")
                 obligation = store.snapshot("e").obligation
@@ -151,7 +151,7 @@ ___________ test_production_sqlite_access_uses_the_declared_boundary ___________
 
     def test_production_sqlite_access_uses_the_declared_boundary():
         from agent_comms import typed_table
-    
+
         owner = Path(typed_table.__file__).resolve()
         failures = {
             str(path.relative_to(SOURCE)): violations(ast.parse(path.read_text()))

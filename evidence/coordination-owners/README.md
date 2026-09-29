@@ -85,3 +85,34 @@ migration are explicit source edits, not a claimed NRA-proven rewrite. Runtime
 behavior is established by the executed tests above, not by source parsing.
 
 No CI wait, provider account request, live state mutation or historical input replay.
+
+## Final handoff
+
+Source head: 4300c3943488b4fb531637d5ace53db9c142fb94, rebased onto main38239b3b.
+PR292. No remaining diagnosed blocker in this assigned aggregate closure.
+
+- `focused-main.log`: **170 passed in30.36s**, installed current-main wheel.
+- `native-main.log`: **3 passed in24.96s**, installed current-main real native
+  peer/restart for fresh and base-only bootstrap plus drift refusal.
+- Subsequent SQL boundary cleanup derives SQLite arity and trigger arguments from
+  dataclass constructor fields and lets the constructor validate once; deleted the
+  duplicate positional mapping and repeated ForeignKey default declarations.
+- Removed the duplicate publication-key SQL expression. The INSERT trigger calls
+  the canonical PublicationIntents validator, which enforces canonical_publication_key;
+  all updates remain frozen. Existing databases can retain their redundant CHECK;
+  no converter, dual reader or version/data change is introduced.
+- `authority-final.log`: **94 passed in17.53s** after that final canonical-authority
+  cleanup: actual SQL envelope/CAS/recovery/response invariants and ownership guards.
+- `final-boundary.log`: **4 passed in13.12s** after the final import-boundary move:
+  installed real native first delivery/restart/second delivery plus all ownership
+  guards. `native-derived.log` also records the derived-input version's native pass.
+- `ratchet-changes.json`: **exit0**, no per-class size increase. Aggregate type
+  identity tests decreased2; long boolean chains decreased6; string subscripts
+  unchanged. Includes moved declaration alignment, not a reset of class baselines.
+- Readable compact FK edges keep both endpoint identities together. Consumer
+  imports now use their acyclic lower-level declaration owners at module boundaries.
+
+- src/agent_comms: +2956/-3024 lines (net -68).
+- tests: +133/-206 lines (net -73).
+
+The overall PR adds evidence receipts; production and tests both shrink.
