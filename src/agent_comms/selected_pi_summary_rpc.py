@@ -7,6 +7,7 @@ starts a child, resolves credentials, commits a summary, or replays input.
 from __future__ import annotations
 
 import asyncio
+import secrets
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -30,7 +31,6 @@ from .pi_summary_payloads import (
     SummarySummarizedData,
     SummaryUnknownData,
 )
-from .selected_pi_route import _request
 
 
 class SelectedChildUnknown(RuntimeError):  # noqa: N818 - UNKNOWN is a protocol state
@@ -140,14 +140,13 @@ class SelectedSummarySlot:
         """
         envelope = FieldCodec.decode(SelectedSummarySource, source)
         source = FieldCodec.encode(envelope)
-        preparation = _request(witness, source["selected"], source["settings"])
         request = AgentCommsSummarizeCompaction(
-            id=preparation.id,
+            id=secrets.token_hex(16),
             version=1,
             operation_id="",
             witness=witness,
-            selected=preparation.selected,
-            settings=preparation.settings,
+            selected=envelope.selected,
+            settings=envelope.settings,
             custom_instructions=custom_instructions,
         )
         if (
