@@ -21,7 +21,7 @@ No old internal format/consumer/store or before/after oracle is restored.
 | S4 acceptance4/6 and OPEN4 | Older markers/reset-reader compatibility is superseded; no restored reader. Requested NRA coverage now available, but absence of every named mirror/case-recovery and complete DisplayOrder justification is not globally certified by139 raw leads. |
 | S5 | Original completion map plus maintained turn/admission/incarnation and accepted-turn/rejected-rebind tests cover distinct identities. Old registry compatibility superseded. No new counterpart mechanism found or built. |
 | S6 | Original export byte-goldens/new-limit declaration and coordinated Toad-call evidence retained in original completion map and maintained export tests. This audit does not rerun its matrix; no blanket original byte-golden count completeness claim. |
-| S7 acceptance2/4/5 |50/100/150-thread,3-poller before/after send p50/p99 and lock hold/wait benchmark remains unproved. Universal size and blanket no-outer-lock assertions are not established; real wire/native/SQLite authority fences must not be removed for grep. Literal size limits differ from current per-class growth ratchet. Parent312 owns active source decomposition. |
+| S7 acceptance2/4/5 |The requested50/100/150-thread,3-poller current and pre-A8 send p50/p99 and lock wait/hold measurements were already executed in285: `evidence/s7-contention/RESULTS.md` and `HISTORICAL.md`. All1200 current and600 historical sends persisted once; no A8-only causal claim.289 subsequently fixed the measured marker inode race; `evidence/registry-marker-contention/s7-fixed.log` records1200 sends/7646 polls with zero failures. Universal size and blanket no-outer-lock assertions are not established; real wire/native/SQLite authority fences must not be removed for grep. Literal size limits differ from current per-class growth ratchet. Parent312 owns active source decomposition. |
 | S8 | Maintained goal/action/new-declaration/model-schema tests and original completion map retained. Internal persisted status compatibility superseded. Universal historic edit-count/full-suite requirements remain qualified above. |
 | L0 / D22 | Parent's in-place durable rewrite, retained-history/native acceptance, current-only readers and deleted one-shot tools are recorded in integration/deployment receipts. No migration reset, converter or alternate store added by this audit. |
 | R0 / TR0 | Installed shared per-class ratchet and guards already merged. Required-CI language is superseded by the owner override at top of current R0 plan; no new check or hold. Differential growth receipt is not a universal absolute size/debt proof. |
@@ -32,7 +32,7 @@ No old internal format/consumer/store or before/after oracle is restored.
 | S13 / A12 | Original child ownership/native restart/cancel/reopen and parent current deployment receipts retained. Native launch/retention followthrough311 has its own owner; platform-wide Windows/Darwin acceptance is not proved by Linux receipts. |
 
 Concrete remaining categories: domain-reviewed raw-record/case/mirror closure,
-the original scale benchmark, universal size/nesting claims, and genuinely
+universal size/nesting claims, and genuinely
 missing current reachable S2 acceptance. Historical superseded contracts and
 deferred CI are **not** newly created blockers. Inventory completeness is now
 proved for the named context; architectural/global behavior completeness is not.
