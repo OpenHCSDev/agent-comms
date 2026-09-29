@@ -78,6 +78,131 @@ class PerFileOccurrenceMeasure(OccurrenceMeasure):
                 {key: head.get(key, 0) for key in identities})
 
 
+class DispatchCases(MroDispatch):
+    """Collect cases of one external Python AST without executing its source."""
+
+    minimum_arms = 3
+
+    def __init__(self) -> None:
+        self.cases: dict[str, set[str]] = {}
+
+    def add(self, subject: ast.AST, case: str) -> None:
+        self.cases.setdefault(ast.dump(subject), set()).add(case)
+
+    def groups(self) -> tuple[frozenset[str], ...]:
+        return tuple(frozenset(cases) for cases in self.cases.values()
+                     if len(cases) >= self.minimum_arms)
+
+    def read_function(self, function: ast.AST) -> None:
+        pending = list(ast.iter_child_nodes(function))
+        while pending:
+            node = pending.pop()
+            # A nested scope's comparisons cannot combine with its parent's.
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                continue
+            self.dispatch_sync(node)
+            pending.extend(ast.iter_child_nodes(node))
+
+
+class LiteralDispatchCases(DispatchCases):
+    @staticmethod
+    def literal(node: ast.AST) -> bool:
+        return (isinstance(node, ast.Constant)
+                and isinstance(node.value, (str, int, float))
+                and not isinstance(node.value, bool))
+
+    @handles(ast.Compare)
+    def comparison(self, node: ast.Compare) -> None:
+        left = node.left
+        for operator, right in zip(node.ops, node.comparators, strict=True):
+            match operator, right:
+                case (ast.Eq() | ast.NotEq(), literal) if self.literal(literal):
+                    self.add(left, repr(literal.value))
+                case (ast.In() | ast.NotIn(), ast.Set(elts=items) | ast.Tuple(elts=items) | ast.List(elts=items)):
+                    for item in items:
+                        if self.literal(item):
+                            self.add(left, repr(item.value))
+            left = right
+
+    @handles(ast.Match)
+    def match_cases(self, node: ast.Match) -> None:
+        for case in node.cases:
+            if isinstance(case.pattern, ast.MatchValue) and self.literal(case.pattern.value):
+                self.add(node.subject, repr(case.pattern.value.value))
+
+
+class TypeDispatchCases(DispatchCases):
+    @handles(ast.Call)
+    def instance_check(self, node: ast.Call) -> None:
+        match node:
+            case ast.Call(func=ast.Name(id="isinstance"), args=[subject, kind], keywords=[]):
+                self.add(subject, ast.dump(kind))
+
+    @handles(ast.Compare)
+    def exact_type(self, node: ast.Compare) -> None:
+        match node:
+            case ast.Compare(left=ast.Call(func=ast.Name(id="type"), args=[subject]), comparators=[kind]):
+                self.add(subject, ast.dump(kind))
+
+    @handles(ast.Match)
+    def match_cases(self, node: ast.Match) -> None:
+        for case in node.cases:
+            if isinstance(case.pattern, ast.MatchClass):
+                self.add(node.subject, ast.dump(case.pattern.cls))
+
+
+class DispatchMeasure(PerFileOccurrenceMeasure):
+    """Screen three-arm subjects per function, with per-file growth isolation.
+
+    These are candidates, not a proof that an external taxonomy is ours. Review
+    ownership at each reported site; no exception roster or second registry.
+    """
+
+    @classmethod
+    @abstractmethod
+    def collector(cls) -> DispatchCases: ...
+
+    @classmethod
+    def groups(cls, node: ast.AST) -> tuple[frozenset[str], ...]:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return ()
+        collector = cls.collector()
+        collector.read_function(node)
+        return collector.groups()
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return len(cls.groups(node))
+
+
+class StringDispatch(DispatchMeasure):
+    @classmethod
+    def collector(cls) -> DispatchCases:
+        return LiteralDispatchCases()
+
+
+class TypeSwitch(DispatchMeasure):
+    @classmethod
+    def collector(cls) -> DispatchCases:
+        return TypeDispatchCases()
+
+
+class DispatchArms:
+    """Count growth inside an existing candidate through the same collector."""
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return sum(len(group) for group in cls.groups(node))
+
+
+class StringDispatchArms(DispatchArms, StringDispatch):
+    pass
+
+
+class TypeSwitchArms(DispatchArms, TypeSwitch):
+    pass
+
+
 class GodClassExcess(GitMeasure):
     """Independent class lines beyond 500, including newly introduced classes."""
 

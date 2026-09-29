@@ -204,10 +204,61 @@ def test_chain_terms_catch_growth_hidden_by_unchanged_chain_count(repo: Reposito
     assert report["delta"][f"BooleanChainTerms:{repo.root}/rules.py"] == 1
 
 
+@pytest.mark.parametrize(("measure", "decision"), [
+    ("StringDispatch", 'if value == {case!r}: return 1'),
+    ("StringDispatch", 'if value in ({case!r},): return 1'),
+    ("StringDispatch", 'match value:\n        case {case!r}: return 1'),
+    ("TypeSwitch", 'if isinstance(value, Case{case}): return 1'),
+    ("TypeSwitch", 'if type(value) is Case{case}: return 1'),
+    ("TypeSwitch", 'match value:\n        case Case{case}(): return 1'),
+])
+def test_dispatch_growth_and_reduction_use_the_installed_command(
+    repo: Repository, measure: str, decision: str
+) -> None:
+    def source(cases):
+        return 'def decide(value):\n' + '\n'.join(
+            '    ' + decision.format(case=case) for case in cases
+        ) + '\n'
+
+    before = repo.commit({"policy.py": source(range(3))})
+    grown = repo.commit({"policy.py": source(range(4))})
+    status, report = repo.compare(before, grown)
+    assert status == 1
+    assert report["delta"][f"{measure}:{repo.root}/policy.py"] == 0
+    assert report["delta"][f"{measure}Arms:{repo.root}/policy.py"] == 1
+    reduced = repo.commit({"policy.py": source(range(2))})
+    status, report = repo.compare(grown, reduced)
+    assert status == 0
+    assert report["delta"][f"{measure}:{repo.root}/policy.py"] == -1
+    assert report["delta"][f"{measure}Arms:{repo.root}/policy.py"] == -4
+
+
+def test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine(repo: Repository) -> None:
+    before = repo.commit({})
+    head = repo.commit({"scope.py": '''
+def first(value):
+    if value == "one": return 1
+    if value == "two": return 2
+    if other == "three": return 3
+    if value == "two": return 2
+    def inner(value):
+        if value == "three": return 3
+    return inner
+async def second(value):
+    if value == "three": return 3
+'''} )
+    status, report = repo.compare(before, head)
+    assert status == 0
+    assert report["head"][f"StringDispatch:{repo.root}/scope.py"] == 0
+    assert report["head"][f"StringDispatchArms:{repo.root}/scope.py"] == 0
+
+
 @pytest.mark.parametrize(("measure", "source"), [
     ("BooleanChainTerms", "valid = a and b and c and d\n"),
     ("ForeignAbsenceProbe", "absent = other.value is None\n"),
     ("CodecSubclass", "class Local(FieldCodec):\n    pass\n"),
+    ("StringDispatch", 'def decide(x):\n    return x in ("a", "b", "c")\n'),
+    ("TypeSwitch", 'def decide(x):\n    return isinstance(x, A) or isinstance(x, B) or isinstance(x, C)\n'),
 ])
 def test_per_file_increase_cannot_be_offset_or_moved(repo: Repository, measure: str, source: str) -> None:
     base = repo.commit({"old.py": source, "new.py": ""})
