@@ -17,3 +17,11 @@ Pending acceptance is tracked by this draft. It does not block merged Core419
 or independent C3 Core421. Serial bounded fixtures only, no paid calls/live root.
 Persistent WT `/home/ts/wt/comms-selected-summary-native-fixture-20260929`;
 scratch owner Mendel `/home/ts/.cache/agent-scratch/comms-selected-summary-native-fixture-20260929`.
+
+Additional transferred fixture gap from parent C4: at baseline main7995bc5a,
+`test_acp_private_nk_delivery.py::test_acp_session_selected_native_pipeline_never_uses_legacy_ack`
+expects covered_seq equal original injected sequence 1, but source coverage is 2
+after the sender response. Parent reproduced this on baseline in 1.75 seconds.
+Injection identity and source coverage answer different questions. Migrate its
+fake pipeline to the same actual retained/native journey; preserve original
+input identity, coverage proof and no replay, not a compatibility coverage value.
