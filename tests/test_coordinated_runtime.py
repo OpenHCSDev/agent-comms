@@ -15,6 +15,8 @@ import threading
 from dataclasses import replace
 from pathlib import Path
 
+from native_proof_cases import read_proof_rows, write_proof_rows
+
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
@@ -217,11 +219,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         else:
             entries = [json.loads(line) for line in session_file.read_text().splitlines()]
             proof_file = Path(str(session_file) + ".input-proof")
-            proof_rows = (
-                [json.loads(line) for line in proof_file.read_text().splitlines()]
-                if proof_file.exists()
-                else []
-            )
+            proof_rows = read_proof_rows(session_file) if proof_file.exists() else []
         session_id = entries[0]["id"]
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
@@ -271,8 +269,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             }
         )
         proof_file = Path(str(session_file) + ".input-proof")
-        proof_file.write_text("".join(json.dumps(row) + "\n" for row in proof_rows))
-        proof_file.chmod(0o600)
+        write_proof_rows(session_file, proof_rows)
         reply = json.dumps({"decision": decision}) if "bounded triage" in prompt else "42"
         observer = _kwargs.get("observe_event")
         if observer is not None:
@@ -892,9 +889,9 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             == ()
         )  # Alpha's triage is pending, not a proof or max-seq gap to skip.
         journal = Path(str(rows[0].context.session_file) + ".input-proof")
-        proofs = [json.loads(line) for line in journal.read_text().splitlines()]
+        proofs = read_proof_rows(rows[0].context.session_file)
         proofs[0]["llmContextDigest"] = "0" * 64
-        journal.write_text("".join(json.dumps(row) + "\n" for row in proofs))
+        write_proof_rows(rows[0].context.session_file, proofs)
         with pytest.raises(IdentityConflict, match="differs from live-recorded proof"):
             read_historical_native_inputs(
                 store,
@@ -1205,9 +1202,7 @@ async def test_session_file_registration_during_native_triage_keeps_owner(
         comms.registry.declare(replace(current, session_file=str(root / "metadata.jsonl")))
         return result
 
-    monkeypatch.setattr(
-        "agent_comms.tracked_turn.TrackedTurnSession.execute", register_session
-    )
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
     outcome = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
     ).run()
@@ -1228,9 +1223,7 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
         comms.registry.declare(replace(current, session_file=str(root / "metadata.jsonl")))
         return result
 
-    monkeypatch.setattr(
-        "agent_comms.tracked_turn.TrackedTurnSession.execute", register_session
-    )
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
     outcome = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
@@ -1256,9 +1249,7 @@ async def test_project_change_during_native_full_turn_denies_response(
         assert comms.registry.snapshot().admission_generations["beta"] == before
         return result
 
-    monkeypatch.setattr(
-        "agent_comms.tracked_turn.TrackedTurnSession.execute", change_project
-    )
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", change_project)
     with pytest.raises(StaleFence, match="owner stopped or changed"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True

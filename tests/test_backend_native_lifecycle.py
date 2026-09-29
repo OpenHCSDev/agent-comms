@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 
+from native_proof_cases import read_proof_rows, write_proof_rows
+
 import pytest
 
 from agent_comms import agent_events as events
@@ -193,10 +195,7 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
 
     assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 4
     assert len({row[1] for row in owner.starts}) == 4
-    proofs = [
-        json.loads(row)
-        for row in Path(str(owner.session) + ".input-proof").read_text().splitlines()
-    ]
+    proofs = read_proof_rows(owner.session)
     assert {row["inputId"] for row in proofs} == {row[1] for row in owner.starts}
 
 

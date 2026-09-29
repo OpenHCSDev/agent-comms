@@ -14,6 +14,8 @@ import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
+from native_proof_cases import read_proof_rows, write_proof_rows
+
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
@@ -173,10 +175,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
             proof_rows = []
         else:
             entries = [json.loads(line) for line in session_file.read_text().splitlines()]
-            proof_rows = [
-                json.loads(line)
-                for line in Path(str(session_file) + ".input-proof").read_text().splitlines()
-            ]
+            proof_rows = read_proof_rows(session_file)
         generation = 1 + max((row["requestGeneration"] for row in proof_rows), default=0)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
         # Real pinned native semantics: the tracked digest covers the
@@ -204,8 +203,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
             }
         )
         proof_file = Path(str(session_file) + ".input-proof")
-        proof_file.write_text("".join(json.dumps(row) + "\n" for row in proof_rows))
-        proof_file.chmod(0o600)
+        write_proof_rows(session_file, proof_rows)
         reply = json.dumps({"decision": decision}) if "bounded triage" in prompt else "42"
         from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 
@@ -748,7 +746,9 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
 
-    real_bind = runtime.bind_expected_prompt
+    from agent_comms import private_send_admission
+
+    real_bind = private_send_admission.bind_expected_prompt
 
     def generation_bumps_then_bind(*args, **kwargs):
         # Simulate a concurrent owner generation advance after the reservation
@@ -762,7 +762,7 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
         return real_bind(*args, **kwargs)
 
     monkeypatch.setattr(
-        "agent_comms.coordinated_runtime.bind_expected_prompt", generation_bumps_then_bind
+        "agent_comms.private_send_admission.bind_expected_prompt", generation_bumps_then_bind
     )
     with pytest.raises((IdentityConflict, StaleFence)) as error:
         await SelectedExecution(

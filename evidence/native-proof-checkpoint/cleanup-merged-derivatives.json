@@ -1,0 +1,23 @@
+{
+  "time": 1790674424.0090787,
+  "removed": [
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-input-lifetime",
+      "bytes": 25083048
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/selected-probe-retirement",
+      "bytes": 6945856
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/canonical-event-time",
+      "bytes": 7972183
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-tool-declarations",
+      "bytes": 5376720
+    }
+  ],
+  "process_references": [],
+  "preserved": "Source, committed evidence, owner-startup interpreter, canonical global native package and all live history"
+}

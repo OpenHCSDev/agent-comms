@@ -1,0 +1,7 @@
+native_crash_recovery={"boundary": "before-journal-sync", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "before-database-sync", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "after-database-sync", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "after-journal-remove", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "before-directory-sync", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.
+5 passed, 1 deselected in 45.88s

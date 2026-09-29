@@ -1,0 +1,30 @@
+native_proof_growth=[{"proof_bytes": 6504448, "cold_turn_seconds": 3.258483615005389, "native_peak_rss": 168636416}, {"proof_bytes": 39059456, "cold_turn_seconds": 3.170121505012503, "native_peak_rss": 167055360}, {"proof_bytes": 136839168, "cold_turn_seconds": 3.19567162101157, "native_peak_rss": 168222720}]
+.native_crash_recovery={"boundary": "before-journal-sync", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "before-database-sync", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "after-database-sync", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "after-journal-remove", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "before-directory-sync", "inputs": 3, "provider_calls": 2, "first_generation_preserved": true, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "before-schema-sync", "inputs": 2, "provider_calls": 1, "first_generation_preserved": null, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "after-schema-publish", "inputs": 2, "provider_calls": 1, "first_generation_preserved": null, "uncertain_input_replayed": false}
+.native_crash_recovery={"boundary": "after-schema-unlink", "inputs": 2, "provider_calls": 1, "first_generation_preserved": null, "uncertain_input_replayed": false}
+.native_proof_conversion={"proof_rows": 1, "tracked_inputs": 2, "inputs_without_context_proof": 1}
+.F.
+=================================== FAILURES ===================================
+_______ test_saved_native_selection_survives_acp_load_and_one_new_prompt _______
+
+native_backend = <test_backend_native_lifecycle.NativeBackendFixture object at 0x7f96c4d065d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96c4ce4520>
+
+    async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
+        native_backend, monkeypatch
+    ):
+        import asyncio
+        from dataclasses import replace
+    
+>       from acp.agent.router import build_agent_router
+E       ModuleNotFoundError: No module named 'acp'
+
+tests/test_native_arguments.py:98: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED tests/test_native_arguments.py::test_saved_native_selection_survives_acp_load_and_one_new_prompt
+1 failed, 11 passed in 96.13s (0:01:36)
