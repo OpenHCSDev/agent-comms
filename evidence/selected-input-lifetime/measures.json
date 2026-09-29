@@ -1,0 +1,87 @@
+{
+  "GodClassExcess": {
+    "GodClassExcess:src/agent_comms/acp.py::CommsAgent": {
+      "before": 76,
+      "after": 76
+    },
+    "GodClassExcess:src/agent_comms/attempt_store.py::AttemptStore": {
+      "before": 12,
+      "after": 12
+    },
+    "GodClassExcess:src/agent_comms/compaction_journal.py::CompactionJournal": {
+      "before": 206,
+      "after": 206
+    },
+    "GodClassExcess:src/agent_comms/coordinated_runtime.py::SelectedExecution": {
+      "before": 305,
+      "after": 191
+    },
+    "GodClassExcess:src/agent_comms/goal_attempts.py::GoalAttemptStore": {
+      "before": 281,
+      "after": 281
+    },
+    "GodClassExcess:src/agent_comms/history_views.py::HistoryViews": {
+      "before": 518,
+      "after": 518
+    },
+    "GodClassExcess:src/agent_comms/input_drain.py::InputDrain": {
+      "before": 96,
+      "after": 96
+    },
+    "GodClassExcess:src/agent_comms/message_bus.py::MessageBus": {
+      "before": 252,
+      "after": 252
+    },
+    "GodClassExcess:src/agent_comms/owner_compaction_commit.py::OwnerCompactionCommit": {
+      "before": 42,
+      "after": 42
+    },
+    "GodClassExcess:src/agent_comms/thread_management.py::ThreadManagement": {
+      "before": 61,
+      "after": 61
+    },
+    "GodClassExcess:src/agent_comms/wire_log.py::WireLog": {
+      "before": 148,
+      "after": 148
+    }
+  },
+  "TypeIdentity": {
+    "TypeIdentity": {
+      "before": 9,
+      "after": 9
+    }
+  },
+  "LongBooleanChain": {
+    "LongBooleanChain": {
+      "before": 4,
+      "after": 4
+    }
+  },
+  "BooleanChainTerms": {
+    "BooleanChainTerms:src/agent_comms/coordinated_runtime.py": {
+      "before": 12,
+      "after": 12
+    },
+    "BooleanChainTerms:src/agent_comms/private_send_stage.py": {
+      "before": 5,
+      "after": 5
+    }
+  },
+  "ForeignAbsenceProbe": {
+    "ForeignAbsenceProbe:src/agent_comms/coordinated_runtime.py": {
+      "before": 7,
+      "after": 6
+    },
+    "ForeignAbsenceProbe:src/agent_comms/private_send_stage.py": {
+      "before": 6,
+      "after": 6
+    }
+  },
+  "CodecSubclass": {},
+  "StringSubscript": {
+    "StringSubscript": {
+      "before": 3,
+      "after": 3
+    }
+  }
+}
