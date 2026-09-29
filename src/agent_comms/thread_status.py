@@ -114,7 +114,7 @@ class ArchivedThreadStatus(ThreadStatus):
         return self
 
     def allows_control(self, tool: str, *, owner_pid: int) -> bool:
-        return tool not in {"comms_start", "comms_stop", "comms_archive"}
+        return tool not in {"comms_start", "comms_stop", "comms_queue_restart", "comms_archive"}
 
 
 class DeletingThreadStatus(ThreadStatus):
