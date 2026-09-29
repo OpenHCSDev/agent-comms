@@ -135,8 +135,8 @@ class PrivateSendAdmission:
             saved = self._saved_session(actual_session_file, selected_runtime_revision)
             # Persist UNKNOWN before any byte. Then retain the SAME journal's
             # exclusion through the raw writer; neither ACK nor fake result clears it.
-            self._journal.reserve_private_raw_input(saved, self.input_id)
-            with self._journal.ordinary_input_send_fence(saved, private_input_id=self.input_id):
+            self._journal.private_inputs.reserve(saved, self.input_id)
+            with self._journal.private_inputs.send_fence(saved, private_input_id=self.input_id):
                 updated = NativeRuntimeInput.update(
                     db,
                     where="input_id=? AND sent_owner_admission_generation IS NULL",

@@ -26,10 +26,8 @@ class CompactionResult(DeclaredFamily, affix="CompactionResult"):
 class CommittedCompactionResult(CompactionResult):
     summary: str
     commit_id: str
-
     def terminal_event(self):
         return ManualCompactionEnd(aborted=False, summary=self.summary)
-
     def prompt_response(self):
         return PromptResponse(
             stop_reason="end_turn",
@@ -50,9 +48,7 @@ class CommittedCompactionResult(CompactionResult):
 @dataclass(frozen=True)
 class RefusedCompactionResult(CompactionResult):
     error: str
-
     def terminal_event(self):
         return ManualCompactionEnd(aborted=True, summary=self.error)
-
     def prompt_response(self):
         raise RequestError(-32603, self.error, {"reason": self.error})

@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from . import agent_events as events
 from .activity import ActivityState
-from .compaction_journal import CompactionJournalError
+from .compaction_errors import CompactionJournalError
 from .compaction_result import CompactionResult, RefusedCompactionResult
 from .transcript_updates import StartedTranscriptUpdate
 
