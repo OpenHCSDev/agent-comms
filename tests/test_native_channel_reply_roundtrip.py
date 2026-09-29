@@ -13,6 +13,8 @@ import pytest
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.comms import Comms
+from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -182,6 +184,17 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             raise
         users = [item for item in requests[1]["messages"] if item["role"] == "user"]
         assert reply.body in json.dumps(users[-1]["content"])
+        # The same response remains available through canonical natural-turn awareness.
+        # Reading this projection proves neither model delivery nor ACK; native delivery
+        # above must have happened automatically before inspecting pointers.
+        owner = comms.registry.require("questioner")
+        with comms.bus.log.locked():
+            marker = comms.bus.log._private_marker_unlocked()
+            pointers = addressed_source_pointers_unlocked(
+                comms.bus.log, marker, stable_thread_lookup(owner.created_at)
+            )
+        assert reply.message_id in [pointer.message_id for pointer in pointers]
+
         await until(
             lambda: any(
                 isinstance(fact, CursorAdvancedUpdate) and fact.selected_status == "proven"

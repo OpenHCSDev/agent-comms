@@ -22,3 +22,9 @@ The post-fix receipt must exercise remaining assertions; these are not proved by
 Latest 22:16 skills applied: AGENT-8 production paths, AGENT-3 no duplicated legacy
 fixture matrix, BOUND-1 shared typed ACP decoder, TIME-9 no adapters/aliases. New test
 has zero BooleanChainTerms (no >=4-term BooleanOp). No production/live changes.
+
+Response-awareness followthrough: after AUTOMATIC native receipt (never before it),
+the same test also requires the reply ID in the existing canonical addressed source
+pointer projection. This protects the separate natural-turn awareness omission
+without mistaking pointers for model delivery or restoring the advisory ledger.
+This added assertion remains unexecuted until Boyle supplies his production candidate.
