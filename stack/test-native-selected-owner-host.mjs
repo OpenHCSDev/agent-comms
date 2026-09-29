@@ -24,7 +24,7 @@ const modelId = process.env.PR95_CUSTOM_MODEL ? 'custom-model' : 'selected';
 await runtime.setRuntimeApiKey(provider, 'offline-fixture');
 const model = runtime.getModel(provider, modelId);
 const settings = pi.SettingsManager.inMemory({
-  compaction: { enabled: process.env.PR95_EFFECTIVE_DISABLED !== '1', reserveTokens: 1000, keepRecentTokens: 10 },
+  compaction: { enabled: process.env.PR95_EFFECTIVE_DISABLED !== '1', reserveTokens: process.env.PR95_DECLINE_SUMMARY === "1" && process.env.PR95_COLD_DECLINE !== "1" ? 0 : 1000, keepRecentTokens: 10 },
   retry: { enabled: false },
 });
 const loader = new pi.DefaultResourceLoader({cwd: root, agentDir: root, settingsManager: settings});
@@ -56,7 +56,14 @@ if (existing < 0 && !process.env.PR95_OWNER_SAVED_SESSION) {
   }
   session.agent.state.messages = manager.buildContextEntries().flatMap(pi.sessionEntryToContextMessages).toArray();
 }
-if (process.env.PR95_DECLINE_SUMMARY === '1') runtime.getAvailableSnapshot = () => [];
+if (process.env.PR95_DECLINE_SUMMARY === '1') {
+  // A valid clean decline retains a context admitted under its original budget.
+  // Change the effective reserve through the real settings owner after restore:
+  // soft compaction is now requested, while the current native manager is ready.
+  // The separate cold-decline case starts above its input budget and must refuse.
+  settings.applyOverrides({compaction: {reserveTokens: 1000}});
+  runtime.getAvailableSnapshot = () => [];
+}
 process.stderr.write(JSON.stringify({sessionFile: session.sessionFile, sessionId: session.sessionId,
   model: `${model.provider}/${model.id}`, contextWindow: model.contextWindow}) + '\n');
 await runRpcMode({session, setRebindSession() {}, async dispose() { session.dispose(); }});

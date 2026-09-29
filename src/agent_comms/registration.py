@@ -9,7 +9,6 @@ from pathlib import Path
 
 from .compaction_publication_lease import publication_identity_fence
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner

@@ -15,8 +15,8 @@ from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.native_compaction_writer import NativeCompactionWriter
+from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.threads import Thread
 

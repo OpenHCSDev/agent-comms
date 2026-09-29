@@ -472,6 +472,19 @@ async def test_acp_selected_summary_handoff_uses_final_prompt_once(
                     assert row.exists and not row.has_native_binding and not row.has_started
                 assert "proj" not in agent.inputs.selected_summary_admissions
                 return
+            if os.environ.get("PR95_COLD_DECLINE") == "1":
+                from agent_comms.owner_compaction_settings import PiSettingsEvidenceError
+                with pytest.raises(PiSettingsEvidenceError, match="context_requires_compaction"):
+                    await turn
+                original = dispositions.read().lookup(original_key)
+                assert original.exists and not original.has_native_binding and not original.has_started
+                journal = CompactionJournal(root / "compaction-commits.sqlite3")
+                (attempt,) = journal.summaries.history(file)
+                assert attempt.state.declared_name == "refused"
+                assert "proj" not in agent.inputs.selected_summary_admissions
+                assert publications == []
+                assert Path(file).read_bytes() == before
+                return
             if correction:
                 with pytest.raises(RelationViolationError, match="Unsettled"):
                     await turn
@@ -976,3 +989,13 @@ async def test_private_retained_session_accepts_after_runtime_journal_reset(
             ).summaries.blocking(file)
         finally:
             await agent.shutdown()
+
+
+@pytest.mark.parametrize("private_session", [False, True], ids=["ordinary", "private"])
+async def test_cold_context_decline_refuses_before_original_binding(tmp_path, monkeypatch, private_session):
+    monkeypatch.setenv("PR95_COLD_DECLINE", "1")
+    await test_acp_selected_summary_handoff_uses_final_prompt_once(
+        tmp_path, monkeypatch, correction=False, future_queued=False,
+        queue_revoked=False, clean_decline=True, private_session=private_session,
+    )
+    assert json.loads((tmp_path / "provider-requests.json").read_text()) == []
