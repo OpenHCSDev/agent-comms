@@ -239,3 +239,26 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
             assert not more
     finally:
         case.close()
+
+
+def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path):
+    import json
+
+    from agent_comms.bus_publication import DuplicateWireKeyError
+
+    case = _ready(tmp_path, direct=True)
+    try:
+        marker = case.bus.log._private_marker_unlocked()
+        row = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
+        (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
+        marker.checkpoint_version = None
+        marker.checkpoint_seal = None
+        case.bus.log.write_metadata_unlocked(marker)
+        raw = '{"seq":' + str(row["seq"]) + ',' + json.dumps(row)[1:] + '\n'
+        case.bus.log.path.write_text(raw)
+        before = case.bus.log.path.read_bytes()
+        with pytest.raises(DuplicateWireKeyError, match="Duplicate bus object key"):
+            case.bus.log.full_history()
+        assert case.bus.log.path.read_bytes() == before
+    finally:
+        case.close()

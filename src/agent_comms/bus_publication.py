@@ -47,12 +47,16 @@ def public_envelope_digest(record: Mapping[str, object]) -> str:
     return hashlib.sha256(_canonical(record)).hexdigest()
 
 
+class DuplicateWireKeyError(ValueError):
+    """Ambiguous JSON cannot carry a canonical wire receipt."""
+
+
 def unique_wire_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     """Reject ambiguous JSON objects, including nested receipt keys."""
     result: dict[str, object] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError("Duplicate bus object key.")
+            raise DuplicateWireKeyError("Duplicate bus object key.")
         result[key] = value
     return result
 
