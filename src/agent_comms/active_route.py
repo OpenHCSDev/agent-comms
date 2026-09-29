@@ -47,7 +47,13 @@ class LocalRoute(CommsRoute):
     """Explicit/environment roots and the unconfigured historical default."""
 
     def bind_owners(self, owners: OwnerLifecycle) -> None:
-        pass
+        from .private_nk_entrypoint import private_nk_launch
+
+        launch = private_nk_launch(self.root, os.environ)
+        if launch is not None:
+            owners.pin_private_nk_launch(
+                launch.validated_root, launch.wire_root_id, launch.native_package
+            )
 
 
 class AbsoluteRoutePathText(PathText):
@@ -106,9 +112,9 @@ class ActiveRoute(CommsRoute):
 def resolve_comms_route(root: Path | str | None = None) -> CommsRoute:
     """Resolve one current selection without creating stores or reading registry."""
     if root is not None:
-        return LocalRoute(Path(root).expanduser())
+        return LocalRoute(Path(root).expanduser().absolute())
     if "AGENT_COMMS_ROOT" in os.environ:
-        return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser())
+        return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser().absolute())
     return read_active_route() or LocalRoute(Path.home() / ".agent-comms")
 
 
