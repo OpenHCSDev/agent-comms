@@ -64,3 +64,26 @@ Full reader now uses decoded KeyedResponseReceipt.add_unique; canonical decode
 owns root/envelope/execution-route/structure validation for bounded readers too.
 Final candidate must include optional index decoder deletion and Boyle's finished
 certified negative coverage; fresh affected-path proof follows that checkpoint.
+
+## Final reader/caller closurece05cc04
+
+Boyle331 publishedce05cc04c38644b29f330e34d0c2f0572e971353, merged into
+owne72024e8 and noneditable-installed. final-readers-native.log:34passed15.63s.
+Executed existing full/certified malformed response receipt cases (wrong root,
+envelope, canonical publication route, execution type, missing key value, extra
+field), duplicate keyed publication rejection, mandatory derived delivery tag,
+optional candidate projection shared-decoder callers, and actual native330.
+
+Certified tampered-byte refusal is enforced by its real prefix fence; the same
+negative cases separately invoke shared semantic decoder rejection. Tests never
+forge a certificate or bypass the fence to manufacture receipt-decoder evidence.
+Checkpoint index bytes remain unchanged on refusal. Boyle owns these maintained
+cases; I added no parallel corrupt-record matrix and edited no production code.
+
+Final actual330 proves automatic A return native content and attached verified ACP
+reply/input cursor, response awareness, two distinct native sessions/two provider
+requests, no mandatory ACK reply/ping-pong or replay, cleanup. Earlier RED and
+false-assumption receipts are preserved and labeled above. No live edits/install.
+No remaining assigned receipt/native acceptance blocker at this source checkpoint.
+Parent owns history conversion, batch merge and activation; this proof does not
+claim those live operations are complete or certify unavailable S15 plan details.
