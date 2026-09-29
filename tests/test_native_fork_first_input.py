@@ -13,6 +13,7 @@ from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
+    CompactionPublishedUpdate,
     decode_updates,
 )
 from agent_comms.comms import Comms
@@ -155,6 +156,7 @@ async def test_underbudget_physical_native_fork_answers_first_input_without_comp
         assert latency < 20
         assert not any(isinstance(fact, CompactionChangedUpdate) for fact in facts)
         assert not any(isinstance(fact, CompactionCommittedUpdate) for fact in facts)
+        assert not any(isinstance(fact, CompactionPublishedUpdate) for fact in facts)
         thread = comms.registry.require(child.name)
         assert thread.session_file and thread.session_file != str(native.session)
         entries = [json.loads(line) for line in Path(thread.session_file).read_text().splitlines()]
