@@ -101,9 +101,10 @@ class SelectedOriginalBinding(TurnInputBinding):
         text: str,
         already_bound: bool,
     ) -> bool:
+        # The canonical revision reader already owns absent/unreadable sessions;
+        # do not reconstruct that state from the optional path here.
         if (
-            current.session_file is None
-            or len(keys) != 1
+            len(keys) != 1
             or already_bound
             or (revision := _session_revision(current.session_file)) is None
         ):
