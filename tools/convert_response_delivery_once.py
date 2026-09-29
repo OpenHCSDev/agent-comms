@@ -13,19 +13,19 @@ import os
 import shutil
 import subprocess
 import tempfile
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import replace
 from pathlib import Path
 
 from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.bus_publication import (
     PRIVATE_WIRE_FIELD,
-    initial_sideband,
     validate_delivery_record,
 )
 from agent_comms.checkpoint_seals import FinalSeal, file_revision
 from agent_comms.coordinator import Coordination
-from agent_comms.delivery_policy import ResponseDeliveryPolicy
+from agent_comms.delivery_policy import DeliveryManifest, InitialDeliveryPolicy
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message
 from agent_comms.private_bus_checkpoint import (
     PrefixCertificate,
@@ -34,20 +34,44 @@ from agent_comms.private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
 from agent_comms.response_conversation import ResponseConversation
-from agent_comms.store_files import _store_lock
-from agent_comms.wake import ControlClassification
 from agent_comms.wire_log import WireLog
 
-OLD_VERIFY = """
+OLD_BOUNDARY = """
 from pathlib import Path
 import sys
 from agent_comms.wire_log import WireLog
+from agent_comms.store_files import _store_lock
 from agent_comms.private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
-bus=WireLog(Path(sys.argv[1])/'bus.jsonl')
-marker=bus._private_marker_unlocked()
-verify_private_bus_checkpoint_unlocked(bus,marker)
-list(bus._verified_private_rows_unlocked(marker))
+root=Path(sys.argv[1]);bus=WireLog(root/'bus.jsonl')
+with _store_lock(root/'wire'),bus.locked():
+ marker=bus._private_marker_unlocked()
+ verify_private_bus_checkpoint_unlocked(bus,marker)
+ list(bus._verified_private_rows_unlocked(marker))
+ print('verified',flush=True)
+ sys.stdin.read()
 """
+
+
+@contextmanager
+def predecessor_boundary(root, old_python):
+    # The predecessor owns verification of its schema AND the canonical locks.
+    # It retains those locks throughout the new writer's in-place conversion.
+    process = subprocess.Popen(
+        [str(old_python), "-c", OLD_BOUNDARY, str(root)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        if process.stdout.readline().strip() != "verified":
+            raise RuntimeError(process.stderr.read())
+        yield
+    finally:
+        process.stdin.close()
+        process.wait(timeout=10)
+        process.stdout.close()
+        process.stderr.close()
 
 
 def sync(path):
@@ -57,8 +81,7 @@ def sync(path):
 
 def convert(root: Path, old_python: Path):
     bus = WireLog(root / "bus.jsonl")
-    with _store_lock(root / "wire"), bus.locked():
-        subprocess.run([str(old_python), "-c", OLD_VERIFY, str(root)], check=True)
+    with predecessor_boundary(root, old_python):
         marker = bus._private_marker_unlocked()
         backup = root / "response-delivery-before"
         backup.mkdir(mode=0o700)  # Refuse repeated/unreviewed cutover.
@@ -69,6 +92,7 @@ def convert(root: Path, old_python: Path):
         committed = {}
         rewritten = []
         converted = []
+        retired = []
         with Coordination(str(root / "coordination.sqlite3")) as store:
             for raw in bus.path.read_bytes().splitlines(keepends=True):
                 record = json.loads(raw)
@@ -77,6 +101,14 @@ def convert(root: Path, old_python: Path):
                     rewritten.append(raw)
                     continue
                 message = Message.from_wire(record)
+                if "response" in private and message.seq <= marker.admission_after_seq:
+                    # This runtime was explicitly retired at the existing floor.
+                    # Keep its public history; do not reconstruct lost execution
+                    # authority or send those historical replies again.
+                    del record[PRIVATE_WIRE_FIELD]
+                    rewritten.append(json.dumps(record, allow_nan=False).encode() + b"\n")
+                    retired.append(message.seq)
+                    continue
                 if "response" in private:
                     snapshot = store.snapshots.get(private["response"]["execution_id"])
                     sources = tuple(committed[a.wire_seq] for a in snapshot.assignments)
@@ -87,15 +119,19 @@ def convert(root: Path, old_python: Path):
                         snapshot.execution.exact_target,
                         sources,
                     )
-                    audience = conversation.audience(message)
-                    decisions = ResponseDeliveryPolicy().resolve(
-                        message, audience, ControlClassification.ORDINARY
-                    )
-                    private["initial"] = initial_sideband(
-                        marker.root_id, message, audience, decisions, control="ordinary"
+                    record = conversation.record(
+                        marker.root_id, message, snapshot.publication_intent
                     )
                     raw = json.dumps(record, allow_nan=False).encode() + b"\n"
                     converted.append(message.seq)
+                else:
+                    record[PRIVATE_WIRE_FIELD] = FieldCodec.encode(
+                        InitialDeliveryPolicy(
+                            version=1,
+                            initial=FieldCodec.decode(DeliveryManifest, private["initial"]),
+                        )
+                    )
+                    raw = json.dumps(record, allow_nan=False).encode() + b"\n"
                 delivery = validate_delivery_record(record, marker.root_id)
                 committed[message.seq] = delivery
                 rewritten.append(raw)
@@ -152,6 +188,7 @@ def convert(root: Path, old_python: Path):
         ]
         return {
             "converted_response_seqs": converted,
+            "retired_response_seqs": retired,
             "messages": len(actual),
             "backup": str(backup),
             "root_id": marker.root_id,

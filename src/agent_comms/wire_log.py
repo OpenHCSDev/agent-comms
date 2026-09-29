@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, BinaryIO
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    canonical_publication_key,
 )
 
 from .bus_publication import (
@@ -25,6 +24,7 @@ from .bus_publication import (
     unique_wire_object,
     validate_delivery_record,
 )
+from .delivery_policy import KeyedResponseReceipt
 from .envelope_claim_transitions import (
     ClaimProjection,
     apply_transition,
@@ -169,11 +169,11 @@ class WireLog:
         *,
         on_row: (
             Callable[
-                [int, bytes, Message, Mapping[str, object] | None, CommittedDelivery | None], None
+                [int, bytes, Message, KeyedResponseReceipt | None, CommittedDelivery | None], None
             ]
             | None
         ) = None,
-    ) -> Iterator[tuple[Message, Mapping[str, object] | None, CommittedDelivery | None]]:
+    ) -> Iterator[tuple[Message, KeyedResponseReceipt | None, CommittedDelivery | None]]:
         """Validate the ENTIRE append-only log before any new append or trusted read.
 
         A later corrupt row cannot be skipped to attest an earlier row. No
@@ -243,9 +243,9 @@ class WireLog:
                     ):
                         raise ValueError("Unsupported private bus record.")
                     initial = validate_delivery_record(record, metadata.root_id)
-                    receipt = private.get("response")
+                    receipt = initial.receipt
                     if receipt is not None:
-                        seen_keys.add(receipt["publication_key"])
+                        receipt.add_unique(seen_keys)
                     if on_row is not None:
                         on_row(offset, line, existing, receipt, initial)
                     yield existing, receipt, initial
@@ -303,7 +303,7 @@ class WireLog:
                 if isinstance(private, dict) and "initial" in private
                 else None
             )
-            receipt = private.get("response") if isinstance(private, dict) else None
+            receipt = initial.receipt if initial is not None else None
             public = {key: value for key, value in row.items() if key != PRIVATE_WIRE_FIELD}
             try:
                 append_private_bus_checkpoint_unlocked(
@@ -351,8 +351,8 @@ class WireLog:
         previous_sequence = 0
         for existing, receipt, _initial in self._verified_private_rows_unlocked(metadata):
             previous_sequence = existing.seq
-            if receipt is not None and receipt["publication_key"] == intent.publication_key:
-                if receipt["execution_id"] != intent.execution_id:
+            if receipt is not None and receipt.publication_key == intent.publication_key:
+                if receipt.execution_id != intent.execution_id:
                     raise RelationViolationError("Response publication identity conflicts.")
                 matched = existing
         if matched is not None:

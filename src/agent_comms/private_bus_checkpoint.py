@@ -17,7 +17,6 @@ import os
 import sqlite3
 import stat
 import tempfile
-from collections.abc import Mapping
 from contextlib import closing, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -31,6 +30,7 @@ from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
+    from .delivery_policy import KeyedResponseReceipt
     from .messages import Message
     from .wire_log import WireLog
 
@@ -69,7 +69,7 @@ class ResponseKeys(CheckpointTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class Initials(CheckpointTable, TypedTable):
+class DeliverySources(CheckpointTable, TypedTable):
     seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
     message_id: str
     offset: int = field(metadata={"sql": Column(check="offset>=0")})
@@ -79,7 +79,9 @@ class Initials(CheckpointTable, TypedTable):
 @dataclass(frozen=True)
 class Addressed(CheckpointTable, TypedTable):
     lookup: str = field(metadata={"sql": Column(primary_key=True)})
-    seq: int = field(metadata={"sql": Column(primary_key=True, references=(Initials, "seq"))})
+    seq: int = field(
+        metadata={"sql": Column(primary_key=True, references=(DeliverySources, "seq"))}
+    )
 
 
 @dataclass(frozen=True)
@@ -192,13 +194,13 @@ def _index_row(
     offset: int,
     raw: bytes,
     message: Message,
-    receipt: Mapping[str, object] | None,
+    receipt: KeyedResponseReceipt | None,
     initial: CommittedDelivery | None,
 ) -> None:
     if receipt is not None:
-        ResponseKeys(receipt["publication_key"]).insert(db)
+        ResponseKeys(receipt.publication_key).insert(db)
     if initial is not None:
-        Initials(message.seq, message.message_id, offset, len(raw)).insert(db)
+        DeliverySources(message.seq, message.message_id, offset, len(raw)).insert(db)
         for recipient in initial.audience.recipients:
             Addressed(recipient.recipient_lookup, message.seq).insert(db)
 
@@ -308,7 +310,7 @@ def _recover_pending_unlocked(
 
     with db:
         db.execute("DELETE FROM addressed")
-        db.execute("DELETE FROM initials")
+        db.execute(f"DELETE FROM {DeliverySources.declared_name}")
         db.execute("DELETE FROM response_keys")
 
         def collect(offset, raw, message, receipt, initial):
@@ -389,7 +391,7 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
             observed_prefix = saved.offset == 0
             prefix_seq = 0
             additions: list[
-                tuple[int, bytes, Message, Mapping[str, object] | None, CommittedDelivery | None]
+                tuple[int, bytes, Message, KeyedResponseReceipt | None, CommittedDelivery | None]
             ] = []
             suffix_bytes = 0
 
@@ -397,7 +399,7 @@ def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -
                 offset: int,
                 raw: bytes,
                 message: Message,
-                receipt: Mapping[str, object] | None,
+                receipt: KeyedResponseReceipt | None,
                 initial: CommittedDelivery | None,
             ) -> None:
                 nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
@@ -462,7 +464,7 @@ def append_private_bus_checkpoint_unlocked(
     marker: WireMetadata,
     raw: bytes,
     message: Message,
-    receipt: Mapping[str, object] | None,
+    receipt: KeyedResponseReceipt | None,
     initial: CommittedDelivery | None,
 ) -> PrefixWitness:
     """Append one certified row only AFTER the canonical bus/parent fsync."""
@@ -541,16 +543,20 @@ def certified_delivery_page_unlocked(
             closing(_connect(_path(bus.path), readonly=True)) as db,
             bus.path.open("rb") as stream,
         ):
-            rows = Initials.read(
+            rows = DeliverySources.read(
                 db.execute(
-                    "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
-                    "JOIN initials i ON i.seq=a.seq "
+                    f"SELECT i.seq,i.message_id,i.offset,i.length FROM {Addressed.declared_name} a "
+                    f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
                     "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
                     (lookup, after, limit + 1),
                 )
             )
             has_more = len(rows) > limit
-            last = Initials.read(db.execute("SELECT * FROM initials ORDER BY seq DESC LIMIT 1"))
+            last = DeliverySources.read(
+                db.execute(
+                    f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1"
+                )
+            )
             latest_source_seq = last[0].seq if last else 0
             if latest_source_seq < 0 or latest_source_seq > witness.through_seq:
                 raise RelationViolationError("Certified initial high-water is invalid.")
@@ -590,7 +596,7 @@ def certified_delivery_page_unlocked(
 
 def addressed_source_pointers_unlocked(
     bus: WireLog, marker: WireMetadata, lookup: str, *, limit: int = 4
-) -> tuple[Initials, ...]:
+) -> tuple[DeliverySources, ...]:
     """Latest source pointers for natural-turn awareness, never delivery evidence.
 
     Caller holds the bus lock. Read only the current sealed index: no payload
@@ -607,10 +613,10 @@ def addressed_source_pointers_unlocked(
             or file_revision(bus.path.stat()) != saved.revision
         ):
             raise RelationViolationError("Current source pointers require an unchanged checkpoint.")
-        rows = Initials.read(
+        rows = DeliverySources.read(
             db.execute(
-                "SELECT i.seq,i.message_id,i.offset,i.length FROM addressed a "
-                "JOIN initials i ON i.seq=a.seq "
+                f"SELECT i.seq,i.message_id,i.offset,i.length FROM {Addressed.declared_name} a "
+                f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
                 "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq DESC LIMIT ?",
                 (lookup, marker.admission_after_seq, limit),
             )

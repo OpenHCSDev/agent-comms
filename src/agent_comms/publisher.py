@@ -450,18 +450,23 @@ class Publisher:
             decisions = resolve_wake_cohort(
                 stored, frozen_audience=audience, control=classification
             )
+            from .delivery_policy import InitialDeliveryPolicy
+            from .field_codec import FieldCodec
+
             row = {
                 **stored.to_wire(),
-                PRIVATE_WIRE_FIELD: {
-                    "version": 1,
-                    "initial": initial_sideband(
-                        metadata.root_id,
-                        stored,
-                        audience,
-                        decisions,
-                        control=classification.value,
-                    ),
-                },
+                PRIVATE_WIRE_FIELD: FieldCodec.encode(
+                    InitialDeliveryPolicy(
+                        version=1,
+                        initial=initial_sideband(
+                            metadata.root_id,
+                            stored,
+                            audience,
+                            decisions,
+                            control=classification.value,
+                        ),
+                    )
+                ),
             }
             # Check the exact bytes and one coherent source revision before any append.
             validate_delivery_record(row, metadata.root_id)

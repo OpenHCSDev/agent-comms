@@ -70,26 +70,24 @@ class ResponseConversation:
 
     def record(self, root_id, message, intent):
         from .bus_publication import PRIVATE_WIRE_FIELD, initial_sideband, public_envelope_digest
-        from .delivery_policy import ResponseDeliveryPolicy
+        from .delivery_policy import KeyedResponseReceipt, ResponseDeliveryPolicy
+        from .field_codec import FieldCodec
         from .wake import ControlClassification
 
         audience = self.audience(message)
-        decisions = ResponseDeliveryPolicy().resolve(
+        decisions = ResponseDeliveryPolicy.resolve(
             message, audience, ControlClassification.ORDINARY
         )
-        public = message.to_wire()
-        return {
-            **public,
-            PRIVATE_WIRE_FIELD: {
-                "version": 1,
-                "initial": initial_sideband(
-                    root_id, message, audience, decisions, control="ordinary"
-                ),
-                "response": {
-                    "wire_root_id": root_id,
-                    "execution_id": intent.execution_id,
-                    "publication_key": intent.publication_key,
-                    "envelope_digest": public_envelope_digest(public),
-                },
-            },
-        }
+        publication = ResponseDeliveryPolicy(
+            version=1,
+            initial=initial_sideband(
+                root_id, message, audience, decisions, control=ControlClassification.ORDINARY.value
+            ),
+            response=KeyedResponseReceipt(
+                root_id,
+                intent.execution_id,
+                intent.publication_key,
+                public_envelope_digest(message.to_wire()),
+            ),
+        )
+        return {**message.to_wire(), PRIVATE_WIRE_FIELD: FieldCodec.encode(publication)}
