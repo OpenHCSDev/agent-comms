@@ -9,12 +9,8 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from acp.schema import (
-    ContentToolCallContent,
-    PermissionOption,
     PromptResponse,
     RequestPermissionResponse,
-    TextContentBlock,
-    ToolCallUpdate,
 )
 
 from . import agent_events as events
@@ -301,7 +297,7 @@ class TurnRunner:
         session_id: str,
         turn_id: str,
         controller: Any,
-        request: pi.ExtensionUiRequest,
+        request: pi.DialogUiRequest,
     ) -> pi.ExtensionUiChoice:
         """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
 
@@ -310,45 +306,10 @@ class TurnRunner:
         """
         if self.active_turns.get(session_id) != turn_id or controller is None:
             return pi.CancelledUiChoice()
-        title, method = request.title, request.method
-        if title is None or not title or len(title) > 160:
+        permission = request.permission(turn_id)
+        if permission is None:
             return pi.CancelledUiChoice()
-        choices: dict[str, str] = {}
-        if method == "confirm":
-            body = request.message
-            if body is None or len(body) > 8192:
-                return pi.CancelledUiChoice()
-            options = [
-                PermissionOption(option_id="allow-once", name="Allow once", kind="allow_once"),
-                PermissionOption(option_id="deny", name="Deny", kind="reject_once"),
-            ]
-        elif method == "select":
-            values = request.options
-            if (
-                values is None
-                or not 1 <= len(values) <= 8
-                or any(not item or len(item) > 100 for item in values)
-            ):
-                return pi.CancelledUiChoice()
-            choices = {f"choice-{index}": value for index, value in enumerate(values)}
-            options = [
-                PermissionOption(option_id=key, name=f"Choose {value}", kind="allow_once")
-                for key, value in choices.items()
-            ]
-            options.append(PermissionOption(option_id="deny", name="Cancel", kind="reject_once"))
-            body = "Select one Pi extension option for this turn only."
-        else:
-            return pi.CancelledUiChoice()
-        tool_call = ToolCallUpdate(
-            tool_call_id=f"pi-ui-{turn_id}-{request.id}",
-            kind="other",
-            title=title,
-            content=[
-                ContentToolCallContent(
-                    type="content", content=TextContentBlock(type="text", text=body)
-                )
-            ],
-        )
+        tool_call, options = permission
         try:
             if isinstance(controller, SocketClient):
                 reply = await self.runtime.request_permission(
@@ -390,11 +351,7 @@ class TurnRunner:
         selected = outcome.get("optionId")
         if outcome.get("outcome") != "selected" or type(selected) is not str:
             return pi.CancelledUiChoice()
-        if method == "confirm":
-            return pi.ConfirmedUiChoice(selected == "allow-once")
-        if selected in choices:
-            return pi.ValueUiChoice(choices[selected])
-        return pi.CancelledUiChoice()
+        return request.choice(selected)
 
     def finish_turn_stream(
         self,
