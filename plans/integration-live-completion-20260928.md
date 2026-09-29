@@ -4,21 +4,19 @@ Owner: parent Codex. Active goal set by Tristan on 2026-09-28. CI deferred;
 local focused checks plus the actual installed affected path are the gate.
 No feature is complete merely because a draft exists or a PR was merged.
 
-Latest installed pair: core0a1f126d (311 native child/attestation custody plus
-308/307), Toad4147eb1 (144 nominal goal interactions plus129/141/143),
-Textualc9743801, native5fde. Five launchers and four idle-restarted owners use
-runtime-goal-controls-20260928. Final installed nine actual native custody,
-revision/reopen/cancellation/EOF/preparation/compaction cases pass45.77s.
-Actual native goal read/write/modal/draft/outage and painted declaration checks
-pass. Four fresh live ACP attachments and actual PR95/UX savedpaint105/61phrase
-checks pass. Worker process command paths verified. No reset/replay/historyrewrite.
-Initial staging failed dependency URL resolution; tests stopped before imports.
-The exact frozen environment was installed without re-resolving its conflicting
-transitive git pins, then final311/144 pinned and tested; red receipts retained.
-Current immutable slots preserve the previous working runtime for rollback.
-Existing Toad requires normal reopen for new UI imports.
-142 is the single workspace implementation path;116 is reference/provenance only
-until its remaining unique behavior/tests are carried into142, then close116.
+Latest installed pair: core0931c47d (corrected312 send-admission ownership and
+315 audit; includes311/308/307), Toad4147eb1 (144 plus129/141/143), Textualc974,
+native5fde. Five launchers and four idle-restarted workers use
+runtime-send-admission-20260928. Installed9 checks pass: three actual native
+selected executions, selected native summary/commit/one input, shared rules and
+ownership guards. Four fresh live ACP attachments pass; PR95 savedpaint105matches,
+ready/noerrors. Process commandpaths verified. No reset/replay/historyrewrite.
+Parent rejected initial312 opaque fieldtuples; correctedcandidate reuses actual
+identity owners and named ReservationRule family failures. New policies add more
+lines than removed; displaced253line closure andhelpers/callers are deleted.
+Retired workspace/watchdog runtimes and completed native test scratch cleaned.
+142 is the single workspace implementation path;116 stays provenance until its
+unique viewport behavior/tests are transferred, then closes.
 
 Latest integration proof: combined installed203passed/1test-only golden mismatch
 (the corrected extension/nominal set then50passed),23 read/legality cases,16 actual
@@ -231,7 +229,9 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
 - [x] Boyle306: S7 native cursor/proven coverage owners, old helpers/callers deleted;
   89 focused plus3 native/2guards; net49 production lines deleted. Merged b77db612
   and installed; final combined actual native and live attachment/paint pass.
-- [ ] Boyle: remaining coordinated-runtime/send-boundary ownership and deletion.
+- [x] Boyle312: private selected admission/rules/identity/caller closure merged
+  and installed; old253line send closure deleted, all named fences preserved.
+- [ ] Boyle: ordinary OwnedTurn send-boundary and remaining runtime ownership.
 - [x] Dalton:305 current S1 event/settlement acceptance merged19281c46;16 final
   installed checks, actual native manual success/refusal, relay and native terminal
   release. OPEN2 resolved using current active-goal policy, not historical pause.
@@ -260,13 +260,13 @@ reported separately in evidence/cursor-load-recovery. Full goal remains active.
   actual native output/compaction and mounted durable read-ACK checks pass.
   144 goal interactions merged/installed with actual native goal and painted
   declaration acceptance. Remaining T4 root ownership stays active.
-  312 send admission remains active; parent review of312
-  requires identity/state-owned comparisons and named failures instead of
-  relocated field-tuple validity chains. Boyle owns that correction before
-  the remaining ordinary OwnedTurn boundary.
-- [ ] Parent: remaining source/acceptance reconciliation. A bounded package NRA
-  run completed35.94s; its payload lacks detector coverage counts, so it is not
-  claimed as complete-detector/zero-debt proof. Domain review rejected schema-index
+  Corrected312 merged/installed; shared named rules and typed identity owners
+  replace the rejected opaque tuples. Ordinary OwnedTurn boundary continues.
+- [ ] Parent: remaining source/acceptance reconciliation. 315 executes81/81 declared
+  detectors with zero omissions on694 explicit core/Toad/Textual files;139 raw
+  leads remain. This supplies snapshot coverage, not zero-debt certification.
+  Domain-reviewed typed compaction-result closure assigned to Dalton. Parent
+  corrected the stale S7 scale-gap row using285/289 actual archived receipts. Domain review rejected schema-index
   ordering as a false-positive mirror; actual tool declaration duplication assigned.
 
 ## Quiet runtime cutover
