@@ -24,7 +24,7 @@ def populated(tmp_path):
         ("bob", {"ui"}),
         ("outsider", set()),
     ):
-        comms.threads.register(Thread(name, frozenset(tags), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     return comms
 
 

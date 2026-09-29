@@ -20,7 +20,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
     owner = Thread(
         "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )
-    comms.threads.register(owner)
+    comms.registry.declare(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(

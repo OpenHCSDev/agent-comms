@@ -125,7 +125,7 @@ def run_case(scratch, count, policy, budget):
             comms.messaging.initialize_private_initial_protocol()
             identity = ProcessIdentity.capture(os.getpid())
             for index in range(count):
-                comms.threads.register(Thread(f"thread-{index}", frozenset({"benchmark"}),
+                comms.registry.declare(Thread(f"thread-{index}", frozenset({"benchmark"}),
                                               str(root), process_identity=identity))
             for index in range(budget.seed):
                 comms.messaging.send("thread-0", "#benchmark", f"seed {index}")

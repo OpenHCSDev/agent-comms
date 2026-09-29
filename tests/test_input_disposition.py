@@ -88,7 +88,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
     from agent_comms.threads import Thread
 
     comms = wire(tmp_path)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="kid",
             tags=frozenset(),

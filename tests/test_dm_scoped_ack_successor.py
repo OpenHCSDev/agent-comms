@@ -30,7 +30,7 @@ def _mark(comms, peer, root, page):
 
 def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_path: Path):
     comms = wire(tmp_path)
-    comms.threads.register(_peer(tmp_path, "peer"))
+    comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "before rename")
     old = comms.views.dm_display_page("peer", worktree=str(tmp_path))
@@ -54,14 +54,14 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
 
 def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Path):
     comms = wire(tmp_path)
-    comms.threads.register(_peer(tmp_path, "peer"))
+    comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "old peer painted")
     old = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert old.display_basis is not None
     comms.registry.unregister("peer")
     comms.registry.remove("peer")
-    comms.threads.register(_peer(tmp_path, "peer"))
+    comms.registry.declare(_peer(tmp_path, "peer"))
     comms.messaging.send("peer", viewer, "new peer unseen")
     before = comms.bus.pending_count(viewer, "peer")
     markers = tmp_path / "read_ledger.json"
@@ -78,7 +78,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
 
 def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms = wire(tmp_path)
-    comms.threads.register(_peer(tmp_path, "peer"))
+    comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "old viewer painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
@@ -92,7 +92,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
         )
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
-    comms.threads.register(Thread(viewer, frozenset(), str(tmp_path), role=ThreadRole.USER))
+    comms.registry.declare(Thread(viewer, frozenset(), str(tmp_path), role=ThreadRole.USER))
     comms.messaging.send("peer", viewer, "new viewer unseen")
     before = comms.bus.pending_count(viewer, "peer")
     assert before == 1
@@ -103,12 +103,12 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
 
 def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: Path):
     comms = wire(tmp_path)
-    comms.threads.register(_peer(tmp_path, "peer"))
+    comms.registry.declare(_peer(tmp_path, "peer"))
     old_viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", old_viewer, "old viewer painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.display_basis is not None and page.display_basis.viewer == old_viewer
-    comms.threads.register(Thread("new_user", frozenset(), str(tmp_path), role=ThreadRole.USER))
+    comms.registry.declare(Thread("new_user", frozenset(), str(tmp_path), role=ThreadRole.USER))
     # Normal registry rename retains the old human declaration but moves its
     # insertion position behind new_user. user_identity now selects new_user.
     comms.registry.rename(old_viewer, "old_user")
@@ -127,7 +127,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
 
 def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, monkeypatch):
     comms = wire(tmp_path)
-    comms.threads.register(_peer(tmp_path, "peer"))
+    comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted")
     original = comms.bus.dm_history_page
@@ -148,7 +148,7 @@ def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, mo
 def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
     comms = wire(tmp_path)
     for name in ("peer", "other"):
-        comms.threads.register(_peer(tmp_path, name))
+        comms.registry.declare(_peer(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))

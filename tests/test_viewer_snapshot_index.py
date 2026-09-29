@@ -16,8 +16,8 @@ from agent_comms.threads import Thread
 
 def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
-    comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     for number in range(100):
         comms.messaging.send("bob", "#team", f"message {number}")
     expected = comms.views.viewer_snapshot(str(tmp_path))
@@ -42,8 +42,8 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
 
 def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
-    comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
     comms.messaging.send("bob", "#team", "second")
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
@@ -67,8 +67,8 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     tmp_path, monkeypatch
 ):
     comms = wire(tmp_path)
-    comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
-    comms.threads.register(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
     bus_path = comms.bus.log.path
     appended = []
@@ -95,8 +95,8 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     from agent_comms.bus_route_counts import BusRouteCounts
 
     comms = wire(tmp_path)
-    comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
-    comms.threads.register(Thread("bob", frozenset(), str(tmp_path / "bob")))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread("bob", frozenset(), str(tmp_path / "bob")))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     messages = [
         comms.messaging.send_message("bob", viewer if number % 2 else "#team", f"message {number}")

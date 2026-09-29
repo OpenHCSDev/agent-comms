@@ -112,7 +112,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
         try:
             await agent.new_session(str(project))
             comms.channels.update_tags("worker", add=frozenset({"team"}))
-            comms.threads.register(Thread("peer", frozenset({"team"}), str(project)))
+            comms.registry.declare(Thread("peer", frozenset({"team"}), str(project)))
             turn = asyncio.create_task(agent.inputs.run_owned_input("worker", "worker", "Warmup"))
             assert await asyncio.to_thread(started.wait, 15)
             if case != "steer":

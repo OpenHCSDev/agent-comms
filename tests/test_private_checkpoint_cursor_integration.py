@@ -64,7 +64,7 @@ def _root(tmp_path: Path):
         ),
     ]
     for person in people:
-        comms.threads.register(person)
+        comms.registry.declare(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
     first = comms.messaging.send_initial_cohort("sender", "#team", "selected one")
     with Coordination(str(root / "coordination.sqlite3")) as store:

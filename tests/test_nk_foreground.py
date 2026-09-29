@@ -55,7 +55,7 @@ def _private_root(tmp_path: Path):
     root.mkdir(mode=0o700)
     (root / "work").mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender",
             frozenset(),
@@ -209,7 +209,7 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
             native_package=root / "fake-pi",
             opt_in=True,
         )
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 "alpha",
                 frozenset({"team"}),
@@ -253,7 +253,7 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, comms, root_id = _private_root(tmp_path)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "alpha",
             frozenset({"team"}),

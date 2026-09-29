@@ -76,7 +76,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         package.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
-            comms.threads.register(
+            comms.registry.declare(
                 Thread(
                     name,
                     frozenset({"team"}),
@@ -253,7 +253,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         package.mkdir(mode=0o700)
         comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
         sender_pid = os.getpid()
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 "sender",
                 frozenset(),
@@ -262,7 +262,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 created_at=61001.0,
             )
         )
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 "alpha",
                 frozenset({"team"}),
@@ -305,7 +305,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         attached = None
         try:
             assert process.pid != sender_pid
-            comms.threads.register(
+            comms.registry.declare(
                 Thread(
                     "beta",
                     frozenset({"team"}),

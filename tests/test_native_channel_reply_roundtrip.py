@@ -129,7 +129,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         project = tmp_path / name
         project.mkdir()
         projects[name] = project
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset({"team"}),

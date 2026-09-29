@@ -34,7 +34,7 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     thread = Thread(
         "beta", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )
-    comms.threads.register(thread)
+    comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"
     owner, admission_generation = comms.registry.live_owner_with_admission("beta")

@@ -16,7 +16,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
         row.recipient for row in receipts[(original.message.seq, original.message.message_id)]
     } == {"alpha", "beta"}
     comms.channels.update_tags("alpha", remove=frozenset({"team"}))
-    comms.threads.register(
+    comms.registry.declare(
         replace(comms.registry.require("beta"), tags=frozenset({"team", "extra"}))
     )
     message = comms.messaging.send_user_message("#team", "current membership", worktree=str(root))

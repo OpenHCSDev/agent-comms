@@ -282,7 +282,7 @@ def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(t
 def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
     comms = wire(tmp_path / "wire")
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "#team", "captured")
 
     with comms.bus.log.full_history_snapshot() as (through, messages):
@@ -297,7 +297,7 @@ def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
 def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_path):
     comms = wire(tmp_path / "wire")
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "#team", "team row")
     comms.messaging.send("alice", "#other", "other row")
     comms.messaging.send("alice", "bob", "private row")
@@ -345,7 +345,7 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp
     root = tmp_path / "wire"
     comms = wire(root)
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "#team", "hello")
     destination = tmp_path / "cli.jsonl"
 
@@ -375,7 +375,7 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp
 def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
     comms = wire(tmp_path / "wire")
     for name in ("alice", "bob"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     comms.messaging.send("alice", "bob", "unread")
     bus_before = comms.bus.log.path.read_bytes()
     markers = comms.root / "read_markers.json"

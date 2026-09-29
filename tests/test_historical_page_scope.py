@@ -16,9 +16,9 @@ from agent_comms.threads import Thread
 @pytest.fixture
 def history(tmp_path):
     old = Comms(tmp_path / "old")
-    old.threads.register(Thread("alice-old", frozenset({"api"}), str(old.root), created_at=10))
+    old.registry.declare(Thread("alice-old", frozenset({"api"}), str(old.root), created_at=10))
     for created, name in enumerate(("bob", "carol"), start=11):
-        old.threads.register(Thread(name, frozenset({"ops"}), str(old.root), created_at=created))
+        old.registry.declare(Thread(name, frozenset({"ops"}), str(old.root), created_at=created))
     old.registry.rename("alice-old", "alice")
     old.messaging.initialize_private_initial_protocol()
     rows = []
@@ -51,8 +51,8 @@ def history(tmp_path):
     old.bus.log.write_metadata_unlocked(marker)
     live = Comms(tmp_path / "live")
     # Deliberately different membership: source scope must not use live tags.
-    live.threads.register(Thread("alice", frozenset({"ops"}), str(live.root), created_at=500))
-    live.threads.register(Thread("alice-old", frozenset({"api"}), str(live.root), created_at=501))
+    live.registry.declare(Thread("alice", frozenset({"ops"}), str(live.root), created_at=500))
+    live.registry.declare(Thread("alice-old", frozenset({"api"}), str(live.root), created_at=501))
     live.registry.rename("alice-old", "carol")
     source = live.views.attach_history(old.root)
     return live, source, rows

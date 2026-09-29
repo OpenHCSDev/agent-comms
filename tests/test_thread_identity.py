@@ -91,7 +91,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
     comms = Comms(tmp_path)
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     first = comms.agents.begin_turn("owner", "reused")
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
     comms.registry.rename("owner", "renamed")
@@ -164,7 +164,7 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms = Comms(tmp_path)
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("owner", viewer, "already painted")
     page = comms.views.dm_display_page("owner", worktree=str(tmp_path))

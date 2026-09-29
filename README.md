@@ -56,7 +56,7 @@ from agent_comms.threads import Thread
 from agent_comms.comms import wire
 
 comms = wire(Path("~/.agent-comms").expanduser())
-comms.threads.register(Thread(name="PR111", tags=frozenset({"base"}), worktree=str(Path("~/wt/pr111").expanduser())))
+comms.registry.declare(Thread(name="PR111", tags=frozenset({"base"}), worktree=str(Path("~/wt/pr111").expanduser())))
 comms.messaging.broadcast("PR111", "CI is green")
 comms.bus.inbox("fixer")
 ```

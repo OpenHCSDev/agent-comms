@@ -48,7 +48,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     with comms.bus.log.locked():
         root_id = comms.bus.log.read_metadata_unlocked().root_id
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "parent",
             frozenset(),

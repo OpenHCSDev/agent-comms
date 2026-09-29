@@ -24,12 +24,12 @@ def _wire(base: Path) -> tuple[Comms, str]:
     root = base / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())
         )
     )
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "beta",
             frozenset({"team"}),

@@ -40,7 +40,7 @@ def _fresh(tmp_path: Path, count: int = 2):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender",
             frozenset(),
@@ -50,7 +50,7 @@ def _fresh(tmp_path: Path, count: int = 2):
     )
     for n in range(count):
         name = "alpha" if n == 0 else f"other{n:03}"
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset({"team"}),

@@ -11,8 +11,8 @@ from agent_comms.threads import Thread
 
 def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.threads.register(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path), created_at=100))
-    comms.threads.register(Thread(name="beta", tags=frozenset(), worktree=str(tmp_path), created_at=200))
+    comms.registry.declare(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path), created_at=100))
+    comms.registry.declare(Thread(name="beta", tags=frozenset(), worktree=str(tmp_path), created_at=200))
     comms.agents.activity.emit(Activity(thread="alpha", state=ActivityState.WORKING, timestamp=300))
     comms.bus.publisher.publish_ordinary(
         Message(
@@ -27,7 +27,7 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     assert comms.views.last_sent_timestamps() == {"alpha": 400, "beta": 500}
     comms.owners.acquire_thread("alpha", owner_pid=os.getpid())
     comms.threads.heartbeat("alpha")
-    comms.threads.register(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path)))
     people = {person["name"]: person for person in comms.views.presence()}
     assert people["alpha"]["created_at"] == 100
     assert people["alpha"]["last_activity"] == 300

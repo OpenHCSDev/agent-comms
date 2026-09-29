@@ -8,8 +8,8 @@ class TestToolCatalog:
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
         monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
-        comms.threads.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         before = comms.registry.snapshot()
         result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"})
         assert result["collaboration"]["owner"] == "a"
@@ -76,8 +76,8 @@ class TestToolCatalog:
         assert actions[0]["context_bindings"] == {"parent": "subject"}
 
     def test_inbox_ack_behavior_is_owned_by_declared_tool(self, comms):
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
-        comms.threads.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         comms.messaging.send("a", "b", "hello")
 
         result = invoke_tool(comms, "comms_inbox", {"thread": "b"})
@@ -95,9 +95,9 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_threads", {"active_only": "yes"})
 
     def test_ack_can_target_one_conversation(self, comms):
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
-        comms.threads.register(Thread(name="b", tags=frozenset(), worktree="/wt"))
-        comms.threads.register(Thread(name="c", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="c", tags=frozenset(), worktree="/wt"))
         comms.messaging.send("a", "b", "from a")
         comms.messaging.send("c", "b", "from c")
 
@@ -133,7 +133,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
             }
 
     for name in ("a", "b"):
-        comms.threads.register(Thread(name=name, tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree="/wt"))
     comms.messaging.send("a", "b", "Actual inbox source")
     schema = next(row for row in tool_catalog() if row["name"] == InspectInboxTool.declared_name)
     assert schema["parameters"]["required"] == ["target", "viewer"]

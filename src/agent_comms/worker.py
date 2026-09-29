@@ -86,7 +86,7 @@ def main() -> int:
     name = os.environ.get("AGENT_COMMS_THREAD") or os.environ.get("PI_AGENT_ID") or "participant"
     if name not in comms.registry:
         tags = frozenset(filter(None, os.environ.get("PI_AGENT_TAGS", "bot").split(",")))
-        comms.threads.register(Thread(name, tags, str(Path.cwd()), task=os.environ.get("PI_TASK")))
+        comms.registry.declare(Thread(name, tags, str(Path.cwd()), task=os.environ.get("PI_TASK")))
     thread = comms.registry.require(name)
     if thread.process_identity is not None and thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")

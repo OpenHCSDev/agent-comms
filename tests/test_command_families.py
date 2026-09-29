@@ -147,7 +147,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
 
     comms = wire(tmp_path)
-    comms.threads.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     agent = SimpleNamespace(_comms=comms, sessions=SimpleNamespace(bindings={"session": "owner"}))
     server = RuntimeServer(agent)
     await server.start()
@@ -201,7 +201,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     old, live = wire(tmp_path / "old"), wire(tmp_path / "live")
     for comms in (old, live):
         for name in ("alice", "bob"):
-            comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+            comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel")
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct")
     source = live.views.attach_history(old.root)

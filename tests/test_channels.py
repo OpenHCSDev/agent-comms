@@ -19,7 +19,7 @@ from agent_comms.threads import Thread
 def setup_wire(path):
     comms = wire(path)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("both", {"api", "ui"}), ("other", set())):
-        comms.threads.register(Thread(name=name, tags=frozenset(tags), worktree=str(path)))
+        comms.registry.declare(Thread(name=name, tags=frozenset(tags), worktree=str(path)))
     return comms
 
 
@@ -181,7 +181,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     before = comms.registry.snapshot()
 
     with pytest.raises(ValueError, match="reserved by a saved view"):
-        comms.threads.register(Thread("registered", frozenset({"reserved"}), str(tmp_path)))
+        comms.registry.declare(Thread("registered", frozenset({"reserved"}), str(tmp_path)))
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=str(tmp_path))
 
@@ -213,7 +213,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
         )
     parent_session = tmp_path / "parent.jsonl"
     parent_session.write_text("{}\n")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_session))
     )
     with pytest.raises(ValueError, match="reserved by a saved view"):
@@ -398,8 +398,8 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
 
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(Thread("moving", frozenset(), str(tmp_path)))
-    comms.threads.register(
+    comms.registry.declare(Thread("moving", frozenset(), str(tmp_path)))
+    comms.registry.declare(
         Thread(
             "peer",
             frozenset({"api"}),

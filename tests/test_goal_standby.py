@@ -64,7 +64,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
 
 def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(Thread("parent", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("parent", frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
     with pytest.raises(ValueError, match="wait_for"):
         comms.goals.update_goal(
@@ -78,7 +78,7 @@ def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_pa
 def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -111,7 +111,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
 def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
     comms = wire(tmp_path)
     for name in ("alice", "bob", "carol"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -139,7 +139,7 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
 def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
     comms = wire(tmp_path)
     for name in ("alice", "bob", "carol"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -170,7 +170,7 @@ def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
 def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -179,7 +179,7 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
             )
         )
         comms.agents.begin_turn(name, f"{name}-turn")
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "carol",
             frozenset(),
@@ -216,7 +216,7 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
 def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending_reply):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -269,7 +269,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
 def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_turn):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -314,7 +314,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
 def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -364,7 +364,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
 def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, acknowledged):
     comms = wire(tmp_path)
     for name in ("parent", "child"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
     message = comms.messaging.send_message("child", "parent", "Finished immediately")
     if acknowledged:

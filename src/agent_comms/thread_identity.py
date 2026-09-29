@@ -22,6 +22,12 @@ class ThreadIncarnation:
     name: str
     created_at: float
 
+    def resolved(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
+        """Follow retained rename aliases only for this exact historical owner."""
+        if self.created_at == -1.0 or not self.current(snapshot):
+            return self
+        return snapshot.threads[snapshot.aliases.get(self.name, self.name)].incarnation
+
     def current(self, snapshot: RegistrySnapshot) -> bool:
         thread = snapshot.threads.get(snapshot.aliases.get(self.name, self.name))
         return (

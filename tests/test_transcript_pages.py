@@ -26,7 +26,7 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     path = tmp_path / "session.jsonl"
     transcript(path, 105)
     comms = wire(tmp_path / "wire")
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=10)
     through = page.after
     seen = [event.text for event in page.events]
@@ -61,11 +61,11 @@ def test_oversized_message_and_file_identity(tmp_path):
     )
     comms = wire(tmp_path / "wire")
     thread = Thread("worker", frozenset(), str(tmp_path), session_file=str(path))
-    comms.threads.register(thread)
+    comms.registry.declare(thread)
     page = comms.transcripts.thread_transcript_page("worker", max_bytes=100)
     assert page.events[0].text == text
     assert not page.has_older
-    comms.threads.register(replace(thread, session_file=str(tmp_path / "other.jsonl")))
+    comms.registry.declare(replace(thread, session_file=str(tmp_path / "other.jsonl")))
     with pytest.raises(ValueError, match="changed"):
         comms.transcripts.thread_transcript_page("worker", before=page.before)
     with pytest.raises(ValueError):
@@ -76,7 +76,7 @@ def test_oversized_message_and_file_identity(tmp_path):
 
 def test_empty_transcript_and_non_message_records(tmp_path):
     comms = wire(tmp_path / "wire")
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     page = comms.transcripts.thread_transcript_page("worker")
     assert not page.events and not page.has_older and not page.has_newer
 
@@ -85,10 +85,10 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
     parent_path = tmp_path / "parent.jsonl"
     transcript(parent_path, 3)
     comms = wire(tmp_path / "wire")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
     )
-    comms.threads.register(
+    comms.registry.declare(
         Thread("child", frozenset(), str(tmp_path), parent="parent", task="Inspect the renderer")
     )
 
@@ -119,10 +119,10 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     parent_path = tmp_path / "parent.jsonl"
     transcript(parent_path, 35)
     comms = wire(tmp_path / "wire")
-    comms.threads.register(
+    comms.registry.declare(
         Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
     )
-    comms.threads.register(
+    comms.registry.declare(
         Thread("child", frozenset(), str(tmp_path), parent="parent", task="Child task")
     )
     page = comms.transcripts.thread_transcript_page("child", max_messages=5)

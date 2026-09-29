@@ -33,10 +33,10 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
         task="Original task",
         active_turn=ActiveTurn("old-turn", os.getpid()),
     )
-    old.threads.register(live)
-    old.threads.register(missing)
+    old.registry.declare(live)
+    old.registry.declare(missing)
     old.messaging.send("live", "missing", "Old pending work must not be replayed")
-    current.threads.register(replace(live, title="Current live title"))
+    current.registry.declare(replace(live, title="Current live title"))
     current.messaging.initialize_private_initial_protocol()
     current.messaging.send_user_message("#comms", "Current message", worktree=str(tmp_path))
     before = current.registry.snapshot()
@@ -65,13 +65,13 @@ def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
     old = Comms(tmp_path / "old")
     current = Comms(tmp_path / "current")
     original = Thread("owner", frozenset(), str(tmp_path))
-    current.threads.register(original)
+    current.registry.declare(original)
     good = Thread("good", frozenset(), str(tmp_path))
     conflicting = Thread("owner" if collision == "name" else "other", frozenset(), str(tmp_path))
     if collision == "incarnation":
         conflicting = replace(conflicting, created_at=original.created_at)
-    old.threads.register(good)
-    old.threads.register(conflicting)
+    old.registry.declare(good)
+    old.registry.declare(conflicting)
     if collision == "alias":
         current.registry.rename("owner", "renamed")
         conflicting = replace(conflicting, name="owner")
@@ -149,8 +149,8 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
-    old.threads.register(missing)
-    current.threads.register(live)
+    old.registry.declare(missing)
+    current.registry.declare(live)
     root_id = current.messaging.initialize_private_initial_protocol()
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
@@ -204,6 +204,6 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
 
 def test_public_restoration_does_not_create_coordinator(tmp_path):
     old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
-    old.threads.register(Thread("missing", frozenset({"comms"}), str(tmp_path)))
+    old.registry.declare(Thread("missing", frozenset({"comms"}), str(tmp_path)))
     assert current.threads.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
     assert not (current.root / "coordination.sqlite3").exists()

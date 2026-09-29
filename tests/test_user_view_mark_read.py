@@ -21,8 +21,8 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     source = tmp_path / "sender.jsonl"
     source.touch()
     answer(source, "Saved reply")
-    comms.threads.register(Thread("sender", frozenset({"ci"}), str(tmp_path), session_file=str(source)))
-    comms.threads.register(Thread("receiver", frozenset({"ci"}), str(tmp_path)))
+    comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path), session_file=str(source)))
+    comms.registry.declare(Thread("receiver", frozenset({"ci"}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("sender", "receiver", "Agent inbox remains unread")
     comms.messaging.send("sender", viewer, "Human DM")

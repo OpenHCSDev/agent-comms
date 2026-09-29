@@ -46,7 +46,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 ):
     root = tmp_path / "wire"
     comms = Comms(root)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender",
             frozenset(),
@@ -61,7 +61,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
         process_identity=ProcessIdentity.capture(os.getpid()),
         model="openai-codex/gpt-6-sol",
     )
-    comms.threads.register(alpha)
+    comms.registry.declare(alpha)
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -128,7 +128,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -154,7 +154,7 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
 def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),
@@ -178,7 +178,7 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
 def test_explicitly_disabled_private_writer_refuses(tmp_path):
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "beta"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),

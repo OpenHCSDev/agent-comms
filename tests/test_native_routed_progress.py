@@ -134,7 +134,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             project = root / "worker"
             project.mkdir()
             await agent.new_session(str(project))
-            comms.threads.register(Thread("member", frozenset({"team"}), str(project)))
+            comms.registry.declare(Thread("member", frozenset({"team"}), str(project)))
             human = comms.messaging.user_identity(str(project))
             origin = Message(human.name, "#team", "Please help", MessageType.INFO)
             await asyncio.wait_for(

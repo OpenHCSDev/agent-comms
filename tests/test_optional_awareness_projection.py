@@ -36,7 +36,7 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender",
             frozenset(),
@@ -45,7 +45,7 @@ def _root(
         )
     )
     for number in range(recipients):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 f"member{number:03}",
                 frozenset({"team"}),

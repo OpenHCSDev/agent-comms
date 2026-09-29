@@ -70,7 +70,7 @@ class Fixture:
 def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     comms = Comms(tmp_path / "wire", private_initial_writes=True)
     for name in ("sender", "owner"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset({"team"}),

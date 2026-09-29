@@ -102,7 +102,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         monkeypatch.delenv(name, raising=False)
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "recipient"):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 name,
                 frozenset(),

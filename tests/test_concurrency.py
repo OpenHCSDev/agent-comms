@@ -28,14 +28,14 @@ def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
 
 def _register_thread(root: str, name: str, start: Event) -> None:
     start.wait()
-    wire(root).threads.register(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
+    wire(root).registry.declare(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
 
 
 def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
     start.wait()
 
     store_files.time.time = lambda: 1_700_000_000.0
-    wire(root).threads.register(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
+    wire(root).registry.declare(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
 
 
 def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
@@ -86,8 +86,8 @@ class TestConcurrentWire:
         second = Thread(name="second", tags=frozenset(), worktree="/tmp")
         assert type(first.created_at) is float
         assert first.created_at == second.created_at
-        wire(root).threads.register(first)
-        wire(root).threads.register(second)
+        wire(root).registry.declare(first)
+        wire(root).registry.declare(second)
         stored = wire(root).registry
         first_time = stored.require("first").created_at
         second_time = stored.require("second").created_at
@@ -96,7 +96,7 @@ class TestConcurrentWire:
         assert stable_thread_lookup(first_time) != stable_thread_lookup(second_time)
         assert "_generated_created_at" not in stored.require("second").to_wire()
         with pytest.raises(RelationViolationError, match="creation identities collide"):
-            wire(root).threads.register(
+            wire(root).registry.declare(
                 Thread(
                     name="explicit",
                     tags=frozenset(),
@@ -123,7 +123,7 @@ class TestConcurrentWire:
         comms = wire(root)
         senders = [f"worker-{index}" for index in range(6)]
         for sender in senders:
-            comms.threads.register(Thread(name=sender, tags=frozenset(), worktree="/tmp"))
+            comms.registry.declare(Thread(name=sender, tags=frozenset(), worktree="/tmp"))
 
         ctx = multiprocessing.get_context("spawn")
         _run_concurrently(

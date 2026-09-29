@@ -16,7 +16,7 @@ def chat(wired):
     comms = wired
     pr111 = comms.registry.require("PR111")
     fixer = comms.registry.require("fixer")
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="PR111",
             tags=frozenset({"ci"}),
@@ -24,7 +24,7 @@ def chat(wired):
             process_identity=pr111.process_identity,
         )
     )
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             name="fixer",
             tags=frozenset({"ci"}),
@@ -34,7 +34,7 @@ def chat(wired):
             process_identity=fixer.process_identity,
         )
     )
-    comms.threads.register(
+    comms.registry.declare(
         Thread(name="PR112", tags=frozenset({"docs"}), worktree="/tmp/wt2", process_identity=None)
     )
     return comms
@@ -95,7 +95,7 @@ class TestChannelDelivery:
 
     def test_untagged_thread_does_not_receive_tag_channel(self, chat):
         # A thread with no tags receives only DMs and the global channel.
-        chat.threads.register(Thread(name="loner", tags=frozenset(), worktree="/wt"))
+        chat.registry.declare(Thread(name="loner", tags=frozenset(), worktree="/wt"))
         chat.messaging.send("PR111", "#ci", "only tagged see this")
         assert chat.bus.pending_count("loner") == 0
 

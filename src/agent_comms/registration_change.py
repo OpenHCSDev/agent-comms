@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from .errors import RelationViolationError
 from .goals import Goal
 from .thread_status import ThreadStatus
 from .threads import Thread
@@ -48,6 +49,10 @@ class RegistrationChange(ABC):
     @abstractmethod
     def restarted(self) -> RegistrationChange: ...
 
+    def declared(self, requested: Thread) -> RegistrationChange:
+        """Initial declarations have no prior executor to preserve or replace."""
+        return self
+
     def apply(self, document: RegistryDocument) -> None:
         """Caller holds registry/publication authority and records goal history."""
         thread = self.installed_thread
@@ -76,6 +81,29 @@ class InitialRegistration(RegistrationChange):
 class UpdatedRegistration(RegistrationChange):
     previous: Thread
     previous_status: ThreadStatus
+
+    def declared(self, requested: Thread) -> RegistrationChange:
+        """Decide executor preservation/admission against the locked prior owner."""
+        if self.previous.executing:
+            if requested.process_identity not in {None, self.previous.process_identity}:
+                raise RelationViolationError("Cannot replace an executor during its active turn.")
+            return replace(
+                self,
+                thread=replace(
+                    self.thread,
+                    process_identity=self.previous.process_identity,
+                    active_turn=self.previous.active_turn,
+                    turn_generation=self.previous.turn_generation,
+                    last_finished_turn_id=self.previous.last_finished_turn_id,
+                ),
+            )
+        if (
+            self.previous.has_process
+            and requested.has_process
+            and requested.incarnation != self.previous.incarnation
+        ):
+            return self.restarted()
+        return self
 
     @property
     def prior_goal(self) -> Goal | None:
@@ -111,8 +139,10 @@ class UpdatedRegistration(RegistrationChange):
 
     def restarted(self) -> RegistrationChange:
         return OwnerRestartRegistration(
-            thread=self.thread, status=self.status,
-            previous=self.previous, previous_status=self.previous_status,
+            thread=self.thread,
+            status=self.status,
+            previous=self.previous,
+            previous_status=self.previous_status,
         )
 
 

@@ -12,7 +12,7 @@ from agent_comms.threads import Thread
 def fixture(tmp_path):
     comms = wire(tmp_path / "wire")
     for name in ("peer", "worker"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     message = comms.messaging.send_message("peer", "worker", "Review the implementation")
     source = ScheduledTurn.incoming(message).prompt
     sent = "Coordination context: owner instructions\n\n" + source
@@ -128,8 +128,8 @@ def test_cli_previews_by_default(tmp_path, capsys):
 def test_channel_batch_recovers_one_binding_for_all_admitted_sequences(tmp_path):
     comms = wire(tmp_path / "wire")
     owner = Thread("worker", frozenset({"team"}), str(tmp_path))
-    comms.threads.register(owner)
-    comms.threads.register(Thread("peer", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(owner)
+    comms.registry.declare(Thread("peer", frozenset({"team"}), str(tmp_path)))
     messages = tuple(
         comms.messaging.send_message("peer", "#team", body) for body in ("First", "Second")
     )

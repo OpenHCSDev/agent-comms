@@ -143,7 +143,7 @@ async def owner_turn(comms, tmp_path):
 
 def waiting_owner(execution):
     comms = execution.runner.comms
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "waiting",
             frozenset(),
@@ -367,7 +367,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
         await emit(session_id, event, **kwargs)
         observed.append(type(event))
         if isinstance(event, StartedTranscriptUpdate):
-            comms.threads.register(
+            comms.registry.declare(
                 Thread(
                     "waiting",
                     frozenset(),
@@ -453,7 +453,7 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
         await emit(session_id, event, **kwargs)
         events.append(type(event))
         if isinstance(event, StartedTranscriptUpdate):
-            comms.threads.register(
+            comms.registry.declare(
                 Thread(
                     "waiting",
                     frozenset(),

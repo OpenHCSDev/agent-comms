@@ -51,7 +51,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         resource.write_text("value = 1\n")
         comms = Comms(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
-            comms.threads.register(
+            comms.registry.declare(
                 Thread(
                     name,
                     frozenset({"team"}),

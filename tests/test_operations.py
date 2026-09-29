@@ -122,7 +122,7 @@ class TestThreadOps:
             },
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records))
-        wired.threads.register(
+        wired.registry.declare(
             Thread(
                 name="transcript-thread",
                 tags=frozenset(),
@@ -157,7 +157,7 @@ class TestThreadOps:
             )
             + "\n"
         )
-        wired.threads.register(
+        wired.registry.declare(
             Thread(
                 name="compacted-thread",
                 tags=frozenset(),
@@ -320,7 +320,7 @@ class TestThreadOps:
             wired.threads.rename_self("pr17")
 
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired):
-        wired.threads.register(
+        wired.registry.declare(
             Thread(
                 name="generated-7",
                 tags=frozenset({"acp"}),
@@ -340,7 +340,7 @@ class TestThreadOps:
             wired.threads.rename_managed_thread("testing-123", "wrong", owner_pid=os.getppid())
 
     def test_managed_rename_disambiguates_duplicate_titles(self, wired):
-        wired.threads.register(
+        wired.registry.declare(
             Thread(
                 name="testing-123",
                 tags=frozenset(),
@@ -348,7 +348,7 @@ class TestThreadOps:
                 process_identity=ProcessIdentity.capture(os.getppid()),
             )
         )
-        wired.threads.register(
+        wired.registry.declare(
             Thread(
                 name="generated-7",
                 tags=frozenset({"acp"}),
@@ -362,7 +362,7 @@ class TestThreadOps:
         assert result.current == "testing-123-2"
 
     def test_managed_rename_reclaims_own_alias(self, wired):
-        wired.threads.register(
+        wired.registry.declare(
             Thread(name="generated-7", tags=frozenset(), worktree="/tmp/project", process_identity=ProcessIdentity.capture(os.getpid()))
         )
         assert wired.threads.rename_managed_thread(
@@ -391,7 +391,7 @@ class TestThreadOps:
             start_new_session=True,
             env=env,
         )
-        wired.threads.register(
+        wired.registry.declare(
             Thread(
                 name="live-process",
                 tags=frozenset(),
@@ -451,7 +451,7 @@ class TestLedgerOps:
                     )
                     + "\n"
                 )
-        wired.threads.register(
+        wired.registry.declare(
             Thread(name="large", tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
         )
         events = wired.transcripts.thread_transcript("large")
@@ -506,7 +506,7 @@ class TestPollAndWire:
 
     def test_runtime_files_created_on_demand(self, tmp_path):
         comms = wire(tmp_path / "fresh")
-        comms.threads.register(Thread(name="a", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         assert (tmp_path / "fresh" / "registry.json").exists()
 
 
@@ -514,7 +514,7 @@ class TestCrossWireIsolation:
     def test_two_wires_do_not_leak(self, tmp_path):
         a = wire(tmp_path / "a")
         b = wire(tmp_path / "b")
-        a.threads.register(Thread(name="only-in-a", tags=frozenset(), worktree="/wt"))
+        a.registry.declare(Thread(name="only-in-a", tags=frozenset(), worktree="/wt"))
         assert "only-in-a" in a.registry
         with pytest.raises(UnregisteredThreadError):
             b.registry.require("only-in-a")
@@ -525,15 +525,15 @@ class TestReDeclarationPreservesProvenance:
     the tags its fork declared, or it silently loses channel access."""
 
     def test_empty_tags_inherit_previous(self, wired):
-        wired.threads.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
+        wired.registry.declare(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
         assert wired.registry.require("fixer").tags == frozenset({"auth"})
 
     def test_explicit_tags_replace_previous(self, wired):
-        wired.threads.register(Thread(name="fixer", tags=frozenset({"docs"}), worktree="/tmp/wt1"))
+        wired.registry.declare(Thread(name="fixer", tags=frozenset({"docs"}), worktree="/tmp/wt1"))
         assert wired.registry.require("fixer").tags == frozenset({"docs"})
 
     def test_missing_session_file_inherits_previous(self, wired, tmp_path):
-        wired.threads.register(
+        wired.registry.declare(
             Thread(
                 name="PR111",
                 tags=frozenset({"base"}),
@@ -541,15 +541,15 @@ class TestReDeclarationPreservesProvenance:
                 session_file=str(tmp_path / "s.json"),
             )
         )
-        wired.threads.register(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
+        wired.registry.declare(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))
         assert wired.registry.require("PR111").session_file == str(tmp_path / "s.json")
 
     def test_fresh_declaration_is_unaffected(self, wired):
-        wired.threads.register(Thread(name="fresh", tags=frozenset(), worktree="/wt"))
+        wired.registry.declare(Thread(name="fresh", tags=frozenset(), worktree="/wt"))
         assert wired.registry.require("fresh").tags == frozenset()
 
     def test_tagless_child_keeps_channel_after_reregister(self, wired):
-        wired.threads.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
+        wired.registry.declare(Thread(name="fixer", tags=frozenset(), worktree="/tmp/wt1"))
         wired.messaging.send("PR111", "#auth", "only tagged fixer sees this")
         assert wired.bus.pending_count("fixer") == 1
 

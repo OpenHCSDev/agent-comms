@@ -171,7 +171,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
     with pytest.MonkeyPatch.context() as patch:
         root, root_id, comms, _, people = _root(directory, direct=True)
         owner = people[2]
-        comms.threads.register(replace(owner, task="x" * 24000))
+        comms.registry.declare(replace(owner, task="x" * 24000))
         patch.setattr(runtime, "_trusted_package", lambda _: None)
         patch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
         patch.setattr(native_prompt_send, "_MAX_SEND_SECONDS", 0.35)

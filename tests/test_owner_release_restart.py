@@ -40,7 +40,7 @@ def release(signum, frame):
     while not (root / 'exit').exists(): time.sleep(0.01)
     raise SystemExit(0)
 signal.signal(signal.SIGTERM, release)
-comms.threads.register(current_thread())
+comms.registry.declare(current_thread())
 (root / 'ready').touch()
 while True: time.sleep(0.01)
 """)

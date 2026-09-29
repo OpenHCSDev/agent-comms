@@ -74,7 +74,7 @@ async def main():
         comms=wire(root/'wire')
         comms.messaging.initialize_private_initial_protocol()
         for name, parent in [('openhcs-architecture-memory',None),('openhcs-pr159-viewer-bind-owner','openhcs-architecture-memory')]:
-            comms.threads.register(Thread(name,frozenset({'openhcs','comms'}),str(root),parent=parent,
+            comms.registry.declare(Thread(name,frozenset({'openhcs','comms'}),str(root),parent=parent,
                                           process_identity=None))
         originals=copy_actual_history(comms.root,live)
         navigation=ThreadNavigationRequest(str(comms.root),'openhcs-pr159-viewer-bind-owner',root,()).read()

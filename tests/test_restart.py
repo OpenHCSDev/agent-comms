@@ -19,7 +19,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     comms = wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]))
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     comms.agents.set_agent_info(
         "worker", model="test/model", session_name="preserved", context_used=23, context_size=100
     )

@@ -21,7 +21,7 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 def test_original_record_clock_survives_split_and_routed_projection(tmp_path, stamp):
     comms = wire(tmp_path / "wire")
     for name in ("peer", "owner"):
-        comms.threads.register(Thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     requests = tuple(
         comms.messaging.send_message("peer", "owner", text) for text in ("first", "second")
     )
@@ -90,7 +90,7 @@ async def test_actual_native_saved_clocks_survive_acp_snapshot_and_rebuild(
     ]
     assert len(expected) == 2
     comms = wire(native.root)
-    comms.threads.register(
+    comms.registry.declare(
         Thread("clock", frozenset(), str(native.project), session_file=str(native.session))
     )
     page = comms.transcripts.thread_transcript_page("clock")

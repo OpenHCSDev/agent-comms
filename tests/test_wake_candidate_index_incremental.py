@@ -39,7 +39,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
-    comms.threads.register(
+    comms.registry.declare(
         Thread(
             "sender",
             frozenset({"writer"}),
@@ -49,7 +49,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
         )
     )
     for number in range(recipients):
-        comms.threads.register(
+        comms.registry.declare(
             Thread(
                 f"member{number:03}",
                 frozenset({"cohort"}),

@@ -38,7 +38,7 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
         comms = Comms(root)
         people = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
         for name, created_at in people.items():
-            comms.threads.register(
+            comms.registry.declare(
                 Thread(
                     name,
                     frozenset({"team"}),

@@ -13,7 +13,7 @@ from agent_comms.threads import Thread
 def prepared(root):
     comms = wire(root)
     for name, tags in (("alice", {"team"}), ("bob", set())):
-        comms.threads.register(Thread(name, frozenset(tags), str(root)))
+        comms.registry.declare(Thread(name, frozenset(tags), str(root)))
     return comms
 
 
@@ -40,7 +40,7 @@ def test_displayed_message_is_read_in_every_projection(tmp_path):
 
 def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp_path):
     comms = prepared(tmp_path)
-    comms.threads.register(Thread("carol", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("carol", frozenset(), str(tmp_path)))
     hidden = comms.messaging.send_message("bob", "carol", "no member mentioned")
     shown = comms.messaging.send_message("bob", "carol", "@alice shown by mention")
     comms.channels.set_channel_any_mode("#team", True)
@@ -107,7 +107,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     assert comms.bus.pending_count(viewer, "alice") == 0
     comms.registry.unregister("alice")
     comms.registry.remove("alice")
-    comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+    comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
     assert old.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
     assert comms.bus.pending_count(viewer, "alice") == 1
@@ -304,7 +304,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
         elif operation == "rebind":
             comms.registry.unregister("alice")
             comms.registry.remove("alice")
-            comms.threads.register(Thread("alice", frozenset({"team"}), str(tmp_path)))
+            comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
         elif operation == "crash":
             # The child loads the actual durable store, then exits without
             # Python cleanup. No synthetic read document or mocked reopen.

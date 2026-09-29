@@ -9,11 +9,11 @@ from agent_comms.threads import Thread
 def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
     comms = wire(tmp_path)
     for name in ("active", "stopped", "archived"):
-        comms.threads.register(Thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.owners.stop("stopped")
     comms.owners.stop("archived")
     comms.threads.archive("archived")
-    comms.threads.register(Thread("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER))
+    comms.registry.declare(Thread("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER))
 
     def names(snapshot):
         return {view.thread.name for view in snapshot.threads}

@@ -108,7 +108,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
 
 @pytest.mark.parametrize("attribution", ["model", "runtime", "missing", "stale_owner"])
 def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, attribution):
-    wired.threads.register(Thread(name="project", tags=frozenset(), worktree=str(tmp_path)))
+    wired.registry.declare(Thread(name="project", tags=frozenset(), worktree=str(tmp_path)))
     initial = wired.goals.update_goal("project", SetGoalAction(text="Work"))
     if attribution == "stale_owner":
         wired.goals.update_goal(

@@ -24,7 +24,7 @@ from agent_comms.tools import ToolRequest
 
 def _wire(tmp_path) -> Comms:
     comms = Comms(tmp_path / "wire")
-    comms.threads.register(Thread("worker", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     return comms
 
 

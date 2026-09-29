@@ -35,7 +35,7 @@ from agent_comms.threads import Thread
 @pytest.fixture
 def owner(tmp_path):
     comms = wire(tmp_path)
-    comms.threads.register(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep the durable objective"))
     return comms, goal
 
