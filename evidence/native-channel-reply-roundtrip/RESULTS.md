@@ -52,3 +52,15 @@ archives and named worktree files; requested authoritative path from Boyle. This
 receipt does not certify S15 family implementation. Current331 excludes responder
 from wake recipients; mentions/ambient expansion needs explicit chosen contract,
 not restoration of deleted advisory state. No duplicate production implementation.
+
+## Strict correction checkpoint805ca4ab
+
+Merged into own94e1fc21; own noneditable installation. corrected-acceptance.log:
+47passed29.33s, existing keyed receipt negative cases, checkpoint readers,
+response fencing and actual native330 automatic reply/ACP acceptance together.
+This verifies published805ca4ab, not unpublished later WakeCandidateIndex closure.
+Boyle owns certified/full negative additions; no duplicate matrix was created.
+Full reader now uses decoded KeyedResponseReceipt.add_unique; canonical decode
+owns root/envelope/execution-route/structure validation for bounded readers too.
+Final candidate must include optional index decoder deletion and Boyle's finished
+certified negative coverage; fresh affected-path proof follows that checkpoint.
