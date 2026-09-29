@@ -1,6 +1,8 @@
 """Canonical page identity covers byte and annotation/source changes."""
 
 import json
+import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -9,7 +11,8 @@ from agent_comms.coordination_errors import StaleRevision
 from agent_comms.threads import Thread
 
 
-def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path):
+@pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
+def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, journal_mode):
     comms = wire(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
     native_id = "a" * 32
@@ -19,15 +22,18 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path):
         },
     }) + "\n")
     comms.threads.register(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
-    captured = comms.transcripts.capture_page_read("worker")
-    assert captured.read().events[0].declared_name == "user"
-    original = path.read_bytes()
-    comms.transcripts.routes.record_input_display(native_id, None)
-    assert path.read_bytes() == original
-    assert not captured.current()
-    with pytest.raises(StaleRevision):
-        captured.read()
-    assert comms.transcripts.capture_page_read("worker").read().events[0].declared_name == "context"
+    comms.transcripts.routes.record_input_display("b" * 32, None)
+    with closing(sqlite3.connect(comms.transcripts.routes.database_path)) as connection:
+        assert connection.execute("PRAGMA journal_mode=" + journal_mode).fetchone()[0] == journal_mode.lower()
+        captured = comms.transcripts.capture_page_read("worker")
+        assert captured.read().events[0].declared_name == "user"
+        original = path.read_bytes()
+        comms.transcripts.routes.record_input_display(native_id, None)
+        assert path.read_bytes() == original
+        assert not captured.current()
+        with pytest.raises(StaleRevision):
+            captured.read()
+        assert comms.transcripts.capture_page_read("worker").read().events[0].declared_name == "context"
 
 
 def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):

@@ -19,7 +19,7 @@ from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
-from .transcript_routes import TranscriptRoutes
+from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .store_files import file_revision
 from .coordination_errors import StaleRevision
 
@@ -53,10 +53,11 @@ class TranscriptReadIdentity:
     """All canonical inputs to a bounded native page, including annotations."""
 
     root: str
+    requested_name: str
     thread: Thread
     session_file: str
     native_revision: tuple[int, int, int, int] | None
-    route_revision: tuple[int, int, int, int] | None
+    route_revision: TranscriptRouteRevision
     bus_revision: tuple[int, int, int, int] | None
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -73,7 +74,7 @@ class TranscriptRead:
     def current(self) -> bool:
         identity = self.identity
         return self.owner.capture_page_read(
-            identity.thread.name, before=identity.before, after=identity.after,
+            identity.requested_name, before=identity.before, after=identity.after,
             through=identity.through,
         ).identity == identity
 
@@ -82,7 +83,7 @@ class TranscriptRead:
             raise StaleRevision("Transcript read inputs changed before preparation")
         identity = self.identity
         page = self.owner.thread_transcript_page(
-            identity.thread.name, before=identity.before, after=identity.after,
+            identity.requested_name, before=identity.before, after=identity.after,
             through=identity.through,
         )
         if not self.current():
@@ -113,9 +114,9 @@ class Transcripts:
             name, through.session_file if through is not None else None,
         )
         return TranscriptRead(self, TranscriptReadIdentity(
-            str(self.root), thread, session_file,
+            str(self.root), name, thread, session_file,
             file_revision(Path(session_file)) if session_file else None,
-            file_revision(self.routes.database_path), file_revision(self.bus.log.path),
+            self.routes.revision(), file_revision(self.bus.log.path),
             before, after, through,
         ))
 
