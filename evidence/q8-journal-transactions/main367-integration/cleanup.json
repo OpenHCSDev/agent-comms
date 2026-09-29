@@ -1,0 +1,10 @@
+{
+  "active_references": [],
+  "removed": [
+    ".venv",
+    ".scratch",
+    ".pytest_cache",
+    ".ruff_cache",
+    "tests/__pycache__"
+  ]
+}

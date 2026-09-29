@@ -178,7 +178,7 @@ async def test_uncertain_or_changed_input_never_borrows_future_queue_exception(o
         capture(owner)
     assert agent.inputs.dispositions.read().rows["acp:original"].declared_name == "unknown"
     assert (
-        CompactionJournal(agent._comms.root / "compaction-commits.sqlite3").unresolved(
+        CompactionJournal(agent._comms.root / "compaction-commits.sqlite3").operations.unresolved(
             str(current.session_file)
         )
         == ()

@@ -623,6 +623,6 @@ class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
             "thread": thread.name,
             "attempts": [
                 {"operation_id": row.operation_id, "state": FieldCodec.encode(row.state)}
-                for row in journal.selected_summaries(thread.session_file)
+                for row in journal.summaries.history(thread.session_file)
             ],
         }

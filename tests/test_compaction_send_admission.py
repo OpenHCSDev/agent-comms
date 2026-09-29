@@ -26,19 +26,19 @@ def test_saved_session_barrier_does_not_create_or_repair_journal(tmp_path):
     assert native_input_admitted(root, str(session))
     assert not (root / "compaction-commits.sqlite3").exists()
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    first = journal.begin(
+    first = journal.operations.begin(
         str(session),
         {"source": "pre-summary"},
         inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
     )
     assert not native_input_admitted(root, str(session))
-    journal.resolve(first, UnknownOperation(), {"status": "unknown", "reason": "lost reply"})
+    journal.operations.resolve(first, UnknownOperation(), {"status": "unknown", "reason": "lost reply"})
     assert not native_input_admitted(root, str(session))
     assert native_input_admitted(root, None)
-    journal.resolve(first, CommittedOperation(), {"status": "committed", "entryId": "entry"})
+    journal.operations.resolve(first, CommittedOperation(), {"status": "committed", "entryId": "entry"})
     assert native_input_admitted(root, str(session))
     assert not native_input_admitted(root, str(root / "missing.jsonl"))
-    assert [row.commit_id for row in journal.pending_publications(str(session))] == []
+    assert [row.commit_id for row in journal.publications.pending(str(session))] == []
     journal.path.unlink()
     journal.path.symlink_to(root / "missing-db.sqlite3")
     assert not native_input_admitted(root, str(session))
@@ -61,7 +61,7 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
     session.write_text("{}\n")
     comms.threads.attach_session("project", str(session), pid=os.getpid())
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-    commit_id = journal.begin(
+    commit_id = journal.operations.begin(
         str(session),
         {"source": "pre-summary"},
         inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
@@ -83,10 +83,10 @@ async def test_acp_original_send_denied_before_input_bind_with_unresolved_commit
             .unknown(frozenset({"project"}))
         )
         assert len(rows) == 1 and not rows[0].has_native_binding
-        assert journal.get(commit_id).state.declared_name == "intent"
-        journal.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "uncertain"})
+        assert journal.operations.get(commit_id).state.declared_name == "intent"
+        journal.operations.resolve(commit_id, UnknownOperation(), {"status": "unknown", "reason": "uncertain"})
         await agent.inputs.run_owned_input("project", "project", "distinct later input")
         assert observed == [False, False]
-        assert journal.get(commit_id).state.declared_name == "unknown"
+        assert journal.operations.get(commit_id).state.declared_name == "unknown"
     finally:
         await agent.shutdown()

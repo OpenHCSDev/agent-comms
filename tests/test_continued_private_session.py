@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.compaction_journal import CompactionJournal, CompactionJournalError
+from agent_comms.compaction_errors import CompactionJournalError
+from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_sidecar import native_request_digest
@@ -55,11 +56,11 @@ def continued(tmp_path):
 def test_continued_private_session_needs_no_fresh_object_and_preserves_history(continued):
     journal, session, inputs, source = continued
     before = session.read_bytes(), inputs.path.read_bytes()
-    operation = journal.reserve_selected_summary(str(session), source)
-    assert journal.selected_summary(operation).state.declared_name == "reserved"
+    operation = journal.summaries.reserve(str(session), source)
+    assert journal.summaries.get(operation).state.declared_name == "reserved"
     assert before == (session.read_bytes(), inputs.path.read_bytes())
     with pytest.raises(CompactionJournalError):
-        journal.reserve_selected_summary(str(session), source)
+        journal.summaries.reserve(str(session), source)
 
 
 @pytest.mark.parametrize(
@@ -111,14 +112,14 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
     if damage == "duplicate":
         entries.append(entries[1])
     if damage == "raw":
-        journal.reserve_private_raw_input(session, "b" * 32)
+        journal.private_inputs.reserve(session, "b" * 32)
     inputs.path.write_text(json.dumps(saved))
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     if damage != "revision":
         refresh_source(source, session)
     with pytest.raises((CompactionJournalError, ValueError)):
-        journal.reserve_selected_summary(str(session), source)
-    assert journal.unresolved_selected_summary(str(session)) == ()
+        journal.summaries.reserve(str(session), source)
+    assert journal.summaries.unresolved(str(session)) == ()
     assert json.loads(inputs.path.read_text())["rows"] == rows
 
 
@@ -135,7 +136,7 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
     journal, session, inputs, source = continued
     inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
     if damage != "no-marker":
-        journal.reserve_private_raw_input(session, "a" * 32)
+        journal.private_inputs.reserve(session, "a" * 32)
     if damage in {"extended", "null", "opaque"}:
         entries = [json.loads(line) for line in session.read_text().splitlines()]
         part = entries[1]["message"]["content"][0]
@@ -200,9 +201,9 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
     refresh_source(source, session)
     if damage in {"context", "unsettled", "foreign"}:
         with pytest.raises(CompactionJournalError, match="coverage floor"):
-            journal.reserve_selected_summary(str(session), source)
+            journal.summaries.reserve(str(session), source)
     else:
-        journal.reserve_selected_summary(str(session), source)
+        journal.summaries.reserve(str(session), source)
     with sqlite3.connect(journal.path) as db:
         assert db.execute("SELECT input_id,status FROM private_raw_inputs").fetchall() == (
             [] if damage == "no-marker" else [("a" * 32, "unknown")]

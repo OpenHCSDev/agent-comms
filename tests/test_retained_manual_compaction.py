@@ -165,11 +165,11 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             assert isinstance(receipt, CompactionCommittedUpdate)
             assert receipt.summary
         journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-        (attempt,) = journal.selected_summaries(str(session))
+        (attempt,) = journal.summaries.history(str(session))
         if mode == "manual":
             assert isinstance(attempt.state, ManualCommittedSummary)
         assert attempt.state.commit_id
-        assert journal.get(attempt.state.commit_id).state.committed
+        assert journal.operations.get(attempt.state.commit_id).state.committed
         persistent = agent.turns.persistent_backends["retained"]
         if mode == "manual":
             assert not persistent.available and persistent.custody.session_file == str(session)

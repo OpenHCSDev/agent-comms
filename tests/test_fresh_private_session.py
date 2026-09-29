@@ -8,11 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.compaction_journal import (
-    CompactionJournal,
-    CompactionJournalError,
-    CompactionJournalUnknownError,
-)
+from agent_comms.compaction_errors import CompactionJournalError, CompactionJournalUnknownError
+from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import NativePiUnavailable, _read_private_file, _trusted_package
 from agent_comms.thread_identity import ThreadIncarnation
@@ -330,8 +327,8 @@ def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
     fresh = create_fresh_private_session(root / "native-sessions" / "alice-lookup", worktree=root)
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
     with pytest.raises(CompactionJournalError, match="coverage floor"):
-        journal.reserve_selected_summary(str(fresh.path), _private_source(fresh.path))
-    journal.enroll_fresh_private_session(
+        journal.summaries.reserve(str(fresh.path), _private_source(fresh.path))
+    journal.private_inputs.enroll(
         fresh,
         incarnation=ThreadIncarnation("alice", 1.0),
         owner_lookup="alice-lookup",
@@ -339,7 +336,7 @@ def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
         admission_generation=3,
     )
     with pytest.raises(CompactionJournalError, match="coverage differs"):
-        journal.reserve_selected_summary(
+        journal.summaries.reserve(
             str(fresh.path),
             _private_source(fresh.path),
             fresh_session=fresh,
@@ -348,16 +345,16 @@ def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
     changed_owner = _private_source(fresh.path)
     changed_owner["source"]["incarnation"]["created_at"] = 1.5
     with pytest.raises(CompactionJournalError, match="coverage differs"):
-        journal.reserve_selected_summary(
+        journal.summaries.reserve(
             str(fresh.path), changed_owner, fresh_session=fresh, admission_generation=3
         )
     next_turn = _private_source(fresh.path)
-    attempt = journal.reserve_selected_summary(
+    attempt = journal.summaries.reserve(
         str(fresh.path), next_turn, fresh_session=fresh, admission_generation=3
     )
-    assert journal.selected_summary(attempt).state.declared_name == "reserved"
+    assert journal.summaries.get(attempt).state.declared_name == "reserved"
     with pytest.raises(CompactionJournalError, match="blocks native input"):
-        journal.reserve_private_raw_input(fresh.path, "a" * 32)
+        journal.private_inputs.reserve(fresh.path, "a" * 32)
 
 
 def test_outward_hardlink_cannot_evade_private_floor(tmp_path: Path) -> None:
@@ -368,7 +365,7 @@ def test_outward_hardlink_cannot_evade_private_floor(tmp_path: Path) -> None:
     os.link(fresh.path, outward)
     journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
     with pytest.raises(CompactionJournalError, match="one private inode link"):
-        journal.reserve_selected_summary(str(outward), _private_source(fresh.path))
+        journal.summaries.reserve(str(outward), _private_source(fresh.path))
 
 
 def test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker(
@@ -378,16 +375,16 @@ def test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker(
         tmp_path / "native-sessions" / "alice-lookup", worktree=tmp_path
     )
     journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-    journal.enroll_fresh_private_session(
+    journal.private_inputs.enroll(
         fresh,
         incarnation=ThreadIncarnation("alice", 1.0),
         owner_lookup="alice-lookup",
         owner_generation=2,
         admission_generation=3,
     )
-    journal.reserve_private_raw_input(fresh.path, "b" * 32)
+    journal.private_inputs.reserve(fresh.path, "b" * 32)
     with pytest.raises(CompactionJournalError, match="never replay"):
-        journal.reserve_selected_summary(
+        journal.summaries.reserve(
             str(fresh.path),
             _private_source(fresh.path),
             fresh_session=fresh,
@@ -416,7 +413,7 @@ def test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_select
 
     monkeypatch.setattr(module.os, "fsync", uncertain_fsync)
     with pytest.raises(CompactionJournalUnknownError, match="durability UNKNOWN"):
-        journal.enroll_fresh_private_session(
+        journal.private_inputs.enroll(
             fresh,
             incarnation=ThreadIncarnation("alice", 1.0),
             owner_lookup="alice-lookup",
@@ -427,7 +424,7 @@ def test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_select
     monkeypatch.setattr(module.os, "fsync", original_fsync)
     assert CompactionJournal(journal.path).path.exists()
     with pytest.raises(CompactionJournalError, match="coverage differs"):
-        journal.reserve_selected_summary(
+        journal.summaries.reserve(
             str(fresh.path),
             _private_source(fresh.path),
             fresh_session=fresh,

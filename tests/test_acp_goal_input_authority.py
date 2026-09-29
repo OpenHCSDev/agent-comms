@@ -244,14 +244,14 @@ async def test_unresolved_journal_reports_named_refusal_or_goal_deferral(
             comms.goals.update_goal("project", SetGoalAction(text="Continue until stopped"))
         public_id, command = await queue_followup(agent, kwargs)
         journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
-        commit_id = journal.begin(
+        commit_id = journal.operations.begin(
             str(session), {"source": "before-summary"}, inputs=agent.inputs.dispositions.read()
         )
         with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
             observed.append(allowed)
         row = agent.inputs.dispositions.read().lookup("acp:" + public_id)
         assert not row.has_native_binding
-        assert journal.get(commit_id).state.declared_name == "intent"
+        assert journal.operations.get(commit_id).state.declared_name == "intent"
         yield ae.StreamSettled()
         yield ae.Done(ok=True, text="No follow-up was sent")
 
