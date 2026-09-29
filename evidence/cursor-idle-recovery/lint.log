@@ -1,11 +1,1 @@
-E501 Line too long (101 > 100)
-  --> tests/test_cursor_load_recovery.py:51:101
-   |
-49 |                 payload = json.loads(await reader.readline())
-50 |                 for update in decode_updates(payload["update"].get("_meta")):
-51 |                     if isinstance(update, CursorAdvancedUpdate) and update.envelope.revision > after:
-   |                                                                                                     ^
-52 |                         return update.envelope
-   |
-
-Found 1 error.
+All checks passed!
