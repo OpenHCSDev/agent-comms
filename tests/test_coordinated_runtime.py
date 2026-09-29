@@ -28,12 +28,10 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.compaction_journal import (
-    CompactionJournal,
-    CompactionJournalError,
-    CompactionJournalUnknownError,
-    SelectedSummaryAttempt,
-)
+from agent_comms.compaction_errors import CompactionJournalError, CompactionJournalUnknownError
+from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.compaction_private_inputs import PrivateInputs
+from agent_comms.compaction_records import SelectedSummaryAttempt
 from agent_comms.compaction_states import ReservedSummary
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import (
@@ -484,7 +482,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
     fresh.verify_saved_identity()
     assert len(fresh.path.read_text().splitlines()) == 2
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    with journal._transaction() as db:
+    with journal.transaction() as db:
         coverage = db.execute(
             "SELECT session_id,device,inode,owner_generation,admission_generation "
             "FROM enrolled_private_sessions WHERE session_file=?",
@@ -500,7 +498,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
             (str(fresh.path),),
         ).fetchone() == (result.input_id, "unknown")
     with pytest.raises(CompactionJournalError, match="never replay"):
-        journal.reserve_selected_summary(
+        journal.summaries.reserve(
             str(fresh.path),
             {
                 "source": manual_source(fresh.path, "beta", incarnation=people[2].incarnation),
@@ -545,7 +543,7 @@ async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
     rows = [json.loads(row) for row in result.fresh_session.path.read_text().splitlines()]
     assert [row["type"] for row in rows[:3]] == ["session", "model_change", "thinking_level_change"]
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    with journal._transaction() as db:
+    with journal.transaction() as db:
         assert db.execute(
             "SELECT status FROM private_raw_inputs WHERE session_file=?",
             (str(result.fresh_session.path),),
@@ -597,7 +595,7 @@ async def test_selected_startup_changed_after_state_denies_before_fake_raw_byte(
         ).run()
     assert len(seen) == 1 and not calls
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    with journal._transaction() as db:
+    with journal.transaction() as db:
         assert (
             db.execute(
                 "SELECT count(*) FROM private_raw_inputs WHERE session_file=?",
@@ -638,7 +636,7 @@ async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
     assert len(visible) == 1
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
     with pytest.raises(CompactionJournalError, match="coverage floor"):
-        journal.reserve_selected_summary(
+        journal.summaries.reserve(
             str(visible[0]),
             {
                 "source": manual_source(visible[0], "beta", incarnation=people[2].incarnation),
@@ -918,7 +916,7 @@ def _reserved_private_selected_row(journal: CompactionJournal, session_file: Pat
         sort_keys=True,
         separators=(",", ":"),
     )
-    with journal._transaction() as db:
+    with journal.transaction() as db:
         SelectedSummaryAttempt(
             operation_id, str(session_file.resolve(strict=True)), source, ReservedSummary()
         ).insert(db)
@@ -940,10 +938,10 @@ async def test_private_raw_send_refuses_same_session_selected_row_before_write(
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
     operation_id = _reserved_private_selected_row(journal, session_file)
     if status == "unknown":
-        journal.mark_selected_summary_unknown(operation_id)
+        journal.summaries.mark_unknown(operation_id)
     elif status == "declined-prestart":
-        assert journal.decline_selected_summary_prestart(operation_id, "unsupported") is None
-    assert journal.selected_summary(operation_id).state.declared_name == status
+        assert journal.summaries.decline_prestart(operation_id, "unsupported") is None
+    assert journal.summaries.get(operation_id).state.declared_name == status
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
@@ -994,7 +992,7 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
-    reserve = CompactionJournal.reserve_private_raw_input
+    reserve = PrivateInputs.reserve
 
     def uncertain(self, session_file, input_id):
         fsync = os.fsync
@@ -1004,7 +1002,7 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
         finally:
             os.fsync = fsync
 
-    monkeypatch.setattr(CompactionJournal, "reserve_private_raw_input", uncertain)
+    monkeypatch.setattr(PrivateInputs, "reserve", uncertain)
     with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
         await SelectedExecution(
             root=root,
@@ -1016,7 +1014,7 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
         ).run()
     assert calls == []
     journal = CompactionJournal(root / "compaction-commits.sqlite3")
-    with journal._transaction() as db:
+    with journal.transaction() as db:
         assert (
             db.execute(
                 "SELECT count(*) FROM private_raw_inputs WHERE session_file = ?", (str(saved),)
@@ -1024,7 +1022,7 @@ async def test_private_raw_prewrite_fsync_unknown_never_dispatches_or_retries(
             == 1
         )
     with pytest.raises(CompactionJournalError, match="coverage floor"):
-        journal.reserve_selected_summary(
+        journal.summaries.reserve(
             str(saved),
             {
                 "source": manual_source(saved, "beta", incarnation=people[2].incarnation),
