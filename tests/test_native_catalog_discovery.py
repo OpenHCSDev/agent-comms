@@ -7,9 +7,12 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import backend
-from agent_comms.child_process import AttachedChild
+from agent_comms.child_process import AttachedChild, BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.config_options import ModelConfigOption, ThinkingLevelConfigOption
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.pi_commands import SetModel, SetThinkingLevel
+from agent_comms.pi_events import Response
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
@@ -139,3 +142,51 @@ async def test_actual_catalog_cancellation_reaps_child(catalog_owner, native_bac
 @pytest.mark.refactor_guard
 def test_backend_no_longer_owns_discovery_or_catalog_projection():
     assert not {"discover_models", "discover_thinking_levels", "Model"}.intersection(vars(backend))
+    assert not hasattr(PiRpcChannel, "request")
+
+
+async def test_actual_native_setting_responses_use_the_command_result_owner(
+    catalog_owner,
+    native_backend,
+):
+    _owner, children = catalog_owner
+    launch = NativePiRpcLaunch.managed(
+        "pi",
+        (
+            "--model",
+            "response-local/fixture",
+            "--offline",
+            "--no-session",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+        ),
+        worktree=native_backend.project,
+    )
+    session = backend.TurnSession(launch, "")
+    observed = []
+    async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=10) as child:
+        channel = PiRpcChannel(child.stdout)
+        for command, expected in (
+            (SetModel(id="model", provider="response-local", model_id="fixture"), True),
+            (SetThinkingLevel(id="thinking", level="off"), True),
+            (SetModel(id="refused", provider="response-local", model_id="missing"), False),
+        ):
+            pending = channel.track(command)
+            child.stdin.write(channel.command_bytes(command))
+            await child.stdin.drain()
+            while not pending.done():
+                event = await channel.receive()
+                assert event is not None
+                if isinstance(event, Response):
+                    channel.correlate(event)
+            response = pending.result()
+            updates = [event async for event in command.on_response(response, session)]
+            assert len(updates) == 1 and isinstance(updates[0], command.result_type)
+            assert updates[0].id == command.id and updates[0].ok is expected
+            if not expected:
+                assert response.error and updates[0].error == response.error
+            observed.append((command.declared_name, updates[0].ok))
+        assert not channel.pending._pending
+    assert len(children) == 1 and not children[0].alive()
+    print("actual_native_setting_results", observed)
