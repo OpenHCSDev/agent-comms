@@ -10,8 +10,8 @@ from .channel_targets import Tag
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
-from .goals import Goal
-from .thread_identity import OwnerIdentity, ThreadIncarnation, ThreadRole, TurnIdentity
+from .goals import Goal, GoalRevision
+from .thread_identity import OwnerIdentity, ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
 from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence
 
 
@@ -113,6 +113,35 @@ class Thread:
     @property
     def process_alive(self) -> bool:
         return self.process_identity is not None and self.process_identity.alive()
+
+    @classmethod
+    def require_declaration(cls, value: Thread) -> None:
+        if type(value) is not cls:
+            raise ValueError("live owner requires an exact thread declaration")
+
+    def require_local_process(self, process: ProcessIdentity) -> None:
+        self.role.require_executable()
+        if self.process_identity != process:
+            raise RelationViolationError("live owner is not the current process incarnation")
+
+    def require_idle(self) -> None:
+        if self.active_turn is not None:
+            raise RelationViolationError("live owner already has an active turn")
+
+    def require_current_turn(self, admission: int) -> None:
+        turn = self.active_turn
+        if turn is not None and not turn.current(admission, self.turn_generation):
+            raise RelationViolationError("live owner turn admission is no longer current")
+
+    def require_turn(self, turn_id: TurnId, admission: int) -> None:
+        self.require_current_turn(admission)
+        turn = self.active_turn
+        if turn is None or TurnId(turn.id) != turn_id:
+            raise RelationViolationError("live owner does not hold the requested turn")
+
+    @property
+    def goal_checkpoint(self) -> GoalRevision | None:
+        return self.goal.checkpoint if self.goal is not None else None
 
     @property
     def incarnation(self) -> ThreadIncarnation:

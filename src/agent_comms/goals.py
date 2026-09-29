@@ -67,6 +67,18 @@ class GoalMentionSource:
 
 
 @dataclass(frozen=True)
+class GoalRevision:
+    """A particular revision, independent of text and execution state."""
+
+    id: str
+    revision: int
+
+    def __post_init__(self) -> None:
+        if not self.id or self.revision < 0:
+            raise ValueError("Goal revision requires identity and nonnegative revision")
+
+
+@dataclass(frozen=True)
 class Goal:
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
 
@@ -88,6 +100,10 @@ class Goal:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
+
+    @property
+    def checkpoint(self) -> GoalRevision:
+        return GoalRevision(self.id, self.revision)
 
     def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
         """Later revisions may describe the same failed goal, never a replacement."""

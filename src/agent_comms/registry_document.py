@@ -419,6 +419,15 @@ class RegistrySnapshot:
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
 
+    def require_active(self, name: str) -> Thread:
+        canonical = self.aliases.get(name, name)
+        try:
+            thread = self.threads[canonical]
+            self.statuses[canonical].require_active()
+        except KeyError as error:
+            raise RelationViolationError("live owner is stopped or unavailable") from error
+        return thread
+
     def require_unambiguous_ownership(self) -> None:
         """Archived identities remain readable; publication requires unique owners."""
         if len({thread.created_at for thread in self.threads.values()}) != len(self.threads):

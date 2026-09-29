@@ -16,7 +16,11 @@ from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .native_admission_rules import GoalRegistryAdmissionCheck, RegistryAdmissionCheck
+from .native_admission_rules import (
+    GoalRegistryAdmissionCheck,
+    GoalRegistryIdentityCheck,
+    RegistryAdmissionCheck,
+)
 from .registry_document import RegistrySnapshot
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
@@ -30,6 +34,34 @@ class RegistryOwner:
     check_type: ClassVar[type[RegistryAdmissionCheck]] = GoalRegistryAdmissionCheck
     thread: Thread
     admission_generation: int
+
+    @classmethod
+    def capture_local(cls, snapshot: RegistrySnapshot, name: str) -> RegistryOwner:
+        """Read local executable authority from this single locked snapshot."""
+        thread = snapshot.require_active(name)
+        thread.require_local_process(ProcessIdentity.capture(os.getpid()))
+        admission = snapshot.admission_generations[thread.name]
+        thread.require_current_turn(admission)
+        return cls(thread=thread, admission_generation=admission)
+
+    def require_exact(
+        self, snapshot: RegistrySnapshot, expected: Thread, generation: int
+    ) -> None:
+        if snapshot.owner_identity(self.thread.name) != expected.owner_identity(generation):
+            raise RelationViolationError("live owner generation changed")
+        if self.thread != expected:
+            raise RelationViolationError("live owner declaration changed")
+
+    def require_claim(self, expected: Thread, admission: int) -> None:
+        try:
+            GoalRegistryIdentityCheck(
+                expected=expected, actual=self.thread,
+                expected_admission=admission, admission=self.admission_generation,
+                process=ProcessIdentity.capture(os.getpid()),
+            ).require_valid()
+        except ReservationViolationError as error:
+            raise RelationViolationError(f"live owner changed before turn claim: {error}") from error
+        self.thread.require_idle()
 
     def require_active_turn(self):
         """Return the captured executable turn whose process/admission still agree."""
@@ -67,11 +99,10 @@ class RegistryOwner:
             raise StaleFence(f"{reason}: {error}") from error
 
     def require_snapshot(self, snapshot: RegistrySnapshot, reason: str) -> None:
-        actual, status = snapshot.threads.get(self.thread.name), snapshot.statuses.get(
-            self.thread.name
-        )
-        if actual is None or status is None or not status.active:
-            raise StaleFence(reason)
+        try:
+            actual = snapshot.require_active(self.thread.name)
+        except RelationViolationError as error:
+            raise StaleFence(reason) from error
         self._require_current(actual, snapshot.admission_generations.get(self.thread.name), reason)
 
     def require_registry(self, registry: Registration) -> None:
