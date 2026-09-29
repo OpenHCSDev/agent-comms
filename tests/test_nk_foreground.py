@@ -221,7 +221,7 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
         _accept(root, root_id, comms, message)
         failing, attempts = _fake_model(fail_on=1)
         with (
-            patch("agent_comms.coordinated_runtime.TrackedTurnSession.execute", failing),
+            patch("agent_comms.tracked_turn.TrackedTurnSession.execute", failing),
             pytest.raises(RuntimeError),
         ):
             asyncio.run(owner.run_go("GO 0"))
@@ -264,7 +264,7 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
     fake, calls = _fake_model()
     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", _fake_package)
-    monkeypatch.setattr("agent_comms.coordinated_runtime.TrackedTurnSession.execute", fake)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     commands: list[int] = []
 
     def explicit_go(timeout: int) -> str:

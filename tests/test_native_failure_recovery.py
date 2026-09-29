@@ -58,7 +58,7 @@ def failed_owner(directory, output, exit_allowed):
             )
         raise NativePiUnavailable("pre-fix native provider failure")
 
-    runtime.TrackedTurnSession.execute = old_failure
+    TrackedTurnSession.execute = old_failure
     try:
         asyncio.run(
             runtime.SelectedExecution(

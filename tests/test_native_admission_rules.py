@@ -158,7 +158,7 @@ async def test_durable_private_admission_names_each_changed_authority(
         raise InspectedError
 
     monkeypatch.setattr(
-        "agent_comms.coordinated_runtime.TrackedTurnSession.execute", inspect_before_native
+        "agent_comms.tracked_turn.TrackedTurnSession.execute", inspect_before_native
     )
     with pytest.raises(InspectedError):
         await SelectedExecution(
