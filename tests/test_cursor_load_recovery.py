@@ -4,6 +4,8 @@ import asyncio
 import json
 import os
 
+import pytest
+
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.bus_publication import stable_thread_lookup
@@ -58,6 +60,20 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         await agent.inputs.drain_inbox(owner.name)
         before = await receive()
         assert before.observation.status == "none"
+        # Drain initial queue/cursor publications before observing idle effects.
+        while True:
+            try:
+                before = await asyncio.wait_for(receive(), 0.05)
+            except TimeoutError:
+                break
+        # A periodic observation deferred by a real writer did not invalidate
+        # the last trusted owner snapshot. After release, no duplicate should
+        # reach the socket and schedule idle reader preparation.
+        with _store_lock(comms.root / "bus.jsonl"):
+            await agent._publish_private_cursor(owner.name, owner.name)
+        await agent._publish_private_cursor(owner.name, owner.name)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(receive(), 0.05)
         with _store_lock(comms.root / "bus.jsonl"):
             loaded = next(
                 update.envelope

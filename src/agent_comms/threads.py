@@ -307,6 +307,10 @@ class Thread:
     def is_fork(self) -> bool:
         return self.parent is not None
 
+    def turn_started_by(self, updated_at_ms: int) -> bool:
+        """A declared turn already belongs to this executor (enforced at decode)."""
+        return self.active_turn is not None and self.active_turn.started_at * 1000 <= updated_at_ms + 1
+
     @property
     def executing(self) -> bool:
         return self.active_turn is not None

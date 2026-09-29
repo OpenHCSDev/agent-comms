@@ -6,6 +6,7 @@ import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .channels import Channel
 from .field_codec import FieldCodec
@@ -21,9 +22,45 @@ from .threads import Thread
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
+if TYPE_CHECKING:
+    from .presentation import BusPresentation
+
 
 class HistoryView(ABC):
     """A requested view binds its predicate once to each original registry."""
+
+    viewer: str | None = None
+
+    @abstractmethod
+    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
+        """Each view owns its current-source interpretation as well as retained capture."""
+
+    def page(self, presentation: BusPresentation, **paging) -> MessagePage:
+        return presentation.bus.history.integrated_page(self, presentation, **paging)
+
+    def display_evidence(self, page: MessagePage, presentation: BusPresentation):
+        """Paint evidence belongs to the selected view, never executor delivery."""
+        if self.viewer is None:
+            return None
+        source = page.messages[0].source
+        return HistoricalDisplay(
+            source,
+            presentation.bus.reads.capture(
+                self.viewer,
+                page.messages,
+                presentation.registry.snapshot(),
+                Path(source.root) / "bus.jsonl",
+                conversation_snapshot=source.registry().snapshot(),
+            ),
+        )
+
+    def full_history(self, presentation: BusPresentation) -> list[Message]:
+        page = self.page(presentation, limit=1000)
+        pages = [page.messages]
+        while page.has_older:
+            page = self.page(presentation, before=page.oldest_cursor, limit=1000)
+            pages.append(page.messages)
+        return [message for rows in reversed(pages) for message in rows]
 
     @abstractmethod
     def capture(self, snapshot: RegistrySnapshot) -> MessageDisplayScope:
@@ -35,6 +72,9 @@ class ChannelHistory(HistoryView):
     target: str
     targets: frozenset[str] | None
 
+    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
+        return presentation.bus.channel_history_page(self.target, **paging)
+
     def capture(self, snapshot: RegistrySnapshot) -> ChannelDisplayScope:
         return ChannelDisplayScope(self.target, self.targets)
 
@@ -42,6 +82,10 @@ class ChannelHistory(HistoryView):
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayHistory(HistoryView):
     channel: Channel
+    viewer: str | None = None
+
+    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
+        return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
 
     def capture(self, snapshot: RegistrySnapshot) -> ChannelDisplayScope:
         return ChannelDisplayScope.capture(self.channel, snapshot)
@@ -52,8 +96,36 @@ class DMHistory(HistoryView):
     first: str
     second: str
 
+    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
+        return presentation.bus.dm_history_page(self.first, self.second, **paging)
+
     def capture(self, snapshot: RegistrySnapshot) -> DMDisplayScope:
         return DMDisplayScope.capture(self.first, self.second, snapshot)
+
+
+@dataclass(frozen=True, slots=True)
+class DMDisplayHistory(DMHistory):
+    worktree: str
+
+    @property
+    def viewer(self) -> str:
+        return self.first
+
+    def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
+        from .read_basis import DMDisplayBasis
+
+        bus = presentation.bus
+        if self.second not in presentation.registry and bus.history.threads(self.second):
+            return MessagePage((), False, False)
+        return DMDisplayBasis.fetch_page(
+            bus,
+            presentation.registry,
+            bus.log.path.parent,
+            self.first,
+            self.second,
+            worktree=self.worktree,
+            **paging,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +247,21 @@ class HistoricalDisplay:
     def select(self, sequences) -> HistoricalDisplay:
         return HistoricalDisplay(self.source, self.displayed.select(sequences))
 
+    def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
+        """Acknowledge exactly painted retained membership in its own ledger."""
+        from .read_ledger import ReadLedger
+
+        viewer = registry.require(self.viewer)
+        if viewer.incarnation != self.displayed.viewer_identity or viewer.role.executable:
+            raise ValueError("Historical viewer changed; refresh history")
+        if self.source not in archive.sources():
+            raise ValueError("Historical source detached; refresh history")
+        self.source.validate()
+        ReadLedger(Path(self.source.root) / ReadLedger.filename).mark_displayed(
+            self.viewer,
+            self.displayed,
+        )
+
 
 class HistoryArchive:
     """Ordered immutable source snapshots; never a delivery/launch authority."""
@@ -276,8 +363,9 @@ class HistoryArchive:
                 shutil.rmtree(stage)
                 raise
 
-    def page(self, view: HistoryView, *, before=None, after=None, limit=100,
-             max_bytes=256 * 1024) -> MessagePage:
+    def page(
+        self, view: HistoryView, *, before=None, after=None, limit=100, max_bytes=256 * 1024
+    ) -> MessagePage:
         traversal = PageTraversal.capture(
             before.sequence if before is not None else None,
             after.sequence if after is not None else None,
@@ -297,11 +385,77 @@ class HistoryArchive:
                 view.capture(snapshot), traversal.for_source(index == start), limit, max_bytes
             )
             page = request.read(WireLog(Path(source.root) / "bus.jsonl"))
-            page = replace(page, messages=tuple(
-                HistoricalMessage.project(message, source, index, snapshot)
-                for message in page.messages
-            ))
+            page = replace(
+                page,
+                messages=tuple(
+                    HistoricalMessage.project(message, source, index, snapshot)
+                    for message in page.messages
+                ),
+            )
             if page.messages:
-                return replace(page, has_older=page.has_older or index > 0,
-                               has_newer=page.has_newer or index < len(sources) - 1)
+                return replace(
+                    page,
+                    has_older=page.has_older or index > 0,
+                    has_newer=page.has_newer or index < len(sources) - 1,
+                )
         return MessagePage((), False, False)
+
+    def integrated_page(
+        self,
+        view: HistoryView,
+        presentation: BusPresentation,
+        *,
+        before=None,
+        after=None,
+        limit=100,
+        max_bytes=256 * 1024,
+    ):
+        if not self.sources() and not isinstance(before or after, HistoryCursor):
+            return view.live_page(
+                presentation, before=before, after=after, limit=limit, max_bytes=max_bytes
+            )
+        history_revision = file_revision(self.path)
+        if before is not None and after is not None:
+            raise ValueError("Choose one history paging direction")
+        cursor = before if before is not None else after
+        historical = isinstance(cursor, HistoryCursor)
+        if not historical:
+            page = view.live_page(
+                presentation, before=before, after=after, limit=limit, max_bytes=max_bytes
+            )
+            if page.messages or after is not None:
+                return replace(
+                    page,
+                    has_older=page.has_older or bool(self.sources()),
+                    history_revision=history_revision,
+                )
+        history = self.page(
+            view,
+            before=before if historical and before is not None else None,
+            after=after if historical and after is not None else None,
+            limit=limit,
+            max_bytes=max_bytes,
+        )
+        if history.messages:
+            display = view.display_evidence(history, presentation)
+            latest = view.live_page(presentation, limit=1)
+            return replace(
+                history,
+                historical_display=display,
+                history_revision=history_revision,
+                has_newer=history.has_newer or bool(latest.messages),
+            )
+        if historical and after is not None:
+            return replace(
+                view.live_page(presentation, after=0, limit=limit, max_bytes=max_bytes),
+                history_revision=history_revision,
+            )
+        return replace(history if historical else page, history_revision=history_revision)
+
+    def threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
+        return tuple(
+            HistoricalThread(source, thread)
+            for source in self.sources()
+            for thread in source.registry().snapshot().threads.values()
+            if name is None or thread.name == name
+        )

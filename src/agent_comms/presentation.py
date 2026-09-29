@@ -2,33 +2,42 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from dataclasses import asdict, dataclass, field
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import ExitStack, contextmanager
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .activity import Activity, ActivityState
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
+from .channel_targets import is_channel_target
 from .channels import Channel
 from .display_order import ChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
+from .message_page import MessagePage, MessagePageRequest
 from .messages import Message
-from .read_basis import ChannelDisplayScope, ViewUnread
+from .read_basis import ChannelDisplayScope, DMDisplayScope, ViewUnread
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import file_revision
+from .store_files import _store_lock, file_revision
 from .thread_presentation import ThreadPresentation
 from .thread_status import ThreadStatus
 from .threads import Thread
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
+    from .catalog_document import CatalogDocument
+    from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
+    from .message_bus import MessageBus
     from .messages import Message
+    from .read_ledger import ReadLedger
+    from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .wire_log import WireLog
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,14 +51,237 @@ class MessageNotification:
     busy: bool = False
     message: Message | None = None
 
+    @classmethod
+    def window(
+        cls, root: Path, registry: Registration, messages: Sequence[Message]
+    ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
+        """Read one visible window's actual recipient outcomes; never schedule work.
+
+        Display uses the coordinator's existing assignment decoder and lifecycle.
+        A missing coordination store or absent row supplies no receipt. Errors remain
+        visible to the caller instead of becoming false successful delivery.
+        """
+        from .notification_assignment import NotificationAssignment
+
+        if len(messages) > 120:
+            raise ValueError("Notification reads require a bounded visible message window")
+        keys = {(message.seq, message.message_id) for message in messages if message.seq > 0}
+        result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
+        if not keys:
+            return {}
+        placeholders = ",".join("?" for _ in keys)
+        rows = NotificationAssignment.select(
+            root, f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
+        )
+        owners = NotificationAssignment.active_owners(registry.snapshot())
+        for receipt in rows:
+            notification = receipt.project(owners)
+            source = receipt.assignment.source
+            key = (source.seq, source.message_id)
+            if key in result:
+                result[key].append(notification)
+        return {key: tuple(rows) for key, rows in result.items()}
+
+    @classmethod
+    def recent(
+        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
+    ) -> tuple[MessageNotification, ...]:
+        """Recent assigned messages, including channel work, for one agent view.
+
+        Reads the original assignments and source messages. This is not a DM
+        delivery or a read acknowledgement, and never schedules another turn.
+        """
+        from .bus_publication import stable_thread_lookup
+        from .notification_assignment import NotificationAssignment
+
+        if not 1 <= limit <= 20:
+            raise ValueError("Recent notification limit must be between 1 and 20")
+        owner = registry.require(name)
+        rows = NotificationAssignment.select(
+            root,
+            "w.recipient_lookup=?",
+            (stable_thread_lookup(owner.created_at),),
+            limit=limit,
+        )
+        result = []
+        owners = NotificationAssignment.active_owners(registry.snapshot())
+        for receipt in rows:
+            notification = receipt.project(owners)
+            source = receipt.assignment.source
+            message = log.message_by_id(source.message_id)
+            if message is not None and message.seq == source.seq:
+                result.append(replace(notification, message=message))
+        return tuple(result)
+
+
+@dataclass(frozen=True, slots=True)
+class DisplaySelection:
+    """One captured registry/catalog/read basis for local human presentation."""
+
+    registry: RegistrySnapshot
+    catalog: CatalogDocument
+    viewer: str | None
+    seen: frozenset[int]
+    notice: str | None
+
+    @classmethod
+    def capture(
+        cls, registry: Registration, catalog: ChannelCatalog, reads: ReadLedger, viewer: str | None
+    ) -> DisplaySelection:
+        snapshot = registry.snapshot()
+        canonical = snapshot.aliases.get(viewer, viewer) if viewer is not None else None
+        seen = reads.seen_sequences(viewer, snapshot) if viewer is not None else frozenset()
+        return cls(snapshot, catalog.read(), canonical, seen, reads.read().notice)
+
+    @property
+    def channels(self) -> Mapping[str, Channel]:
+        return self.catalog.views(self.registry.threads)
+
+    @property
+    def scopes(self) -> tuple[ChannelDisplayScope, ...]:
+        return tuple(
+            ChannelDisplayScope.capture(channel, self.registry, seen=self.seen)
+            for channel in self.channels.values()
+        )
+
+    @property
+    def viewer_names(self) -> frozenset[str]:
+        return (
+            DMDisplayScope.names_for(self.viewer, self.registry)
+            if self.viewer is not None
+            else frozenset()
+        )
+
+    def scope(self, target: str) -> ChannelDisplayScope:
+        channel = self.channels.get(target)
+        if channel is None:
+            raise ValueError(f"Unknown channel: {target!r}")
+        return ChannelDisplayScope.capture(channel, self.registry, seen=self.seen)
+
 
 class BusPresentation:
-    def __init__(self, path: Path):
-        self._path = path
+    def __init__(self, bus: MessageBus, registry: Registration, catalog: ChannelCatalog):
+        self.bus = bus
+        self.registry = registry
+        self.catalog = catalog
+        self._path = bus.log.path
+        self._wire_lock_path = bus.log.path.parent / "wire"
         self._view_unread_cache: dict[str, ViewUnread] = {}
         self._display_activity_revision: tuple | None = None
         self._display_activity: dict[str, ChannelActivity] = {}
         self._display_activity_verified = False
+
+    def revision(self) -> tuple:
+        """Revisions of every store used to define one display predicate and marker."""
+        return tuple(
+            file_revision(path)
+            for path in (
+                self.registry.store.path,
+                self.catalog.path,
+                self.bus.reads.path,
+            )
+        )
+
+    @contextmanager
+    def snapshot(
+        self, viewer: str | None = None, target: str | None = None
+    ) -> Iterator[tuple[DisplaySelection, Iterator[tuple[Message, int]], tuple | None]]:
+        """Open one bus boundary atomically with a validated display basis.
+
+        Direct registry/catalog writers need not hold the Comms wire lock; the
+        revision checks detect their changes before the opened bus boundary.
+        The raw scan happens after releasing that lock. A later append is not
+        retried: the opened inode and byte limit already define a valid point.
+        """
+        for _ in range(3):
+            with ExitStack() as stack:
+                with _store_lock(self._wire_lock_path):
+                    revision = self.revision()
+                    basis = DisplaySelection.capture(
+                        self.registry, self.catalog, self.bus.reads, viewer
+                    )
+                    if self.revision() != revision:
+                        continue
+                    bus_revision = file_revision(self.bus.log.path)
+                    _, records = stack.enter_context(
+                        self.bus.log._record_snapshot(need_sequence=False)
+                    )
+                    if self.revision() != revision:
+                        continue
+                    if file_revision(self.bus.log.path) != bus_revision:
+                        bus_revision = None
+                if target is not None and target not in basis.channels:
+                    # A newly-created channel must not be rejected from an
+                    # earlier basis without checking its current revision.
+                    if self.revision() != revision:
+                        continue
+                    raise ValueError(f"Unknown channel: {target!r}")
+                yield basis, records, bus_revision
+                return
+        raise RuntimeError("Display scope changed during snapshot; retry the request.")
+
+    def channel_page(
+        self,
+        target: str,
+        *,
+        viewer: str | None = None,
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        """Local display projection; underlying channel history remains target-owned."""
+        if not is_channel_target(target):
+            raise ValueError(f"{target!r} is not a channel target.")
+        with self.snapshot(viewer=viewer, target=target) as (basis, records, _):
+            scope = basis.scope(target)
+            page = MessagePageRequest.capture(
+                scope,
+                before=before,
+                after=after,
+                limit=limit,
+                max_bytes=max_bytes,
+            ).collect(records)
+            if viewer is not None:
+                scope = replace(
+                    scope,
+                    displayed=self.bus.reads.capture(
+                        viewer, page.messages, basis.registry, self.bus.log.path
+                    ),
+                )
+            return replace(page, display_scope=scope)
+
+    def mark_channel_read(
+        self,
+        target: str,
+        *,
+        viewer: str,
+        through: int | None = None,
+        expected_scope: ChannelDisplayScope | None = None,
+    ) -> None:
+        with _store_lock(self._wire_lock_path):
+            revision = self.revision()
+            basis = DisplaySelection.capture(self.registry, self.catalog, self.bus.reads, viewer)
+            current = basis.scope(target)
+            if through is None:
+                # Explicit Mark Read selects the entire current view, unlike painted-page ACK.
+                messages = (
+                    message for message in self.bus.log.full_history() if current.includes(message)
+                )
+                displayed = self.bus.reads.capture(
+                    viewer, messages, basis.registry, self.bus.log.path
+                )
+                through = self.bus.log.latest_sequence()
+            else:
+                if expected_scope is None:
+                    raise ValueError("Channel display scope missing; refresh the displayed page.")
+                displayed = expected_scope.require_displayed()
+                if not current.same_projection(expected_scope) or self.revision() != revision:
+                    raise ValueError("Channel display changed; refresh the displayed page.")
+                displayed.validate(
+                    viewer, basis.registry, self.bus.reads.bus_identity(self.bus.log.path)
+                )
+            self.bus.reads.mark_displayed(viewer, displayed.through(through))
 
     def display_view_metrics(
         self,
@@ -155,6 +387,63 @@ class ChannelView:
     last_user_input: float = 0
     pinned_members: frozenset[str] = frozenset()
 
+    @classmethod
+    def roster(
+        cls,
+        snapshot: RegistrySnapshot,
+        channels: Mapping[str, Channel],
+        pins: Mapping[str, frozenset[str]],
+        order: ChannelSort,
+        activity: Mapping[str, Activity],
+        sent: Mapping[str, float],
+        messages: Mapping[str, ChannelActivity],
+        *,
+        show_stopped: bool,
+        show_archived: bool,
+    ) -> tuple[ChannelView, ...]:
+        people = {
+            name: thread
+            for name, thread in snapshot.threads.items()
+            if snapshot.statuses[name].in_view(
+                show_stopped=show_stopped, show_archived=show_archived
+            )
+            and thread.role.executable
+        }
+        views: list[ChannelView] = []
+        for channel in channels.values():
+            pinned_members = pins.get(channel.name, frozenset())
+            members = tuple(
+                sorted(
+                    (name for name, thread in people.items() if channel.matches(thread.tags)),
+                    key=lambda name: (
+                        name not in pinned_members,
+                        channel.order.key(
+                            name,
+                            people[name].created_at,
+                            activity[name].timestamp if name in activity else 0,
+                            sent.get(name, 0),
+                        ),
+                    ),
+                )
+            )
+            history = messages.get(channel.name, ChannelActivity())
+            views.append(
+                cls(
+                    channel,
+                    members,
+                    max(
+                        history.last_message,
+                        max(
+                            (activity[name].timestamp for name in members if name in activity),
+                            default=0,
+                        ),
+                    ),
+                    history.last_user_input,
+                    pinned_members & frozenset(members),
+                )
+            )
+        return tuple(sorted(views, key=order.key))
+
     def to_wire(self) -> dict[str, object]:
         return {
             **self.channel.to_wire(),
@@ -184,33 +473,46 @@ class ThreadView:
 
     @classmethod
     def capture(
-        cls, thread: Thread, snapshot: RegistrySnapshot, activity: Activity,
-        runtime: AgentRuntimeInfo | None, waits: dict[str, GoalWait],
+        cls,
+        thread: Thread,
+        snapshot: RegistrySnapshot,
+        activity: Activity,
+        runtime: AgentRuntimeInfo | None,
+        waits: dict[str, GoalWait],
     ) -> ThreadView:
         """Roster and individual readers join the same captured authorities."""
         return cls(
-            thread, snapshot.statuses[thread.name], activity, runtime,
+            thread,
+            snapshot.statuses[thread.name],
+            activity,
+            runtime,
             snapshot.last_seen.get(thread.name, 0),
             GoalWaits.execution(thread.goal, waits, snapshot),
         )
 
     @classmethod
     def roster(
-        cls, snapshot: RegistrySnapshot, agents: AgentActivity, goal_waits: GoalWaits,
-        *, show_stopped: bool, show_archived: bool,
+        cls,
+        snapshot: RegistrySnapshot,
+        agents: AgentActivity,
+        goal_waits: GoalWaits,
+        *,
+        show_stopped: bool,
+        show_archived: bool,
     ) -> tuple[ThreadView, ...]:
         runtime = agents.runtime_info.read()
         activities = agents.all_activity(snapshot=snapshot)
         waits = goal_waits.read()
         return tuple(
             cls.capture(
-                thread, snapshot,
+                thread,
+                snapshot,
                 activities.get(name, Activity(name, ActivityState.IDLE, timestamp=0)),
-                runtime.get(name), waits,
+                runtime.get(name),
+                waits,
             )
             for name, thread in snapshot.threads.items()
-            if cls.visible(thread, snapshot,
-                           show_stopped=show_stopped, show_archived=show_archived)
+            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
         )
 
     @property
