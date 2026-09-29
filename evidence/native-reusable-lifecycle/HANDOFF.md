@@ -1,4 +1,53 @@
-# Review closure: ready on current main and #328
+# Final current-main/#323 receipt: ready
+
+**Integrated checkpoint:** `45d39ac5a587b14ab4e5c31ce38d9ec5d9432049` includes
+main/#323 `658b9a89`, #328, and partial-snapshot correction `23e6c542`.
+`review325-main323-native.log`: **5 passed in 69.69s**, actual pinned native/local
+HTTP, no skips or paid calls:
+
+1. Selected observation cancellation, exact child retirement, strict reopen,
+   foreign-package/stale revision refusal and no replay.
+2. Cancelled retirement joins the existing cleanup task before the next borrow.
+3. Ordinary ACP selected summary commits and admits the exact original once.
+4. Private ACP selected summary commits and admits the exact original once.
+5. Attached ACP manual compaction: real owner socket, four provider requests,
+   one commit, same-child reuse then retirement/reopen, updates and cleanup.
+
+Only this critical matrix was rerun for #323's owned-turn/input/progress changes.
+No unchanged full matrix or CI wait. Parent owns noneditable staging/live install.
+
+## Exact channel fixture diagnosis and owner
+
+`review325-stack.log`'s missing `bus:2:owner:...` row is **stale fixture semantics**,
+not a #325 custody regression or a new #318 batch behavior. The routing already
+existed before either PR:
+
+- `git blame` at pre-#325 main `da2b43d4` assigns `InputDrain.drain_owned_inbox`
+  lines 348–351 to `36a7c393` ("Certify fresh bootstrap and delete alternate native
+  source readers"), an ancestor of #318. It calls `_drain_private_if_changed`,
+  then `CommsAgent._drain_private_nk`.
+- `_drain_private_nk` selects a sealed wake from `Coordination`. The coordinated
+  full-send reservation is `_reserve_full_input` in `coordinated_runtime.py`:
+  it inserts `NativeRuntimeInput` in coordination SQLite and binds the expected
+  prompt. It does not insert an InputDispositions bus reservation.
+- The old test assumes `drain_inbox` merely stages an ordinary pending turn,
+  asserts the old bus-disposition row, then manually calls `schedule_wake`.
+  Canonical private draining performs the selected native delivery itself.
+  Disabling `schedule_wake` does not disable that route. The later expectation
+  of reusing the ordinary warmup child is also not proof for a private wake.
+- #325 changes none of `input_drain.py`, `acp.py`, `coordinated_runtime.py` or
+  `native_pi.py`. The diagnostic canonical fixture migration reached that route
+  and failed precisely at the obsolete row assertion; it was not retained.
+
+**Fix owner: Dalton**, existing original-plan baseline closure; notified on #328
+and #325. Migrate the old channel/goal acceptance to canonical wake/native input
+evidence, preserving delivery/revocation/no-replay assertions. Do not manufacture
+ordinary bus rows or restore the retired drain path to satisfy the old test.
+This does not claim every later assertion in those eleven old nodes is valid.
+
+---
+
+# Review closure on #329 and #328
 
 **Production/test checkpoint:** `23e6c54289ab0a85ab621f35929e17e63e1b6b22`.
 Merged Dalton #328 (`1c7f53a7`) and current main/#329 (`da2b43d4`); PR325 targets
