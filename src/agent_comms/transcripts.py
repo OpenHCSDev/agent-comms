@@ -20,7 +20,7 @@ from .routing import TurnRouting
 from .threads import Thread
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
-from .transcript_receipts import AssignedSourceCursor
+from .transcript_receipts import AssignedSourceCursor, AssignedSourceIdentity
 from .store_files import file_revision
 from .coordination_errors import StaleRevision
 
@@ -44,13 +44,24 @@ class TranscriptCursor:
     def at_sequence(self, sequence: int) -> TranscriptCursor:
         from dataclasses import replace
         if self.receipts is None:
-            raise ValueError("Receipt cursor requires its declared source")
+            if sequence == 0:
+                return self
+            raise ValueError("Native-only cursor cannot advance an assigned wire source")
         return replace(self, receipts=self.receipts.at(sequence))
 
     def contains(self, other: TranscriptCursor) -> bool:
         return (self.session_file == other.session_file and self.offset >= other.offset
-                and (other.receipts is None or (self.receipts is not None
-                     and self.receipts.contains(other.receipts))))
+                and other.receipts_within(self))
+
+    def receipts_within(self, parent: TranscriptCursor) -> bool:
+        return self.receipts is None or parent.includes_receipts(self.receipts)
+
+    def includes_receipts(self, receipts: AssignedSourceCursor) -> bool:
+        return self.receipts is not None and self.receipts.contains(receipts)
+
+    def require_source(self, identity: AssignedSourceIdentity) -> None:
+        if self.receipts is not None:
+            self.receipts.require_source(identity)
 
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
@@ -244,9 +255,7 @@ class Transcripts:
         receipt_log = WireLog(receipt_root / "bus.jsonl") if historical_source is not None else self.bus.log
         receipts = AssignedTranscriptSource.for_thread(receipt_root, thread, receipt_log)
         frontier = through or TranscriptCursor(session_file, size, receipts.frontier)
-        if (frontier.receipts is not None and
-                (frontier.receipts.root != str(receipt_root) or frontier.receipts.recipient != thread.incarnation)):
-            raise ValueError("Receipt cursor belongs to a different transcript source")
+        frontier.require_source(AssignedSourceIdentity(str(receipt_root), thread.incarnation))
         if frontier.wire_seq < 0 or (cursor is not None and not frontier.contains(cursor)):
             raise ValueError("Cursor is outside the combined transcript source")
         traversal = LaterTranscript() if after is not None else EarlierTranscript()
@@ -255,21 +264,22 @@ class Transcripts:
         records: list[tuple[TranscriptEvent, ...]] = []
         used = 0
         native = traversal.native(NativeTranscript(path), initial, frontier) if size else (record for record in ())
+        from functools import partial
         with routes_owner.for_session(session_file) as routes:
+            project_native = partial(receipts.native_events, routes=routes, messaging=self.messaging)
             try:
                 record = next(native, None)
                 message = receipts.next(traversal, consumed.wire_seq, frontier)
                 while record is not None or message is not None:
-                    events = receipts.native_events(record.entry, routes, self.messaging) \
-                        if record is not None and record.entry is not None else ()
+                    events = record.project(project_native) if record is not None else ()
                     if record is not None and not events:
-                        if after and record.end == size and not record.complete and record.entry is None:
+                        if after and record.incomplete_tail(size):
                             break
                         consumed = consumed.at_offset(traversal.native_position(record))
                         record = next(native, None)
                         continue
-                    native_time = next((event.timestamp for event in events
-                                        if event.timestamp is not None), None)
+                    # NativeEntry owns one clock for all parts of a record.
+                    native_time = events[0].timestamp if events else None
                     choose_native = (record is not None and (message is None
                                      or traversal.chooses_native(native_time, message.timestamp)))
                     batch = events if choose_native else receipts.events(message)
@@ -287,7 +297,7 @@ class Transcripts:
                 if record is None:
                     consumed = consumed.at_offset(frontier.offset if after else 0)
                 if message is None:
-                    consumed = consumed.at_sequence(frontier.wire_seq if after else 0) if consumed.receipts is not None else consumed
+                    consumed = consumed.at_sequence(frontier.wire_seq if after else 0)
             finally:
                 native.close()
         start, end = traversal.bounds(initial, consumed)
