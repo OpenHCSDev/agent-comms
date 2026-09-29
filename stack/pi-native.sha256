@@ -1,5 +1,5 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-9d90d807509084f0378450ba954eadde8b8fdc11504a8d55c0afb75753220116  dist/core/agent-session.js
+b00974709a1c2241fba67f093e4400234da8b9e40de814f0d1766860b3217b9d  dist/core/agent-session.js
 33f969302e89cc99064a04bce76ba97d5be67466b53af27dce1ac1fb0b90e3f7  dist/core/compaction/compaction.js
 4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67  dist/core/session-manager.js
 9dbdb210962dfe41a908ea29ff828a7b972ce4e5c25f1042a01b3167c0d0875c  dist/modes/rpc/rpc-mode.js
@@ -23,4 +23,6 @@ d01bddc0733a8f0f9b9ff5bf863017dd9aa4dfdcf7688a112e539ea76e0791b3  dist/core/comp
 1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d  dist/core/output-guard.js
 4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa  dist/core/export-html/index.js
 fc662902a510c19c5b0af7e3cf96742f5d6071c004fe226a992a59cd0bf7522a  dist/core/sdk.js
-# agent-comms-native-tree-v1 350044fc4bf6c1d7efcb4d3298cb1b0a236ed98c9ecc50f97d3e8d4290c33127
+223b4e3cc99b8f7a46c2243df77bfb02e4127d3101180fe4e2be072a28c98622  dist/core/native-proof-journal.js
+d2cee72e8e69b5dc8f8d0c84944c1a341e85ed7aa283b94463bafa5b4107ea1c  dist/core/native-proof-schema.js
+# agent-comms-native-tree-v1 0945077777126688d4dd511132c45761cd789aca331cc26f2e0d541cf4995e7c

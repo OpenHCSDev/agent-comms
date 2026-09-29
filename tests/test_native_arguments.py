@@ -3,6 +3,8 @@
 import ast
 from pathlib import Path
 
+from native_proof_cases import read_proof_rows
+
 import pytest
 
 from agent_comms.native_arguments import (
@@ -103,7 +105,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
     await native.persistent.close()
     history = native.session.read_bytes()
     proof_path = native.session.with_suffix(native.session.suffix + ".input-proof")
-    proof = proof_path.read_bytes()
+    proof = read_proof_rows(native.session)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     owner = canonical_agent(
         Comms(native.root),
@@ -141,7 +143,9 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             thread = owner._comms.registry.require(sid)
             state = await owner.turns.prepare_selected_session(sid, thread)
             assert state.model == "response-local/fixture"
-            assert native.session.read_bytes() == history and proof_path.read_bytes() == proof
+            assert (
+                native.session.read_bytes() == history and read_proof_rows(native.session) == proof
+            )
             child = owner.turns.persistent_backends[sid].custody.child
             assert child.attestation.state.thinking_level == "off"
             response = await router(
@@ -155,7 +159,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             await asyncio.gather(*tuple(owner.turns.turn_tasks.values()))
             assert response.stop_reason == "end_turn"
             assert native.session.read_bytes().startswith(history)
-            assert proof_path.read_bytes().startswith(proof)
+            assert all(row in read_proof_rows(native.session) for row in proof)
             assert len(native.saved_inputs()) == 2 and native.provider.posts == 2
             assert not owner.turns.active_turns
     finally:

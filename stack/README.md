@@ -67,12 +67,19 @@ required native user-start receipt. Existing Pi session directories and files
 must be private (0700 directory, 0600 file) before a tracked prompt; the native
 preflight refuses unsafe sessions rather than changing their permissions.
 
-Native proof recovery streams the retained journal through AgentSession. There
-is no lifetime file-size quota or startup copy of historical message bodies.
-SessionManager owns historical tracked-input lookup across all branches. Recovery
-validates every row and reserves generation high water; it never re-emits live
-acceptance proof. Malformed, truncated or concurrently changed evidence refuses
-startup without replaying uncertain inputs.
+Native proof uses one transactional, indexed SQLite journal at the existing
+`.input-proof` path. Its schema is generated from `NativeContextJournal`; native
+commit validates current source IDs and flushes SQLite plus the containing
+directory before emitting a live receipt. Cold recovery visits the current
+context's indexed proof, with rollback work bounded by the interrupted transaction;
+it does not scan the entire proof history. Historical accepted IDs and UNKNOWN
+claims remain in native session history and never authorize replay. Initial schema
+publication is atomic and cannot overwrite an existing proof journal.
+
+Old JSONL proof requires the explicit quiet-runtime, one-shot durable conversion
+in [native proof cutover](native-proof-cutover.md). There is no runtime legacy
+reader. The native session JSONL metadata index remains a separate startup cost;
+indexed proof recovery does not claim to remove that history read.
 
 All three packages are installed from immutable Git commits. Toad also pins
 agent-comms in its own manifest, so both agent-comms pins must agree. Update
