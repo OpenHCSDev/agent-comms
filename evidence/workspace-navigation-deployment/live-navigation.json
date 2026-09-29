@@ -1,0 +1,16 @@
+{
+  "prompts_sent": 0,
+  "owners_stopped": 0,
+  "channel_clicks": [
+    {
+      "name": "#comms",
+      "saved_rows": 8,
+      "history_initialized": true
+    },
+    {
+      "name": "#nra",
+      "saved_rows": 8,
+      "history_initialized": true
+    }
+  ]
+}
