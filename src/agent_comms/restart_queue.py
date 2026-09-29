@@ -78,21 +78,6 @@ class RestartedRestart(RestartState):
 
 
 @dataclass(frozen=True)
-class QueuedRestart:
-    id: str
-    selection: OwnerRestartSelection
-    interpreter: str
-    state: RestartState
-
-    @property
-    def name(self) -> str:
-        return self.selection.name
-
-    def transition(self, state: RestartState):
-        return replace(self, state=state)
-
-
-@dataclass(frozen=True)
 class RestartEnvironment:
     """Declared inheritance policy for the credential-free resident watcher.
 
@@ -104,25 +89,30 @@ class RestartEnvironment:
         default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"}
     )
     path: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "PATH"}
+        default=None, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True}
     )
     pythonpath: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "PYTHONPATH"}
+        default=None,
+        metadata={"wire_omit_default": True, "wire_name": "PYTHONPATH", "runtime": True},
     )
     virtual_env: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV"}
+        default=None,
+        metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True},
     )
     config: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"}
     )
     root: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_ROOT"}
+        default=None,
+        metadata={"wire_omit_default": True, "wire_name": "AGENT_COMMS_ROOT", "runtime": True},
     )
     root_id: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": ROOT_ID_ENV}
+        default=None,
+        metadata={"wire_omit_default": True, "wire_name": ROOT_ID_ENV, "runtime": True},
     )
     package: str | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_name": PACKAGE_ENV}
+        default=None,
+        metadata={"wire_omit_default": True, "wire_name": PACKAGE_ENV, "runtime": True},
     )
     owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
     binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
@@ -141,12 +131,69 @@ class RestartEnvironment:
             raise ValueError("Owner launch configuration cannot be verified")
 
     @classmethod
-    def restart_arguments(cls, environment: Mapping[str, str]):
+    def restart_arguments(cls, environment: Mapping[str, str], *, agent_bin: str | None = None):
         arguments = environment.get(cls.arguments_key)
         return dict(
-            agent_bin=environment[cls.binary_key],
+            agent_bin=agent_bin if agent_bin is not None else environment[cls.binary_key],
             agent_args=shlex.split(arguments) if arguments is not None else None,
         )
+
+    def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:
+        """Preserve source credentials/settings; replace the declared runtime fields."""
+        result = dict(source)
+        encoded = self.encode()
+        for declaration in fields(self):
+            if declaration.metadata.get("runtime"):
+                name = declaration.metadata.get("wire_name")
+                result.pop(name, None)
+                if name in encoded:
+                    result[name] = encoded[name]
+        return result
+
+
+@dataclass(frozen=True)
+class RestartTarget:
+    interpreter: str
+    runtime: RestartEnvironment
+    agent_bin: str
+
+    @classmethod
+    def capture(cls, comms: Comms, source: Mapping[str, str]):
+        runtime = RestartEnvironment.inherit(
+            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())
+        )
+        return cls(
+            sys.executable,
+            runtime,
+            comms.owners.restart_entrypoint(source[RestartEnvironment.binary_key]),
+        )
+
+    def require_watcher(self, comms: Comms) -> None:
+        current = RestartEnvironment.inherit(
+            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())
+        )
+        if self.interpreter != sys.executable or self.runtime != current:
+            raise ValueError("Watcher target runtime changed")
+        if not Path(self.interpreter).is_file() or not os.access(self.interpreter, os.X_OK):
+            raise ValueError("Target interpreter is unavailable")
+        if Path(self.agent_bin).is_absolute() and not os.access(self.agent_bin, os.X_OK):
+            raise ValueError("Target agent entrypoint is unavailable")
+
+
+@dataclass(frozen=True)
+class QueuedRestart:
+    id: str
+    selection: OwnerRestartSelection
+    source_interpreter: str
+    target: RestartTarget
+    state: RestartState
+
+    @property
+    def name(self) -> str:
+        return self.selection.name
+
+    def transition(self, state: RestartState):
+        return replace(self, state=state)
 
 
 def _directory(comms: Comms) -> Path:
@@ -186,7 +233,7 @@ def _owner_environment(pid: int, name: str, interpreter: str) -> dict[str, str]:
     """Read an exact owner's launch configuration without journaling secrets."""
     command = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0", 1)[0]
     if os.fsdecode(command) != interpreter:
-        raise ValueError("Owner interpreter changed; cross-runtime restart is not supported")
+        raise ValueError("Selected source owner interpreter changed")
     raw = Path(f"/proc/{pid}/environ").read_bytes()
     values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
     env = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
@@ -205,29 +252,37 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         if not owner.role.executable or not status.active or not owner.process_alive:
             raise RelationViolationError("Queued restart requires a live agent owner")
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
+        Platform.current().require(selection.process)
+        source_interpreter = os.fsdecode(
+            Path(f"/proc/{selection.process.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
+        )
+        source = _owner_environment(selection.process.pid, owner.name, source_interpreter)
+        Platform.current().require(selection.process)
+        target = RestartTarget.capture(comms, source)
+        target.require_watcher(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with _store_lock(directory / "queue"):
             for _, previous in _records(comms):
                 if previous.name == owner.name and previous.state.active:
-                    if previous.selection != selection:
+                    if previous.selection != selection or previous.target != target:
                         raise RelationViolationError("Previous owner restart requires review")
                     result = previous
                     break
             else:
                 result = QueuedRestart(
-                    uuid.uuid4().hex, selection, sys.executable, PendingRestart()
+                    uuid.uuid4().hex, selection, source_interpreter, target, PendingRestart()
                 )
                 _save(directory / f"{result.id}.json", result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
-    _start_watcher(comms.root)
+    _start_watcher(comms.root, target.runtime)
     return result
 
 
-def _start_watcher(root: Path) -> ParentedProcess:
+def _start_watcher(root: Path, environment: RestartEnvironment) -> ParentedProcess:
     # The resident watcher inherits only its declared runtime configuration.
     return ParentedProcess.launch(
         (sys.executable, "-m", "agent_comms.restart_queue", str(root.resolve())),
-        env=RestartEnvironment.inherit(os.environ).encode(),
+        env=environment.encode(),
     )
 
 
@@ -272,21 +327,29 @@ def step(comms: Comms) -> None:
             else:
                 if not owner.process_alive:
                     record = record.transition(StaleRestart(reason="Owner process exited"))
-                elif record.interpreter != sys.executable:
-                    record = record.transition(BlockedRestart(reason="Watcher runtime changed"))
                 else:
-                    # Persist before any side effect; crashes cannot authorize replay.
-                    record = record.transition(AttemptingRestart())
+                    try:
+                        record.target.require_watcher(comms)
+                    except ValueError as error:
+                        record = record.transition(BlockedRestart(reason=str(error)))
+                    else:
+                        # Persist before any side effect; crashes cannot authorize replay.
+                        record = record.transition(AttemptingRestart())
             _save(path, record)
         if not record.state.attempting:
             continue
         try:
             Platform.current().require(record.selection.process)
-            original = _owner_environment(owner.pid, owner.name, record.interpreter)
+            original = _owner_environment(owner.pid, owner.name, record.source_interpreter)
             Platform.current().require(record.selection.process)
+            launch = RestartEnvironment.restart_arguments(
+                original, agent_bin=record.target.agent_bin
+            )
             (receipt,) = comms.owners.restart_owners(
-                [owner.name], expected=record.selection, environment=original,
-                **RestartEnvironment.restart_arguments(original),
+                [owner.name],
+                expected=record.selection,
+                environment=record.target.runtime.apply_runtime(original),
+                **launch,
             )
         except RestartRefusal as refusal:
             record = record.transition(refusal.queue_state())
