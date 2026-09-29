@@ -1,0 +1,189 @@
+✖ SIGKILL before first assistant leaves fsynced exact input and context on disk; restart cannot duplicate (30.615995ms)
+✖ real SDK pipeline durably binds two identical prompts to distinct input IDs before fake provider (86.915915ms)
+✔ direct core prompt cannot forge a native receipt without a prior claim (23.74837ms)
+✔ direct core prompt with mismatched claimed digest fails before append (21.541662ms)
+✔ context hook rejects an unclaimed user even when a matching legacy row exists (24.919608ms)
+✔ native ID survives an actual input extension and prompt template expansion (39.229194ms)
+✔ context transform preserving ID succeeds; removing tracked ID fails closed before provider (43.961065ms)
+✔ queued follow-up clear is not committed; same ID can be submitted again (57.506986ms)
+✔ direct steer: throwing queue_update cannot create an inert native ID (deliver) (68.926479ms)
+✔ direct steer: throwing queue_update cannot create an inert native ID (clear) (49.611154ms)
+✔ direct followUp: throwing queue_update cannot create an inert native ID (deliver) (98.738201ms)
+✔ direct followUp: throwing queue_update cannot create an inert native ID (clear) (59.398427ms)
+✔ streaming steer prompt: throwing queue_update cannot create an inert native ID (deliver) (84.873867ms)
+✔ streaming steer prompt: throwing queue_update cannot create an inert native ID (clear) (65.22496ms)
+✔ streaming followUp prompt: throwing queue_update cannot create an inert native ID (deliver) (86.494166ms)
+✔ streaming followUp prompt: throwing queue_update cannot create an inert native ID (clear) (73.837529ms)
+✖ direct steer: throwing dequeue queue_update cannot strand a tracked input (53.82857ms)
+✖ direct followUp: throwing dequeue queue_update cannot strand a tracked input (51.805489ms)
+✖ streaming steer prompt: throwing dequeue queue_update cannot strand a tracked input (60.152284ms)
+✖ streaming followUp prompt: throwing dequeue queue_update cannot strand a tracked input (56.479861ms)
+✔ throwing SDK message_start observer cannot preempt tracked user persistence (64.076055ms)
+✔ throwing SDK message_end observer cannot preempt tracked user persistence (97.480009ms)
+✔ observer containment never hides a tracked-user fsync failure (58.809812ms)
+✔ direct tracked queue metadata failure releases only its fresh unqueued claim (17.017555ms)
+✔ steer: pre-core metadata failure does not leave a native claim (17.109428ms)
+✔ steer: a post-core exception retains local/core identity until clear (15.755175ms)
+✔ steer: a no-op core enqueue cannot create a display-only ID (17.356025ms)
+✔ followUp: pre-core metadata failure does not leave a native claim (29.779981ms)
+✔ followUp: a post-core exception retains local/core identity until clear (13.218751ms)
+✔ followUp: a no-op core enqueue cannot create a display-only ID (10.822664ms)
+✔ two identical queued follow-ups retain distinct IDs and durable individual context proofs (86.298305ms)
+✔ a later context prune cannot forge another proof for an old removed input (57.199935ms)
+✖ tracked 429 with default Pi retry enabled has one provider opportunity and no automatic retry (40.363021ms)
+✔ tracked context-overflow provider error never triggers auto-compaction retry (36.590438ms)
+✔ untracked Pi retry behavior and configured provider budget remain unchanged (85.262544ms)
+✔ tracked truncated tool-call response never auto-continues to a second provider request (41.329201ms)
+✔ a tool turn generates two context generations for one durable input (58.353258ms)
+✔ nonregular proof journal rejects tracked input before storing private ID or calling provider (17.416521ms)
+✔ fsync failure never reaches provider and never emits context_committed (20.449573ms)
+✔ first ordinary Pi turn and later tracked input are both private; old 0644 session is rejected (41.516987ms)
+✔ independent 022-umask/public-root repro keeps earlier untracked session private (58.429602ms)
+✔ unsafe session directory mode or redirected ancestor refuses tracked IDs before prompt (14.215198ms)
+✔ extension handled tracked input fails ACK and clears ghost claim on repeated ID (15.98535ms)
+✔ two real concurrent SDK prompts cannot retain a pre-append ghost claim after provisional ACK (58.764718ms)
+✔ throwing successful preflight callback releases only its fresh pre-append claim (38.4189ms)
+✔ throwing same-ID replay callback cannot release an original running owner (49.512687ms)
+✖ post-preflight error after user append retains the claim and suppresses duplicate replay (64.15779ms)
+ℹ tests 47
+ℹ suites 0
+ℹ pass 39
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3643.050822
+
+✖ failing tests:
+
+test at experiments/pi-context-proof/crash-restart.test.mjs:14:1
+✖ SIGKILL before first assistant leaves fsynced exact input and context on disk; restart cannot duplicate (30.615995ms)
+  AssertionError [ERR_ASSERTION]: unexpected child exit: 90 
+  
+  null !== 'SIGKILL'
+  
+      at TestContext.<anonymous> (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/crash-restart.test.mjs:22:14)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: 'SIGKILL',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at experiments/pi-context-proof/native-runtime.test.mjs:69:1
+✖ real SDK pipeline durably binds two identical prompts to distinct input IDs before fake provider (86.915915ms)
+  TypeError [Error]: sm.getEntries is not a function
+      at file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:92:23
+      at async withSession (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:58:11)
+      at async TestContext.<anonymous> (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:70:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at experiments/pi-context-proof/native-runtime.test.mjs:313:3
+✖ direct steer: throwing dequeue queue_update cannot strand a tracked input (53.82857ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:352:16
+      at async withSession (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:58:11)
+      at async TestContext.<anonymous> (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:314:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at experiments/pi-context-proof/native-runtime.test.mjs:313:3
+✖ direct followUp: throwing dequeue queue_update cannot strand a tracked input (51.805489ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:352:16
+      at async withSession (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:58:11)
+      at async TestContext.<anonymous> (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:314:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at experiments/pi-context-proof/native-runtime.test.mjs:313:3
+✖ streaming steer prompt: throwing dequeue queue_update cannot strand a tracked input (60.152284ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:352:16
+      at async withSession (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:58:11)
+      at async TestContext.<anonymous> (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:314:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at experiments/pi-context-proof/native-runtime.test.mjs:313:3
+✖ streaming followUp prompt: throwing dequeue queue_update cannot strand a tracked input (56.479861ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:352:16
+      at async withSession (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:58:11)
+      at async TestContext.<anonymous> (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:314:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at experiments/pi-context-proof/native-runtime.test.mjs:560:1
+✖ tracked 429 with default Pi retry enabled has one provider opportunity and no automatic retry (40.363021ms)
+  TypeError [Error]: sm.getEntries is not a function
+      at withSession.retry.baseDelayMs (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:583:21)
+      at async withSession (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:58:11)
+      at async TestContext.<anonymous> (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:561:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at experiments/pi-context-proof/native-runtime.test.mjs:901:1
+✖ post-preflight error after user append retains the claim and suppresses duplicate replay (64.15779ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert(session._nativeInputClaims.has(ID_A))
+  
+      at file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:912:5
+      at async withSession (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:58:11)
+      at async TestContext.<anonymous> (file:///home/ts/wt/comms-selected-cold-compaction-native-20260928/experiments/pi-context-proof/native-runtime.test.mjs:902:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

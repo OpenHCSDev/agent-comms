@@ -5,6 +5,8 @@ import sqlite3
 from dataclasses import replace
 from pathlib import Path
 
+from native_proof_cases import read_proof_rows, write_proof_rows
+
 import pytest
 
 from agent_comms.compaction_errors import CompactionJournalError
@@ -157,8 +159,7 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
         llmContextDigest="b" * 64,
     )
     proof_file = Path(str(session) + ".input-proof")
-    proof_file.write_text(json.dumps(proof) + "\n")
-    proof_file.chmod(0o600)
+    write_proof_rows(session, [proof])
     # Native schema fixture: the immutable result columns represent an already
     # recorded live result; the journal must only corroborate those columns.
     with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:

@@ -1,0 +1,74 @@
+................................................................s....FF. [ 69%]
+..........................F.F.F                                          [100%]
+=================================== FAILURES ===================================
+__________ test_actual_foreground_command_owns_its_recipient_process ___________
+tests/test_cohort_foreground.py:590: in test_actual_foreground_command_owns_its_recipient_process
+    ready = json.loads(child.stdout.readline())
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/__init__.py:352: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py:363: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+______ test_two_real_recipient_processes_emit_selected_and_typed_no_wake _______
+tests/test_cohort_foreground.py:682: in test_two_real_recipient_processes_emit_selected_and_typed_no_wake
+    assert json.loads(child.stdout.readline())["pid"] == child.pid
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/__init__.py:352: in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py:345: in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py:363: in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+E   json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+_____________ test_fake_rpc_tool_event_and_terminal_gate[success] ______________
+src/agent_comms/tracked_turn.py:141: in complete
+    await self.open_tools()
+src/agent_comms/tracked_turn.py:187: in open_tools
+    await self.tool_socket.start()
+src/agent_comms/selected_tool_broker.py:435: in start
+    self._server = await asyncio.start_unix_server(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py:113: in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py:310: in create_unix_server
+    sock.bind(path)
+E   OSError: AF_UNIX path too long
+
+The above exception was the direct cause of the following exception:
+tests/test_selected_tool_native_fake.py:115: in test_fake_rpc_tool_event_and_terminal_gate
+    result = await operation
+             ^^^^^^^^^^^^^^^
+src/agent_comms/tracked_turn.py:137: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/tracked_turn.py:175: in complete
+    raise NativePiUnavailable(
+E   agent_comms.native_pi.NativePiUnavailable: Native Pi tracked turn failed; send may be UNKNOWN
+______________ test_fake_rpc_tool_event_and_terminal_gate[denied] ______________
+tests/test_selected_tool_native_fake.py:122: in test_fake_rpc_tool_event_and_terminal_gate
+    assert observed == ([] if variant in {"tamper", "badproof"} else ["call_1"])
+E   AssertionError: assert [] == ['call_1']
+E     
+E     Right contains one more item: 'call_1'
+E     Use -v to get more diff
+_________ test_fake_rpc_tool_event_and_terminal_gate[forged_terminal] __________
+tests/test_selected_tool_native_fake.py:122: in test_fake_rpc_tool_event_and_terminal_gate
+    assert observed == ([] if variant in {"tamper", "badproof"} else ["call_1"])
+E   AssertionError: assert [] == ['call_1']
+E     
+E     Right contains one more item: 'call_1'
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/test_cohort_foreground.py::test_actual_foreground_command_owns_its_recipient_process
+FAILED tests/test_cohort_foreground.py::test_two_real_recipient_processes_emit_selected_and_typed_no_wake
+FAILED tests/test_selected_tool_native_fake.py::test_fake_rpc_tool_event_and_terminal_gate[success]
+FAILED tests/test_selected_tool_native_fake.py::test_fake_rpc_tool_event_and_terminal_gate[denied]
+FAILED tests/test_selected_tool_native_fake.py::test_fake_rpc_tool_event_and_terminal_gate[forged_terminal]
+5 failed, 97 passed, 1 skipped, 1 deselected in 49.60s

@@ -12,6 +12,8 @@ import sys
 import threading
 import time
 from pathlib import Path
+
+from native_proof_cases import write_proof_rows
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -115,9 +117,9 @@ def _fake_pi(calls: list[str]):
         )
         session_file.chmod(0o600)
         digest = hashlib.sha256(input_id.encode()).hexdigest()
-        proof = Path(str(session_file) + ".input-proof")
-        proof.write_text(
-            json.dumps(
+        write_proof_rows(
+            session_file,
+            [
                 {
                     "schema": 1,
                     "type": "context_committed",
@@ -127,10 +129,8 @@ def _fake_pi(calls: list[str]):
                     "requestGeneration": 1,
                     "llmContextDigest": digest,
                 }
-            )
-            + "\n"
+            ],
         )
-        proof.chmod(0o600)
         from agent_comms.pi_events import PiEvent
 
         observer = _kwargs["observe_event"]
@@ -552,7 +552,8 @@ from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
 f.Thread = _configured_thread
 f._trusted_package = _fake_package
 r._trusted_package = _fake_package
-r.TrackedTurnSession.execute = _fake_pi([])
+from agent_comms.tracked_turn import TrackedTurnSession
+TrackedTurnSession.execute = _fake_pi([])
 raise SystemExit(f.main(sys.argv[1:]))
 """
         child = subprocess.Popen(
@@ -637,7 +638,8 @@ from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
 f.Thread = _configured_thread
 f._trusted_package = _fake_package
 r._trusted_package = _fake_package
-r.TrackedTurnSession.execute = _fake_pi([])
+from agent_comms.tracked_turn import TrackedTurnSession
+TrackedTurnSession.execute = _fake_pi([])
 raise SystemExit(f.main(sys.argv[1:]))
 """
         env = {

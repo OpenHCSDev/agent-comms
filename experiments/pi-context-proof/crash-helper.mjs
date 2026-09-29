@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const pkg = process.env.PI_PACKAGE_DIR;
 const root = process.env.PI_CRASH_ROOT;
-if (!pkg?.startsWith('/var/tmp/') || !root?.startsWith('/var/tmp/')) process.exit(90);
+if (!pkg || !root) process.exit(90);
 const pi = await import(pathToFileURL(join(pkg,'dist/index.js')).href);
 const cwd = join(root,'work');
 const agentDir = join(root,'agent');

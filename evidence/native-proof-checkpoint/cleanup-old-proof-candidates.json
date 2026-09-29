@@ -1,0 +1,31 @@
+{
+  "removed": [
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-86c2f983aa2ecb0c",
+      "bytes": 138540200
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/stack/.pi-native-22f1823d9011452b",
+      "bytes": 138541937
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-proof-checkpoint/baseline-main",
+      "bytes": 9104370
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-proof-checkpoint/tests",
+      "bytes": 151535077
+    },
+    {
+      "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.artifacts/native-proof-checkpoint/wheel",
+      "bytes": 685455
+    }
+  ],
+  "process_references": [
+    {
+      "pid": "323386",
+      "path": "/home/ts/wt/.p107-callers"
+    }
+  ],
+  "preserved": "Current fcadec candidate, active installed acceptance, all source and evidence, global/live d396"
+}

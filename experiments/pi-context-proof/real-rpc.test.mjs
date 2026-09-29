@@ -1,5 +1,5 @@
 // Opt-in real-provider integration check of the disposable copied Pi package.
-// Uses a fresh /var/tmp HOME/session and disables all extensions/tools; never
+// Uses a fresh TMPDIR HOME/session and disables all extensions/tools; never
 // invokes or mutates the globally installed Pi. Requires provider credentials.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -7,9 +7,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { proofRecords } from './proof-records.mjs';
 
 const pkg = process.env.PI_PACKAGE_DIR;
-if (!pkg?.startsWith('/var/tmp/') || !process.env.OPENROUTER_API_KEY) {
+if (!pkg || !process.env.OPENROUTER_API_KEY) {
   throw new Error('Disposable PI_PACKAGE_DIR and OPENROUTER_API_KEY required');
 }
 const INPUT_ID = '712eee1314644da48675083528169a31';
@@ -85,7 +86,7 @@ test('real patched RPC model request commits input/session/context IDs; restart 
       assert(entries.some(e=>e.type==='message' && e.id===input.sessionEntryId && e.message.inputId===INPUT_ID));
       assert.equal(statSync(sessionFile).mode & 0o777,0o600);
       assert.equal(statSync(sessionFile+'.input-proof').mode & 0o777,0o600);
-      const proof=readFileSync(sessionFile+'.input-proof','utf8').trim().split('\n').map(JSON.parse);
+      const proof=proofRecords(sessionFile+'.input-proof');
       assert(proof.some(e=>e.inputId===INPUT_ID && e.sessionEntryId===input.sessionEntryId));
       await first.stop(); first=undefined;
       second=launch(root,sessionFile);
