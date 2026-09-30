@@ -132,6 +132,9 @@ class TranscriptRead:
     def current(self) -> bool:
         return self.identity == self.current_identity()
 
+    def content_current(self) -> bool:
+        return self.identity.same_content(self.current_identity())
+
     def current_identity(self) -> TranscriptReadIdentity:
         identity = self.identity
         return self.owner.capture_page_read(
@@ -142,7 +145,7 @@ class TranscriptRead:
         ).identity
 
     def read(self) -> TranscriptPage:
-        if not self.identity.same_content(self.current_identity()):
+        if not self.content_current():
             raise StaleRevision("Transcript read inputs changed before preparation")
         identity = self.identity
         page = self.owner.thread_transcript_page(
@@ -151,7 +154,7 @@ class TranscriptRead:
             after=identity.after,
             through=identity.through,
         )
-        if not self.identity.same_content(self.current_identity()):
+        if not self.content_current():
             raise StaleRevision("Transcript read inputs changed during preparation")
         return page
 
