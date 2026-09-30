@@ -69,3 +69,12 @@ passed1check0.04s; binding its Unix socket uses the open directory through
 /proc/self/fd because the persistent worktree test path exceeds Linux sun_path,
 then inspects the actual named inode. The initial long-path failure is retained;
 no fake stat, skipped role assertion or production limit change was introduced.
+
+
+Final source9890c75e:106 production lines deleted,394 added across7 files,
+including the common builder. All7 changed production files parse and contain
+zero six-plus Boolean expressions. No FieldCodec subtype, old scalar alias or
+retired tuple access was added. The final47 checks (real593b optional native
+controls included) pass2.58s. source-validation.json records scope and limits.
+The actual native/ACP/Toad integrated first-input gate remains Einstein458's
+integration claim; no separate redundant parent gate is launched.
