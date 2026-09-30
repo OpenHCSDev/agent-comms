@@ -1,0 +1,45 @@
+{
+  "originals": {
+    "registry.json": "fb4d2e9508c481374156e2dcece92609e3321bd21fc54b8383cf1951efa13f9c",
+    "owner_release_receipts.json": "e9ec8e2775af937033a76d6e31e12c17118c8eeb16150e5841e746943b4af474",
+    "active-route.json": "51330a669cda7b27fc9468edd4bff0a18201f35d208c1894437a406605db6508"
+  },
+  "target_validation": {
+    "threads": 4,
+    "releases": 2
+  },
+  "all_original_processes_retired": true,
+  "provider_calls": 0,
+  "original_input_replays": 0,
+  "phase": "target_owners_launched",
+  "owners": 2,
+  "route_published_before_first_launch": true,
+  "original_wire_descriptor_retained": true,
+  "busy_refusal_without_stops": true,
+  "retained_distinct_settings": true,
+  "renamed_owner_retained": true,
+  "both_thread_carriers_retired": true,
+  "original_native_wire_unknown_unchanged": true,
+  "protected_hashes": {
+    "bus.jsonl": "f3300652a226301d510839beea6248f40c766917d174f6d357394b348a417f84",
+    "protected-native.jsonl": "7cabbfdcfff3eba4745ac5575ae94562b7568a7035ae3f777db5eb815130bbc6",
+    "input_dispositions.json": "c18cb88b02fe306e74bca4e04a310585b44d0915251d56af525b4753bbe1525c",
+    "diagnostics/979394590738ee84f5b4a3e2d090c4ed.json": "84bf384d7d728f62aca0112932bf122460c644d391c0911740a0aa2f7b03add0"
+  },
+  "actual_target_runtime_attachment": true,
+  "original_python": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python",
+  "target_python": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python",
+  "source_head": "254311654b88ded2a817ede29ceaff26f44f6f0f",
+  "complete": true,
+  "historical_unknown_not_reclassified": true,
+  "historical_failure_receipt_unchanged": true,
+  "historical_reservation_sha256": "5587dd5cf8551a7a5cf52c4be18dd8d00cf49af86152db7d2dd8cdb8994d29a7",
+  "historical_assignment_ineligible": true,
+  "blocked_goal_not_resumed": true,
+  "prompt_count": 0,
+  "fixture_processes_retired": true,
+  "candidate_module_path": "/home/ts/wt/comms-phased-owner-cutover-20260930/.phase-fixtures/installed-closure/agent_comms",
+  "installed_production_file_count": 288,
+  "installed_production_byte_equal": true,
+  "acceptance_case": "authentic original historical UNKNOWN channel TRIAGE; no prompt reclassification or replay through real batch restart"
+}

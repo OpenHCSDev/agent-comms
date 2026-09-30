@@ -170,7 +170,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     from agent_comms.goal_states import BlockedGoal
     from agent_comms.goals import Goal
     from agent_comms.owner_launch import RetainedOwnerLaunch
-    from agent_comms.owner_cutover import OwnerCutover
+    from agent_comms.owner_cutover import StoppedOwnerInstallation
     from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
     comms = Comms(tmp_path)
@@ -183,7 +183,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         ("batch-b", (), "credential-b"),
     )
 
-    class RebuildFixtureCheckpoint(OwnerCutover):
+    class RebuildFixtureCheckpoint(StoppedOwnerInstallation):
         """An actual declared writer operation; it never starts or stops owners."""
 
         def require_selection(self, snapshot, owners):
