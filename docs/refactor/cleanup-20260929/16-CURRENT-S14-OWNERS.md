@@ -102,3 +102,18 @@ and Kepler coordinate one corrected continuous installed native/ACP/UI journey.
 Schrodinger builds the final coherent pair after that source freeze. Current
 live build remains Core6feb/Toad98bab. Tristan requested a persistent question
 notification after the new install passes its affected actual live paths.
+
+Mendel428's exact merged artifact acceptance passed10 controls and12 actual
+CLI invocations against installed FieldCodec, with exporter/exact/stale/missing
+results and malformed/duplicate/typed/unknown input rejection. The original
+fixture hashes and codec match prior published evidence; that matrix was not
+repeated. Receipt:evidence/pr428-artifact-acceptance/receipt.json, integrated
+parent15760881. S1–S4 production/model evaluation remains pending.
+The critical source pair is now frozen Toadc0750340/Coreea8aa4ea; normal parent
+merge includes252784cc3a5. Head4eb20010 adds only the physical duplicate-paint
+oracle refinement and docs, with no production/config delta. Schrodinger staged
+one normal68-package runtime-canonical-bus-input-visibility-20260930, dependency
+and294Core/273Toad source equality/native trust passed. Einstein's sole joint
+native/ACP/UI gate and Schrodinger's same-cohort bus journey remain pending.
+Mendel resumes independent originalC0 certified GoalWait reply/source-incarnation
+closure in draft462; accepted/frozen release source is preserved.

@@ -10,7 +10,16 @@ plans and a synthetic fixture, not production task-aware memory activation.
 Parent250 pushed49b80af2 with Kepler251 final11aa9d9e. Heisenberg252 fixes the
 preserved duplicate-answer failure before one corrected joint installed
 native/ACP/UI journey. Full performance continues independently in253.
-The new pair is not installed yet. Send Tristan the requested persistent
+Mendel428 acceptance is now complete: exact merged10 controls and12 actual CLI
+checks pass using installed FieldCodec. Receipt:evidence/pr428-artifact-acceptance/receipt.json.
+Parent froze Toadc0750340/Coreea8aa4ea after normally merging substantive252
+784cc3a5 and25111aa9d9e. Later250head4eb20010 changes only the physical test
+oracle and its documentation; production/config remain frozen. Schrodinger's
+runtime-canonical-bus-input-visibility-20260930 normal68-package install passes
+dependency and294Core/273Toad source-byte/fullnative trust checks. Einstein owns
+the sole corrected joint installed native/ACP/UI gate; Schrodinger then owns the
+same cohort's open DM/IRC bus journey. The new pair is not live yet.
+Send Tristan the requested persistent
 question prompt only after activation and actual affected live-path acceptance.
 
 ## 2026-09-30 native sidebar custody checkpoint merged and installed
