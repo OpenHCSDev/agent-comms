@@ -1,3 +1,26 @@
+## 2026-09-30 15:30Z paired release and exact budget recurrence
+
+- Core452 merged a80c15025624eec3ed6bd93ef6173cfb66a193b6, including450;
+  accepted installed three-owner automatic-input/reply/ACP journey, no replay.
+- Toad240 merged308deb818152c104a77f5b0f0e2675a5c13955fa: normal dependency
+  source and uv lock pin to that Core merge. Textual2e49 and ACP SDK0.12.1
+  unchanged; no Toad production edits. Schrodinger owns one immutable paired
+  stage; parent owns quiet public/native/global-extension retained-owner cutover.
+  This pair is merged, not yet published to the user defaults.
+- User live400 at11:28:45, openhcs-helper2: endpoint1048576, text427363,
+  tools5273, output643482, total1076118. Original ACP receipt
+  /home/ts/.local/state/toad/logs/Agent_Comms_2026-09-30T11_28_15_909242.txt:25.
+  Core406 merged and installed e36 helper includes its recovery, but the central
+  ProviderRejection decoder accepts only Cloudflare's different count wording.
+  Actual installed helper SHAe3572ebbb69891ae0789c90aa018eef981e335a4c1113ff90ec10f53740b0a10.
+  Mendel owns semantic count decoding through the existing rejection/request
+  family and reuse of the real installed native/ACP recovery journey. No original
+  input replay, hardcoded cushion, second budget store, or forced compaction.
+- Heisenberg239 independent bounded viewport admission checkpoint c468dd4c
+  is pushed and under actual physical saved-history video/CPU verification;
+  baseline55evictions/53restores in0.8s versus candidate0 in the same source
+  stationary journey. No final UI or CPU target claim.
+
 # Full goal checklist and evidence boundaries
 
 Parent owns integration in Core432. This checklist preserves the complete
