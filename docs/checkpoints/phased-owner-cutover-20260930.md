@@ -1,0 +1,66 @@
+# Original admission through owner format cutover
+
+Owner: Arendt. Receiving full S14/C3 lifecycle assignment after merged436 and
+merged441 `2244bf5c03dee23252f900d37149622927b2d5e7`. Base2244bf5c includes
+C3/421 `2519fb65`. Parent alone owns live execution and activation. Mendel owns
+the removed Thread member semantics. Source-only421/216 acceptance does not
+authorize this later format transition or delay first436/215 activation.
+
+## Required owned relation
+
+The existing OwnerLifecycle retained batch must hold original credentials,
+arguments, process/birth, owner generation and admission proof through original
+typed admission, ALL idle fences, ALL process retirement, the quiet format
+operation, and target-format replacement launch. Immutable acquired launch and
+selection witnesses are bounded resources, not competing semantic stores.
+Neither side reads two formats. Original typed records are decoded only by the
+authentic original installed runtime. Target readers strictly decode target
+records only after the declared stopped phase has completed.
+
+Actual old720 readonly evidence:13 live executable owners,0 active turns and
+0 stored active_turns across ALL records. Target C3/20079652 still rejects
+Thread.last_goal_report_turn on114 retired records. Existing restart_owners
+decodes its target RegistrySnapshot before the after_stopped member can run;
+that initial admission crossing is the defect. Removing a field before stopping
+old processes or adding a target-reader converter does not close it.
+
+The declared phased lifecycle extends that ONE central batch. Selection and
+retirement remain original format ownership; the one-shot outside-src operation
+changes BOTH RegistryDocument.threads and OwnerReleaseReceipt.thread values in
+owner_release_receipts.json before target admission and replacement launch.
+Full receipt before/after admission, birth/incarnation and process equality is
+preserved. Historical preimages remain recovery resources. No report journal is
+invented from a retired field. Original goal_history owns report state.
+
+## Scope and concrete exclusions
+
+Own OwnerLifecycle/OwnerCutover retained-batch custody declarations and their
+callers. Coordinate shared registration/lease methods with parent before edits.
+Mendel supplies C3 field closure; backend/goal source is his. Sch/Heisenberg own
+first release SourceSnapshot/hot UI gates. Einstein owns native producer
+semantics. No paid/native turn needed to prove this provider-free cutover.
+
+The first reviewed old720-to-436 operator remains unchanged and explicitly
+excludes421. No live mutation, public process signal, UNKNOWN input replay,
+production old reader, codec subclass/alias, synced Thread copy, separate
+operator stop/start loop or untyped callback policy is authorized here.
+
+## Acceptance and limits
+
+Use persistent isolated original/target runtimes and the existing provider-free
+two-owner installed batch fixture: distinct credentials/args retained, rename,
+original retired Thread-bearing release receipt, both fields carried, strict
+target readers and real replacement workers. One busy owner rejects before any
+stop or mutation. Preserve native/history/proofs/UNKNOWN, verify all originals
+stop before format mutation and every replacement begins afterward. A failure
+keeps custody and the stopped batch for explicit review; no automatic resume.
+
+Patterns: IDEN-1 allocation domains; IDEN-3 state ownership; IMPL-10 legal phases;
+IMPL-13 one acquired resource mechanism; TIME-2 one-shot durable carry outside
+production. New-case experiment: another declared stopped-format operation
+extends the same lifecycle capability without another reader or restart loop.
+Bounded same-run StringDispatch/TypeSwitch subject and arm checks accompany the
+whole changed-source diff. No broad test fleet or repeated accepted native gates.
+
+Draft opened before long source implementation. No readiness or live acceptance
+claimed by this initial ownership receipt.
