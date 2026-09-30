@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
+    from .transcripts import TranscriptReadIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +18,7 @@ class ThreadPresentation:
     busy: bool = False
     notifications: tuple[MessageNotification, ...] = ()
     attention: bool = False
+    read_identity: TranscriptReadIdentity | None = None
 
     @property
     def label(self) -> str:

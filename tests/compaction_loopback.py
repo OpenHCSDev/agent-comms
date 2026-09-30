@@ -61,9 +61,7 @@ class LoopbackProvider:
                         "object": "chat.completion.chunk",
                         "created": 1,
                         "model": "fake-compact",
-                        "choices": [
-                            {"index": 0, "delta": delta, "finish_reason": reason}
-                        ],
+                        "choices": [{"index": 0, "delta": delta, "finish_reason": reason}],
                     }
                     return b"data: " + json.dumps(chunk).encode() + b"\n\n"
 
@@ -72,9 +70,19 @@ class LoopbackProvider:
                 else:
                     name, arguments = self.tool_call
                     self.tool_call = None
-                    assert any(tool["function"]["name"] == name for tool in self.requests[-1]["tools"])
-                    delta = {"tool_calls": [{"index": 0, "id": "local-tool-once", "type": "function",
-                                             "function": {"name": name, "arguments": json.dumps(arguments)}}]}
+                    assert any(
+                        tool["function"]["name"] == name for tool in self.requests[-1]["tools"]
+                    )
+                    delta = {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "local-tool-once",
+                                "type": "function",
+                                "function": {"name": name, "arguments": json.dumps(arguments)},
+                            }
+                        ]
+                    }
                     reason = "tool_calls"
                 body = event(delta, None) + event({}, reason) + b"data: [DONE]\n\n"
                 writer.write(

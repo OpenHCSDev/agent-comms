@@ -33,7 +33,11 @@ def test_no_retired_cursor_procedures_or_callers():
     for path in SOURCE.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
             match node:
-                case ast.ClassDef(name=name) | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                case (
+                    ast.ClassDef(name=name)
+                    | ast.FunctionDef(name=name)
+                    | ast.AsyncFunctionDef(name=name)
+                ):
                     assert name not in RETIRED, (path, name)
                 case ast.Name(id=name) | ast.alias(name=name) | ast.Attribute(attr=name):
                     assert name not in RETIRED, (path, name)

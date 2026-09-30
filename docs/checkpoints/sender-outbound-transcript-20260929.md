@@ -102,3 +102,18 @@ serial native slot; the next attempt is queued by named dependency only. Exact
 private-root ProcessIdentity scan records zero surviving owned subprocesses in
 native-fixture-custody-check.json. Scratch footprint was 3 MiB; all failure logs,
 originals and input dispositions are retained. No global runtime/package changes.
+
+Main7fcf826a normally integrated at322fd792, retaining both source-proof guard
+extensions. The existing ThreadPresentation packet now carries its source owner's
+TranscriptReadIdentity. Handling of an original older than the recent-five window
+changes both already-open sender and recipient packet identities without new wire
+records/frontier advancement or changed recent notifications. The existing bounded
+message notification projection also accepts original MessageReference windows,
+resolves them via WireLog.message_by_id and checks BOTH sequence and content id.
+No UI message lookup, second index or status cache is introduced.
+
+Focused post-merge certified-index, notification, read-identity and existing guard
+checks passed36 in14.89s before the reference-window extension. The prepared
+native journey is still awaiting the coordinated serial slot (Arendt425, then
+Schrodinger426, then430); its checkpoint is not a native acceptance claim. Both-open
+actual Toad hot publication is Schrodinger's paired215 followthrough.

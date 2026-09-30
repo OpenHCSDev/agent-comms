@@ -34,6 +34,7 @@ from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
 from .message_page import MessagePage
+from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
 from .presentation import (
@@ -83,6 +84,20 @@ class HistoryViews:
 
     def message_notifications(self, messages: Sequence[Message]):
         return MessageNotification.window(self.root, self.registry, messages)
+
+    def message_notifications_for_references(self, references: Sequence[MessageReference]):
+        """Resolve a bounded mounted window through its original wire identities."""
+        if len(references) > 120:
+            raise ValueError("Notification reads require a bounded visible message window")
+        from .errors import RelationViolationError
+
+        messages = []
+        for reference in references:
+            message = self.bus.log.message_by_id(reference.message_id)
+            if message is None or message.reference != reference:
+                raise RelationViolationError("Notification reference is not its original source")
+            messages.append(message)
+        return self.message_notifications(messages)
 
     def recent_notifications(self, name: str, *, limit: int = 5):
         return MessageNotification.recent(self.root, self.registry, self.bus.log, name, limit=limit)
@@ -301,7 +316,11 @@ class HistoryViews:
             self.agents.runtime_info.read().get(thread.name),
             GoalWaits(self.root / GoalWaits.filename).read(),
         )
-        return replace(view.presentation, notifications=self.recent_notifications(thread.name))
+        return replace(
+            view.presentation,
+            notifications=self.recent_notifications(thread.name),
+            read_identity=self.transcripts.capture_page_read(thread.name).identity,
+        )
 
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False

@@ -17,7 +17,9 @@ from delivery_owner_fixture import canonical_agent
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
-async def test_saved_native_send_has_one_original_source_and_target_outcome(native_backend, monkeypatch):
+async def test_saved_native_send_has_one_original_source_and_target_outcome(
+    native_backend, monkeypatch
+):
     native = native_backend
     assert (await native.run("Retained original context before outbound tool"))[-1].ok
     await native.persistent.close()
@@ -26,13 +28,33 @@ async def test_saved_native_send_has_one_original_source_and_target_outcome(nati
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
     comms = Comms(native.root)
-    owner = canonical_agent(comms, auto_wake=False, runtime_enabled=True, agent_args=[
-        "--provider=response-local", "--model=fixture", "--thinking=off", "--offline",
-        "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates",
-        "--no-builtin-tools", "--extension", str(package / "agent-comms-extensions/global-agent-comms/index.mjs"),
-    ])
-    comms.registry.declare(Thread("receiver", frozenset(), str(native.project),
-                                  model="response-local/fixture", thinking_level="off"))
+    owner = canonical_agent(
+        comms,
+        auto_wake=False,
+        runtime_enabled=True,
+        agent_args=[
+            "--provider=response-local",
+            "--model=fixture",
+            "--thinking=off",
+            "--offline",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--no-prompt-templates",
+            "--no-builtin-tools",
+            "--extension",
+            str(package / "agent-comms-extensions/global-agent-comms/index.mjs"),
+        ],
+    )
+    comms.registry.declare(
+        Thread(
+            "receiver",
+            frozenset(),
+            str(native.project),
+            model="response-local/fixture",
+            thinking_level="off",
+        )
+    )
     snapshots = asyncio.Queue()
     updates = []
 
@@ -67,15 +89,29 @@ async def test_saved_native_send_has_one_original_source_and_target_outcome(nati
             await client.load_session(cwd=str(native.project), session_id=sender, mcp_servers=[])
             await snapshots.get()
             open_source = comms.transcripts.capture_page_read(sender)
-            native.provider.tool_call = ("comms_send", {
-                "from": sender, "to": "receiver", "body": "Original outbound ownership handoff",
-            })
+            native.provider.tool_call = (
+                "comms_send",
+                {
+                    "from": sender,
+                    "to": "receiver",
+                    "body": "Original outbound ownership handoff",
+                },
+            )
             try:
-                await client.prompt(session_id=sender, prompt=[TextContentBlock(type="text", text="!agent Send the original ownership handoff once")])
+                await client.prompt(
+                    session_id=sender,
+                    prompt=[
+                        TextContentBlock(
+                            type="text", text="!agent Send the original ownership handoff once"
+                        )
+                    ],
+                )
             except acp.RequestError as failure:
                 raise AssertionError(f"Actual ACP error data: {failure.data!r}") from failure
             wire = comms.bus.log.full_history()
-            originals = [message for message in wire if message.body == "Original outbound ownership handoff"]
+            originals = [
+                message for message in wire if message.body == "Original outbound ownership handoff"
+            ]
             assert len(originals) == 1
             original = originals[0]
             assert not open_source.current()
@@ -86,9 +122,13 @@ async def test_saved_native_send_has_one_original_source_and_target_outcome(nati
             assert sent[0].routing.reply.targets == ("receiver",)
             assert native.session.read_bytes().startswith(original_native)
             entries = [json.loads(line) for line in native.session.read_text().splitlines()]
-            tools = [row["message"] for row in entries if row.get("type") == "message"
-                     and row["message"].get("role") == "toolResult"
-                     and row["message"].get("toolName") == "comms_send"]
+            tools = [
+                row["message"]
+                for row in entries
+                if row.get("type") == "message"
+                and row["message"].get("role") == "toolResult"
+                and row["message"].get("toolName") == "comms_send"
+            ]
             assert len(tools) == 1 and not tools[0].get("isError")
             receipt = json.loads(tools[0]["content"][0]["text"])
             assert receipt == {"id": original.message_id}
