@@ -105,3 +105,11 @@ window and correctly skipped at185,067 tokens; its obsolete summary expectation
 failed and that run is preserved. A fresh adaptive case declares a180k localhost
 model to exercise actual preparation, selected-policy trigger and original input
 admission. The completed manual case is not repeated; no live input is replayed.
+
+The triggered native caller control caught a leftover settings_paths variable
+after deleting the detached policy branch. That private pre-provider refusal is
+preserved. Source-file invalidation across reopen is retained using the original
+prepared child's launch environment, while effective model/context/settings
+remain owned by native StateData and the selected child. The corrected triggered
+control passes9.76s; disabled effective-native policy also passes. No input was
+sent or provider invoked by the failed control.

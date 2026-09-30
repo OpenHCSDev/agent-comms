@@ -73,6 +73,21 @@ async def maybe_compact_owner_turn(
     if summary_strategy is None and (input_text is None or on_admission is None):
         raise PiSettingsEvidenceError("Selected live Pi summary needs its original-input owner")
 
+    # Preserve source-file invalidation across the later native reopen. These
+    # paths come from the original prepared child's launch, not display metadata
+    # or a detached settings decision. Effective values are still read from Pi.
+    environment = persistent.custody.idle().child.key[0].env
+    global_dir = Path(environment.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent").expanduser()
+    native_config = Path(environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR") or global_dir).expanduser()
+    if not global_dir.is_absolute() or not native_config.is_absolute():
+        raise PiSettingsEvidenceError("Prepared native configuration directories must be absolute")
+    project_settings = Path(owner.worktree) / ".pi" / "settings.json"
+    settings_paths = tuple(dict.fromkeys(map(str, (
+        global_dir / "settings.json", project_settings,
+        global_dir / "models.json", native_config / "models.json",
+        project_settings.with_name("models.json"),
+    ))))
+
     async def decision() -> PiCompactionDecision:
         # Native preparation owns model identity; the same retained child owns
         # effective settings and context use, including injected summary workers.
