@@ -36,3 +36,38 @@ Mendel430 identified ordinary routed TurnProgress.publish_result drops original 
 Use bounded original-journal and startup/cancel resource checks before one actual installed continuous affected user journey when the existing serial native slot is released. Preserve all uncertain input/native journals/failed traces. No new provider or live replay/interrupt/restart. Existing merged425/211/433/219 and Ready435 acceptance is not repeated. Parent owns merge/live cutover; remaining lifecycle scope is not claimed complete.
 
 Persistent source /home/ts/wt/comms-original-turn-custody-20260929. Disposable output /home/ts/.cache/agent-scratch/original-turn-custody-20260929. Successful435 owned overlays/wheels/test roots removed9,807,460bytes after exact owned process scan returned none; source/committed evidence and live originals preserved.
+
+### Current original SendReceipt boundary
+
+Producer1db38fcd publishes `InputDocument.started_for_native(lease:TurnLeaseFence,
+native_id,sent_text)` returning the actual original `StartedInput` row group.
+Native batches may bind several original inputs to one actual native user;
+correction/followup inputs may be the final assistant's closest ancestor.
+The declaration-owned InputAttempt/StartedInput methods select only recorded
+name/admission/turn/native-ID/sent-text facts. No first-row choice, public
+InputStarted reconstruction or invented historical birth/process proof.
+Mendel430 owns the final native ancestry/full-lease/frozen-certified-source join
+and its `record_turn_publication` API. TurnProgress returned-publication receipt
+consumption follows that complete API; the producer alone is not a Ready
+ordinary-message checkpoint. Group/correction and foreign native/text/turn/
+admission/name source negatives passed2focused checks; changed-source ratchet
+has zero positive measures. Parent owns the single combined Core432 next stage.
+
+### Actual retained native third lane
+
+Toad223 owns the existing pilot's actual installed fixture-only continuation.
+Core82ba/Toade213/native4ab opened the original43,194,077-byte SDK fork with
+configured Sol/high credentials held only in RAM. It proved the first typed
+pre-native failure: adaptive compaction's whole-Thread comparison rejected its
+own published progress. Einstein437's complete identity/attestation relation
+checkpoint854 was integrated independently asb65626e7. The next real fork
+entered native multi-segment summary preparation and displayed source-owned
+22percent plus1:50elapsed together across7,248private frames.
+
+The fixture's120-second tool-start deadline then interrupted the still-running
+summary. Selected summary attempt remains UNKNOWN with no commit; original
+input was UNKNOWN at receipt and later unbound cleanup Not sent. Raw journal,
+original selected attempt and failed trace are preserved; all children retired.
+No replay or native tool-cancel/next-input/goal acceptance is claimed. The test
+bound was corrected for large-context preparation; subsequent independent
+acceptance must use the parent's one reviewed cohort, never replay this attempt.
