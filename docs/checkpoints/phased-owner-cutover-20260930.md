@@ -64,3 +64,16 @@ whole changed-source diff. No broad test fleet or repeated accepted native gates
 
 Draft opened before long source implementation. No readiness or live acceptance
 claimed by this initial ownership receipt.
+
+## Receiving225 private-fixture capture crossing
+
+Einstein225/Core440 initially read the actual original41MB source through the
+target Registration and failed before SDK fork at Thread.last_goal_report_turn.
+Arendt receives this bounded fixture capability within the SAME declared C3
+retirement operation. The421 goal fixture seeded new state, not original capture.
+The reusable original_owner_capture.py boundary uses authentic original typed
+admission and current strict decoding. Einstein owns both resource-pilot caller
+edits and actual installed40s UI/CPU acceptance. Original public root is readonly.
+The full public phased lifecycle remains independent of the first441 release.
+Exact API, proof commands, owned artifacts and limits are in
+../validation/original-owner-capture-20260930.md.
