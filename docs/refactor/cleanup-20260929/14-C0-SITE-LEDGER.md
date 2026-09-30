@@ -72,3 +72,15 @@ in owner_release_receipts.json. Actual C3 decoding of the original live registry
 refuses it before the present after_stopped hook. Arendt's later single lifecycle
 cutover owns that initial admission crossing and both runtime containers;
 canonical goal history, native proofs and original recovery preimages survive.
+
+## Additional original catalog caller closure — Toad234
+
+AgentModal / ActionModal / Store configured command classification and launch
+is closed through234 c62c8d29. CatalogCommandAction owns behavior, the original
+Command record is bound once, and TypedLaunchAction owns the native launcher.
+All three Store details routes use that action; copied result/name switches,
+modal action/title/bootstrap mirrors and the launch response alias are deleted.
+Actual native08 continuous catalog/edit/cancel/failure/success/login/details
+journey passes. Production129 lines deleted; default activation and standalone
+packaging remain the231 paired-release boundary. This does not close other C0
+rows or the full original cleanup package.

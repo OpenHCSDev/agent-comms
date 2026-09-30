@@ -919,7 +919,7 @@ passes in0.97s with zero prompts/providers and unchanged native bytes. This is
 source/native resource acceptance, not a new full installed workflow claim.
 
 Einstein now owns normal advancement of existing231 release integration to
-current Toadd main and merged Textual14, keeping accepted first UI artifacts
+current Toad main and merged Textual14, keeping accepted first UI artifacts
 immutable. Core pin and one final full build will use Arendt442's reviewed final
 merged phased cutover; no intermediate full cohort or C3 backport. Parent432
 remains the sole public activation owner. Warm227 can join when ready without
@@ -927,3 +927,47 @@ holding the usage-blocking fixes. Kepler221 pushed the shared physical scroll
 locator/driver and CPU-to-video interval tooling, with no product edits or new
 physical warm-performance claim. Mendel234 owns the remaining original C0
 AgentModal→command editing→action completion→Store launch caller closure.
+
+### Warm-resource, compaction-permission and catalog checkpoints merged
+
+Toad227 merged ecbca1d94d7ec961ae885a276babc8102b861be0, exactcb77ce9a.
+Forty-three production lines added,39 deleted. Existing parked source state
+retains its bounded prepared pages and reader; final disposal revokes resources.
+The duplicate revealed-history pointer and its consumers are deleted. Actual
+original41MB private installed A/B/A/source-advance/disposal acceptance preserves
+reader, prepared pages, widget children, draft, undo and original source/owner.
+No prompts or paid calls. This proves resource reuse, not fast first paint:
+measured Pilot returns remain1.5–1.8s and no raster-strip reuse was observed.
+Heisenberg236 and Kepler221 own remaining physical warm rendering, adaptive
+scroll buffering, End/idle/reverse and scroll-past-end acceptance together.
+
+Toad235 merged04536c3c9cd1bdc938bb097791c9ae960291d42b, exact9738ae86.
+One production line added,seven deleted: compaction availability derives solely
+from TurnOwner.can_compact; Conversation._compacting and copied permission checks
+are removed. Actual native manual candidate proves progressive display, second
+Compact refusal, one committed summary and reconnect continuity. Cancellation
+notice coverage remains separately open in Core445/446 and Toad237: original
+journal outcome must be represented by the canonical source, not a UI notice
+copy or a body/seen-ID cache. No default activation is claimed for235.
+
+Toad234 mergedc62c8d29d23519a46acd571bdeeabfb76cce0046, exact15a0e5f7.
+Catalog command actions own install/login/adapter behavior and native launch;
+AgentModal, ActionModal and all Store details launch routes derive from original
+AgentDefinition/Command objects. Production162 added,129 deleted. Actual native08
+continuous catalog/edit/cancel/failure/success/login/details-launch acceptance
+passes with original draft/undo preserved, one controlled response and no paid
+calls. The test prefix borrowed normal dependencies; standalone packaging is
+accepted only by231's final normal-package build. This closes the named C0/T3
+catalog caller row, not the full C0 plan.
+
+Core442 merged ea1c275ae849c0bb7ac8b32f500096c820fc263a at12:21:34Z,
+exacta5abdfc4. The original interpreter admits and retires the entire owner batch
+before both retired-field containers are transformed and the canonical expected
+ActiveRoute is published before target launch. Authentic historical UNKNOWN
+reservation, assignment, diagnostic, blocked goal and wire/native bytes remain
+unchanged; zero prompts/providers/replays; fixture processes retired.
+Einstein231's single final paired build is unblocked. Public activation still
+requires excluding old UI/ACP registry writers: their original codec can restore
+the removed field through metadata updates even when the owner is unchanged.
+Arendt owns the bounded writer proof and old-client retirement condition.
+No legacy reader, root-ID change or format mirror will hide that hazard.
