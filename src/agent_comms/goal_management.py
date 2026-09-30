@@ -190,8 +190,8 @@ class Goals:
             owner = snapshot.threads.get(canonical)
             if owner is None or owner.active_turn is not None:
                 return ()
-            goal = owner.goal
-            if goal is None or not goal.state.active:
+            goal = owner.active_goal
+            if goal is None:
                 return ()
             waits = self.waits
             rows = waits.read()
@@ -256,8 +256,8 @@ class Goals:
             waits = self.waits.read()
             released: list[str] = []
             for owner in snapshot.threads.values():
-                goal = owner.goal
-                if goal is None or not goal.state.active:
+                goal = owner.active_goal
+                if goal is None:
                     continue
                 wait = waits.get(goal.id)
                 if (
@@ -340,9 +340,9 @@ class Goals:
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""
-        goal = self.registry.require(name).goal
+        goal = self.registry.require(name).active_goal
         return bool(
-            goal is not None and goal.state.active and self.waits.clear(goal.id, wait_id=wait_id)
+            goal is not None and self.waits.clear(goal.id, wait_id=wait_id)
         )
 
     def update_goal(
