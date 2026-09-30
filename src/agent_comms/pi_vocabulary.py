@@ -44,7 +44,7 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
 
     @classmethod
     def tracked(cls, session, message):
-        session.terminal_error = message.error_message or cls.tracked_failure
+        session.fail_terminal(message.error_message or cls.tracked_failure)
 
 
 class PendingStopReason(PiStopReason):
