@@ -1,12 +1,13 @@
 # Original turn resources and journal settlement continuation
 
-Current delivered checkpoint: original resource custody plus ordinary native
-publication is Ready after the installed41MB lifecycle gate and fresh actual
+Current delivered checkpoint: Core436 original resource custody plus ordinary native
+publication merged at reviewed1f327fd01c6d46090113394c482136b8b49b4849 after the installed41MB lifecycle gate and fresh actual
 native Source/consumer gate recorded below. Main1e967af4 is integrated normally;
 production src is unchanged from the tested ordinary d6b5c706 source. The native
 gate used reviewed native614; main's later shared scheduling has its separate439
-receipt. Mendel owns the required quiet certified durable routing carry before
-a future paired installation. Parent owns integration/activation. Remaining S14
+receipt. Arendt owns the required quiet certified durable routing carry builder
+and its outside-src artifact in the retained-routing continuation; Mendel owns the routing semantic API.
+Parent alone owns quiet revalidation and live integration/activation. Remaining S14
 initial command custody and broader lifecycle closure stay with Arendt; those
 are not included in this useful checkpoint. No repeat of completed gates.
 
@@ -237,7 +238,55 @@ receipt `evidence/ordinary-turn-publication/run02.json` retains source heads
 and actual original references. Six joined production files have zero positive
 debt measures, including StringDispatch/TypeSwitch and their arm counts.
 This closes the ordinary native publication relation, not the whole messaging
-or default install. Mendel's quiet certified durable annotation carry remains
+or default install. Arendt's quiet certified durable annotation carry remains
 an installation dependency. Initial command custody and remaining S14 are
 tracked outside this useful checkpoint; no local mirror or fallback substitutes
 for them. The earlier failed originals remain preserved without replay.
+
+### Receiving reassignment: quiet durable routing carry
+
+Arendt owns the carry builder and all outside-src operation/fixture files in
+`tools/cutover/`; parent alone owns execution and paired activation. Mendel owns
+the Source/Transcripts semantic API, not a competing carry implementation. The
+source-only436 checkpoint has merged independently; the carry still blocks
+activation of reference-only routing, not that proven source merge.
+
+Parent's authentic old720 typed readonly capture observed13 live executable
+owners,0 active turns and0 stored active_turns across ALL registry records.
+There is no present old active-routing decode crossing. Execution must recheck
+quiet custody through the existing central batch before any signal. The
+provider-free fixture also retains an expired reply-only active-turn routing
+control; it does not introduce a new production registry decoder.
+
+The operation derives both annotation tables and their primary keys from the
+existing RouteAnnotationTable declarations. The original installed720 decoder
+resolves embedded requests only against exact certified original wire seq/id
+and frozen sender/audience. New436 validates the entire reference plan before
+any mutation. Existing publications are preserved, never invented. The same
+typed OwnerCutover runs after ALL captured original processes stop and before
+ANY replacement launches, under the original writer descriptor and registry/
+annotation locks. Per-owner arguments and credentials remain retained in RAM
+by OwnerLifecycle. No new stop/start path or Source mirror exists.
+
+SQLite uses BEGIN IMMEDIATE and synchronous FULL; registry changes use its
+existing guarded commit owner. Private durable preimages are retained before
+mutation in the fresh receipt's `.originals` directory. SQLite failure rolls
+back the transaction; a committed registry replacement is restored through the
+same guard owner if possible. A pending guard or failure after SQL commit
+leaves the batch stopped for explicit review using those preimages. There is
+no automatic operation retry, restart or original-input replay.
+
+Production source and frozen41/e59 stage remain untouched. Failed private
+fixture roots `.routing-carry-fixtures/run01` through run05 and their logs are
+preserved. The first seed used the wrong old public API, the next native614
+package mismatched current439's pin, then the registry control exposed a raw
+write bypass of its guard. The carry now uses the existing guarded writer.
+Installed1f Source reads the carried original references; the old e213/223
+Toad fixture ignores IncomingTranscript and is not the matching consumer.
+Acceptance awaits the existing paired pure-join renderer, not a compatibility
+handler or production patch in this continuation.
+
+Remaining S14: initial UI command custody and the initial/forwarded input send
+resource capability currently exposed as `_maintenance_wire_locked`, plus
+broader lifecycle consumers. These remain with Arendt, coordinated with Mendel;
+no C3 backend/goal source edits are included in the carry checkpoint.

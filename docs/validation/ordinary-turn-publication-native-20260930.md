@@ -64,6 +64,7 @@ fixtures delete59lines; the existing actual producer fixture replaces them.
 
 Reference-only durable TurnRouting requires the separately owned quiet
 certified annotation carry before a coherent future installation. Parent owns
-integration/activation; Mendel owns that carry. The completed installed41MB
+integration/activation; Arendt owns that carry builder and its outside-src
+operator, while Mendel owns the routing semantic API. The completed installed41MB
 resource journey in Toad223 is a separate gate and was not repeated. Remaining
 S14 initial command custody and other lifecycle closure are not claimed done.
