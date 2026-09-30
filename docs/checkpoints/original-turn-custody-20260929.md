@@ -212,3 +212,22 @@ references and private diagnostics remain under this worktree's
 .native-publication-fixtures/run01. They are not retried or replayed. Its native
 processes have exited. The actual retained41MB lifecycle acceptance above stays
 complete; no repeated paid gate or public/default runtime change occurred.
+
+The corrected ordinary source/consumer checkpoint is now verified atd6b5c706.
+Normal merge0b5f4fc5 supplies the original NativeContextJournal point proof;
+the wrong-domain digest check and redundant session-header helper are deleted.
+Fresh actual OwnedTurn/native614/localhost run02 passed3cases in33.42seconds:
+final, real Bash progress/final, and provider503 without a false final send.
+Original Started inputs, final native-to-wire references and idle retirement
+are asserted through actual producers. All fixture native processes exited.
+
+The exact command and evidence limits are in
+`docs/validation/ordinary-turn-publication-native-20260930.md`; sanitized
+receipt `evidence/ordinary-turn-publication/run02.json` retains source heads
+and actual original references. Six joined production files have zero positive
+debt measures, including StringDispatch/TypeSwitch and their arm counts.
+This closes the ordinary native publication relation, not the whole messaging
+or default install. Mendel's quiet certified durable annotation carry remains
+an installation dependency. Initial command custody and remaining S14 are
+tracked outside this useful checkpoint; no local mirror or fallback substitutes
+for them. The earlier failed originals remain preserved without replay.
