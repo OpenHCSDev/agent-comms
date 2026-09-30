@@ -1,0 +1,42 @@
+patching file dist/core/session-manager.js
+patching file dist/core/compaction/compaction.js
+patching file dist/core/agent-session-runtime.js
+patching file dist/core/agent-session.js
+Hunk #2 succeeded at 34 (offset 1 line).
+Hunk #4 succeeded at 409 (offset -74 lines).
+Hunk #5 succeeded at 784 (offset -74 lines).
+Hunk #6 succeeded at 1069 (offset -74 lines).
+Hunk #7 succeeded at 1815 (offset -73 lines).
+Hunk #8 succeeded at 1871 (offset -73 lines).
+Hunk #9 succeeded at 1983 (offset -73 lines).
+Hunk #10 succeeded at 2081 (offset -73 lines).
+Hunk #11 succeeded at 2160 (offset -73 lines).
+Hunk #12 succeeded at 2870 (offset -73 lines).
+Hunk #13 succeeded at 2947 (offset -73 lines).
+Hunk #14 succeeded at 2969 (offset -73 lines).
+Hunk #15 succeeded at 2995 (offset -73 lines).
+Hunk #16 succeeded at 3050 (offset -73 lines).
+patching file dist/core/cache-stats.d.ts
+patching file dist/core/cache-stats.js
+patching file dist/core/compaction/branch-summarization.d.ts
+patching file dist/core/compaction/branch-summarization.js
+patching file dist/core/compaction/compaction.d.ts
+patching file dist/core/export-html/index.js
+patching file dist/core/extensions/types.d.ts
+patching file dist/core/output-guard.js
+patching file dist/core/sdk.js
+patching file dist/core/session-export.js
+patching file dist/core/session-manager.d.ts
+patching file dist/index.d.ts
+patching file dist/index.js
+patching file dist/main.js
+patching file dist/modes/interactive/components/footer.js
+patching file dist/modes/interactive/interactive-mode.js
+patching file dist/modes/rpc/rpc-mode.js
+Hunk #2 succeeded at 368 (offset -17 lines).
+Hunk #3 succeeded at 763 (offset -26 lines).
+Hunk #4 succeeded at 912 (offset -26 lines).
+Hunk #5 succeeded at 942 (offset -26 lines).
+
+added 95 packages in 2s
+PI_NATIVE_BIN=/home/ts/wt/comms428-native-wait-custody-20260930/stack/bin/pi-native

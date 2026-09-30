@@ -27,4 +27,6 @@ fc662902a510c19c5b0af7e3cf96742f5d6071c004fe226a992a59cd0bf7522a  dist/core/sdk.
 d2cee72e8e69b5dc8f8d0c84944c1a341e85ed7aa283b94463bafa5b4107ea1c  dist/core/native-proof-schema.js
 ada3b43980c4fd627cf67c8c7836c0b8118e4fb3b0e7bf49adf3c7b7192c9383  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
 e3572ebbb69891ae0789c90aa018eef981e335a4c1113ff90ec10f53740b0a10  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js
-# agent-comms-native-tree-v1 5ea25e3f9e88d073e5506ce97ceeca4c763b6da19f986ab032880d45f020f35c
+bfcdccbbceac26cd561ead2009d645bd41d2e2b6608d2506babc73c1ff689d87  agent-comms-extensions/global-agent-comms/index.mjs
+aec2f02b51690af1e1555fdf64241976155f4daac7e87a8e436784b719a408c3  dist/agent-comms-imports.json
+# agent-comms-native-tree-v1 10798d3bd729c1a4cc1998d05eeb54a9e1ba94477aa6c7d6705763ceb394eb0f

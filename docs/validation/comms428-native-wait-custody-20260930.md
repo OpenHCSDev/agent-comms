@@ -199,3 +199,53 @@ backend checkpoint dependency. Arendt now owns the separately reproduced
 seq247 pre-byte BUS contention/UNKNOWN admission workflow; #450 leaves
 OwnerLifecycle.pin, BUS admission and lock lifetimes unchanged, and transferred
 its exact route/trust/multi-CLI timing evidence directly. Preserve UNKNOWN.
+
+
+## Reviewed native bundle checkpoint (Sch takeover)
+
+Parent transferred bundle preparation only to Sch after the configured-model
+capacity failure. Mendel retains the read-only original 129.898s investigation.
+Interrupted pin generation had completed; its saved receipt and actual filesystem
+were inspected before proceeding. No build or uncertain native input was replayed.
+The latest stock-build02 already contained the exact offline locked 95 dependencies.
+
+The fresh stock artifact differs from unchanged e36 in exactly two files:
+`agent-comms-extensions/global-agent-comms/index.mjs` and
+`dist/agent-comms-imports.json`. Every previous diagnostic file pin remains exact.
+The new manifest SHA256 is
+`ceca2c05cf0ae07bc7bfab3831387bbf7f54a122675f26264f240dc5476b6e47`;
+full tree is
+`10798d3bd729c1a4cc1998d05eeb54a9e1ba94477aa6c7d6705763ceb394eb0f`.
+The ordinary canonical `stack/bin/prepare-pi-native`, using only the owned locked
+npm cache, completed exit 0 and published the new
+`stack/.pi-native-ceca2c05cf0ae07b`. No verification was bypassed; e36 was untouched.
+
+The normally rebuilt and installed wheel matches all 290 Python source files and
+the new packaged manifest. Its actual `_trusted_package` passed full tree,
+ancestry, owner-only root and independent-file checks. Actual DefaultResourceLoader
+settings discovery loaded the two manifest-declared packaged comms/project-sync
+modules, with zero extensionFactories and no inline compilation. Actual native
+SessionManager/createAgentSession/builtin tools and extension hooks completed
+read/edit/read in 3.215 seconds with external sockets denied. Managed comms
+registered 32 tools and only session_start, and emitted no activity.jsonl. No
+provider prompt, input, public mutation or process reference remained.
+
+The first packaged probe completed the same native tool work but failed when
+writing its receipt due to an invalid entry-path lookup. Its failed logs/private
+saved header remain protected. The second corrected receipt serialization only;
+no production source correction or provider retry occurred.
+
+Evidence: `evidence/comms428-native-latency/native-bundle-packaged-discovery03.json`,
+production loader gate beside it, and canonical prepare log. Owned scratch:
+`/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930`.
+Package and private proofs remain protected until parent deployment acceptance;
+then inspect references before removing disposable npm/build intermediates.
+
+This is a ready bundle/tool-cost checkpoint, not whole provider-turn latency
+closure. Current global TS source is still old: parent must deploy the reviewed
+source snapshot with the package before claiming default global discovery. Parent
+owns paired merge/activation; no live owner was restarted. The source ratchet and
+seven affected admission controls already accepted at 56d362 remain unchanged;
+new changes replace one pin line/add two diagnostics and add evidence only.
+New production semantics deleted: zero. Previous source checkpoint replaces 40
+production lines with 44, plus two snapshot declaration lines each way.
