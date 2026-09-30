@@ -520,3 +520,32 @@ no hardlinks. Old4ab/614/source artifacts and UNKNOWN proofs retained. Sch's
 sole next normal68 stage uses Core41/Toade59/Text650/SDK0.12.1/nativee36;
 actual full native send/reply/handling and idle/reopen/return acceptance remains
 pending before the central old-writer quiet cutover.
+
+### Paired real06 partial result, no backend activation
+
+ExactCore41/Toade59/Text650/nativee36 fully installed/trusted. Fresh original
+811956778224/seq1 received actual native FULLafbb66cc and user entry945beb5f,
+then published replyc136d11a5590/seq2. Original once-body/header and reply SVG
+checks passed. Two SVG token mentions are request instructions plus actual reply,
+not evidence of two reply bodies. Canonical original handling is Responded and
+reply handling Checked-noresponse. No tab-return inputs existed.
+
+The driver's360-second watchdog,15-second grace, then KILL ended137. Parent
+confirmed the original2617940 process absent; neither a prior stack nor a stale
+PID list proves continued liveness. No final success receipt exists. Hot labels,
+31-second idle, A/B/A and cold reopen remain unproven. Original wire, native
+inputs, journal and diagnostic archive are preserved; Sch canonical-stopped
+the two idle fixture owners and verified absence, with no original replay.
+Readonly notification stack showed CommsChatView._read_notifications query,
+which does not alone prove a backend status bug or driver-only failure. Sch
+owns the global notification/publication/driver diagnosis before another paid
+run. The default UI checkpoint remains verified; backend remains720/native4ab.
+
+Ordinary436/430 source1f327fd0 is Ready with native localhost3/3 in33.42s,
+retained89.168s installed resource proof and complete source/API join. Parent
+reviewed its delta against immutable41:10 production files,74 lines deleted
+and249 added, including request/publication references and original native
+context proof. That future routing encoding needs a certified durable carry;
+Arendt now owns the outside-src operator plus genuine old-format acceptance,
+while parent owns eventual single quiet activation. Current41 schemas and
+frozen06 gate are not changed. Mendel resumes whole421/216 C3 in parallel.
