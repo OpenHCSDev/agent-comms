@@ -56,3 +56,53 @@ journey verifies bounded concurrency across nested maps and both source branches
 ordered summary/usage, progressive monotone source clock, abort/failure cleanup,
 and serial policy. This is local native-path evidence; a subsequent real model
 speed measurement needs a fresh authorized input and is not claimed here.
+
+## Published code checkpoint
+
+Deleted **73 production JavaScript lines**: 66 actual compiled compaction lines,
+six policy lines and one source line. This is the algorithm delta against the
+reviewed614 native artifact, not patch-text deletion or test-line accounting.
+Added six declaration lines for the existing source contract. Replaced the
+serial turn-prefix helper with a HistorySummarySource member whose instructions
+and phase are declaration-owned.
+
+CompactionPlan admits both original sources; every model-sized leaf request uses
+the same plan's provider slots. Source orchestration does not occupy a provider
+slot while waiting for nested reductions. The plan retains the original source
+scope's AbortController reference; a rejected leaf aborts that scope before a
+queued request can start. The old local failure copy is removed. Chronological
+result ordering and usage aggregation remain unchanged. Branch-summary behavior
+is untouched; compaction validates the whole leaf before releasing its slot.
+
+Original-source controlled acceptance uses the actual 43,194,077-byte saved
+session and its 600,500-byte selected source, actual SDK event streams and compiled
+native compact function. The same configured output4096/thinking-high contract
+is checked on all seven requests. Four global slots are observed; serial policy
+observes one. Original source bytes are unchanged, progress is monotone, streamed
+summary text arrives, and all owned provider operations join on cancellation and
+failure. Temporary ReducedSummarySource directories close normally.
+
+The controlled provider span is893.717ms at the reviewed614 baseline and621.071ms
+with shared scheduling: **30.5% shorter in this controlled fixture**. This is not
+a measured real-model speedup. Preparation is separately measured at190.524ms
+and184.168ms. Current-turn work starts before history synthesis completes; final
+output still puts history before current turn and counts every usage once.
+
+The standard pinned preparation recipe now reproduces the complete candidate
+with zero fuzz and validates its full-tree commitment. Missing npm archive data
+was obtained into the owned scratch npm cache from the existing lock, without
+installing or changing default packages. Prepared manifest:
+`e36a1dde326b70179fa1c854a73fcad61948c90f5a93465a55ddd07d72936f07`;
+tree:`5ea25e3f9e88d073e5506ce97ceeca4c763b6da19f986ab032880d45f020f35c`.
+
+[Controlled receipt](../../evidence/shared-compaction-scheduling/controlled-native.json)
+is the source checkpoint evidence. Before readiness, the affected installed
+native/ACP acceptance must exercise this artifact's joined summary and original
+input boundary. No repeated paid437 gate or default installation is performed.
+
+Owned scratch: `/home/ts/.cache/agent-scratch/comms-shared-compaction-scheduling-20260930`
+contains provider-free receipt/index data and the disposable locked npm cache.
+The temporary copied-native stage is disposable after reproducible preparation;
+the prepared `stack/.pi-native-e36a1dde326b7017` artifact is protected review input.
+Resource preflight: home29.9GiB/RAM16.0GiB, accumulatedswap15.9GiB warning only;
+bounded source-only tests, no new native-owner fleet.

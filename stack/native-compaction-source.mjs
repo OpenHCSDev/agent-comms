@@ -46,7 +46,16 @@ export class SummarySource {
 }
 
 export class HistorySummarySource extends SummarySource {
-    constructor(messages, previousSummary) { super(); this.messages = messages; this.previousSummary = previousSummary; }
+    #consumedBytes = 0;
+    constructor(messages, previousSummary) {
+        super(); this.messages = messages; this.previousSummary = previousSummary;
+        this.sourceBytes = this.byteLength();
+    }
+    get consumedBytes() { return this.#consumedBytes; }
+    get summaryPhase() { return 'history'; }
+    summaryInstructions(instructions) { return instructions; }
+    consume(bytes) { this.#consumedBytes += bytes; }
+    complete() { this.#consumedBytes = this.sourceBytes; }
     *pieces() {
         let emitted = false;
         if (this.previousSummary) {

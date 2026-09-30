@@ -1,0 +1,266 @@
+{
+  "baseline-success": {
+    "mode": "baseline",
+    "preparationMs": 190.523734,
+    "sourceBytes": 43194077,
+    "sourceSelectedBytes": 600500,
+    "peak": 4,
+    "requests": [
+      {
+        "kind": "map",
+        "index": 0,
+        "startMs": 366.13762699999995,
+        "finishMs": 566.087913
+      },
+      {
+        "kind": "map",
+        "index": 1,
+        "startMs": 370.72407799999985,
+        "finishMs": 606.902528
+      },
+      {
+        "kind": "map",
+        "index": 2,
+        "startMs": 375.64779699999997,
+        "finishMs": 626.5860139999999
+      },
+      {
+        "kind": "map",
+        "index": 3,
+        "startMs": 381.03010499999993,
+        "finishMs": 647.3223549999999
+      },
+      {
+        "kind": "map",
+        "index": 4,
+        "startMs": 568.616834,
+        "finishMs": 699.2680319999998
+      },
+      {
+        "kind": "synthesis",
+        "index": 0,
+        "startMs": 700.1460559999999,
+        "finishMs": 951.8118409999998
+      },
+      {
+        "kind": "current-turn",
+        "index": 0,
+        "startMs": 1087.4111349999998,
+        "finishMs": 1259.8543600000003
+      }
+    ],
+    "providerSpanMs": 893.7167330000003,
+    "observedProgress": 30,
+    "streamedChunks": 7,
+    "sourceUnchanged": true,
+    "ownedProviderRequestsJoined": true
+  },
+  "candidate-success": {
+    "mode": "success",
+    "preparationMs": 184.168412,
+    "sourceBytes": 43194077,
+    "sourceSelectedBytes": 600500,
+    "peak": 4,
+    "requests": [
+      {
+        "kind": "map",
+        "index": 0,
+        "startMs": 374.81454900000006,
+        "finishMs": 575.9869400000001
+      },
+      {
+        "kind": "map",
+        "index": 1,
+        "startMs": 375.1215900000001,
+        "finishMs": 611.5140970000001
+      },
+      {
+        "kind": "map",
+        "index": 2,
+        "startMs": 375.22801200000015,
+        "finishMs": 625.338742
+      },
+      {
+        "kind": "map",
+        "index": 3,
+        "startMs": 375.32940399999995,
+        "finishMs": 641.183024
+      },
+      {
+        "kind": "current-turn",
+        "index": 0,
+        "startMs": 577.0503050000001,
+        "finishMs": 749.3568510000001
+      },
+      {
+        "kind": "map",
+        "index": 4,
+        "startMs": 612.008093,
+        "finishMs": 742.9054770000001
+      },
+      {
+        "kind": "synthesis",
+        "index": 0,
+        "startMs": 743.8786410000001,
+        "finishMs": 995.8858349999999
+      }
+    ],
+    "providerSpanMs": 621.0712859999999,
+    "observedProgress": 30,
+    "streamedChunks": 7,
+    "sourceUnchanged": true,
+    "ownedProviderRequestsJoined": true
+  },
+  "candidate-serial": {
+    "mode": "success",
+    "preparationMs": 191.957811,
+    "sourceBytes": 43194077,
+    "sourceSelectedBytes": 600500,
+    "peak": 1,
+    "requests": [
+      {
+        "kind": "map",
+        "index": 0,
+        "startMs": 264.15635299999997,
+        "finishMs": 464.9886399999999
+      },
+      {
+        "kind": "map",
+        "index": 1,
+        "startMs": 471.23754099999985,
+        "finishMs": 707.706462
+      },
+      {
+        "kind": "map",
+        "index": 2,
+        "startMs": 714.259218,
+        "finishMs": 964.716515
+      },
+      {
+        "kind": "map",
+        "index": 3,
+        "startMs": 973.3792090000001,
+        "finishMs": 1239.9143399999998
+      },
+      {
+        "kind": "map",
+        "index": 4,
+        "startMs": 1243.1500409999999,
+        "finishMs": 1373.5987449999998
+      },
+      {
+        "kind": "synthesis",
+        "index": 0,
+        "startMs": 1374.680715,
+        "finishMs": 1625.4828949999996
+      },
+      {
+        "kind": "current-turn",
+        "index": 0,
+        "startMs": 1761.4148689999997,
+        "finishMs": 1934.1061049999998
+      }
+    ],
+    "providerSpanMs": 1669.949752,
+    "observedProgress": 30,
+    "streamedChunks": 7,
+    "sourceUnchanged": true,
+    "ownedProviderRequestsJoined": true
+  },
+  "candidate-cancel": {
+    "mode": "cancel",
+    "preparationMs": 189.72297700000001,
+    "sourceBytes": 43194077,
+    "sourceSelectedBytes": 600500,
+    "peak": 4,
+    "requests": [
+      {
+        "kind": "map",
+        "index": 0,
+        "startMs": 393.239068,
+        "finishMs": 424.38025400000004,
+        "aborted": true
+      },
+      {
+        "kind": "map",
+        "index": 1,
+        "startMs": 393.517285,
+        "finishMs": 424.4123249999999,
+        "aborted": true
+      },
+      {
+        "kind": "map",
+        "index": 2,
+        "startMs": 393.62087099999997,
+        "finishMs": 424.41783499999985,
+        "aborted": true
+      },
+      {
+        "kind": "map",
+        "index": 3,
+        "startMs": 393.71751499999993,
+        "finishMs": 424.42249400000003,
+        "aborted": true
+      }
+    ],
+    "providerSpanMs": 31.183426000000054,
+    "observedProgress": 5,
+    "streamedChunks": 0,
+    "sourceUnchanged": true,
+    "ownedProviderRequestsJoined": true
+  },
+  "candidate-failure": {
+    "mode": "failure",
+    "preparationMs": 192.553089,
+    "sourceBytes": 43194077,
+    "sourceSelectedBytes": 600500,
+    "peak": 4,
+    "requests": [
+      {
+        "kind": "map",
+        "index": 0,
+        "startMs": 374.314078,
+        "finishMs": 574.522623
+      },
+      {
+        "kind": "map",
+        "index": 1,
+        "startMs": 374.607795,
+        "finishMs": 575.1956879999999,
+        "aborted": true
+      },
+      {
+        "kind": "map",
+        "index": 2,
+        "startMs": 374.7100489999999,
+        "finishMs": 575.207661,
+        "aborted": true
+      },
+      {
+        "kind": "map",
+        "index": 3,
+        "startMs": 374.817582,
+        "finishMs": 575.213562,
+        "aborted": true
+      }
+    ],
+    "providerSpanMs": 200.89948400000003,
+    "observedProgress": 5,
+    "streamedChunks": 0,
+    "sourceUnchanged": true,
+    "ownedProviderRequestsJoined": true
+  },
+  "controlled_provider_span_reduction_percent": 30.506919802742505,
+  "real_model_speed_measurement": false,
+  "paid_calls": 0,
+  "live_activation": false,
+  "manifest_sha256": "e36a1dde326b70179fa1c854a73fcad61948c90f5a93465a55ddd07d72936f07",
+  "native_tree": "5ea25e3f9e88d073e5506ce97ceeca4c763b6da19f986ab032880d45f020f35c",
+  "production_deleted_lines": {
+    "compiled_compaction_js": 66,
+    "policy_js": 6,
+    "source_js": 1,
+    "total": 73
+  },
+  "declaration_added_lines": 6
+}
