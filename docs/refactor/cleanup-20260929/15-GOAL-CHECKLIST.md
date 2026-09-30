@@ -28,7 +28,7 @@ retained under213/214; a median improvement alone does not close them.
 
 ## Current default activation
 
-The default paired checkpoint is now Core72062939, Toad3b019be0,
+The default paired checkpoint is now Core72062939, Toad540bc85c,
 Textual412b5a2b and reviewed native4ab91006. All11 live executable owners
 were idle at preflight and were restarted through the existing lifecycle;
 each retained session, model, thinking level, tags and goal. Stopped or dead
@@ -110,3 +110,44 @@ Next native fixture ownership: Schrodinger215 consumes Mendel430 original-source
 checkpoint; Kepler214 follows its released slot. Arendt433 continues nominal
 identity closure, Mendel421/216 and422 remain open, and Heisenberg217 owns full
 reader/focus/resource continuation. These are active unfinished scopes.
+
+## Launch admission followthrough
+
+The first activation's existing-owner launcher check missed registrations with
+no live process. Actual default opening of refactor-r1 reproduced a load refusal:
+AgentProcess projected AGENT_COMMS_ROOT before admitted_spawn determined how the
+route had been selected, dropping the default route's private launch pins.
+Schrodinger owns the complete RouteSelection/AgentProcess/admission fix in
+Toad220. The actual installed7b86 candidate launched the original refactor-r1
+owner and loaded40 saved events without an error or prompt; root, root ID and
+native package were checked in the actual owner environment. Baseline and
+candidate receipts are under evidence/cleanup-live-integration. This is an
+opening-path acceptance, not a new selected-provider input/reply claim.
+
+Toad214 is mergedcc68c51e: full installed native input, rich saved-answer
+rendering, isolated st PageUp/PageDown/reverse/End/idle capture and same-run
+654-sample CPU profile, then a second native answer painted in the original
+view. Two controlled provider requests, exit0 and owned-process cleanup passed.
+Production72 lines and67 obsolete test lines were deleted. The recording's
+visual assessment and the primary pending lazy-read/growing-end reproducer
+remain open; no new50ms target or idle-CPU improvement is claimed. Kepler's
+continuation is Toad221, alongside Heisenberg217.
+
+Toad220 merged540bc85c and214 are now the default installed Toad checkpoint.
+Actual default `toad-comms nominal-refactor-advisor-2` ensured a second previously
+processless owner, completed attachment with correct private pins and exited0,
+without an ACP error or submitted prompt. This thread had zero saved events;
+the separate original refactor-r1 candidate check loaded40. No full messaging or
+lazy-void closure follows from either opening receipt. Default Core/native stayed
+72062939/4ab and no further running-owner restart was necessary for this Toad-only
+update. Existing Toad windows require restart to consume the new producer.
+
+Core433 nominal admission/registry identity split is mergedea7cbaed; companion
+Toad219 fixture migration is merged7e4465c7. The distinct installed zero-provider
+attachment gate proved unequal allocation counters (admission6, registry owner5),
+original process proof, available queue and physical draft. These are MERGED,
+not default-installed yet: the next quiet paired cutover must replace ephemeral
+connection projections and restart eligible exact owners onto Core433. Keep all
+durable reservations, histories, native sessions and proofs. Production42 lines
+were deleted across10 files; the ambiguous Thread.owner_identity(int) constructor
+was removed along with all admission-domain consumers.
