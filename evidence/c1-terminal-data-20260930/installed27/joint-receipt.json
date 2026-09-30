@@ -1,0 +1,101 @@
+{
+  "state": "parent-input-continuous-visible-pass-fork-rightclick-menu-failed",
+  "ready": false,
+  "terminal": {
+    "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "toad": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+    "driver": "e1d9ba540ef1cc6eb4c331e0d65fbcf90d9945ff",
+    "exit_code": 1,
+    "elapsed_seconds": 45.3522841919912,
+    "stage": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930",
+    "runtime_activation_unchanged": true,
+    "manual_replay": false,
+    "old_u01_preserved": true,
+    "old_u02_preserved": true,
+    "public_mutations": 0,
+    "paid_calls": 0,
+    "gate": "existing actual native+ACP+LinuxDriver firstfork/five original preDelivery/oncechat/cancel; raw source proof review pending"
+  },
+  "raw_root": "/home/ts/wt/g458g/u02",
+  "partial_actual_positive": {
+    "source": "Original e1d driver real LinuxDriver/nonheadless physical Enter, same actual Native/ACP installed stage; existing offline review of SAME original ANSI, no extra fixture",
+    "physical_pending_before_native_started": true,
+    "original_input_id": "cec584c2d7eb4dc588adaf20b5b6471d",
+    "native_input_id": "d81bc0b4d59bd6349dafac7a4f81f5c6",
+    "disposition_kind": "started",
+    "saved_native_user_rows": 1,
+    "saved_native_assistant_rows": 1,
+    "saved_assistant_text": [
+      {
+        "type": "text",
+        "text": "NATIVE_RESPONSE_1"
+      }
+    ],
+    "physical_review": {
+      "frames": 379,
+      "drivers": [
+        "LinuxDriver"
+      ],
+      "headless": [
+        false
+      ],
+      "native_painted_request_ids": [
+        "cec584c2d7eb4dc588adaf20b5b6471d"
+      ],
+      "before_delivery_paint_ns": {
+        "cec584c2d7eb4dc588adaf20b5b6471d": 285675193434373
+      },
+      "source_to_first_paint_ns": {
+        "cec584c2d7eb4dc588adaf20b5b6471d": 0
+      },
+      "scope": "original selected queue and native chat viewport; excludes status captions"
+    },
+    "actual_provider_posts": 1,
+    "provider_errors": [],
+    "remaining_owned_processes": []
+  },
+  "failure": {
+    "site": "first_fork_native_installed_pilot.py:89 open_fork_dialog waiting ContextMenuItem after pilot.click(beta CommsRow, button=3)",
+    "exception": "TimeoutError",
+    "owner": "Kepler251 original physical menu/fixture control; Heisenberg Sidebar if product cause proven",
+    "last_emitted_screen": "last-emitted-terminal.txt",
+    "observed_screen": "#any expanded with beta Ready; #team collapsed; original parent user/answer painted once; bottom left 40% slider and Float; no thread ContextMenuItem found",
+    "actual_click_coordinates": "not recorded by original driver, so exact target attribution remains unresolved",
+    "scope": "No child created, no FIRST_FORK_NEW_INPUT, no busy/queued followup/cancel inputs attempted. First original parent only passed source/physical handoff. Do not claim five-input/fork/whole-queue regression closure."
+  },
+  "effects": {
+    "production_changes": 0,
+    "production_lines_deleted": 0,
+    "public_mutations": 0,
+    "paid_calls": 0,
+    "original_replay": false,
+    "defaults_changed": false,
+    "runtime_activation_unchanged": true
+  },
+  "preserved_negative_runs": [
+    "/home/ts/wt/g458g/u01",
+    "/home/ts/wt/g458f/u02"
+  ],
+  "next": "Kepler owns original raw/rightclick scope diagnosis. No unchanged rerun, semantic fork bypass, timeout increase or oracle waiver. Independent Sch460 and Arendt canonical BUS settlement continue.",
+  "sha256": {
+    "terminal.timing": "ef1d1b518ef10c46fa53d32f4837b96e013eceba81d2b7ab05aa1261e6260229",
+    "launch.json": "23548c1284a7de7b06d9a95e598c91868809095061f8cd8de00e3cfb9ca83867",
+    "owner-b39aa1733905e7a278407a9b07685fa5-e6bd2f87ad4247678da413ff3d9b741b.log": "632d1131e90aed1cd03587ef58c309c45fdc7862fed4e2826534c12d7ef37f48",
+    "terminal-receipt.json": "30c4b625118ac1c9918d16af471536eee2a86b27dde636c4a052613831ad5cad",
+    "terminal.ansi": "10e910d247c5324c5b354f6d6fd7df91f820c69638cd8a9d03cf8b4019d9e762",
+    "provider-failures.json": "80ca990229ef3b2e7f1344c454a1c6636cea7329bdd91a123a28ce8490213a65",
+    "original-input-dispositions.json": "cca6a7c7a1add31cf2eeab112abc27aeb8ef0e13825c0414e7aaaf80121fe804",
+    "Native_fixture_2026-09-30T19_13_48_781946.txt": "0116d6dfe20b7f1f36fa1d81af20d67ed16c153a50f42008061d8d7745fa6c27",
+    "before-delivery-cec584c2d7eb4dc588adaf20b5b6471d.json": "cf66823e44f907c6e08b4c4cc39a0f9856e7ed0a990e130467eca14f1f45ce39",
+    "original-native-session.jsonl": "d3d8a6777a4183d68524f1069aff65a9e6e0a75e44089616ebd84128078bc1a2",
+    "acp-debug": "b2a67033e6ef71e2f33b1765f0fa1208151c7477335b53b5715c40c75fba0f70",
+    "cleanup-review.json": "a2cc4bea88104a36074b3a23d1830ad97e3ac32ae0d9250decded8a51be19c70",
+    "toad-acp.log": "0116d6dfe20b7f1f36fa1d81af20d67ed16c153a50f42008061d8d7745fa6c27",
+    "acceptance-failure.txt": "b0e22c33875c8fb89e6d71bbf6c72f9ee39ff671b15e0950d7e4c47b37a97926",
+    "last-emitted-terminal.txt": "7c6f08a75a3f241f35c126864c14654f9319e0295b179bbbd9dc411a31e78693",
+    "partial-input-visibility-review.json": "b34ace70e075f37e7f746da8fc35dc939d55026935b88e81f261b6dd2230c4ce",
+    "acp-debug.log": "a838293f0f82a9a6af0a20117453c4b8e68522809f5a930852f9a0d68edec8dc",
+    "input-frames.jsonl": "de9228c45a0c5fe7914da234b00e598582d9df98b2c474dee862b2123dbb40bf"
+  }
+}
