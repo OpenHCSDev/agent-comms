@@ -211,7 +211,7 @@ class TurnProgress(events.AgentEventConsumer):
             self.comms.threads.attach_session(self.thread_name, str(session_file))
 
     async def after_agent_info(self, event: events.AgentInfo) -> None:
-        await self.sessions.config.observe_agent_info(self.session_id, self.thread_name, event)
+        await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
 
     @handles(events.ToolEnd)
     async def tool_ended(self, event: events.ToolEnd) -> None:

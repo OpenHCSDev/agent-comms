@@ -21,6 +21,7 @@ from acp.schema import (
 )
 
 from .pi_vocabulary import ThinkingLevel
+from . import agent_events as events
 from .acp_extension import (
     ContextUsage,
     CoordinationChangedUpdate,
@@ -248,6 +249,15 @@ class SessionLifecycle:
             )
             self.worktrees[session_id] = thread.worktree
         return name
+
+    async def observe_native_configuration(
+        self, session_id: str, thread_name: str, event: events.AgentInfo
+    ) -> None:
+        """Initialize only unset configuration from its actual native producer."""
+        self.comms.threads.initialize_native_configuration(
+            thread_name, model=event.model, thinking_level=event.thinking_level
+        )
+        await self.config.publish_configuration(session_id, thread_name)
 
     def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
         thread = self.comms.registry.require(thread_name)

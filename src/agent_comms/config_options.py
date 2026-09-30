@@ -18,7 +18,6 @@ from acp.schema import (
 )
 
 from .pi_vocabulary import ThinkingLevel
-from . import agent_events as events
 from . import backend
 from .comms import Comms
 from .declared_family import DeclaredFamily
@@ -51,7 +50,7 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
     async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]: ...
 
     @abstractmethod
-    async def describe(self, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect: ...
+    async def describe(self, thread: Thread) -> SessionConfigOptionSelect: ...
 
     @abstractmethod
     async def change(
@@ -87,14 +86,14 @@ class CatalogConfigOption(ConfigOption):
                 self.generation += 1
             return self.catalogs[key]
 
-    def selection(self, owner: ConfigOptions, thread: Thread, choices) -> str:
-        return self.current_value(thread)
-
-    async def describe(self, owner: ConfigOptions, thread: Thread) -> SessionConfigOptionSelect:
+    async def describe(self, thread: Thread) -> SessionConfigOptionSelect:
         choices = await self.choices(thread)
-        selected = self.selection(owner, thread, choices)
+        configured = self.current_value(thread)
+        selected = configured if configured is not None else ""
         if selected not in {choice.value for choice in choices}:
-            choices = [SessionConfigSelectOption(value=selected, name=selected), *choices]
+            choices = [SessionConfigSelectOption(
+                value=selected, name=configured if configured is not None else "Not configured"
+            ), *choices]
         return SessionConfigOptionSelect(
             id=self.declared_name,
             name=self.title,
@@ -113,8 +112,8 @@ class CatalogConfigOption(ConfigOption):
     async def change(
         self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
     ) -> None:
-        options = await self.describe(owner, thread)
-        if value not in {choice.value for choice in options.options}:
+        choices = await self.choices(thread)
+        if value not in {choice.value for choice in choices}:
             raise RequestError.invalid_params(
                 {"reason": f"Unknown {self.title.lower()}: {value!r}"}
             )
@@ -173,23 +172,12 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
             levels = [member.declared_name for member in data.levels] or ["off"]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
 
-    def selection(self, owner: ConfigOptions, thread: Thread, choices) -> str:
-        selected = self.current_value(thread)
-        levels = {choice.value for choice in choices}
-        if selected not in levels:
-            selected = "medium" if "medium" in levels else choices[0].value
-            self.persist(owner, thread, selected)
-        return selected
-
     async def apply(
         self, owner: ConfigOptions, session_id: str, thread: Thread, value: str
     ) -> None:
         await owner.set_active_backend_option(
             session_id, SetThinkingLevel(level=value), "Thinking level change timed out"
         )
-        self.persist(owner, thread, value)
-
-    def persist(self, owner: ConfigOptions, thread: Thread, value: str) -> None:
         owner.comms.threads.set_thread_thinking_level(thread.name, value)
 
 
@@ -220,23 +208,10 @@ class ConfigOptions:
     def catalog_generation(self) -> int:
         return sum(option.generation for option in self.catalogs.values())
 
-    def ensure_thread_model(self, thread_name: str) -> str | None:
-        thread = self.comms.registry.require(thread_name)
-        selected = thread.model
-        if selected is None:
-            selected = self.comms.threads.resolve_thread_model(
-                thread.name, self.agent_args.model
-            )
-        if selected is not None and selected != thread.model:
-            self.comms.threads.set_thread_model(thread.name, selected)
-        return selected
-
     async def options(self, thread_name: str) -> list[Any]:
-        if self.ensure_thread_model(thread_name) is None:
-            return []
         thread = self.comms.registry.require(thread_name)
         return [
-            await self.catalog_for(member).describe(self, thread)
+            await self.catalog_for(member).describe(thread)
             for member in ConfigOption.members_with(CatalogConfigOption)
         ]
 
@@ -324,21 +299,14 @@ class ConfigOptions:
     async def sync_thread(self, session_id: str) -> None:
         name = await self.sessions.sync_identity(session_id)
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
-        thread = self.comms.registry.require(name)
+        await self.publish_configuration(session_id, name)
+
+    async def publish_configuration(self, session_id: str, thread_name: str) -> None:
+        thread = self.comms.registry.require(thread_name)
         signature = self.signature(thread)
         if self.session_config_signature.get(session_id) == signature:
             return
         self.session_config_signature[session_id] = signature
         if self.sessions.client is None and not self.sessions.runtime_enabled:
             return
-        await self.publish(session_id, await self.options(name))
-
-    async def observe_agent_info(
-        self, session_id: str, thread_name: str, event: events.AgentInfo
-    ) -> None:
-        """Apply first-observed settings from S1/S2's typed backend observation."""
-        if event.model and self.comms.registry.require(thread_name).model is None:
-            self.comms.threads.set_thread_model(thread_name, event.model)
-            await self.publish(session_id, await self.options(thread_name))
-        if event.thinking_level and self.comms.registry.require(thread_name).thinking_level is None:
-            self.comms.threads.set_thread_thinking_level(thread_name, event.thinking_level)
+        await self.publish(session_id, await self.options(thread_name))

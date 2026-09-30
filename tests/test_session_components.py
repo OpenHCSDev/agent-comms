@@ -15,6 +15,8 @@ from agent_comms.config_options import (
     ThinkingLevelConfigOption,
 )
 from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
+from agent_comms import agent_events as events
+from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from delivery_owner_fixture import canonical_agent
 
 
@@ -68,6 +70,25 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
         "_transcript_snapshots",
     }.intersection(vars(owner))
     await other.shutdown()
+
+
+async def test_native_observation_only_initializes_unset_configuration(owner, tmp_path):
+    session = await owner.new_session(str(tmp_path / "native-config"))
+    thread = owner._comms.registry.require(session.session_id)
+    assert thread.thinking_level is None
+    await owner.sessions.observe_native_configuration(
+        session.session_id, thread.name, events.AgentInfo(model="test/two", thinking_level="high")
+    )
+    observed = owner._comms.registry.require(thread.name)
+    assert observed.model == "test/one"
+    assert observed.thinking_level is HighThinkingLevel
+    owner._comms.threads.set_thread_thinking_level(thread.name, "off")
+    before = (owner._comms.root / "registry.json").read_bytes()
+    await owner.sessions.observe_native_configuration(
+        session.session_id, thread.name, events.AgentInfo(model="test/two", thinking_level="high")
+    )
+    assert owner._comms.registry.require(thread.name).thinking_level is OffThinkingLevel
+    assert (owner._comms.root / "registry.json").read_bytes() == before
 
 
 async def test_one_option_declaration_reaches_real_acp_router_and_persistence(

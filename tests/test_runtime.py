@@ -428,7 +428,8 @@ async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatc
             "test/one",
             "test/two",
         ]
-        assert attached.config_options[1].current_value == "medium"
+        assert attached.config_options[1].current_value == ""
+        assert comms.registry.require(response.session_id).thinking_level is None
         assert (
             next(
                 f
