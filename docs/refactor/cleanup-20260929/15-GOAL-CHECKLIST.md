@@ -33,8 +33,14 @@ Parallel outstanding owners and measured progress:
   native tab restoration from the awaited goal read, and invalidates the existing
   canonical observation resource instead. Actual original-read lifetime gate
   reproduced first-paint exclusion while both navigation lock and atomic selection
-  were held. Candidate installed saved-history/ACP A/B/A acceptance remains pending;
-  no actual mid-compaction latency result is claimed. Capacity has not recurred.
+  were held. Candidate installed saved-history/ACP A/B/A acceptance passed: first paint occurred
+  with the original goal read still pending and navigation lock/atomic selection
+  both released; original UNKNOWN journal/native history stayed unchanged. Four
+  lifetime controls passed and the required ratchet has no positive deltas.
+  Toad238 merged629cca65 (reviewed productiondef49) at14:25:18Z; Einstein owns
+  the UI-only immutable install stage, with backend4295/nativee36 unchanged.
+  Actual mid-active-compaction latency remains follow-up, not a readiness claim.
+  Capacity has not recurred.
 - Heisenberg, Toad236: configurable3-viewport baseline buffer, directional dynamic
   lookahead and retained preparation measurement are implemented. Physical
   attempt02 could navigate but correctly refused a stopped private fixture;
@@ -48,7 +54,7 @@ NEW current native admission failures on NRA inbox drain. Diagnostic
 records nonblocking message-bus log flock contention, then the five-second native
 admission deadline produces PromptSendUnknown before any prompt bytes. Several
 NRA owners now expose InboxUnavailable. Public inputs/UNKNOWN dispositions are
-preserved, with no retry. Arendt owns the new shared admission/lock-lifetime
+preserved, with no retry. Arendt owns Core452, the new shared admission/lock-lifetime
 investigation and coordinates shared route timing directly with Mendel450;
 restoration451 is parked at its draft checkpoint. Installation is verified;
 whole-system live readiness is explicitly NOT established.
