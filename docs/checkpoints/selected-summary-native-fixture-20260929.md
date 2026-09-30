@@ -25,3 +25,15 @@ after the sender response. Parent reproduced this on baseline in 1.75 seconds.
 Injection identity and source coverage answer different questions. Migrate its
 fake pipeline to the same actual retained/native journey; preserve original
 input identity, coverage proof and no replay, not a compatibility coverage value.
+
+Current main72062939 normally integrated for the shared actual native setup and
+turn contract. Additional baseline fixture debt from C3 acceptance: four
+test_goal_standby_liveness fake-stream cases omit actual InputStarted and now
+correctly produce public RequestError for the unstarted original; one obsolete
+_emit_event callback also rejects its client argument. Reproduced unchanged
+main4FAIL2.64s with the approved native package leaf configured. Log:
+main720-standby-baseline.log in this draft's named scratch. Do not synthesize
+started/covered values or adjust exception expectations until the existing
+actual retained/native fixture owns terminal-vs-settled semantics and delayed
+stale callbacks. Full selected-summary correction/settings/source/UNKNOWN
+negative cases and the injected-vs-covered original gap remain assigned here.
