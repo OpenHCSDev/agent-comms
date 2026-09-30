@@ -19,3 +19,13 @@ Acceptance: existing actual private native/ACP/Toad continuous two-agent channel
 and delivery, warm DM+IRC saved history, immediateSend, handling and original
 message once without old inbound tail replay. Provider controls only; no paid
 calls/public replay. Performance claims require actual path and profile.
+
+Production continuation: strict typed append-index records replace raw dict parsers;
+BusPresentation retains one admitted DisplayCheckpoint resource per viewer instead
+of separate activity/verified/unread authorities. FieldCodec owns record shape;
+existing current-format mismatch rebuilds disposable indexes, no old-shape decoder.
+SourceCoverage now borrows original CertifiedSourceRead.addressed_page through
+WireLog.certified_read(blocking=False), removing the standalone page opener and
+its duplicate certificate/connection/stream. Original historical acceptance scripts
+under evidence/existing-checkpoint and pf2-checkpoint-seals remain unchanged raw
+proofs; they target their frozen historical commits, not the current API.
