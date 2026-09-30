@@ -1,0 +1,275 @@
+{
+  "owner": "Mendel",
+  "pr": 462,
+  "review_kind": "item5 final integrated source disposition; no new tests, providers, source edits or SessionRevision implementation",
+  "integrated_head": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "original_base": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+  "accepted_source": "c53449cb6fdefac52152f79f23d66ba6ba6c9340",
+  "existing_review_source": "#462 evidence/goal-wait-certified-reply/NONE-REVIEW.md and none-site-census.json",
+  "own_production_commit_churn": {
+    "added": 121,
+    "deleted": 108,
+    "note": "sum of original own commit deltas; includes repeated edits; excludes peer commits",
+    "commits": [
+      {
+        "commit": "c53449cb6fdefac52152f79f23d66ba6ba6c9340",
+        "added": 121,
+        "deleted": 108
+      }
+    ]
+  },
+  "integrated_scope_diff": {
+    "added": 123,
+    "deleted": 114,
+    "note": "final970 minus originalbase on owned files, includes peer intersections; not personal attribution",
+    "files": [
+      {
+        "path": "src/agent_comms/bus_publication.py",
+        "added": 12,
+        "deleted": 0,
+        "final_blob": "afc1163e4137b5466046da3a6c0e609a694535e2"
+      },
+      {
+        "path": "src/agent_comms/goal_management.py",
+        "added": 39,
+        "deleted": 25,
+        "final_blob": "2548be85780bd96da46c4d8ac9827f982121ae6f"
+      },
+      {
+        "path": "src/agent_comms/goal_presentation.py",
+        "added": 10,
+        "deleted": 0,
+        "final_blob": "3f7c90d5e93e6defb84920026b143b92b9f1f774"
+      },
+      {
+        "path": "src/agent_comms/goal_waits.py",
+        "added": 18,
+        "deleted": 37,
+        "final_blob": "67ee507c00fa279bb97e4cfd9da716249f5d1bf5"
+      },
+      {
+        "path": "src/agent_comms/input_drain.py",
+        "added": 1,
+        "deleted": 2,
+        "final_blob": "9635b852ed07f16d08a9340e961311d06a1c7bec"
+      },
+      {
+        "path": "src/agent_comms/ordinary_admission_rules.py",
+        "added": 5,
+        "deleted": 5,
+        "final_blob": "7efd434341ac04714391e6576dd8bd1177d3df2e"
+      },
+      {
+        "path": "src/agent_comms/owned_send_admission.py",
+        "added": 3,
+        "deleted": 6,
+        "final_blob": "d9f868a93443e740eaa711a4267e9affe0bade89"
+      },
+      {
+        "path": "src/agent_comms/owned_turn.py",
+        "added": 3,
+        "deleted": 13,
+        "final_blob": "c0f6b3f014f2bb28ae70267f7f3d258785c3adde"
+      },
+      {
+        "path": "src/agent_comms/queued_input.py",
+        "added": 8,
+        "deleted": 13,
+        "final_blob": "99dc306d01efeb1b47145891c645aa93900c0672"
+      },
+      {
+        "path": "src/agent_comms/selected_participant.py",
+        "added": 4,
+        "deleted": 0,
+        "final_blob": "4e46748ae8394e23827f6b132c2d106767c4377a"
+      },
+      {
+        "path": "src/agent_comms/selected_triage.py",
+        "added": 1,
+        "deleted": 0,
+        "final_blob": "ddacb44911421b2d62a0029f195f71a85aa1319f"
+      },
+      {
+        "path": "src/agent_comms/selected_turn.py",
+        "added": 1,
+        "deleted": 0,
+        "final_blob": "49f365a0dcf6af0bf25d854361f59ee878e04217"
+      },
+      {
+        "path": "src/agent_comms/turn_input_source.py",
+        "added": 18,
+        "deleted": 13,
+        "final_blob": "65d766db266bc7fc962c7f9bdaca10152390da16"
+      }
+    ]
+  },
+  "changes_since_accepted_source_on_owned_files": [
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "added": 2,
+      "deleted": 6
+    }
+  ],
+  "own_added_none_text_sites": [
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/goal_management.py",
+      "line_at_commit": 344,
+      "added_text": "            if goal is None or captured is None or goal.id != captured.id:",
+      "final_text_occurrences": [
+        344
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/goal_management.py",
+      "line_at_commit": 347,
+      "added_text": "            if wait is None or wait.owner_created_at != current.created_at:",
+      "final_text_occurrences": [
+        347
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/selected_participant.py",
+      "line_at_commit": 53,
+      "added_text": "    def consume_reply_wait(self) -> None:",
+      "final_text_occurrences": [
+        53
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 38,
+      "added_text": "    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool: ...",
+      "final_text_occurrences": [
+        38
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 61,
+      "added_text": "    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool: ...",
+      "final_text_occurrences": [
+        61
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 71,
+      "added_text": "    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool:",
+      "final_text_occurrences": [
+        71,
+        85
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 85,
+      "added_text": "    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool:",
+      "final_text_occurrences": [
+        71,
+        85
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 86,
+      "added_text": "        if wait is None:",
+      "final_text_occurrences": [
+        86
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 150,
+      "added_text": "    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:",
+      "final_text_occurrences": [
+        150,
+        168,
+        180
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 168,
+      "added_text": "    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:",
+      "final_text_occurrences": [
+        150,
+        168,
+        180
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 462,
+      "commit": "c53449cb",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_input_source.py",
+      "line_at_commit": 180,
+      "added_text": "    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:",
+      "final_text_occurrences": [
+        150,
+        168,
+        180
+      ],
+      "disposition": "retained; rationale in receipt"
+    }
+  ],
+  "own_new_none_as_domain_state": "none found in traced contributions; per-site retained resource/dependency/operation-result contract in receipt; preexisting nullable domain relations are not blanket external",
+  "shared_incomplete_native_reference": {
+    "original_witness": "#462 evidence/goal-wait-certified-reply/none-context-shape-probe.json",
+    "fix_commit": "f997cc8586c1dd7551d85d0cbd7334fd215dabca",
+    "in_integrated_head": true,
+    "final_paths": [
+      "src/agent_comms/native_input_record.py:84",
+      "src/agent_comms/native_input_record.py:148",
+      "src/agent_comms/native_runtime_input.py:189",
+      "src/agent_comms/native_runtime_input.py:296",
+      "src/agent_comms/cursor_owner.py:76",
+      "src/agent_comms/native_source_cursor.py:215"
+    ],
+    "disposition": "partial SQL context rejected at existing boundary; complete/unrecorded declaration consumed instead of None-reference state"
+  },
+  "limits": [
+    "Not whole historic native-nullable closure",
+    "No fresh installed970 acceptance claimed; Einstein owns current paired gate",
+    "SessionRevision deferred; runtime compaction-journal reset remains declared operator scope; protected native/input-proof/UNKNOWN/wire/goals unchanged"
+  ]
+}

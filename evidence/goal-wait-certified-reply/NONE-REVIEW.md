@@ -1,5 +1,11 @@
 # Item 5 — newly added None sites in #457 / #462
 
+**Final-source update:** `NONE-STATE-DISPOSITION-970.md` and its JSON trace
+review integration `970bc527f4ddd9b3bde5522dc671aea11fd27ece`. Arendt's
+`f997cc8586c1dd7551d85d0cbd7334fd215dabca` now rejects the incomplete
+reference witnessed below. This supersedes the historical **open** disposition;
+the original witness and reviewed-source rationale are retained unchanged.
+
 Reviewed versions: #457 `e1f2d732bb9c8f447da12b5fbc0b31519860cdc0`,
 #462 source `c53449cb6fdefac52152f79f23d66ba6ba6c9340`.
 No production bytes or frozen ea8/c075 cohort were changed for this review.
