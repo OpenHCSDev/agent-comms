@@ -32,6 +32,7 @@ from .native_pi import (
     _verify_context,
 )
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
+from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
@@ -152,6 +153,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def complete(self) -> NativeTurnResult:
         async with AsyncExitStack() as custody:
+            self.custody = custody
             custody.callback(self.startup.release)
             await self.open_tools(custody)
             self.native = await self.native_session.open(
@@ -312,6 +314,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             if self.input_event is not None:
                 raise NativePiUnavailable("Native Pi repeated the input commitment")
             self.input_event = event
+            self.evidence = self.custody.enter_context(
+                NativeEntry.open_evidence(self.active_session_file)
+            )
+            await asyncio.to_thread(self.evidence.observe)
 
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:
@@ -357,6 +363,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.native.attestation.identity.session_id,
             self.input_event,
             self.context_event,
+            evidence=self.evidence,
         )
 
     @handles(pi.ToolExecutionStart)

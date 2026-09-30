@@ -160,3 +160,13 @@ allocate that combined interval further. The controlled installed journey will
 record tool consumer/callback timing in one Python process separately from the
 original native request clock. The historical 129.898s interval remains
 unattributed; no provider queue, deadlock or CPU diagnosis is claimed.
+
+## Critical basic-tool latency followthrough
+
+Arendt owns the measured `tool_started → context_proof → _verify_context → NativeContextProof.read_evidence` delay. The original 44,661,933-byte source copy contains 10,147 entries. Full historical entry decoding cost 2.051/1.966 seconds on every proof check. Acquired source checks cost 0.0415/0.0411/0.0397 seconds after one initial 2.100-second decode. These are same-process measurements, not subtraction of producer and ACP clocks.
+
+`NativeEntry.open_evidence` owns an acquired reader inside the existing tracked-turn ExitStack. The original input commitment acquires it; each later tool/terminal context check verifies the complete original byte prefix, strict append decoding, opened/named revision and private permissions, and reads the current SQLite proof. No context proof or disposition is cached, no seen-input list or parallel index is introduced. Replaced, truncated, altered, ambiguous and damaged sources still refuse. The decoded source resource ends with its turn.
+
+Fifteen focused controls pass. Actual installed/native retained-history tool acceptance remains pending. The separate 120.935-second model request had a high prompt cache hit rate; the 36.423-second first delta and remaining stream duration are native request phases, with no provider-capacity attribution. This source fix does not claim to explain them.
+
+Sanitized measurement: `evidence/native-input-custody/context-proof-latency-20260930.json`. No durable format or native ABI change, no public writes/restarts/provider calls, no UNKNOWN replay.

@@ -7,6 +7,7 @@ publication. Verified package and send authority remain required for every turn.
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import shutil
@@ -23,7 +24,7 @@ from . import pi_events as pi
 from .native_arguments import NativeArguments
 from .field_codec import FieldCodec
 from .native_input_record import NativeInputCommit, NativeInputIdText
-from .native_entries import NativeEntry, SessionEntry
+from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
 from .pi_vocabulary import ThinkingLevel
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
 from .selected_tool_broker import NativeToolMode
@@ -333,12 +334,20 @@ class NativeContextProof(NativeContextRecord):
 
     @classmethod
     def read_evidence(
-        cls, session_file: Path, input_id: str, *, request_generation: int | None = None
+        cls, session_file: Path, input_id: str, *, request_generation: int | None = None,
+        evidence: NativeEvidenceRead | None = None,
     ) -> NativeContextProof:
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         NativeInputIdText.decode(input_id)
         session_file = Path(session_file).absolute()
-        header, entries = NativeEntry.read_evidence(session_file)
+        if evidence is None:
+            with NativeEntry.open_evidence(session_file) as acquired:
+                return cls.read_evidence(
+                    session_file, input_id, request_generation=request_generation,
+                    evidence=acquired,
+                )
+        evidence.require_path(session_file)
+        header, entries = evidence.observe()
         tracked = NativeEntry.tracked_users(entries)
         if input_id not in tracked:
             raise NativePiUnavailable("The specified input was never durably committed")
@@ -659,38 +668,81 @@ def _read_private_file(path: Path):
     Historical bytes are not an admission quota. Memory follows one record;
     callers must exhaust this iterator before relying on the observation.
     """
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-        with os.fdopen(fd, "rb") as stream:
-            info = os.fstat(stream.fileno())
-            try:
-                PrivateFileRole.require(info)
-            except ValueError as error:
-                raise NativePiUnavailable("Native Pi evidence file is not private") from error
-            if not info.st_size:
-                raise NativePiUnavailable("Native Pi evidence file is empty")
+    with PrivateEvidenceRead.open(path) as evidence:
+        yield from evidence.rows()
+
+
+class PrivateEvidenceRead:
+    """Pinned private source with a verified original byte prefix.
+
+    Resource custody lasts until close. Appending cannot invalidate earlier
+    decoded bytes unnoticed: each read hashes the whole original prefix and
+    checks both the descriptor and named revision across the observation.
+    """
+
+    def __init__(self, path, stream):
+        self.path, self.stream = path, stream
+        self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
+        self.size = 0
+        self.digest = hashlib.sha256().digest()
+
+    @classmethod
+    @contextmanager
+    def open(cls, path):
+        try:
+            with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
+                yield cls(path, stream)
+        except OSError as error:
+            raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
+
+    def close(self):
+        self.stream.close()
+
+    def rows(self):
+        try:
+            info = os.fstat(self.stream.fileno())
+            PrivateFileRole.require(info)
             revision = FileRevision.from_stat(info)
-            remaining = info.st_size
+            if revision.identity != self.identity:
+                raise NativePiUnavailable("Native Pi evidence inode changed")
+            if not info.st_size or info.st_size < self.size:
+                raise NativePiUnavailable("Native Pi evidence file is empty or truncated")
+            self.stream.seek(0)
+            digest = hashlib.sha256()
+            remaining = self.size
             while remaining:
-                raw = stream.readline(remaining)
+                raw = self.stream.read(min(remaining, 128 * 1024))
+                if not raw:
+                    raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
+                remaining -= len(raw)
+                digest.update(raw)
+            if digest.digest() != self.digest:
+                raise NativePiUnavailable("Native Pi evidence original prefix changed")
+            remaining = info.st_size - self.size
+            while remaining:
+                raw = self.stream.readline(remaining)
                 if not raw or not raw.endswith(b"\n"):
                     raise NativePiUnavailable("Native Pi evidence file is incomplete")
                 remaining -= len(raw)
+                digest.update(raw)
                 try:
-                    row = json.loads(
-                        raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique
-                    )
+                    row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
                 except (UnicodeError, ValueError) as error:
                     raise NativePiUnavailable("Native Pi evidence JSON is invalid") from error
                 if type(row) is not dict:
                     raise NativePiUnavailable("Native Pi evidence row has wrong type")
                 yield row
-            after, named = os.fstat(stream.fileno()), path.lstat()
-            for observed in (after, named):
+            for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
+                PrivateFileRole.require(observed)
                 if revision != FileRevision.from_stat(observed):
                     raise NativePiUnavailable("Native Pi evidence changed during observation")
-    except OSError as error:
-        raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
+            self.size, self.digest = info.st_size, digest.digest()
+        except NativePiUnavailable:
+            self.close()
+            raise
+        except (OSError, ValueError) as error:
+            self.close()
+            raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
 
 
 def _trusted_package(package: Path) -> Path:
@@ -830,12 +882,13 @@ def _verify_context(
     session_id: str,
     input_event: pi.InputCommitted,
     context_event: pi.ContextCommitted,
+    *, evidence: NativeEvidenceRead | None = None,
 ) -> NativeContextProof:
     try:
         emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(session_file)
     except (TypeError, ValueError) as error:
         raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
-    proof = NativeContextProof.read_evidence(session_file, input_id)
+    proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
     if proof != emitted:
         raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
     return proof
