@@ -1,3 +1,16 @@
+## Current paired-candidate dependency update
+
+Textual15 merged6b5895fa0a72aeec2aeaef7206d5debfa0c1803c; original shared
+geometry damage source and actual Toad compositor red/green accepted. Parent
+reviewed the complete production change and verified merged product equality.
+Einstein owns the next continuous installed native/ACP/Linux terminal gate;
+Schrodinger builds the same normal immutable package cohort and then bus views.
+Their next pin is merged6b, not old2e49. Kepler retains original submission/
+queue acceptance ownership; Heisenberg254 continues remaining performance.
+Arendt467 final prepared-model closure deletes its test-only GetState helper;
+the installed manual proof drives actual TurnRunner/NativeSessionPreparation.
+Current live pins and the larger release's not-live disposition are unchanged.
+
 ## Current release owners after ratchet pair merge
 
 NRA15 merged c6f15608 into its declared checkpoint base, Core466 merged07fff8c1

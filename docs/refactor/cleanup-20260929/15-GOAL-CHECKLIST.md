@@ -1,3 +1,31 @@
+## 2026-09-30 Textual geometry-damage checkpoint merged
+
+Textual15 merged6b5895fa0a72aeec2aeaef7206d5debfa0c1803c after complete
+production review of a5c6678d and the retained native Toad/compositor counterexample.
+25production linesdeleted/15added in one existing file. Reflow, visible reflow
+and lazy full_map now share the original old/new clipped geometry-damage
+operation and existing dirty ledger. No full repaint, second scene, caption
+mirror or input-state workaround was introduced. Parent verified merged source
+and package metadata equal the accepted source.
+
+The actual ToadApp/WorkspaceScreen/Prompt source reproduction changes the real
+caption and controls, then performs the original lazy geometry read. Baseline
+first frame retains two captions; corrected frames each contain one. Five
+native compositor/layout checks pass1.10s. This reproduces the same failure
+shape as original u02, but does not establish the exact u02 call stack or pass
+the next installed Linux/native/ACP journey. Current public Textual remains2e49.
+Einstein and Schrodinger have received the merged6b pin for the coherent next
+candidate; no live defaults were changed. Original evidence remains in:
+/home/ts/wt/textual-lazy-geometry-publication-damage-20260930/evidence/lazy-geometry-publication-damage-20260930.
+
+Arendt467 published f21ac24a prepared-native StateData and original selected
+startup closure. Parent read every affected production caller and identified
+that the new GetState helper had only a test consumer; acceptance must exercise
+TurnRunner.prepare_selected_session -> NativeSessionPreparation.open itself.
+Arendt confirmed the installed manual44.7MB gate uses that production path and
+passed with5localhost posts; the unnecessary product helper is being deleted.
+The final source and remaining adaptive proof are not yet claimed Ready.
+
 ## 2026-09-30 ratchet pair merged; queue regression remains a release requirement
 
 Requested item3 is published and merged: NRA15 c6f156089bf65b74584506ca4b52153445aabb07
