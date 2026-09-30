@@ -1,0 +1,12 @@
+{
+  "stage": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930",
+  "pins": {
+    "agent-comms": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+    "batrachian-toad": "308deb818152c104a77f5b0f0e2675a5c13955fa",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "state": "verified-immutable-cohort",
+  "staging_receipt_sha256": "76ab805c25117c67b189e18b405ac3d1a6ad137dc4273e5889762b910ce79275"
+}

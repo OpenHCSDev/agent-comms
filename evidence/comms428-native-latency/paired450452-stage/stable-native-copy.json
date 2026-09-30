@@ -1,0 +1,13 @@
+{
+  "owner": "Schrodinger450",
+  "purpose": "reviewed native450 stable independent regular-copy deployment preparation",
+  "source": "/home/ts/wt/comms428-native-wait-custody-20260930/stack/.pi-native-ceca2c05cf0ae07b",
+  "destination": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b",
+  "copy_function": "shutil.copy2, no hardlinks",
+  "wall_seconds": 1.687187500006985,
+  "public_active_route_changed": false,
+  "default_source_changed": false,
+  "trust_pending": false,
+  "cli": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "full_installed_trust": true
+}

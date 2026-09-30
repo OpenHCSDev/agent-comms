@@ -249,3 +249,34 @@ seven affected admission controls already accepted at 56d362 remain unchanged;
 new changes replace one pin line/add two diagnostics and add evidence only.
 New production semantics deleted: zero. Previous source checkpoint replaces 40
 production lines with 44, plus two snapshot declaration lines each way.
+
+
+## Immutable paired 450/452 stage
+
+Parent merged 450/452 and paired Toad240. One normal frozen-68 stage is ready:
+`/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930`.
+Exact Core `a80c15025624eec3ed6bd93ef6173cfb66a193b6`, Toad
+`308deb818152c104a77f5b0f0e2675a5c13955fa`, unchanged Textual
+`2e49cb838af44d69aa5a6d76b2a1d74cfbe67347`, SDK0.12.1.
+New native is the independent regular-copy stable deployment
+`/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b`.
+No hardlinks, repair of e36, source override, editable install or live mutation.
+
+Normal resolution and pip check passed all 68 packages; frozen installed
+requirements differ from the current viewport-buffer baseline only in Core/Toad
+pins. Core290 and Toad273 Python files match their exact merged Git sources.
+Matching installed Core verifies the complete new native commitment/ancestry/root
+mode. Existing RuntimeSelection published metadata from the same staging receipt
+and its actual owned runtime probe exited 0 with no process references/errors.
+Evidence is under `evidence/comms428-native-latency/paired450452-stage`.
+
+Parent owns the retained-owner quiet batch, expected global source snapshot
+replacement, canonical ActiveRoute/default cutover and affected installed public
+entrypoint verification. This is staging acceptance only; no public owner,
+route, global TS, prompt or provider was touched here.
+
+Known uncovered defect: the original helper2 400 reports endpoint-format token
+counts; unchanged e36/ceca ContextBudgetRequest rejection decoder recognizes only
+the prior Cloudflare grammar. Mendel owns that typed external decoder/native
+correction in a separate draft. This stage does not fix output budgeting or claim
+whole model/performance readiness, and its immutable ceca was not patched.
