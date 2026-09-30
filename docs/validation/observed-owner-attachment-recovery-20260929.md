@@ -26,3 +26,30 @@ saved source, failed attachment, owner restart, the same continuously open view,
 automatic recovery and usable original editor/history. Preserve baseline failure
 and correlate source readiness with UI publication. No live user owner or original
 history is changed by this worker. This is a draft scope, not a readiness claim.
+
+
+## Reviewed installed checkpoint
+
+Nine production lines deleted relative to main 7fc. Toad #210 owns the paired
+recovery consumer; #425 owns canonical turn/input lifecycle. The original failed
+load command captures RegistrySnapshot full OwnerIdentity/ProcessIdentity before
+proxy subscription. Its FieldCodec FailedSessionLoadAdmission disposition is
+carried through official RequestError.data and cannot resolve/replay. Accepted
+attachments retain their existing trusted queue lease; no prebind observations
+are promoted. Replacement uses strictly newer generation for the same thread,
+including reused PIDs, then strict fresh full owner/process validation. No
+current-owner mirror, new store, compatibility decoder or input replay.
+
+The actual installed paired recovery receipt is committed in Toad #210 at
+`evidence/owner-attachment-recovery/installed-receipt.json`: healthy alpha,
+physical beta row click, actual old-owner load failure, replacement, same open
+view recovery (4.628 seconds), preserved editor Document/undo, explicit new
+reply painted and stopped-owner read-only load refused without starting it.
+Exit 0; zero provider requests during repair; no original input retried.
+Installed Core 7cd4ee8b; the only later source change 05a6fbe3 moves the unchanged
+full process check inside its RequestError boundary. Required debt ratchet
+against current main passes with zero positive measures. CI is deferred.
+
+T5 outbound/source hot invalidation remains scoped to Core #430 and Toad #215;
+it does not delay this useful recovery checkpoint. Parent owns global paired
+installation and quiet cutover. No worker global install or live owner mutation.
