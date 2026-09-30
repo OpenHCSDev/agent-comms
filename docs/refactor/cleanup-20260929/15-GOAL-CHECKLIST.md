@@ -105,7 +105,7 @@ refactoring scopes below.
 ## Current fleet and resource constraint
 
 Six Codex workers retain assigned work: Heisenberg224, Arendt436, Schrodinger215,
-Mendel430/421, Kepler221 and Einstein439/default-entrypoint verification.
+Mendel430/421, Kepler221 and Einstein's presentation-read/idle-CPU investigation.
 Core422 fixture closure is merged;434/437/438 are merged checkpoints. A worker
 claim is not proof of a running turn. Kepler's latest capacity failure has a
 resume submission; Heisenberg remains the integration owner for224. The owner now
@@ -549,3 +549,43 @@ context proof. That future routing encoding needs a certified durable carry;
 Arendt now owns the outside-src operator plus genuine old-format acceptance,
 while parent owns eventual single quiet activation. Current41 schemas and
 frozen06 gate are not changed. Mendel resumes whole421/216 C3 in parallel.
+
+The reviewed ordinary checkpoint is now merged through Core436 at000a31c5;
+GitHub also marks same-head Core430 merged. Exact head1f327fd0 preserves the
+accepted native33.42s/source relation and earlier installed89.168s resource
+receipt. This is a source checkpoint, not a default backend change. Arendt's
+outside-src durable carry remains required before activation; its continuation
+will use a new draft after publication. No original input or completed paid
+gate is replayed, and the immutable41/e59 messaging stage remains unchanged.
+
+### Workspace publication stage and message-driver diagnosis
+
+Toad224 source6e3110ab is staged separately with Core720, Textual650,
+SDK0.12.1 and native4ab. All68 exact dependency pins, installed import paths,
+package compatibility and complete native trust passed. Default launchers and
+owners are unchanged. The stage receipt is workspace-publication-224-staging.json.
+Heisenberg owns the single original41MB physical held-PageUp/PageDown/reverse/
+End/15s-idle video and correlated profile comparison. The source check's zero
+partial-page frames does not establish physical terminal acceptance.
+
+Sch's readonly original06 root check proves both actual UI service roots and
+accepted ACP root identities match the private fixture. The reported230 was
+Textual's widget registry, not a comms thread count. Each actual comms registry
+has three threads. The nested-app driver invokes direct widget/Pilot operations
+under the last IRC app context; each app's existing context correctly resolves
+its own widgets. Sch owns the driver correction and controlled hot publication,
+idle, A/B/A and reopen acceptance before another paid whole journey. The real06
+original reply and all incomplete/UNKNOWN evidence remain preserved. The context
+finding is not yet proof of the entire watchdog failure's cause.
+
+Einstein owns the independent idle-CPU investigation through the existing
+presentation-read/subscription owners, coordinating shared source with Sch and
+retained raw footage with Heisenberg. Observed stack changes identify a lead;
+they are not call counts, CPU fractions or proof that rendering workers caused
+the slowdown. No second semantic store or frontend status cache is authorized.
+
+Original720 typed registry inspection currently finds13 live executable owners
+and no active turns, including no stale stored active turn on stopped records.
+This supports the existing cutover's admission path but does not replace its
+atomic idle/process fence at execution time. Home free27.8GiB, RAM available
+15.6GiB and swap used15.6GiB; only bounded existing lanes continue.
