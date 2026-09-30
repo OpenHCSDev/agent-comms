@@ -1,0 +1,57 @@
+{
+  "thread": "comms428",
+  "observed_registered_model": "openai-codex/gpt-6.1-sol",
+  "observed_registered_thinking_level": "high",
+  "journal": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-29T23-39-56-904Z_01a0ef8a-0c69-75a1-86fe-53cd38ab0d18.jsonl",
+  "measurements": [
+    {
+      "entry_timestamp": "2026-09-30T19:30:08.050Z",
+      "assistant_message_timestamp_ms": 1790796590044,
+      "provider": "openai-codex",
+      "model": "gpt-6.1-sol",
+      "usage": {
+        "input": 1520,
+        "output": 252,
+        "cacheRead": 156928,
+        "reasoning": 169,
+        "totalTokens": 158700
+      },
+      "stop_reason": "toolUse"
+    },
+    {
+      "entry_timestamp": "2026-09-30T19:32:11.358Z",
+      "assistant_message_timestamp_ms": 1790796610479,
+      "provider": "openai-codex",
+      "model": "gpt-6.1-sol",
+      "usage": {
+        "input": 7434,
+        "output": 1950,
+        "cacheRead": 158336,
+        "reasoning": 516,
+        "totalTokens": 167720
+      },
+      "stop_reason": "toolUse"
+    },
+    {
+      "entry_timestamp": "2026-09-30T19:37:23.706Z",
+      "assistant_message_timestamp_ms": 1790797031104,
+      "provider": "openai-codex",
+      "model": "gpt-6.1-sol",
+      "usage": {
+        "input": 144269,
+        "output": 112,
+        "cacheRead": 2944,
+        "reasoning": 80,
+        "totalTokens": 147325
+      },
+      "stop_reason": "toolUse"
+    }
+  ],
+  "limits": [
+    "Reasoning is reported separately but is included in output; do not double count.",
+    "High cache usage during the 121-second request contradicts attributing that whole request to an uncached prompt.",
+    "Usage and request clocks do not establish provider queue versus reasoning or generation timing."
+  ],
+  "public_inputs": 0,
+  "provider_calls": 0
+}

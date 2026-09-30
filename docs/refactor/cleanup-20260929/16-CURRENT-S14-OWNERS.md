@@ -55,3 +55,23 @@ failed the first-fork UI journey: one native answer was mounted/painted twice.
 Original proof is preserved at /home/ts/wt/g458e/u01/proof. Heisenberg owns the
 frontend source/publication crossing, Arendt checks the canonical producer;
 Kepler251 keeps input/queue visibility. This candidate is not live-ready.
+
+Arendt measured NativeContextProof.read_evidence on an isolated original
+44,661,933-byte comms428 journal copy:2.051s/1.966s unprofiled,10,147 entries;
+every tool start repeats that full decode. The current fix retains the original
+evidence resource and verifies pinned inode/prefix integrity while decoding
+appended entries, still checking the original indexed context proof. It is in
+progress, not yet installed or measured after the change.
+The121-second request already reported158,336 cached input tokens plus7,434
+uncached and1,950 output tokens including516 reasoning tokens. It cannot be
+attributed wholly to a cold prompt. Original usage is retained in model-usage.json;
+provider queue/reasoning/generation phase allocation is still incomplete.
+
+Heisenberg granted Einstein the disjoint253 body-readiness methods in
+ViewportBody/MeasuredViewportBody/DocumentViewport and TranscriptFragmentView
+ready/retire/restore/registration. Einstein traces native Mount completion
+separately; no ready flag or topology registry is permitted. Heisenberg retains
+253 integration and252 answer publication. Kepler retains251 user-input methods.
+The next250 source pair49557473 normally includes merged249 and251aafb with
+Core458d12f2d87;252's substantive source fix must join before the next actual
+first-fork/continuous-input journey. Frozen failed6fab/b3b remains untouched.
