@@ -996,3 +996,17 @@ client. An unrelated old worker1973426 is on a disposable l0a fixture root and
 is not part of the public owner batch. Arendt447 owns writer-exclusion proof
 and reusable typed-capture closure. No broad kill, X-session manipulation,
 version mirror or root-ID replacement is authorized by this census.
+
+Toad218 is now CLOSED as superseded, preserving its branch/history. Its sole
+61b635b6 declaration patch has the same patch ID as merged0e758abd667; all three
+TurnOwner.captured_snapshot methods and both SnapshotPublication/Checkpoint
+consumers are present. Merged215/232's actual native equal-body-distinct-input
+and held39-chunk receipts account for its consumer acceptance. No unique scope
+remains and no provider journey was replayed for this reconciliation.
+
+The owner answered that the old open Toad has no unsent drafts to preserve.
+Existing restart authorization applies; precise old-client retirement can
+proceed at quiet activation after the paired native journey passes. Public
+sessions, wire, goals, UNKNOWN inputs and recovered private preimages remain
+protected. Physical236 work copies its original source before cutover so its
+private recording does not block the usage-critical installation.

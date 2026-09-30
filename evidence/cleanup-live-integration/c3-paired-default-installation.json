@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-09-30T12:44:09.212692+00:00",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930",
+  "previous_bin": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin",
+  "paired_ready_head": "95ab9c3948fcef6a45e311340f6b9a0170ca3e6b",
+  "links": [
+    {
+      "command": "agent-comms",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/agent-comms"
+    },
+    {
+      "command": "agent-comms-acp",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/agent-comms-acp"
+    },
+    {
+      "command": "agent-comms-agent",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/agent-comms-agent"
+    },
+    {
+      "command": "agent-comms-nk-foreground",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/agent-comms-nk-foreground"
+    },
+    {
+      "command": "toad",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/toad"
+    }
+  ],
+  "phase": "new_launchers_published_before_original_client_retirement"
+}
