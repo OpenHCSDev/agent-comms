@@ -6,13 +6,13 @@ tools. Recovery-only historical phases remain readable without manufacturing
 recovery events from a successful result.
 """
 
-from agent_comms.attempt_states import AttemptFailedAttempt
 from . import pi_events as pi
+from .agent_events import NativePhaseChanged
 from .attempt_states import (
+    AttemptFailedAttempt,
     CompactionAttempt,
     ModelRunningAttempt,
     PromptAcceptedAttempt,
-    PromptStartingAttempt,
     SettlingAttempt,
     ToolRunningAttempt,
 )
@@ -28,10 +28,14 @@ class DurableTurn(MroDispatch):
         self.fence = fence
         self.pointer_revision = pointer_revision
         self.input_id = input_id
-        self.current = PromptStartingAttempt
-        self.phase = ModelWaitPhase()
-        self.active_tools = set()
-        self.model_started = False
+
+    @property
+    def current(self):
+        return type(self.attempts.require_fence(self.fence)[1].lifecycle)
+
+    @property
+    def model_started(self):
+        return self.current.has_model_context
 
     def advance(self, state):
         if state is self.current:
@@ -43,7 +47,6 @@ class DurableTurn(MroDispatch):
             progress=True,
         ).value
         self.fence = result.fence
-        self.current = state
 
     @handles(pi.Response)
     async def accepted(self, event):
@@ -57,21 +60,11 @@ class DurableTurn(MroDispatch):
         if self.current.starting:
             self.advance(PromptAcceptedAttempt)
         self.advance(ModelRunningAttempt)
-        self.model_started = True
 
-    @handles(pi.ToolExecutionStart)
-    async def tool_started(self, event):
-        self.active_tools.add(event.tool_call_id)
-
-    @handles(pi.ToolExecutionEnd)
-    async def tool_finished(self, event):
-        self.active_tools.discard(event.tool_call_id)
-
-    @handles(pi.PiEvent)
+    @handles(NativePhaseChanged)
     async def excursion(self, event):
-        self.phase = self.phase.on(event, self.active_tools)
         if self.model_started:
-            await self.dispatch(self.phase)
+            await self.dispatch(event.phase)
 
     @handles(ModelWaitPhase)
     async def model(self, phase):
@@ -87,8 +80,8 @@ class DurableTurn(MroDispatch):
 
     def finish(self):
         """Native child is reaped and any explicit owner effect has completed."""
-        if not self.model_started or self.active_tools:
-            raise IdentityConflict("native completion lacks model progress or has active tools")
+        if not self.model_started:
+            raise IdentityConflict("native completion lacks model progress")
         self.advance(SettlingAttempt)
         self.fence = self.attempts.advance(
             self.fence,

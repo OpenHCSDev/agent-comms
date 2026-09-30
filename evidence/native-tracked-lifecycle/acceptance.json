@@ -1,0 +1,118 @@
+{
+  "installed_source_head": "08ced72919490fa5be87deb7bc9a3b504da97ef2",
+  "artifact": "noneditable installed wheel",
+  "python": "/home/ts/.cache/agent-scratch/comms-native-tracked-lifecycle-wait-20260929/installed/bin/python",
+  "native_commitment": "4ab910061590d1e0d02e915478903aec24da5be3a1c76460a1e2896ab40563cc",
+  "native_tree": "b6c67bbd60acd066e2fa01d3cc41d43c63b1d14c82c42ca0bb01caa7c22f65cd",
+  "journey": "SelectedExecution -> durable admission -> actual Pi CLI/RPC -> selected coding tool socket -> real bash -> native answer/cancel/EOF -> retained raw UNKNOWN and no replay",
+  "provider": "localhost controlled OpenAI-completions responses; real native and application path",
+  "results": [
+    {
+      "outcome": "complete",
+      "elapsed_seconds": 98.0063877220091,
+      "provider_posts": 2,
+      "saved_inputs": 1,
+      "native_children_retired": true,
+      "no_replay": true
+    },
+    {
+      "outcome": "cancel",
+      "elapsed_seconds": 2.507861218007747,
+      "provider_posts": 1,
+      "saved_inputs": 1,
+      "native_children_retired": true,
+      "no_replay": true
+    },
+    {
+      "outcome": "exit",
+      "elapsed_seconds": 2.651508590002777,
+      "provider_posts": 1,
+      "saved_inputs": 1,
+      "native_children_retired": true,
+      "no_replay": true
+    }
+  ],
+  "passed": 3,
+  "seconds": 106.04,
+  "exit_code": 0,
+  "production_lines_deleted": 94,
+  "live_activation": false,
+  "paid_calls": 0,
+  "fixture_setup_correction": "initial collection could not locate private_root; imported existing sealed tmp_path fixture under its declared name before any native process started",
+  "source_errors": "EOF diagnostic retains original chained NativePiUnavailable and native exit/stderr",
+  "cleanup": "all actual children retired; existing sealed TemporaryDirectory disposes isolated fixture state; serial slot returned",
+  "normal_main_integration": {
+    "head": "d306d0df",
+    "merge_head": "b0c806e14c16539d53acc86dd363daa142609d9f",
+    "files": [
+      "presentation.py",
+      "registry_document.py",
+      "session_lifecycle.py",
+      "session_load.py",
+      "thread_presentation.py"
+    ],
+    "native_wait_source_unchanged": true,
+    "repeat_native_gate": false,
+    "reason": "426 owner-attachment recovery passed its separate real gate; disjoint from tracked native waiting and native package"
+  },
+  "paired_activation_requirement": {
+    "core425_integrated": "dc2754156cb5a381b3556f7713b78fb283f458e8",
+    "required_toad_pr": 211,
+    "published_candidate_at_inspection": "f415d6ee47e67a34655a71df0ba886bf09bf7fa7",
+    "required_wire_update": "TurnChangedUpdate(state: TurnState)",
+    "removed_wire_updates": [
+      "TurnStartedUpdate",
+      "TurnSettledUpdate"
+    ],
+    "consumers": [
+      "toad.acp.comms_updates.CommsUpdates.turn_changed",
+      "toad.agent_presentation.ManagedTurnBinding",
+      "toad.widgets.conversation",
+      "toad.widgets.prompt"
+    ],
+    "native_phase_changed": "internal AgentEvent, not a new ACP extension member",
+    "current_toad43949_compatible": false,
+    "pair_gate_owner": "Arendt425/Toad211; installed native/ACP/UI acceptance passed",
+    "activation_owner": "parent432; use Arendt final211 tested source pin; do not activate Core431 alone",
+    "additional_required_field": "InputStartedUpdate.native_id: str | None (required constructor field); all producers use actual StartedInput proof",
+    "saved_native_input_identity": "UserTranscript.native_id from decoded UserMessage.input_id; paired NativeInputClaim exact snapshot retirement",
+    "final_ready_toad211": "dd73f2516a5f5db2b3afde4637e5918232cddf1b",
+    "final_ready_core425": "88ca3edad4eb8fff3ca064a2acd1fbdf90e56d9a",
+    "paired_installed_acceptance": {
+      "requests": 4,
+      "sessionId": "beta",
+      "owner": "renamed-beta",
+      "inputId": "091a5f4c1d6d4496b385aba102b68c81",
+      "inputState": "started",
+      "draftPreserved": true,
+      "exitCode": 0,
+      "coreSource": "5e61097a",
+      "toadSource": "192259b55e3f3d13336e426325ac3096f8c1f414",
+      "nativePackage": "4ab910061590d1e0",
+      "loopbackCalls": 4,
+      "healthyRenameReconnected": false,
+      "firstOriginalVisibleOnceOnWarmReturn": true,
+      "officialSessionPreserved": true,
+      "warmPhysicalABA": true,
+      "editorDocumentAndUndoRetained": true,
+      "goalAndStatusRefreshPassed": true,
+      "nativeChildrenRetired": true
+    },
+    "paired_receipt": "Toad211 evidence/canonical-native-rename-ready/receipt.json",
+    "post_acceptance_changes": "425 documentation only;211 documentation and diagnostic removal only after tested192259, per integration owner"
+  },
+  "followup425_integration": {
+    "published425": "5e61097a",
+    "merge": "a88162094332e4ff55d5fe70f54f09de4d80ee06",
+    "focused_integration_gate": {
+      "passed": 15,
+      "seconds": 0.91,
+      "files": [
+        "tests/test_native_phase_producer.py",
+        "tests/test_acp_extension.py",
+        "tests/test_acp_queue_contract.py"
+      ]
+    },
+    "tracked_watchdog_native_sources_unchanged": true
+  }
+}
