@@ -59,6 +59,13 @@ class FailedSessionLoadAdmission(SessionLoadAdmission):
 
     binding: ThreadOwnerBinding
 
+    @classmethod
+    def from_failure(cls, data: object) -> "FailedSessionLoadAdmission | None":
+        if not isinstance(data, dict):
+            return None
+        witness = data.get("agentCommsLoadFailure")
+        return None if witness is None else FieldCodec.decode(cls, witness)
+
     def failure_metadata(self) -> dict:
         return {"agentCommsLoadFailure": FieldCodec.encode(self)}
 
