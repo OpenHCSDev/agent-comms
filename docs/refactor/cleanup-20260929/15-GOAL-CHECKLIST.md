@@ -887,3 +887,43 @@ the reader's swallowed AttributeError blocked the entire sidebar refresh.
 Existing public resource-query and PresentedFrame caller closure remain the
 named fix, coordinated with227. No deleted private field, independent timer or
 status copy will be restored.
+
+### Combined fork/roster and explicit startup-root checkpoints merged
+
+Toad233 merged4dd9cbe943f0c8e03dbef2ac48b540c9e6668f0d at11:08:25Z,
+reviewed exact0f33bf9b, tested production253eeb10. The app asks its existing
+source-preparation owner whether visible reads are blocked; it no longer reads
+the deleted private loading field. PresentedFrame restoration releases the
+same deferred source work as the native write receipt. Full installed native08
+passes canonical fork registration, inherited tags with additions/removals,
+fresh channel roster, actual child click before the native socket exists,
+same-owner pending attachment, inherited history and first physical Enter.
+One original native input yields one mounted and compositor-painted answer.
+Two controlled loopback requests, no external calls/replays/default changes.
+All seven owned fixture roots have no remaining processes. Four own production
+lines plus seven imported fork-dialog lines deleted; required ratchet positive
+delta zero. These source fixes are not default-live yet.
+
+Toad228 merged94cfc1d2fef3a57f0d958db24c56c5c91978515b at11:10:47Z as a
+docs/evidence-only closure after233: fresh target-main vs exactccd298a3 source,
+pyproject and lock diff was empty. This keeps its independent multiline task
+evidence in main. Actual pasted indentation, two paragraphs and trailing newline
+survive Ctrl+Enter into the canonical child task, inherited tags, one original
+native user ID and one child answer. No duplicate full-fork gate was run.
+
+Core444 merged627ef1c437abb68e919776625fd78f3592c9ad43 at11:08:26Z, exact
+c44cb120. The same startup factory receives the selected library's explicit
+maintenance root instead of relying on ambient worker environment. Five added
+production lines; the concrete absent-ambient lease-wait cancellation check
+passes in0.97s with zero prompts/providers and unchanged native bytes. This is
+source/native resource acceptance, not a new full installed workflow claim.
+
+Einstein now owns normal advancement of existing231 release integration to
+current Toadd main and merged Textual14, keeping accepted first UI artifacts
+immutable. Core pin and one final full build will use Arendt442's reviewed final
+merged phased cutover; no intermediate full cohort or C3 backport. Parent432
+remains the sole public activation owner. Warm227 can join when ready without
+holding the usage-blocking fixes. Kepler221 pushed the shared physical scroll
+locator/driver and CPU-to-video interval tooling, with no product edits or new
+physical warm-performance claim. Mendel234 owns the remaining original C0
+AgentModal→command editing→action completion→Store launch caller closure.
