@@ -36,7 +36,7 @@ goal_mode = 'none', native_ok = False
         starts = []
         if goal_mode != "none":
             from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
-    
+
             goal = comms.goals.update_goal("beta", SetGoalAction(text="Unrelated parked goal"))
             if goal_mode == "standby":
                 comms.agents.begin_turn("sender", "dependency-work")
@@ -46,12 +46,12 @@ goal_mode = 'none', native_ok = False
                 )
         before_goal = comms.registry.require("beta").goal
         before_wait = comms.goals.goal_wait("beta")
-    
+
         async def blocked(package, **kwargs):
             entered.set()
             await release.wait()
             return await fake(package, **kwargs)
-    
+
         async def native(*args, **kwargs):
             native_id = "b" * 32
             with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
@@ -61,7 +61,7 @@ goal_mode = 'none', native_ok = False
             yield events.InputStarted(id=None)
             yield events.StreamSettled()
             yield events.Done(ok=native_ok, text="Fresh owner input completed")
-    
+
         monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
         comms.messaging.send_message("sender", "beta", "Selected direct message")
@@ -79,8 +79,8 @@ goal_mode = 'none', native_ok = False
             release.set()
 >           await asyncio.wait_for(turn, 8)
 
-.artifacts/baseline-source/tests/test_selected_owner_followup.py:87: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/baseline-source/tests/test_selected_owner_followup.py:87:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 /usr/lib/python3.14/asyncio/tasks.py:488: in wait_for
     return await fut
            ^^^^^^^^^
@@ -104,7 +104,7 @@ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     await OwnedTurn(
 .artifacts/baseline-source/src/agent_comms/owned_turn.py:454: in run
     await self.run_native()
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 self = <agent_comms.owned_turn.OwnedTurn object at 0x7fb6cd3aef90>
 
