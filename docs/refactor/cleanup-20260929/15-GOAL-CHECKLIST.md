@@ -1089,3 +1089,25 @@ producer/custody mechanism with a declared current-record projection; no
 shape-based fallback reader. No paired rebuild is needed for these outside-src
 tools/docs/proofs. Arendt also retired one proven owned l0a orphan in0.98s,
 preserving its input/wire/native bytes and fixture root.
+
+### R1/participant shared cause established — Core449
+
+Mendel449's read-only ancestry and native journal establish one workflow cause:
+R1 selected owner3196780 launches native3198326; its original newseq161 triage
+and full input produce bash3200829 running agent-comms-agent tools --help.
+That entrypoint ignores argv, chooses fallback participant without explicit
+AGENT_COMMS_THREAD/PI_AGENT_ID, registers an undurable bot and waits forever as
+worker3200830. This causes both the new participant aggregate inbox failure and
+the original bash/native turn stall. The selected pipeline also leaves canonical
+phase Preparing while native processing has already begun. Originalseq160
+UNKNOWN is NOT replayed in this observed journal; seq161 is a distinct original
+input.
+
+449 owns the complete headless-command/admission/catalog boundary and canonical
+selected-turn phase closure. Recovery is authorized only for the accidental
+idle helper with exact process witness and no helper input/UNKNOWN/history;
+retain original records/diagnostics and let the SAME already-startedseq161 tool
+call settle. Never interrupt the originalR1 owner/native process or clear its
+lease/goal, send a new input, or extend a whole-turn timeout. Arendt448's options
+read/explicit-mutation closure is disjoint; physical236 and cancellation445/237
+continue concurrently.
