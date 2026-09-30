@@ -283,10 +283,52 @@ package mismatched current439's pin, then the registry control exposed a raw
 write bypass of its guard. The carry now uses the existing guarded writer.
 Installed1f Source reads the carried original references; the old e213/223
 Toad fixture ignores IncomingTranscript and is not the matching consumer.
-Acceptance awaits the existing paired pure-join renderer, not a compatibility
-handler or production patch in this continuation.
+The matching reviewed e59 consumer with Textual650 passed actual TUI run06:
+one original request and one native answer painted,3 routing cells carried,
+one reply-only registry control carried, wire/native/UNKNOWN bytes unchanged.
+refusal01 corrupted the last genuine old annotation after earlier valid cells;
+the entire operation refused before mutation, with every original file's bytes,
+inode and mode unchanged and no recovery resources or receipt created.
+Both exit0; provider calls and input replays0. No native execution or public
+owner replacement is claimed by this carry fixture. Existing435/438 owns the
+accepted real retained two-worker all-stop/busy-refusal/settings gate.
+
+Exact command and source pair: `docs/validation/retained-routing-carry-20260930.md`.
+Sanitized persistent receipts: `evidence/retained-routing-carry/run06.json` and
+`evidence/retained-routing-carry/refusal01.json`. Original private receipts,
+certificates and recovery preimages remain under the owned persistent fixture
+roots. No production old reader or changed renderer was added.
 
 Remaining S14: initial UI command custody and the initial/forwarded input send
 resource capability currently exposed as `_maintenance_wire_locked`, plus
 broader lifecycle consumers. These remain with Arendt, coordinated with Mendel;
 no C3 backend/goal source edits are included in the carry checkpoint.
+
+### Later C3 format crossing, separate activation dependency
+
+Parent's readonly actual720 registry reproduction on C3/Core20079652 refuses
+`Thread.last_goal_report_turn` on114 retired records. Zero live active turns
+does not make that Thread format admissible. This crossing is excluded from
+the current old720-to-merged436 routing carry and must not delay the first436/
+215 release. C3 source421/216 can merge independently of activation.
+
+Arendt owns the required lifecycle relation: one canonical batch must admit
+original typed records, capture original process/launch proof, fence and stop
+ALL originals, then carry removed members once and launch target-format owners.
+Full field closure includes nested Thread containers such as
+OwnerReleaseReceipts, not only top-level registry entries. Mendel owns the C3
+removed-member semantics and supplies that closure. No new production legacy
+decoder, FieldCodec adapter, silent field drop or separate operator stop loop
+is authorized. Parent's original reproduction made no mutation or signal;
+the crossing remains tracked for that later typed cutover capability.
+
+Mendel's full declaration closure confirms ONLY `last_goal_report_turn` was
+removed from Thread. Durable carriers are RegistryDocument.threads and
+`owner_release_receipts.json` values' OwnerReleaseReceipt.thread. The future
+same-batch carry must cover BOTH and preserve every receipt's before/after
+admission, birth/incarnation and process relation. Operator preimages remain
+historical resources, not runtime readers. Presentation/transcript/admission/
+selected runtime Thread carriers rebuild through their existing owners.
+Original goal_history owns report state; no report journal may be fabricated
+from an old field-only active report. The historical goal_pause_events file is
+preserved. This full relation belongs to later S14, not the current first carry.

@@ -57,6 +57,31 @@ def main():
     original_bus = file_witness(root / 'bus.jsonl')
     cutover = RetainedRoutingCutover(old_python, seed['root_id'], package, stage / 'carry-receipt.json')
     service = Comms(root)
+    if '--reject-corrupt-original' in sys.argv:
+        # Corrupt the last genuine old annotation, after two earlier valid
+        # cells. The operation must refuse the whole plan before any writes.
+        with sqlite3.connect(database) as db:
+            old = json.loads(db.execute('SELECT routing FROM transcript_route WHERE entry_id=?',
+                                        (seed['final'],)).fetchone()[0])
+            old['requests'][0]['id'] = 'f' * 32
+            db.execute('UPDATE transcript_route SET routing=? WHERE entry_id=?',
+                       (json.dumps(old), seed['final']))
+        original_files = {str(path): file_witness(path) for path in root.rglob('*') if path.is_file()}
+        try:
+            service.owners.restart_owners(cutover=cutover)
+        except subprocess.CalledProcessError as error:
+            assert error.returncode != 0
+        else:
+            raise AssertionError('Corrupt original request was admitted')
+        assert all(file_witness(Path(path)) == witness for path, witness in original_files.items())
+        assert not (stage / 'carry-receipt.json').exists()
+        assert not (stage / 'carry-receipt.json.originals').exists()
+        receipt = {'corrupt_original_refused_before_mutation': True,
+                   'earlier_valid_cells_not_partially_carried': True,
+                   'all_original_files_unchanged': True, 'provider_calls': 0, 'input_replays': 0}
+        (stage / 'receipt.json').write_text(json.dumps(receipt, indent=2))
+        print(json.dumps(receipt), flush=True)
+        return
     assert service.owners.restart_owners(cutover=cutover) == ()
     assert file_witness(root / 'input_dispositions.json') == inputs_before
     assert file_witness(Path(seed['session'])) == native_before
@@ -68,12 +93,13 @@ def main():
         assert display[1] == 'Retained displayed input' and display[2]
         assert json.loads(display[3])['requests'] == [
             {'seq': seed['original']['seq'], 'message_id': seed['original']['id']}]
+        assert 'publications' not in json.loads(display[3])
         assert all(json.loads(row[0])['requests'] == json.loads(display[3])['requests']
                    for row in db.execute('SELECT routing FROM transcript_route'))
     page = service.transcripts.capture_page_read('alpha').read()
     reference = MessageReference(seed['original']['seq'], seed['original']['id'])
     assert any(reference in event.incoming_sources for event in page.events)
-    assert not any(getattr(event, 'native_id', None) == 'c' * 32 for event in page.events)
+    assert not any('c' * 32 in event.native_inputs for event in page.events)
     result = asyncio.run(render(page, root))
     receipt = json.loads((stage / 'carry-receipt.json').read_text())
     assert receipt['routing_cells'] == 3 and receipt['registry_routings'] == 1
