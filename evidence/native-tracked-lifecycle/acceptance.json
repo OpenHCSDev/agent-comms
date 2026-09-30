@@ -40,5 +40,19 @@
   "paid_calls": 0,
   "fixture_setup_correction": "initial collection could not locate private_root; imported existing sealed tmp_path fixture under its declared name before any native process started",
   "source_errors": "EOF diagnostic retains original chained NativePiUnavailable and native exit/stderr",
-  "cleanup": "all actual children retired; existing sealed TemporaryDirectory disposes isolated fixture state; serial slot returned"
+  "cleanup": "all actual children retired; existing sealed TemporaryDirectory disposes isolated fixture state; serial slot returned",
+  "normal_main_integration": {
+    "head": "d306d0df",
+    "merge_head": "b0c806e14c16539d53acc86dd363daa142609d9f",
+    "files": [
+      "presentation.py",
+      "registry_document.py",
+      "session_lifecycle.py",
+      "session_load.py",
+      "thread_presentation.py"
+    ],
+    "native_wait_source_unchanged": true,
+    "repeat_native_gate": false,
+    "reason": "426 owner-attachment recovery passed its separate real gate; disjoint from tracked native waiting and native package"
+  }
 }
