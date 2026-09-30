@@ -25,7 +25,10 @@ classifiers = [
 ]
 keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 
-dependencies = ["metaclass-registry>=0.1.0"]
+dependencies = [
+    "metaclass-registry>=0.1.0",
+    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@d392c5e4cd189ce1203127a746337ad498a0330d#subdirectory=skills/refactor-audit",
+]
 
 [project.optional-dependencies]
 acp = [
@@ -60,6 +63,9 @@ pi-comms-native = "agent_comms.native_pi:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_comms"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel.force-include]
 "stack/pi-native.sha256" = "agent_comms/_native/pi-native.sha256"

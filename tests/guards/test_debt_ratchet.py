@@ -132,6 +132,33 @@ def test_ratchet_has_one_packaged_owner() -> None:
     assert "src/agent_comms/" not in Path(debt_ratchet.__file__).read_text()
 
 
+def test_builtin_handler_measure_uses_shared_collector_and_rejects_growth(repo: Repository) -> None:
+    from agent_comms.debt_ratchet import BuiltinHandlerTypeSwitch
+    from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
+    assert issubclass(BuiltinHandlerTypeSwitch, BuiltinHandlerDeclarations)
+    source = '''from .mro_dispatch import MroDispatch, handles as cases
+class Consumer(MroDispatch):
+    @cases(dict)
+    def one(self, value): pass
+    @cases(DomainRecord)
+    def domain(self, value): pass
+'''
+    base = repo.commit({"policy.py": source})
+    growing = source.replace('@cases(DomainRecord)', '@cases(list, str)')
+    head = repo.commit({"policy.py": growing})
+    status, report = repo.compare(base, head)
+    identity = f"BuiltinHandlerTypeSwitch:{repo.root}/policy.py"
+    assert status == 1
+    assert report["base"][identity] == 1 and report["head"][identity] == 3
+    assert report["delta"][identity] == 2
+    moved = repo.commit({"policy.py": source, "another_codec.py": growing,
+                         "field_codec.py": growing})
+    status, report = repo.compare(head, moved)
+    assert status == 1  # A filename suffix cannot admit another primitive dispatcher.
+    assert report["head"][f"BuiltinHandlerTypeSwitch:{repo.root}/field_codec.py"] == 0
+    assert report["delta"][f"BuiltinHandlerTypeSwitch:{repo.root}/another_codec.py"] == 3
+
+
 def owner(name: str, lines: int, indent: str = "") -> str:
     return indent + f"class {name}:\n" + "".join(
         indent + f"    field_{index} = {index}\n" for index in range(lines - 1)
