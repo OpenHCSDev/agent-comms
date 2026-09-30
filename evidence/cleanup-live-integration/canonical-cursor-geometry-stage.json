@@ -1,0 +1,14 @@
+{
+  "state": "staged-reviewed-imports-native-trust-verified-not-activated",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-geometry-20260930",
+  "pins": {
+    "agent-comms": "72062939239b0f07707406309305a056a23f925f",
+    "batrachian-toad": "f8bad541450aca0a3df763ed132e201aee5858d1",
+    "textual": "65053c5a2df12249ef1c4193beeff7023c1f75d7"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+  "default_launchers_unchanged": true,
+  "pending": "sole original-history physical profile/video comparison under Heisenberg",
+  "verification_correction": "initial operator guessed WorkspaceScreen module as session_view; authoritative owner is screens.workspace, corrected without package mutation"
+}
