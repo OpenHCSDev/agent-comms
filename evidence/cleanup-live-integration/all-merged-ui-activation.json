@@ -1,0 +1,52 @@
+{
+  "state": "all-merged-defaults-published-after-actual-candidate-acceptance",
+  "published_utc": "2026-09-30T17:04:39.299789+00:00",
+  "target": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+  "pins": {
+    "agent-comms": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+    "batrachian-toad": "3625ce9e9379da553374e2e81e08e435e5321d1b",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "native": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "sdk": "0.12.1",
+  "included_toad_prs": [
+    239,
+    241,
+    243,
+    244
+  ],
+  "links": [
+    "agent-comms",
+    "agent-comms-acp",
+    "agent-comms-agent",
+    "agent-comms-nk-foreground",
+    "toad"
+  ],
+  "candidate_gate": "/home/ts/.cache/agent-scratch/kepler-all-merged-ui-20260930-attempt02/capture",
+  "candidate_gate_sha256": "93417a9761833f3b6059987d806e24e61d1fe284a0839da4cfdd1956d77e8388",
+  "actual_checks": {
+    "original_saved_history_loaded": true,
+    "peer_saved_history_loaded": true,
+    "history_scroll_extent": true,
+    "scroll_keys_focus_history": true,
+    "held_page_up_admitted_older_source": true,
+    "held_page_down_admitted_newer_source": true,
+    "reverse_page_up_admitted_older_source": true,
+    "draft_typed": true,
+    "peer_selected": true,
+    "source_retained": true,
+    "editor_retained": true,
+    "history_window_retained": true,
+    "draft_retained": true,
+    "reader_position_retained": true,
+    "ready_body_resources_retained": true,
+    "undo_restored_original_draft": true
+  },
+  "duration_seconds": 86.13161516399123,
+  "owner_restarts": 0,
+  "root_changes": 0,
+  "runtime_store_resets": 0,
+  "inputs_replayed": 0,
+  "default_ui_verification": "pending",
+  "remaining": "Whole UI CPU, final foreground performance and unmerged 242/453/454 remain in progress."
+}
