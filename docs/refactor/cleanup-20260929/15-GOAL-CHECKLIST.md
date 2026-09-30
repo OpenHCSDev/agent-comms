@@ -97,16 +97,22 @@ refactoring scopes below.
 
 Six Codex workers carry active work: Heisenberg217, Arendt436, Schrodinger215,
 Mendel430/421/422, Kepler221 and Einstein434/437. Einstein now owns actual native
-admission contention and the malformed provider-error boundary. Installed native
-journeys run serially. Latest resource check reports11.7GiB available RAM,
-19.8GiB free home storage and13.3GiB swap used; headroom remains a warning.
-Do not launch a heavy parallel fixture fleet or delete unreviewed work/history.
+admission contention and the malformed provider-error boundary. The owner now
+explicitly authorizes three independent real native journeys in parallel,
+superseding the earlier serial fixture policy. Current lanes are Schrodinger's
+messaging/three-view gate, Einstein's437 compaction, and Arendt's436 actual
+cancel/goal/next-input lifecycle. Each uses its own fixture root, native forks,
+installation and original inputs. Read-only UI diagnosis continues separately.
+Latest resource check reports13.8GiB available RAM,20.0GiB free home storage
+and13.3GiB swap used; headroom remains a warning. Preserve uncertain attempts
+and clean only owned disposable artifacts. Shared live cutovers remain atomic
+operations under one owner, with no competing package mutation.
 
 The next installation is prioritized for usage-blocking recovery, lifecycle,
 delivery and deadline defects. Final warm first paint and the remaining broader
 performance targets do not hold a useful verified checkpoint, and remain tracked.
 
-Current native fixture ownership: Schrodinger215 consumes Mendel430 original-source
+Current messaging fixture ownership: Schrodinger215 consumes Mendel430 original-source
 and Einstein434 admission/error checkpoints, using the actual configured provider
 and native forks of the original41MB history. Arendt436 owns original-turn resource
 and settlement closure after435; Mendel421/216 and422 remain open. Heisenberg217
