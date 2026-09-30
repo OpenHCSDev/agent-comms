@@ -315,7 +315,7 @@ capture or verification of the frozen native06 handling idle/A-B/A failure.
 
 Run05 exits0; original canonical Thread process checks show both fixture owners
 stopped/dead and environment-scoped observations find no owned child leftovers.
-The existing OwnerLifecycle owns cleanup. Toad deletes its entire58-line fake
+The existing OwnerLifecycle owns cleanup. Toad deletes its entire59-line fake
 goal agent facade and all consumers are covered by the real native journey or
 Core declaration family controls. Existing thread action deletion guard passes.
 Sanitized paired receipt is committed in Toad216 at
