@@ -39,3 +39,4 @@ coverage.xml
 /bus_route_counts.sqlite3*
 /activity_latest.json
 /.native-init-fixtures/
+/.phase-fixtures/

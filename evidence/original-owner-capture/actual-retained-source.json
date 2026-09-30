@@ -1,0 +1,14 @@
+{
+  "owner": "nra-architecture",
+  "source_bytes": 41270257,
+  "original_python": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/python",
+  "process": {
+    "pid": 2126072,
+    "start_time": 20963438
+  },
+  "original_owner_admission_process_revalidated": true,
+  "credentials_serialized": false,
+  "public_mutations": 0,
+  "native_inputs": 0,
+  "scope": "Read-only capture boundary, not installed UI or CPU acceptance"
+}
