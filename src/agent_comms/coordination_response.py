@@ -265,11 +265,8 @@ def _require_cohort_assignments(
     metadata = bus.log._private_marker_unlocked()
     if metadata.root_id != wire_root_id:
         raise IdentityConflict("cohort bus root changed")
-    originals = {
-        initial.message.seq: initial
-        for record in bus.log.verified_records_unlocked(metadata)
-        for initial in record.deliveries()
-    }
+    originals = {initial.message.seq: initial for initial in bus.log.delivery_cohorts_unlocked(
+        wire_root_id, tuple(assignment.wire_seq for assignment in snapshot.assignments))}
     for assignment in snapshot.assignments:
         initial = originals.get(assignment.wire_seq)
         receipts = SelectedResponseRoute.read(
@@ -354,8 +351,8 @@ def prepare_fenced_response(
     with _response_boundary(bus) as registry_snapshot:
         owner_witness.require_live(registry_snapshot, fence)
         metadata = bus.log._private_marker_unlocked()
-        # A corrupt row anywhere is never accepted as an absent publication.
-        tuple(bus.log.verified_records_unlocked(metadata))
+        # The acquired canonical bus barrier verifies its sealed prefix, with
+        # complete recovery/refusal on source or sidecar revision changes.
         with store.session.transaction() as db:
             snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness)
             execution = snapshot.execution
