@@ -6,7 +6,6 @@ RegistryDocument to reinterpret. Production readers keep one format.
 """
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import os
 import stat
@@ -24,14 +23,6 @@ if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-
-
-class OwnerRestartCompletion(ABC):
-    """Completion capability shared with an original-format operator member."""
-
-    @abstractmethod
-    def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
-        pass
 
 
 @dataclass(frozen=True)

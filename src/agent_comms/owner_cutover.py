@@ -5,7 +5,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
-from .owner_restart import OwnerRestartCompletion
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
@@ -15,7 +14,7 @@ if TYPE_CHECKING:
     from .owner_lifecycle import OwnerRestartResult
 
 
-class OwnerCutover(OwnerRestartCompletion, ABC):
+class OwnerCutover(ABC):
     """An operation owns its audience and retained maintenance proof.
 
     Selection validation precedes every fence or signal. Installation runs with
@@ -29,21 +28,29 @@ class OwnerCutover(OwnerRestartCompletion, ABC):
 
         return AdmittedOwnerBatch.restart(lifecycle, request, self)
 
-    def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
-        """Default same-runtime installation and launch; transfer is a member."""
-        self.after_stopped(stopped.lifecycle)
-        return stopped.launch()
-
     @abstractmethod
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:
         pass
+
+    @abstractmethod
+    def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
+        """Only acquired all-stopped custody can install and launch a target."""
+        pass
+
+
+class StoppedOwnerInstallation(OwnerCutover):
+    """A same-format operation needs no cross-runtime completion transfer."""
+
+    def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
+        self.after_stopped(stopped.lifecycle)
+        return stopped.launch()
 
     @abstractmethod
     def after_stopped(self, lifecycle: OwnerLifecycle) -> None:
         pass
 
 
-class PreserveOwnerRuntime(OwnerCutover):
+class PreserveOwnerRuntime(StoppedOwnerInstallation):
     """Normal retained restart needs no wire/index installation."""
 
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:

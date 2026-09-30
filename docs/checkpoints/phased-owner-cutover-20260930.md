@@ -65,6 +65,44 @@ whole changed-source diff. No broad test fleet or repeated accepted native gates
 Draft opened before long source implementation. No readiness or live acceptance
 claimed by this initial ownership receipt.
 
+## Executable phase checkpoint
+
+The same canonical restart procedure now declares admitted, fenced and stopped
+acquired batch resources. OwnerLifecycle delegates to its OwnerCutover member;
+same-format installation and cross-runtime completion are capabilities on that
+ancestor. The outside-src original operator loads that ONE current phase kernel
+with authentic original Registry/Thread/process declarations. It never installs
+another registry decoder or duplicates a stop/start loop.
+
+The stopped handoff contains original OWNER and ADMISSION witnesses plus exact
+retained ProcessIdentity/settings, with no Thread or RegistryDocument. Only this
+bounded resource packet crosses a stdin pipe in RAM. The current target decoder
+requires the full original witness set before route publication or any launch.
+RetainedOwnerLaunch's concrete captured dict declaration owns its RAM transport;
+there is no mapping adapter or compatibility alias.
+
+tools/cutover/restart_thread_format.py holds route-directory EX before acquiring
+batch wire custody. The authentic original process prevalidates both Thread
+carriers, fences ALL idle owners, retires ALL, strictly validates both complete
+target projections, retains private original preimages, writes both carriers via
+their original guarded durability owners, and transfers the ORIGINAL wire and
+directory OFDs to target completion. Existing guarded expected route publication
+and readback precede the target launch. Publication or launch failure leaves the
+stopped target format and private recovery receipt for explicit review; no replay
+or automatic rollback after uncertain launch.
+
+First private run completed target worker attachment but its final fixture
+assertion incorrectly required three release receipts. Actual original preimage
+has one historical release; original worker retirement did not publish new
+voluntary releases. The trace is preserved. A separate attempted native4ab
+fixture seed was refused by original000's genuine e36 package commitment before
+any worker started. The acceptance will use the authentic original e36 package
+and another verified copy of that same artifact as the new route path, proving
+publication and launch coherence without weakening native validation.
+
+Installed acceptance remains pending at this source checkpoint. Public root,
+route, owners and historical UNKNOWN remain untouched.
+
 ## Receiving225 private-fixture capture crossing
 
 Einstein225/Core440 initially read the actual original41MB source through the
