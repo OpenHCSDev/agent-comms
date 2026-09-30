@@ -31,6 +31,10 @@ class ThreadIncarnation:
         if not math.isfinite(FieldCodec.decode(float, self.created_at)):
             raise ValueError("Thread incarnation requires a finite birth")
 
+    def require_recorded(self) -> None:
+        if self.created_at <= 0:
+            raise ValueError("Thread incarnation requires a positive recorded birth")
+
     def resolved(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
         if self.created_at == -1.0 or not self.current(snapshot):

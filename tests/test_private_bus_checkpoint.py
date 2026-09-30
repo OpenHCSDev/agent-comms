@@ -276,6 +276,7 @@ def test_sql_index_change_plus_complete_bus_suffix_still_denies(
 
 def test_sql_index_change_during_page_is_not_exhaustiveness(tmp_path: Path, monkeypatch) -> None:
     import agent_comms.private_bus_checkpoint as checkpoint
+    import shutil
 
     comms, _ = _root(tmp_path)
     comms.messaging.send_initial_cohort("sender", "Alice", "source")
@@ -284,8 +285,11 @@ def test_sql_index_change_during_page_is_not_exhaustiveness(tmp_path: Path, monk
 
     def mutate_after_original_read(cursor):
         rows = read_rows(cursor)
-        with sqlite3.connect(path) as db:
+        replacement = path.with_name("unsealed-replacement.sqlite3")
+        shutil.copyfile(path, replacement)
+        with sqlite3.connect(replacement) as db:
             db.execute("DELETE FROM addressed")
+        replacement.replace(path)
         return rows
 
     # Mutate after original row resolution, without assuming a second connection.

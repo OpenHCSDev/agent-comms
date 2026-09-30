@@ -79,3 +79,43 @@ default runtime and all public owners are untouched.
 Owned scratch: `/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930`.
 The disposable baseline source extraction and future wheels/stage are owned here;
 original source, receipts, private proof journals and UNKNOWN inputs are protected.
+
+## Todo receiving closure
+
+The previous classification of the original Todo transfer witness as repo path
+grammar was wrong: it was an application relation across revision, original
+assignment, state, fresh generation, last operation and exact previous owner.
+`TodoState` and existing `Command` operation declarations now own the complete
+assign/transfer/release/state path. The store performs a transaction and applies
+the original row's declared command. It contains no application decision chain.
+
+Exact uncertain-reply transfer/release recovery checks the persisted row against
+the command's complete expected result. A new operation validates the exact
+current revision and previous assignment; transfer requires a fresh generation.
+The original Assignment owns frozen owner/parent incarnations and generation.
+No current registry name can stand in for an old creator or assignee. Done-state
+declarations deny later mutations/releases and require the original assignee to
+complete assigned work. No state boolean, second assignment record/store or
+operation catalog has been introduced.
+
+The original raw state/transition strings are decoded once by FieldCodec's
+existing declared-family-name storage. Original six-term transfer and five-term
+release retry chains, state-label branches and duplicated incarnation parsing
+are deleted. All production callers are in TodoStore; the only external source
+consumers are the existing Todo tests, whose one state-label assertion now uses
+its declaration. The backend primitive has no existing UI/ACP command consumer.
+
+All six existing Todo workflow controls passed in 0.73s, including the two-client
+assignment race, cold reopen, exact uncertain-reply transfer/release recovery,
+stale owner/generation refusal, blocking/unblocking, completion and historical
+goal identity. Fresh generated CREATE TABLE SQL is **byte-identical** to 6feb:
+same columns, checks, storage strings and JSON assignment/goal/previous records.
+No schema reset, migration or compatibility reader is required. Original proof:
+`todo-ddl-comparison.json` in owned scratch.
+
+First installed selected-native gate at 82713f9b plus456b39 failed in 6.98s.
+The retained original native journal proves all four managed tool results failed
+with `OwnerGenerations.__init__` receiving positional arguments. This is Arendt's
+published correction2b5918, not a framing or provider regression. Original
+failed fixture/journal and source-hash/installed receipts are protected under
+`native-selected-original`; no input from it will be retried.

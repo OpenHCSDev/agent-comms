@@ -156,6 +156,8 @@ class CertifiedSourceRead:
             self.require_current()
             self.require_marker(bus._private_marker_unlocked())
             return replace(witness, latest_source_seq=latest), tuple(originals), len(rows) > request.limit
+        except RelationViolationError:
+            raise
         except (sqlite3.Error, OSError, ValueError, TypeError) as error:
             raise RelationViolationError("Certified initial page is unavailable.") from error
 

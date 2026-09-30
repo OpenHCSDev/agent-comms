@@ -143,8 +143,7 @@ class SourceCoverage:
             witness, initials, more = source.addressed_page(self.bus.log, request)
             if request.after_seq > max(witness.latest_source_seq, source.marker.admission_after_seq):
                 raise IdentityConflict("source coverage prefix exceeds certified initials")
-            if more and not request.partial:
-                raise IdentityConflict("source coverage exceeded its bounded private initial scan")
+            request.require_exhausted(more)
             return witness, initials, more
 
     def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:
