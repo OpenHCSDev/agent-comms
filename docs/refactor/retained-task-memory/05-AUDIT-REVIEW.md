@@ -17,7 +17,8 @@ state duplication ever. Every consumer must derive from its authoritative source
 - [x] Rerun the eight provider-free scorer/exporter checks successfully.
 - [x] Replace implicit aggregate records with source-derived score views,
       migrate all callers and complete a fresh contextual scan. No stored totals.
-- [ ] Publish tested review/evidence update to the existing PR428 branch.
+- [x] Publish tested code/evidence update to the existing PR428 branch (`79a8a323`).
+- [ ] Receive independent scoped ownership review from `nra-architecture`.
 
 ## Source and exact coverage
 
@@ -138,7 +139,8 @@ native JavaScript proof remain separate from this scaffold review.
 
 Owner: `comms428`. Audit JSON and caches are under
 `/home/ts/.cache/agent-scratch/comms428-audit-20260929`; preserve commands and
-receipts before removing owned scratch after workers exit. The tool defect's failed stderr is retained in the package evidence before owned
+receipts before removing owned scratch after workers exit. Scratch was removed
+once the final scan processes had exited and durable receipts were committed. The tool defect's failed stderr is retained in the package evidence before owned
 scratch is retired.
 Headroom warning: 12.3 GiB RAM available, 19.6 GiB home disk free, 11.0 GiB swap
 used. Runs use the existing interpreter and skill APIs, one worker, bounded
