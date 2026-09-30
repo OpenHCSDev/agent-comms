@@ -1,0 +1,33 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_mounted_coordination_snapshot_reopens_without_scanning_bus ________
+
+wired = <agent_comms.comms.Comms object at 0x7f9ce7bd5400>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f9ce7b96060>
+
+    def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monkeypatch):
+        wired.messaging.send("PR111", "#base", "channel activity")
+        wired.messaging.send("PR111", "fixer", "direct activity")
+        expected = wired.views.coordination_snapshot()
+        fresh = wire(wired.root)
+    
+        def forbidden_scan():
+            raise AssertionError("mounted snapshot reparsed historical bus rows")
+    
+        monkeypatch.setattr(fresh.bus.log, '_iter_log_unlocked', forbidden_scan)
+>       assert fresh.views.coordination_snapshot() == expected
+E       AssertionError: assert CoordinationS...r_notice=None) == CoordinationS...r_notice=None)
+E         
+E         Omitting 9 identical items, use -vv to show
+E         Differing attributes:
+E         ['threads', 'channels']
+E         
+E         Drill down into differing attribute threads:
+E           threads: (ThreadView(thread=Thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', parent=None, task=None, process_identity=None, session_file=None, model=None, thinking_level=None, goal=None, created_at=1790797106.4701135, previous_worktrees=(), auto_title_pending=False, title=None, role=<ThreadRole.AGENT: 'agent'>, active_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None), status=RunningThr...
+E         
+E         ...Full output truncated (8 lines hidden), use '-vv' to show
+
+tests/test_threads_scaling.py:105: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_threads_scaling.py::test_mounted_coordination_snapshot_reopens_without_scanning_bus
+1 failed in 0.39s
