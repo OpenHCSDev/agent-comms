@@ -64,6 +64,19 @@ class NativeRecord:
     def size(self) -> int:
         return self.end - self.start
 
+    @property
+    def annotation_id(self) -> str | None:
+        entry = self.entry
+        return entry.id if entry is not None and entry.is_message else None
+
+    def publication_producer(self) -> NativeEntry | None:
+        if not self.complete or self.entry is None:
+            raise ValueError("Native publication has incomplete evidence")
+        if self.entry.final_reply:
+            self.entry.require_entry_id()
+            return self.entry
+        return None
+
 
 class NativeTranscript:
     def __init__(self, path: Path):
@@ -74,6 +87,16 @@ class NativeTranscript:
         with self.path.open("rb") as stream:
             entry = NativeEntry.read(stream.readline())
         return entry.id if isinstance(entry, SessionEntry) else None
+
+    def require_session_id(self) -> str:
+        identity = self.session_id
+        if identity is None:
+            raise ValueError("Native publication has no session header")
+        return identity
+
+    def annotation_ids(self, after: int, through: int) -> tuple[str, ...]:
+        return tuple(identity for record in self.forward(after, through)
+                     if (identity := record.annotation_id) is not None)
 
     def input_ancestor(self, record: NativeRecord):
         """Follow original parent IDs to the input boundary, without an index.
@@ -95,6 +118,26 @@ class NativeTranscript:
             if parent is None:
                 return None
         return None
+
+    def publication_input(self, *, after: int, through: int):
+        """Return the final producer and its actual tracked input ancestry.
+
+        This bounded reverse walk runs before any BUS/registry lock is acquired.
+        A display-tolerant malformed record cannot supply publication evidence.
+        """
+        from .errors import RelationViolationError
+
+        for record in self.reverse(through):
+            if record.start < after:
+                break
+            producer = record.publication_producer()
+            if producer is None:
+                continue
+            user = self.input_ancestor(record)
+            if user is None:
+                raise RelationViolationError("Native publication has no tracked input ancestry")
+            return record, user.require_tracked_user()
+        raise RelationViolationError("Native turn has no final reply after its checkpoint")
 
     def tail(self, *, max_bytes: int | None = None):
         try:

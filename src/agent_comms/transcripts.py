@@ -13,6 +13,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .message_bus import MessageBus
 from .messages import Message
+from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_entries import TranscriptProjection
 from .native_transcript import NativeTranscript
@@ -21,6 +22,7 @@ from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
+from .turn_lease import TurnLeaseFence
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_receipts import AssignedSourceCursor, AssignedSourceIdentity
@@ -133,6 +135,15 @@ class TranscriptReadIdentity:
             FieldCodec.project(self, "content"), sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
 
+    @property
+    def page_bound(self) -> TranscriptCursor:
+        """The original witnessed byte/receipt bound owns page preparation."""
+        return self.through or TranscriptCursor(
+            self.session_file,
+            self.native_revision[1] if self.native_revision is not None else 0,
+            self.receipt_frontier,
+        )
+
     def same_content(self, other: TranscriptReadIdentity) -> bool:
         """Fence content, including the original native publication proof.
 
@@ -173,7 +184,7 @@ class TranscriptRead:
             identity.requested_name,
             before=identity.before,
             after=identity.after,
-            through=identity.through,
+            through=identity.page_bound,
         )
         if not self.content_current():
             raise StaleRevision("Transcript read inputs changed during preparation")
@@ -465,27 +476,14 @@ class Transcripts:
             AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier,
         )
 
-    def record_turn_routing(
-        self, name: str, checkpoint: TranscriptCursor, routing: TurnRouting
+    def record_turn_publication(
+        self, *, lease: TurnLeaseFence, checkpoint: TranscriptCursor,
+        routing: TurnRouting, published: tuple[MessageReference, ...],
     ) -> None:
-        session_file = self.registry.require(name).session_file
-        if not session_file or not Path(session_file).is_file():
-            return
-        ids: list[str] = []
-        reader = NativeTranscript(Path(session_file))
-        if session_file == checkpoint.session_file:
-            for record in reader.forward(checkpoint.offset, Path(session_file).stat().st_size):
-                entry = record.entry
-                if entry is not None and entry.is_message and entry.id is not None:
-                    ids.append(entry.id)
-        else:
-            # A new/forked file annotates only the last assistant entry.
-            for entry in reader.tail():
-                if entry.assistant_message:
-                    if entry.id is not None:
-                        ids.append(entry.id)
-                    break
-        self.routes.record(session_file, tuple(ids), routing)
+        """Publish original native/wire relations before this exact turn retires."""
+        self.routes.record_turn_publication(
+            self.registry, self.bus.log, lease, checkpoint, routing, published
+        )
 
     def repair_input_routing(self, *, dry_run: bool = True) -> dict[str, int | bool]:
         """Explicit maintenance for old receipt-bound inputs, never a UI/wake scan.
@@ -547,7 +545,7 @@ class Transcripts:
             if len(origins) != len(group) or not sent_text.endswith(source):
                 report["skipped"] += 1
                 continue
-            routing = TurnRouting(tuple(origins), None)
+            routing = TurnRouting(tuple(message.reference for message in origins), None)
             if native_id in existing:
                 binding = existing[native_id]
                 matched = binding.matches(sent_text) and binding.routing == routing

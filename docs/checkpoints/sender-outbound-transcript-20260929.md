@@ -362,3 +362,161 @@ Read admission still rechecks the source around page projection; those remaining
 barriers are not claimed eliminated. Original41MB installed/native/ACP/physical
 UI acceptance remains UNREVIEWED. Parent432 integrates this source with434/436/437
 and Sch215's matching content_identity/public-witness consumer in one cohort.
+
+## Page preparation uses the captured original bound
+
+TranscriptRead now passes its already certified wire frontier and captured
+native byte bound to the existing page projection. The standalone page API
+still captures a frontier when no original witness was supplied. Existing
+before/after admission checks retain native, source, annotation and publication
+custody; the intermediate page no longer recertifies the same frontier.
+
+The original canonical source reproducer records four real barriers at e59ead3b
+and three here: admission before, bounded original page query, admission after.
+A relevant original append during page projection still rejects the read after
+preparation. All19 focused controls pass in3.77s. Baseline and candidate logs
+are captured-frontier-baseline.log and captured-frontier-run01.log under the
+same persistent430 scratch owner. This remains source evidence, not installed
+41MB wall latency or native delivery acceptance. Reusing the opened certificate
+within each canonical lock remains a separate read-transaction improvement;
+no retained proof/cache or alternate lock authority was introduced.
+
+## Canonical lock lifetime owns the opened certificate
+
+Deleted the17-line conversation_read_unlocked definition and both consumers'
+second source/index connection and _saved decode. Original conversation rows
+and visible references now borrow the resource opened by the actual canonical
+durability barrier. Its complete existing prefix verification, cold recovery,
+schema, marker, seal and inode checks remain the verification owner. The query
+validates the fresh original marker and performs existing entry/exit revision
+checks against that same opened wire and index. SQLite query_only applies after
+verification/recovery. No lock bypass, admission cap increase or proof cache
+was added (IDEN-5, IDEN-7, BOUND-2).
+
+StoreLock owns the existing inheritable descriptor and this lock's opened
+resource. LockedStore and WireLog keep supplying the original descriptor to
+actual process custody consumers. All resource handles close before the flock
+is released; a retained resource is rejected after scope exit. This is bounded
+runtime resource ownership, with no durable format or reset in this change.
+Wire/native/frozen audiences/UNKNOWN remain untouched. The existing standalone
+native, delivery and publication verifier still uses the same verification
+owner; it is not a compatibility reader or a second proof implementation.
+
+The actual source reproducer at4dc6b3b performs two _saved reads per original
+thread presentation. The candidate performs one. Missing certified wire cannot
+become an empty presentation, and the expired resource cannot serve another
+read. The guard preserves the original exception thrown by its caller; only
+verification failures are attributed to the durability boundary.
+
+22 focused source/read/notification/ownership controls pass in4.52s. 25 focused
+prefix/recovery/custody controls pass in2.91s, with the larger1000-row/8MiB case
+deliberately excluded. Final exception/certificate/original-source controls pass
+36 checks in4.90s with that same exclusion. The actual inherited descriptor
+survives its fixture parent's death and prevents a competing writer until the
+owned child retires. Resource expiry proves the source and SQLite handles close.
+
+Sch215 real04 still failed BUS admission before native bytes and retained its
+UNKNOWN input; it was not replayed. These source checks do not prove that gate
+fixed or original41MB CPU/blanking acceptable. Sch215 owns the new read-only
+profile and continuous installed gate on the parent432 paired cohort. Current
+headroom assertion exits2 at15.9GiB swap; no build, capture, new worker or paid
+input was started here. Only bounded serial controls ran.
+
+## Descriptor consumers and certificate owner closure after9149
+
+Parent review found the multiline CompactionBoundary.hold bindings still lending
+StoreLock objects to the child. Both now lend their actual descriptor fields
+through HeldCompaction.retained_fds. A scoped AST census includes aliases and
+embedded test programs: six production bindings and one test-script binding,
+all migrated explicitly. No adapter or integer coercion was added. Its receipt
+is store-lock-bind-census.json under this branch's persistent scratch owner.
+
+The existing actual native commit passes in2.60s. The final persistent native4ab
+control runs that commit and a real child borrowing the entire held boundary:
+after parent scope unwind, wire, BUS, registry, inputs and native executor remain
+locked until the child retires, then all admit another owner. Both checks pass
+in3.74s; source sessions/journals remain in store-lock-native-fd-final. This is
+actual inherited descriptor/native CAS acceptance, with no provider invocation.
+It does not establish full selected-summary or original41MB UI readiness.
+
+The original marker-bound certificate owns marker agreement; the opened
+resource owns descriptor/path revision agreement. The claim source durability
+lifetime now lives with the existing certificate owner instead of growing
+WireLog. This corrects9149's new four-term chain and GodClass growth; source
+verification is unchanged, and the scoped ratchet must pass before publishing.
+23 affected source/read/notification/ownership controls pass at this checkpoint.
+Sch04 UNKNOWN and its original private evidence remain preserved; Sch215 runs
+the original41MB read-only three-view comparison before another paid journey.
+
+## Exclusive original wire event membership (2026-09-30)
+
+Deleted the native assistant ancestry from SentTranscript and the native user
+ancestry from the original incoming wire projection. Sch215 composition215-01
+proved the real failure on the immutable8691/Toad4e 41MB three-view fixture:
+one original outgoing row produced two AgentResponse bodies and two painted
+headers, with zero native inputs. MroDispatch correctly invokes all C3 handlers;
+the wire row incorrectly belonged to both sent and native-agent consumers.
+
+WireTextTranscript now owns a mandatory original MessageReference. Sent and
+Incoming belong only to that immutable wire stem. Incoming carries the original
+route, text and timestamp; incoming_sources is declaration-owned coverage.
+MarkdownTranscript owns shared preparation for native streaming and immutable
+wire text. OutgoingRoute owns common route behavior without lending native
+streaming membership to a wire record. No dispatcher change, body comparison,
+deduplication, status mirror or new store was introduced.
+
+The durable TurnRouting request format is unchanged at this critical checkpoint.
+Future reference-only routing/API edits are preserved uncommitted in the named
+branch scratch files ordinary-refs-source-api-before-critical-membership.patch
+and ordinary-refs-transcript-events-pre-membership.py. They are excluded from
+this source pin and current real05. Parent must carry existing durable routing
+JSON once under quiet custody before that later paired format activation.
+
+19 affected source/notification/annotation/ownership checks pass in5.03s.
+Sch215 owns the paired incoming/outgoing renderer, categories, fragment and
+Markdown-preparation consumers and the actual mounted composition/new-frame
+control. This source result alone does not claim that paired acceptance.
+
+Preserve real-wire215-05 original native reply79c8/3a6a2261/2e2ae4f5 and its
+original seq2/e66efc014771 publication. Its native reply file is distinct from
+the41MB retained display. No input, prompt, provider replay or archive mutation
+was performed during this source diagnosis. The four prior admission-budget
+probes passed;40s CPU35.49 remains open.
+
+## Future ordinary publication source API (not paired activation)
+
+TurnRouting.requests now stores only original MessageReference values. Empty
+publication references are omitted from existing routing JSON; committed
+references belong only to the actual final native entry. No table, column,
+index, message store, body comparison or seen cache is added. The synthetic
+request-body reconstruction in Pi UserMessage and the former
+Transcripts.record_turn_routing producer are deleted. Remaining consumer
+constructor/publication changes belong to Arendt's same canonical workflow.
+
+Public record_turn_publication(lease, checkpoint, routing, published) validates
+the existing local RegistryOwner and exact public turn lease, original native
+parent/input/digest and current source revision, then the original STARTED row
+group from InputDocument.started_for_native with the locked RegistrySnapshot.
+Existing frozen sender/addressed membership proves original seq/id references
+and authorized targets. A first committed send subset survives a later send
+failure. Native traversal closes before BUS/registry/input/annotation custody;
+no UI await or new monitoring authority is introduced. Source annotation
+commit finishes before the original lease retires. Publication rebinding is
+rejected without losing the original committed wire rows.
+
+20 focused source/annotation/ownership controls pass in5.08s. A wider source
+run finds43 passes and two old InputDocuments target/bus negative assumptions;
+both reproduce on installed baseline8691 in0.06s. Arendt owns their proper
+original-proof contract migration; no compatibility restriction was restored
+in StartedInput. This does not prove actual ordinary native/ACP/UI acceptance.
+Arendt owns the repaired real OwnedTurn/Loopback native producer controls.
+
+Durable carry required before this future paired activation: existing
+transcript_routes.sqlite3 TranscriptRoute.routing and InputDisplay.routing JSON
+and registry Thread.active_turn.routing, including retained registry snapshots,
+can contain old embedded Message objects. Parent must carry those once under
+quiet original certificate custody to original(seq,id), never today's sender
+name or a body match. Preserve native bytes, original wire, frozen audiences,
+goal journals, proof records and UNKNOWN. Do not reset this durable annotation
+store or install an old-format reader. Critical cf48759d remains independently
+usable with its unchanged routing format and paired215 consumers.
