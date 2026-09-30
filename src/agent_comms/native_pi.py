@@ -20,10 +20,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
-from .pi_vocabulary import ThinkingLevel
 from . import pi_events as pi
 from .native_arguments import NativeArguments
 from .native_entries import NativeEntry, SessionEntry
+from .pi_vocabulary import ThinkingLevel
 from .selected_tool_broker import NativeToolMode
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
@@ -44,9 +44,39 @@ _NATIVE_SETTINGS = (
 class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
     """Tracked execution failed closed without committing a coordinator fact."""
 
+    native_stderr = ""
+
+    @property
+    def diagnostic_evidence(self):
+        return {"stderr": self.native_stderr}
+
+    @property
+    def public_failure(self):
+        return f"{self}; the input is uncertain."
+
     @property
     def rejected_response(self) -> pi.Response | None:
         return None
+
+
+class NativePiInputNotSent(NativePiUnavailable):
+    """Original admission never entered its prompt writer; grants no replay."""
+
+    def __init__(self, error, attestation):
+        self.attestation = attestation
+        super().__init__(f"Native Pi failed before prompt admission; input not sent: {error}")
+
+    @property
+    def diagnostic_evidence(self):
+        return {
+            **super().diagnostic_evidence,
+            "input_disposition": "not_sent",
+            "initialization": self.attestation.diagnostic_evidence,
+        }
+
+    @property
+    def public_failure(self):
+        return str(self)
 
 
 class NativePiPromptRejected(NativePiUnavailable):

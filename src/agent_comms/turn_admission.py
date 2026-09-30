@@ -19,6 +19,13 @@ class PromptAdmission(ABC):
     awaiting_start = False
     started = False
     settled = False
+    dispatched = True
+
+    def dispatch(self) -> PromptAdmission:
+        return self
+
+    def raise_native_failure(self, error, attestation):
+        raise error
 
     def acknowledge(self, response: Response) -> PromptAdmission:
         return self
@@ -41,6 +48,21 @@ class UnacknowledgedPrompt(PromptAdmission):
 
     def acknowledge(self, response):
         return AcknowledgedPrompt(response)
+
+
+class UnwrittenPrompt(PromptAdmission):
+    """The owning send seam has not yet admitted this prompt to its writer."""
+
+    acknowledged = False
+    dispatched = False
+
+    def dispatch(self):
+        return UnacknowledgedPrompt()
+
+    def raise_native_failure(self, error, attestation):
+        from .native_pi import NativePiInputNotSent
+
+        raise NativePiInputNotSent(error, attestation) from error
 
 
 @dataclass(frozen=True)
