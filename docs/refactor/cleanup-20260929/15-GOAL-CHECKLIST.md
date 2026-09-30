@@ -63,7 +63,13 @@ Parallel outstanding owners and measured progress:
   reverse, readable physical frames, End15s idle, A return, draft/undo retention
   and zero visible dormant bodies establish the useful buffer checkpoint.
   Toad236 mergedddf180dd at14:41:14Z, reviewedaa0be31, with106 additions/29
-  deletions across six production files. Einstein owns next immutable UI stage.
+  deletions across six production files. The normal immutable UI stage is installed as runtime-viewport-buffer with
+  exact Toadddf180/Core4295/Text2e49/SDK0.12.1/nativee36; all68 frozen packages
+  and273 source files were verified. Parent published the five default links
+  without restarting backend owners or changing root/native stores. Existing
+  Toad windows remain open and need restart to load the new UI. Einstein owns
+  one affected actual default scrolling gate; that gate is pending. Receipt:
+  `evidence/cleanup-live-integration/viewport-buffer-ui-activation.json`.
   Cold B first paint, high CPU, transient gaps, Strip reuse and the complete
   growing-end/warm workflow remain in Heisenberg's main-based draft239 at f73aefb1. Kepler
   publishedaa83d98 using existing source-cursor comparisons; old failed captures
@@ -91,6 +97,10 @@ below remain tracked and unfinished. Older checkpoint sections are history.
 At the owner's request all six Codex subagents were closed and the goal paused
 for the account/CLI switch. The owner resumed; the goal is active and all six
 same-model agents have been resumed with their exact ownership and worktrees.
+The current six-thread status audit finds each active with no capacity failure.
+Mendel's read-only gap analysis finished at its stated historical evidence limit;
+he now prepares the existing paired native/ACP acceptance journey while the
+reviewed bundle and shared-bus source are being completed independently.
 Original native inputs are not replayed. Interrupted build/test processes are
 revalidated by their existing handles before further actions. Public native
 owners were not stopped for the account switch. The latest resource check has
