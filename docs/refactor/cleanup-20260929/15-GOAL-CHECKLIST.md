@@ -764,3 +764,12 @@ identified a new pre-prune cancellation await in accepted resource retirement;
 Heisenberg227 and Sch229 are validating this same owned lifetime before merge.
 No source deduplication, header flag, mirror or independent retirement registry
 is accepted. Other named workers continue editor focus and fork-task/tag paths.
+
+### Persistent goal status and continuing direct fixes
+
+The authoritative Codex goal read returned BLOCKED (updated1790754238), not
+ACTIVE as inherited context suggested. This status is preserved; no goal
+resume/clear or failed original attempt was invoked. Existing authorized
+source fixes, worker coordination and the reviewed install have continued
+without replaying uncertain input. Completion remains unfinished, and a
+tracker status change requires the user's goal controls.
