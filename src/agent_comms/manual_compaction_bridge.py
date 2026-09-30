@@ -10,7 +10,7 @@ from uuid import uuid4
 from . import agent_events as events
 from .compaction_errors import CompactionJournalError
 from .compaction_result import CompactionResult, RefusedCompactionResult
-from .turn_phase import CompactionPhase, IdlePhase
+from .turn_phase import CompactionPhase, PublishingPhase
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
@@ -41,7 +41,7 @@ async def compact_context(
         started = False
         terminal_attempted = False
         try:
-            await runner.transition_turn(session_id, turn_lease, CompactionPhase(resume=IdlePhase()))
+            await runner.transition_turn(session_id, turn_lease, CompactionPhase(resume=PublishingPhase()))
             info = runner.comms.agents.agent_info_of(thread_name)
             # An old usage sample cannot describe the context after a manual
             # compaction attempt, including one with an uncertain outcome.
