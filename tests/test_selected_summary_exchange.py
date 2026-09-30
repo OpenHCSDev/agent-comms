@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +23,8 @@ from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
 from retained_native_fixture import retained_native_host
 from selected_summary_cases import manual_source
+
+pytest_plugins = ("test_backend_native_lifecycle",)
 
 CHILD = r"""
 import json,sys,sqlite3,time
@@ -136,21 +140,114 @@ async def selected(tmp_path, mode="success"):
         await persistent.close_idle()
 
 
-async def test_existing_child_summary_preserves_native_metadata_and_blocks_replay(tmp_path):
-    async with selected(tmp_path) as (run, persistent, journal, file, received):
-        before = file.read_bytes()
-        result = await run()
-        assert result.summary.text == "native summary"
-        assert result.summary.details.read_files == ("foo.py",)
-        assert result.summary.usage.cost.total == 0
-        assert result.decline_reason is None
-        assert json.loads(received.read_text())["operationId"] == result.operation_id
+async def test_retained_native_summary_preserves_source_and_blocks_replay(native_backend):
+    """The SDK owns saved entries, the native child owns summary metadata."""
+    from agent_comms.backend import _session_revision
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.comms import Comms
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.owner_compaction_prepare import prepare_native_source
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from agent_comms.pi_summary_payloads import SelectedModel, SummarySummarizedData
+    from agent_comms.selected_source import ManualSource
+    from agent_comms.thread_identity import TurnId
+    from agent_comms.threads import Thread
+
+    native = native_backend
+    settings = PiCompactionSettings(2048, 1)
+    configured = json.loads((native.config / "settings.json").read_text())
+    configured["compaction"].update(reserveTokens=2048, keepRecentTokens=1)
+    (native.config / "settings.json").write_text(json.dumps(configured))
+    for text in ("Retained original first question", "Retained original second question"):
+        assert (await native.run(text))[-1].ok
+    before = native.session.read_bytes()
+    prior_inputs = native.saved_inputs()
+    child = native.persistent.custody.child
+    model = child.attestation.state.model
+    assert model is not None and model.provider and model.id and model.context_window
+    selected_model = SelectedModel(model.provider, model.id, model.context_window)
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+    preparation = await asyncio.to_thread(
+        prepare_native_source,
+        package,
+        str(native.session),
+        settings=settings,
+        context_window=model.context_window,
+    )
+    assert preparation is not None
+    comms = Comms(native.root)
+    comms.registry.declare(
+        Thread(
+            "summary-owner",
+            frozenset(),
+            str(native.project),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+            session_file=str(native.session),
+            model=model.display_name,
+        )
+    )
+    lease = comms.agents.begin_turn("summary-owner", "native-summary-exchange")
+    owner = comms.registry.require("summary-owner")
+    source = ManualSource(
+        owner=owner.require_process(),
+        incarnation=owner.incarnation,
+        turn=TurnId(lease.turn_id),
+        reserved_revision=_session_revision(str(native.session)),
+    )
+    journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
+    slot = SelectedSummarySlot(owner.name, preparation.witness.session_id)
+    envelope = dict(
+        source=FieldCodec.encode(source),
+        selected=selected_model.to_wire(),
+        settings=FieldCodec.encode(settings),
+    )
+    events = []
+
+    async def observed(event):
+        events.append(event)
+
+    try:
+        async with asyncio.timeout(35):
+            result = await slot.run_selected_summary(
+                native.persistent,
+                journal,
+                preparation.witness,
+                envelope,
+                expected_package=package,
+                tokens_before=preparation.tokens_before,
+                custom_instructions="Preserve the two original retained questions",
+                idle_timeout_seconds=15,
+                on_event=observed,
+            )
+        assert isinstance(result, SummarySummarizedData)
+        assert result.result.summary.strip()
+        assert result.result.first_kept_entry_id == preparation.witness.first_kept_entry_id
+        assert result.result.tokens_before == preparation.tokens_before
+        assert result.result.usage.cost.total >= 0
+        assert events
+        summary_calls = native.provider.requests[2:]
+        assert summary_calls and len(summary_calls) <= 4
+        assert "Preserve the two original retained questions" in json.dumps(summary_calls)
+        assert native.session.read_bytes() == before
+        assert native.saved_inputs() == prior_inputs
         assert journal.summaries.get(result.operation_id).state.declared_name == "reserved"
-        assert file.read_bytes() == before
-        assert not native_input_admitted(journal.path.parent, str(file))
-        assert persistent.custody.idle().current
-        with pytest.raises(CompactionJournalError, match="never replay"):
-            await run()
+        assert not native_input_admitted(native.root, str(native.session))
+        assert native.persistent.custody.idle().current
+        calls = native.provider.posts
+        with pytest.raises(CompactionJournalError):
+            await slot.run_selected_summary(
+                native.persistent,
+                journal,
+                preparation.witness,
+                envelope,
+                expected_package=package,
+                tokens_before=preparation.tokens_before,
+            )
+        assert native.provider.posts == calls
+        assert native.session.read_bytes() == before
+    finally:
+        comms.agents.finish_turn(lease)
+        await native.persistent.close()
 
 
 async def test_decline_is_data_and_does_not_automatically_clear_input_gate(tmp_path):

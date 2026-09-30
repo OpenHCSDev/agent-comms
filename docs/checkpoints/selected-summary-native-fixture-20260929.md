@@ -37,3 +37,16 @@ started/covered values or adjust exception expectations until the existing
 actual retained/native fixture owns terminal-vs-settled semantics and delayed
 stale callbacks. Full selected-summary correction/settings/source/UNKNOWN
 negative cases and the injected-vs-covered original gap remain assigned here.
+
+Prepared canonical replacement for the obsolete fake-child success assertion in
+test_selected_summary_exchange.py: existing native_backend generates two actual
+SDK saved turns; the existing native preparation helper captures the real cut
+and metadata; a declared owner and original lease provide ManualSource; the same
+retained child executes selected summary. The test requires actual native usage,
+source preservation, original saved inputs, progress, custom instructions and
+blocking reservation/no second provider attempt. No nullable input repair, fake
+header, synthetic summary result or production compatibility was introduced.
+The nine existing RPC framing/cancellation and failed-receipt correlation
+boundary controls pass0.16s. Native acceptance is explicitly UNREVIEWED pending
+the serial433/214 slot. Remaining fake negative cases and helper are pending
+whole semantic migration/deletion, not declared closed by these nine controls.
