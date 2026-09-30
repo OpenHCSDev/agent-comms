@@ -1,6 +1,8 @@
 # Selected summary retained-native fixture cleanup
 
-Owner: Mendel, concrete defect transferred by Einstein Core417. Baseline350b14a9.
+Owner: Kepler, remaining fixture deletion and negative contracts transferred by
+Mendel on 2026-09-30 at 24e710c39e197fbc4fe2a010ea72e17983cc889a.
+Original defect transferred by Einstein Core417. Baseline350b14a9.
 The `test_selected_summary_exchange.py` child fixture imports retired
 `compaction_journal.SelectedSummaryAttempt` and fails before meaningful assertions.
 Do not add a compatibility export or another fake state/protocol facade.
@@ -62,3 +64,28 @@ the serial native slot directly to215 before optional221 profiling comparison.
 This is actual native test acceptance, not global installed activation or
 production large-context/adaptive readiness. Full fake negative facade deletion
 and original covered-vs-injected higher215 journey remain assigned here.
+
+## Receiving ownership, 2026-09-30
+
+Continue existing draft PR422 from an independent persistent worktree
+`/home/ts/wt/comms-selected-summary-negative-closure-20260930`. Mendel's original
+worktree and positive proof remain untouched. Fast-forward publication to PR422's
+existing branch is authorized by Mendel. His transfer record is
+`/home/ts/.cache/agent-scratch/comms-selected-summary-native-fixture-20260929/ownership-transfer-kepler-20260930.md`.
+
+Owned files: `tests/test_selected_summary_exchange.py`, this receiving receipt,
+and replaced negative-contract consumers after checking their current owners.
+Delete the obsolete CHILD and selected helper (TIME-1, BOUND-2); use the existing
+actual native_backend/local-provider lifecycle for missing behavior. Strict RPC
+framing/correlation remains boundary validation, not a fake native owner. Shared
+selected_summary_cases helpers have active consumers and remain unless their
+whole consumer census proves them dead. Production, native source, common fixture
+builders and Core435 are excluded. Mendel retains Core430 and the ordinary join;
+Arendt retains public turn/source Core435.
+
+Do not rerun the recorded 5.45-second positive summary result. Do not replay public
+owner inputs or call paid providers. Native negative checks run serially with the
+current approved native package once the existing physical capture releases its
+slot. No additional physical capture is assigned here. Preserve each replaced
+negative contract by naming its actual native, journal or strict RPC coverage in
+the deletion receipt; report uncovered behavior instead of weakening assertions.
