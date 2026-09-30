@@ -1,0 +1,83 @@
+{
+  "core_execution_head": "d6b5c706dae20f2ee454747f62eeb1236e7a013d",
+  "source_api_head": "0b5f4fc555ca1eb8b3ea406713b8bb87a651a6dc",
+  "source_proof_correction": "085ef784b97801cb94c181153a7ef128747949a5",
+  "consumer_head": "5d612968",
+  "native_manifest": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
+  "native_tree": "614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a",
+  "provider": "controlled localhost; no paid requests",
+  "python": "/home/ts/.local/share/agent-comms/runtime-canonical-native-checkpoint-20260929/bin/python",
+  "exit_code": 0,
+  "elapsed_seconds": 33.42,
+  "scope": "actual native and OwnedTurn source-import publication boundary; not installed UI or default activation",
+  "replay_performed": false,
+  "original_run01_preserved": true,
+  "fixture_processes_retired": true,
+  "private_original_root": ".native-publication-fixtures/run02",
+  "changed_source_positive_debt": {},
+  "cases": [
+    {
+      "case": "final",
+      "status": "passed",
+      "provider_requests": 1,
+      "input_rows": 1,
+      "all_started": true,
+      "active_turns": 0,
+      "notice_count": 0,
+      "committed_final_references": [
+        {
+          "seq": 1,
+          "message_id": "35e66f6b2c72"
+        }
+      ],
+      "original_native_publications": [
+        {
+          "native_entry_id": "3f0d2c36",
+          "publication_references": [
+            {
+              "seq": 1,
+              "message_id": "35e66f6b2c72"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "tool-progress-final",
+      "status": "passed",
+      "provider_requests": 2,
+      "input_rows": 1,
+      "all_started": true,
+      "active_turns": 0,
+      "notice_count": 1,
+      "committed_final_references": [
+        {
+          "seq": 2,
+          "message_id": "cc3963fba0f6"
+        }
+      ],
+      "original_native_publications": [
+        {
+          "native_entry_id": "8a7c557f",
+          "publication_references": [
+            {
+              "seq": 2,
+              "message_id": "cc3963fba0f6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "failed-provider",
+      "status": "passed",
+      "provider_requests": 1,
+      "input_rows": 1,
+      "all_started": true,
+      "active_turns": 0,
+      "notice_count": 1,
+      "committed_final_references": [],
+      "original_native_publications": []
+    }
+  ]
+}

@@ -18,6 +18,35 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 import pytest
 
 
+def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
+    from dataclasses import replace
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.routing import MessageRoute, TurnRouting
+    from agent_comms.transcript_receipts import AssignedTranscriptSource
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    reply = comms.messaging.send_message("beta", "sender", "First original reply")
+    source = AssignedTranscriptSource.for_thread(
+        comms.root, comms.registry.require("beta"), comms.bus.log
+    )
+    original = source.rows("w.seq=?", (reply.seq,))
+    lookup = stable_thread_lookup(source.recipient.created_at)
+    intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
+    # A later send can fail; this first committed subset stays a valid relation.
+    intent.require_publications(original, lookup)
+    reference_only = FieldCodec.encode(intent)["requests"]
+    assert reference_only == [FieldCodec.encode(initial.message.reference)]
+    assert TurnRouting.from_wire(intent.to_wire()) == intent
+    with pytest.raises((TypeError, ValueError)):
+        TurnRouting.from_wire({"requests": [initial.message.to_wire()], "reply": None})
+    with pytest.raises(RelationViolationError):
+        intent.require_publications(original, "foreign-incarnation")
+    with pytest.raises(RelationViolationError):
+        replace(intent, reply=MessageRoute("beta", ("alpha",))).require_publications(original, lookup)
+    with pytest.raises(RelationViolationError):
+        replace(intent, publications=(reply.reference,)).require_publications(original, lookup)
+
+
 def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     before = comms.transcripts.capture_page_read("beta")

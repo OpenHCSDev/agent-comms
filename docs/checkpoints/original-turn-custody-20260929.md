@@ -1,5 +1,15 @@
 # Original turn resources and journal settlement continuation
 
+Current delivered checkpoint: original resource custody plus ordinary native
+publication is Ready after the installed41MB lifecycle gate and fresh actual
+native Source/consumer gate recorded below. Main1e967af4 is integrated normally;
+production src is unchanged from the tested ordinary d6b5c706 source. The native
+gate used reviewed native614; main's later shared scheduling has its separate439
+receipt. Mendel owns the required quiet certified durable routing carry before
+a future paired installation. Parent owns integration/activation. Remaining S14
+initial command custody and broader lifecycle closure stay with Arendt; those
+are not included in this useful checkpoint. No repeat of completed gates.
+
 ## Separate failure consumer checkpoint
 
 Core436 `f955ee52fa702d95192cc297e926caa9e9ccba28` consumes the original exception rethrown by Einstein434. TurnProgress writes its private traceback to the existing turn diagnostic before attempting a safe public Error. OwnedTurn joins the original native child even if diagnostic or public failure delivery raises. Production changes: 3 lines deleted, 16 added; the existing real-owner fixture verifies private cause retention after transport disconnect, no private error text in public events, and no replay.
@@ -114,8 +124,8 @@ Messaging.send's string result. It therefore cannot join the final native
 reply to the original committed wire envelope. The prepared consumer uses the
 existing send_message operation and its actual Message.reference. A bounded
 local list holds only acquired send resources; it is not a lifecycle, identity,
-input or delivery authority. An ExitStack callback acquired with the first
-committed send flushes those references before lease retirement, including when
+input or delivery authority. An ExitStack callback acquired at publication scope
+entry flushes those references before lease retirement, including when
 a later target send fails. Chained source-join errors retain the earlier send
 failure. No resend or rollback follows either failure.
 
@@ -161,3 +171,73 @@ no SQL reset, body/time reconstruction or legacy reader. Arendt owns OwnedTurn,
 OwnedSendAdmission and TurnProgress constructor/consumer migration; Mendel owns
 the routing/source relation and Sch owns its two frontend consumers. This is a
 paired source dependency, not a separate installed cohort.
+
+
+### Native-start receipt and original ingress test migration
+
+Mendel reproduced two unchanged baseline failures on installed8691: the generic
+StartedInput.proves_started test expected valid channel and bus inputs to be
+refused. Its sole producer consumer, SelectedAdmissionSource.original_has_started,
+owns exact ingress lookup; the generic receipt owns recorded native-start facts,
+not a direct-only routing policy. No production predicate was widened or changed.
+
+Nine focused cases passed in0.14seconds. Existing owner/admission/turn/original
+and sent-digest negatives remain. Actual record/bind/started transitions now
+cover owner, channel and bus delivery. The selected source refuses another
+ingress, and first durable acceptance refuses rewriting the original target;
+original store bytes remain unchanged. The two incorrect generic exclusions
+were removed rather than restored as compatibility booleans. This is test
+contract repair, not a native/installed acceptance claim.
+
+### Actual ordinary publication boundary
+
+Consumer5d612968 and Source4f84338f are integrated normally at2b4b9c85. The
+consumer obtains each final Messaging.send_message reference and passes the
+original lease, checkpoint and reference-only routing to
+Transcripts.record_turn_publication before retirement. TurnProgress derives
+origins from the original reserved input and turn identity from the original
+lease; its duplicate task and turn-ID fields are deleted. The three production
+consumer files delete27lines and add38. The increase registers acquired send
+custody and closes the original source relation. Two fake success tests
+delete59lines; the existing real native fixture now runs the actual OwnedTurn.
+
+The first bounded controlled-provider/native614 run exited1 in32.68seconds:
+final and real-Bash-progress/final both committed their native response and
+actual wire send, then failed at the new Source input digest comparison. The
+503 provider refusal passed and published no completed reply. Native614's
+AgentSession._claimNativeInput hashes the domain-prefixed full request envelope;
+StartedInput.sent_digest hashes the delivered text. Their differing digests are
+different identities, not evidence of changed text. The actual native text and
+original StartedInput text have the same digest. IDEN-1 and BOUND-2 require the
+existing native proof owner here, not another request decoder or reconstruction.
+
+Mendel owns the source correction through the original NativeContextJournal
+point proof and existing tracked native ancestry. Original input ID/text/lease,
+certified original request references and committed publication references remain
+mandatory. Einstein owns the native contract. This checkpoint remains Draft
+until a fresh independent controlled-provider run passes that complete relation.
+
+The first run's original native journals, disposition rows, committed wire
+references and private diagnostics remain under this worktree's
+.native-publication-fixtures/run01. They are not retried or replayed. Its native
+processes have exited. The actual retained41MB lifecycle acceptance above stays
+complete; no repeated paid gate or public/default runtime change occurred.
+
+The corrected ordinary source/consumer checkpoint is now verified atd6b5c706.
+Normal merge0b5f4fc5 supplies the original NativeContextJournal point proof;
+the wrong-domain digest check and redundant session-header helper are deleted.
+Fresh actual OwnedTurn/native614/localhost run02 passed3cases in33.42seconds:
+final, real Bash progress/final, and provider503 without a false final send.
+Original Started inputs, final native-to-wire references and idle retirement
+are asserted through actual producers. All fixture native processes exited.
+
+The exact command and evidence limits are in
+`docs/validation/ordinary-turn-publication-native-20260930.md`; sanitized
+receipt `evidence/ordinary-turn-publication/run02.json` retains source heads
+and actual original references. Six joined production files have zero positive
+debt measures, including StringDispatch/TypeSwitch and their arm counts.
+This closes the ordinary native publication relation, not the whole messaging
+or default install. Mendel's quiet certified durable annotation carry remains
+an installation dependency. Initial command custody and remaining S14 are
+tracked outside this useful checkpoint; no local mirror or fallback substitutes
+for them. The earlier failed originals remain preserved without replay.
