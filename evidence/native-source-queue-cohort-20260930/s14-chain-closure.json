@@ -1,0 +1,37 @@
+{
+  "scope": "exact AST direct BoolOp term screening; no semantic completeness or installed usability claim",
+  "baseline_recorded": "Core6feb 36 and earlier To ad8a924 3 direct six-plus sites in original16-CURRENT-S14-OWNERS",
+  "current": [
+    {
+      "revision": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+      "root": "/home/ts/wt/comms-c1-terminal-data-20260930/src/agent_comms",
+      "parsed_python_files": 294,
+      "omitted_files": 0,
+      "six_or_more_direct_terms": 0,
+      "sites": []
+    },
+    {
+      "revision": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+      "root": "/home/ts/wt/toad-native-custody-pair-20260930/src/toad",
+      "parsed_python_files": 273,
+      "omitted_files": 0,
+      "six_or_more_direct_terms": 2,
+      "sites": [
+        {
+          "file": "toad/widgets/streaming_markdown.py",
+          "line": 67,
+          "terms": 6,
+          "source": "self._body_dormant or self._body_measurement is None or self.loading\n                        or not self.is_attached or self._body_viewport is None\n                        or self in self._body_viewport.protected()"
+        },
+        {
+          "file": "toad/widgets/transcript_history.py",
+          "line": 779,
+          "terms": 7,
+          "source": "not self.state.accepts_publication or self.window is not window or self.loader is not loader\n                        or not self.screen.is_current\n                        or generation != self._generation\n                        or (self.pages[0] if older else self.pages[-1]) is not edge\n                        or edge_range != (edge.start, edge.stop)"
+        }
+      ]
+    }
+  ],
+  "remaining_owner": "Heisenberg254 body/viewport/pager original lifetime ownership",
+  "critical_candidate_hold": false
+}
