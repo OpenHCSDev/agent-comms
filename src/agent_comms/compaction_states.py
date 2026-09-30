@@ -20,6 +20,7 @@ from .text_digest import TextDigest
 if TYPE_CHECKING:
     from .compaction_journal import CompactionJournal
     from .compaction_records import SelectedSummaryAttempt
+    from .compaction_records import CompactionOperation
     from .input_disposition import InputDocument
     from .selected_source import SessionRevision
 
@@ -42,6 +43,9 @@ def sql_names(family: type[DeclaredFamily], *, unresolved: bool = False) -> str:
 class OperationState(DeclaredFamily, LifecycleState, affix="Operation"):
     terminal: ClassVar[bool] = False
     committed: ClassVar[bool] = False
+    def represents_summary(self, operation: CompactionOperation,
+                           attempt: SelectedSummaryAttempt) -> bool:
+        return False
     def require_committed(self, commit_id: str) -> None:
         raise CompactionJournalError(
             f"Native compaction operation {commit_id} is {self.declared_name}; "
@@ -78,6 +82,11 @@ class CommittedOperation(TerminalOperation, OperationState):
     committed = True
     def require_committed(self, commit_id: str) -> None:
         return None
+    def represents_summary(self, operation: CompactionOperation,
+                           attempt: SelectedSummaryAttempt) -> bool:
+        operation.require_summary_link(attempt, admit_original=True)
+        operation.committed_outcome()
+        return True
 
 
 class RefusedOperation(TerminalOperation, OperationState):
@@ -94,6 +103,10 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     original_eligible: ClassVar[bool] = False
     settled_without_original: ClassVar[bool] = False
     reconcile_unchanged_source: ClassVar[bool] = False
+
+    def project_outcome(self, attempt: SelectedSummaryAttempt, sequence: int):
+        """In-flight requests and native-owned summaries add no journal notice."""
+        return None
 
     @classmethod
     @abstractmethod
@@ -147,7 +160,34 @@ class ReservedSummary(SummaryState):
         )
 
 
-class UnknownSummary(SummaryState):
+class SummaryOutcome:
+    """The original state declaration owns its read-only transcript notice."""
+
+    @property
+    @abstractmethod
+    def outcome_text(self) -> str: ...
+
+    def project_outcome(self, attempt: SelectedSummaryAttempt, sequence: int):
+        from .compaction_outcomes import SelectedCompactionOutcome
+
+        return SelectedCompactionOutcome(attempt, sequence)
+
+
+class UnknownSummaryOutcome(SummaryOutcome):
+    @property
+    def outcome_text(self) -> str:
+        return "Compaction outcome is UNKNOWN. Inspect the original operation; do not replay."
+
+
+class RefusedSummaryOutcome(SummaryOutcome):
+    decline_reason: str
+
+    @property
+    def outcome_text(self) -> str:
+        return f"Compaction refused: {self.decline_reason}"
+
+
+class UnknownSummary(UnknownSummaryOutcome, SummaryState):
     reconcile_unchanged_source = True
     def retire_unchanged_source(self) -> SummaryState:
         return RetiredUnknownSummary()
@@ -157,7 +197,7 @@ class UnknownSummary(SummaryState):
         return (UnknownSummary, RetiredUnknownSummary)
 
 
-class RetiredUnknownSummary(SummaryState):
+class RetiredUnknownSummary(UnknownSummaryOutcome, SummaryState):
     """Provider outcome stays unknown; writer-fenced evidence excludes a native write."""
 
     terminal = True
@@ -169,12 +209,16 @@ class RetiredUnknownSummary(SummaryState):
 
 
 @dataclass(frozen=True)
-class FailedSummary(SummaryState):
+class FailedSummary(SummaryOutcome, SummaryState):
     """A correlated summary failure attested no native write or original input."""
 
     reason: str
     terminal = True
     settled_without_original = True
+
+    @property
+    def outcome_text(self) -> str:
+        return f"Compaction failed: {self.reason}"
 
     @classmethod
     def successors(cls):
@@ -223,7 +267,7 @@ class DeclinedPrestartSummary(SummaryState, declared_name="declined-prestart"):
 
 
 @dataclass(frozen=True)
-class RefusedSummary(SummaryState):
+class RefusedSummary(RefusedSummaryOutcome, SummaryState):
     """Correlated native prestart refusal, never an original-input admission."""
 
     decline_reason: str = field()
@@ -244,7 +288,7 @@ class RefusedSummary(SummaryState):
 
 
 @dataclass(frozen=True)
-class RetiredRefusalSummary(SummaryState):
+class RetiredRefusalSummary(RefusedSummaryOutcome, SummaryState):
     """An explicit manual command acknowledged a known no-provider refusal."""
 
     decline_reason: str = field()

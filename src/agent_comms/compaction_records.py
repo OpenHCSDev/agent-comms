@@ -119,6 +119,10 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
         self.state.require_committed(self.commit_id)
         return FieldCodec.decode(CommittedNativeOutcome, json.loads(self.evidence_json))
 
+    def represents_summary(self, attempt: SelectedSummaryAttempt) -> bool:
+        """Read-only original linkage, never an input-admission capability."""
+        return self.state.represents_summary(self, attempt)
+
     def publication(self) -> CompactionPublication:
         try:
             committed = self.committed_outcome()
