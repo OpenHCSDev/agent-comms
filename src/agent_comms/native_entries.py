@@ -116,7 +116,6 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
         tracked = self.tracked_user
         if tracked is None:
             raise ValueError("Native publication requires an original tracked input")
-        tracked.require_input_digest()
         return tracked
 
     @property
@@ -216,12 +215,6 @@ class MessageEntry(NativeEntry):
         if self.parent_id != parent_id:
             raise ValueError("Native recovery requires an unambiguous failed terminal")
         self.message.require_failed_terminal()
-
-    def require_input_digest(self) -> None:
-        from .text_digest import TextDigest
-
-        if not TextDigest(self.message.input_digest).matches(self.message.text):
-            raise ValueError("Native publication input digest differs")
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return self.message.transcript_events(context)
