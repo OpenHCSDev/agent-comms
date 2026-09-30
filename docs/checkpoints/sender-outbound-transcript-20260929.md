@@ -56,8 +56,11 @@ Store classification and parent-owned quiet cutover:
 - native SDK journals/input proofs, UNKNOWN dispositions, goal decisions and
   transcript input/routing provenance: DURABLE, preserved unchanged.
 - existing private_bus_checkpoint.sqlite3 source offsets and sender_lookup:
-  DERIVED, rebuild with existing install_private_bus_checkpoint under the bus lock
-  after explicit quiet removal of its old marker seal and old derived sidecar.
+  DERIVED, rebuild with existing install_private_bus_checkpoint under the bus lock.
+  The retained OLD runtime must acquire that lock: the new read barrier correctly
+  rejects the old schema before yielding its usual lock. Clear only the derived
+  marker seal and sidecar there, retain/inherit the existing canonical lock across
+  the new installer call with _bus_locked=True, then publish its new final seal.
   Parent activation owns this operation. It must attest the same original bytes,
   root id, sequence/admission floors and frozen audience; no name reconstruction.
 - marker checkpoint seal: DERIVED binding replaced only as part of that rebuild;
@@ -77,3 +80,25 @@ owner-outbound-192710.png in this document's named scratch directory. Baseline a
 failed intermediate logs are retained. Preparatory private source/identity checks
 and guards pass; exact installed native/tool/ACP plus both-open UI journey remains
 required before readiness, including transitions and cold/A-B-A resource behavior.
+
+Retained source cutover probe passed on actual old source be5fd61c, current
+candidate 2a12d65f. The old source created and certified a real private channel
+message, then renamed its sender, removed beta's channel membership and added a
+new member. The new reader rejected its old derived schema. Holding the OLD
+runtime's actual canonical lock across the existing new installer preserved the
+wire bytes, root/admission/sequence fields and frozen alpha/beta audience. The
+renamed original sender retains its Sent event, departed beta retains the old
+source, and the late member gets no past source. Receipt:
+retained-index-run03/receipt.json in named scratch. Earlier failed probes remain.
+
+Actual native/ACP attempts are preserved under native-outbound-run02/run03.
+The first refused an unapproved worktree extension before input (not_sent).
+Using the approved immutable native7817 global-agent-comms extension reached
+input, but the test's --no-tools disabled extension tools too; controlled provider
+failed without a tool invocation. This is a fixture control error, not native
+readiness evidence. A fresh independent journey uses --no-builtin-tools and the
+same approved bundle, never replaying either failed input. Schrodinger holds the
+serial native slot; the next attempt is queued by named dependency only. Exact
+private-root ProcessIdentity scan records zero surviving owned subprocesses in
+native-fixture-custody-check.json. Scratch footprint was 3 MiB; all failure logs,
+originals and input dispositions are retained. No global runtime/package changes.
