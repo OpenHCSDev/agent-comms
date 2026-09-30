@@ -1,0 +1,6 @@
+{
+  "baseline": "19970f56899674932584138ff5e6fbe533c4af8f",
+  "candidate": "b3b1a8b549647d67c3f4387c040b62f9c259e5f5",
+  "production_src_diff_bytes": 0,
+  "metadata_change": "pyproject+uv.lock only3paired Corepin replacements"
+}

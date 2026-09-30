@@ -1,0 +1,98 @@
+{
+  "selection": "AGENT_COMMS_RUNTIME_ROOT",
+  "bin_directory": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin",
+  "launcher": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/toad",
+  "launcher_sha256": "f2fb5961803521f6c9274b2ee016f67ed1eee2337d1dd17535289cecded719eb",
+  "launcher_links": {
+    "command": {
+      "selected_path": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/toad",
+      "resolved_path": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/toad",
+      "sha256": "f2fb5961803521f6c9274b2ee016f67ed1eee2337d1dd17535289cecded719eb"
+    },
+    "acp": {
+      "selected_path": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/agent-comms-acp",
+      "resolved_path": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/agent-comms-acp",
+      "sha256": "859a45fc6e61a060793dc08b1cf09b7b137537a12453acdf4b32558ec5d0bdf4"
+    }
+  },
+  "entrypoints": {
+    "toad": {
+      "path": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/toad",
+      "sha256": "f2fb5961803521f6c9274b2ee016f67ed1eee2337d1dd17535289cecded719eb"
+    },
+    "agent-comms-acp": {
+      "path": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/agent-comms-acp",
+      "sha256": "859a45fc6e61a060793dc08b1cf09b7b137537a12453acdf4b32558ec5d0bdf4"
+    }
+  },
+  "activation_path": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/activation.json",
+  "activation_sha256": "3810698dfcc83a2b2b655e51c01036aca7c943e29c8f4cbfb06772768b2e04d2",
+  "activation": {
+    "stage": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930",
+    "pins": {
+      "agent-comms": "6fabde90aca7166fe599efba8cd1aa6d84b17e11",
+      "batrachian-toad": "b3b1a8b549647d67c3f4387c040b62f9c259e5f5",
+      "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+    },
+    "sdk": "0.12.1",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "state": "verified-immutable-cohort",
+    "staging_receipt_sha256": "f9e3a64b7f90400ce22adc0b614dfc1501717eef76fbc6aceb7f13a6f23df496"
+  },
+  "observed": {
+    "python": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/python",
+    "prefix": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930",
+    "packages": {
+      "toad": {
+        "origin": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/lib/python3.14/site-packages/toad/__init__.py",
+        "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+        "source_tree_sha256": "7340ddb674391a1d85a7e52fc162b482fbbb4b41def9bb080c66dfda7b345b4b",
+        "distribution": "batrachian-toad",
+        "version": "0.6.20",
+        "direct_url": {
+          "url": "https://github.com/OpenHCSDev/toad.git",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "b3b1a8b549647d67c3f4387c040b62f9c259e5f5",
+            "requested_revision": "b3b1a8b549647d67c3f4387c040b62f9c259e5f5"
+          }
+        }
+      },
+      "textual": {
+        "origin": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/lib/python3.14/site-packages/textual/__init__.py",
+        "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+        "source_tree_sha256": "37c099bc828f724a755c8434bc0fcf674352d66f91312c95a3482a162d8304cd",
+        "distribution": "textual",
+        "version": "8.2.8",
+        "direct_url": {
+          "url": "https://github.com/OpenHCSDev/textual.git",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347",
+            "requested_revision": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+          }
+        }
+      },
+      "agent_comms": {
+        "origin": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+        "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+        "source_tree_sha256": "1bf999bfb17dc828dbb09078276adc16e1b2f9d4e780ed8b3b1d536ad396ed59",
+        "distribution": "agent-comms",
+        "version": "0.1.0",
+        "direct_url": {
+          "url": "https://github.com/OpenHCSDev/agent-comms.git",
+          "vcs_info": {
+            "vcs": "git",
+            "commit_id": "6fabde90aca7166fe599efba8cd1aa6d84b17e11",
+            "requested_revision": "6fabde90aca7166fe599efba8cd1aa6d84b17e11"
+          }
+        }
+      }
+    },
+    "route": {
+      "root": "/home/ts/wt/g458e/meta/wire",
+      "wire_root_id": "49652d62e7a24d048d725efc9a4f629f",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent"
+    }
+  }
+}
