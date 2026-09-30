@@ -10,13 +10,12 @@ from pathlib import Path
 from . import agent_events as events
 from . import backend
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
-from .native_startup import NativeStartupAdmission
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
-from .turn_admission import PromptAdmission
+from .turn_admission import UnwrittenPrompt
 
 
-class PreparedSession(PromptAdmission):
+class PreparedSession(UnwrittenPrompt):
     acknowledged = False
 
     def permits_retention(self, session):
@@ -44,8 +43,11 @@ class NativeSessionPreparation(backend.TurnSession):
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
         if not self.native_session.custody.retained:
-            raise NativePiUnavailable(
-                self.output.failure_text or "Native session preparation failed"
+            self.admission.raise_native_failure(
+                NativePiUnavailable(
+                    self.output.failure_text or "Native session preparation failed"
+                ),
+                self.native.attestation,
             )
         if False:
             yield
@@ -69,10 +71,7 @@ class NativeSessionPreparation(backend.TurnSession):
             environment=environment,
             session_file=session_file,
         )
-        startup = NativeStartupAdmission(Path(environment["AGENT_COMMS_ROOT"]))
-        preparation = cls(
-            launch, "", session_file=session_file, persistent_session=persistent, startup=startup
-        )
+        preparation = cls(launch, "", session_file=session_file, persistent_session=persistent)
         owner = asyncio.current_task()
         async with session_writer_fence(session_file), persistent.lock:
             try:
@@ -84,6 +83,5 @@ class NativeSessionPreparation(backend.TurnSession):
                 assert state is not None
                 return state
             finally:
-                startup.release()
                 if owner is not None:
                     await backend.terminate_task_process(owner)

@@ -47,10 +47,10 @@ class SelectedRequest:
             )
             raise
         except NativePiUnavailable as error:
-            self._uncertain_failure(error)
+            self._native_failure(error)
             raise
 
-    def _uncertain_failure(self, error):
+    def _native_failure(self, error):
         try:
             self.admission.stage.fail_unknown(
                 self.participant.bus,
@@ -65,7 +65,7 @@ class SelectedRequest:
         publish_native_failure(
             self.participant,
             self.admission.input_id,
-            f"{error}; the input is uncertain.",
+            error.public_failure,
             native_response=error.rejected_response,
             source_error=error,
         )

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import getpass
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,6 +51,16 @@ class NativeStartupAdmission:
         self.directory = root / "runtime" / "native-startup"
         self.policy = policy
         self.fd: int | None = None
+
+    @classmethod
+    def for_launch(cls, launch):
+        return cls(
+            Path(
+                launch.env.get("AGENT_COMMS_ROOT")
+                or os.environ.get("AGENT_COMMS_ROOT")
+                or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
+            ).expanduser()
+        )
 
     async def acquire(self, finish_event: asyncio.Event | None = None) -> None:
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)

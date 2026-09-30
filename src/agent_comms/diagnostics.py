@@ -108,6 +108,10 @@ def record_terminal_failure(
         document["source_error"] = "".join(
             TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
         )
+        from .native_pi import NativePiUnavailable
+
+        if isinstance(source_error, NativePiUnavailable):
+            document["native"] = source_error.diagnostic_evidence
     directory = root / "diagnostics"
     directory.mkdir(mode=0o700, exist_ok=True)
     if os.name == "posix":
