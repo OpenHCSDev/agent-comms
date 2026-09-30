@@ -1,5 +1,5 @@
 {
-  "state": "FINAL-PAIRED-INSTALLED-GATE-PASS-PUBLICATION-PENDING",
+  "state": "PUBLISHED-RETAINED-OWNERS-VERIFIED-ORDINARY-DEFAULT-UI-PENDING",
   "owner": "parent",
   "pins": {
     "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
@@ -19,8 +19,413 @@
     "remaining_owned_processes": []
   },
   "original_owners_readonly_observed_idle": 13,
-  "cutover": "Existing StoppedOwnerInstallation; reviewable one-use operator prepared byArendt, execution parent. Fresh selection required.",
+  "cutover": {
+    "phase": "retained-batch-launched-configurations-verified-ui-gate-pending",
+    "started": 1790791122.1650295,
+    "target": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930",
+    "native": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "gate_artifact": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence/request-progress-paired-20260930/ready-receipt.json",
+    "gate_sha256": "35dfee84a3f27fa149b71412c08c0f676d0121652051e69d94b11e90a55550fe",
+    "owners_before": [
+      {
+        "identity": {
+          "incarnation": {
+            "name": "agent-comms-ux",
+            "created_at": 1790049004.0955005
+          },
+          "generation": 1087
+        },
+        "process": {
+          "pid": 3487626,
+          "start_time": 25894703
+        },
+        "admission_generation": 1051
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "nra-architecture",
+            "created_at": 1790049182.3907015
+          },
+          "generation": 1088
+        },
+        "process": {
+          "pid": 3487629,
+          "start_time": 25894836
+        },
+        "admission_generation": 1052
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "nra-class-first-name-review",
+            "created_at": 1790229371.6420214
+          },
+          "generation": 1089
+        },
+        "process": {
+          "pid": 3487708,
+          "start_time": 25894974
+        },
+        "admission_generation": 1053
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "nra-domain-mapping",
+            "created_at": 1790116627.8997042
+          },
+          "generation": 1090
+        },
+        "process": {
+          "pid": 3487789,
+          "start_time": 25895109
+        },
+        "admission_generation": 1054
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "nra-ordered-branch-call-review",
+            "created_at": 1790232054.218321
+          },
+          "generation": 1091
+        },
+        "process": {
+          "pid": 3487854,
+          "start_time": 25895254
+        },
+        "admission_generation": 1055
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "nra-roster-heuristic-map",
+            "created_at": 1790218471.1256046
+          },
+          "generation": 1092
+        },
+        "process": {
+          "pid": 3487864,
+          "start_time": 25895392
+        },
+        "admission_generation": 1056
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "refactor-r1",
+            "created_at": 1790606381.4139948
+          },
+          "generation": 1093
+        },
+        "process": {
+          "pid": 3487868,
+          "start_time": 25895527
+        },
+        "admission_generation": 1057
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-architecture-memory",
+            "created_at": 1790654215.0835924
+          },
+          "generation": 1094
+        },
+        "process": {
+          "pid": 3487904,
+          "start_time": 25895668
+        },
+        "admission_generation": 1058
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-pr159-viewer-bind-owner",
+            "created_at": 1790657026.7285714
+          },
+          "generation": 1095
+        },
+        "process": {
+          "pid": 3487906,
+          "start_time": 25895802
+        },
+        "admission_generation": 1059
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "nominal-refactor-advisor-2",
+            "created_at": 1790700391.614946
+          },
+          "generation": 1096
+        },
+        "process": {
+          "pid": 3487916,
+          "start_time": 25895935
+        },
+        "admission_generation": 1060
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper",
+            "created_at": 1790708584.4423254
+          },
+          "generation": 1097
+        },
+        "process": {
+          "pid": 3488065,
+          "start_time": 25896068
+        },
+        "admission_generation": 1061
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper2",
+            "created_at": 1790713653.7134795
+          },
+          "generation": 1098
+        },
+        "process": {
+          "pid": 3488089,
+          "start_time": 25896208
+        },
+        "admission_generation": 1062
+      },
+      {
+        "identity": {
+          "incarnation": {
+            "name": "comms428",
+            "created_at": 1790725198.0008519
+          },
+          "generation": 1099
+        },
+        "process": {
+          "pid": 3488092,
+          "start_time": 25896350
+        },
+        "admission_generation": 1063
+      }
+    ],
+    "finished": 1790791148.3364463,
+    "results": [
+      {
+        "thread": "agent-comms-ux",
+        "previous_pid": 3487626,
+        "pid": 3697835
+      },
+      {
+        "thread": "nra-architecture",
+        "previous_pid": 3487629,
+        "pid": 3697925
+      },
+      {
+        "thread": "nra-class-first-name-review",
+        "previous_pid": 3487708,
+        "pid": 3697928
+      },
+      {
+        "thread": "nra-domain-mapping",
+        "previous_pid": 3487789,
+        "pid": 3697958
+      },
+      {
+        "thread": "nra-ordered-branch-call-review",
+        "previous_pid": 3487854,
+        "pid": 3697972
+      },
+      {
+        "thread": "nra-roster-heuristic-map",
+        "previous_pid": 3487864,
+        "pid": 3697982
+      },
+      {
+        "thread": "refactor-r1",
+        "previous_pid": 3487868,
+        "pid": 3697985
+      },
+      {
+        "thread": "openhcs-architecture-memory",
+        "previous_pid": 3487904,
+        "pid": 3698056
+      },
+      {
+        "thread": "openhcs-pr159-viewer-bind-owner",
+        "previous_pid": 3487906,
+        "pid": 3698145
+      },
+      {
+        "thread": "nominal-refactor-advisor-2",
+        "previous_pid": 3487916,
+        "pid": 3698148
+      },
+      {
+        "thread": "openhcs-helper",
+        "previous_pid": 3488065,
+        "pid": 3698150
+      },
+      {
+        "thread": "openhcs-helper2",
+        "previous_pid": 3488089,
+        "pid": 3698159
+      },
+      {
+        "thread": "comms428",
+        "previous_pid": 3488092,
+        "pid": 3698182
+      }
+    ]
+  },
   "paid_calls": 0,
   "original_input_replays": 0,
-  "remaining_scope": "Publication+fresh ordinarydefault acceptance pending. Full CPU/cache/focus/growing-End inToad245 continues separately; wholeproviderlatency/all11API proof not claimed."
+  "remaining_scope": "Publication+fresh ordinarydefault acceptance pending. Full CPU/cache/focus/growing-End inToad245 continues separately; wholeproviderlatency/all11API proof not claimed.",
+  "readback": {
+    "state": "PUBLIC-ROUTE-DEFAULTS-RETAINED-OWNERS-VERIFIED-UI-PENDING",
+    "route": {
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+      "version": 1
+    },
+    "defaults": {
+      "agent-comms": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/agent-comms",
+      "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/agent-comms-acp",
+      "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/agent-comms-agent",
+      "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/agent-comms-nk-foreground",
+      "toad": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/toad"
+    },
+    "retained_owners": [
+      {
+        "name": "agent-comms-ux",
+        "process": {
+          "pid": 3697835,
+          "start_time": 26677070
+        },
+        "model": "openai-codex/gpt-6.1-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "nra-architecture",
+        "process": {
+          "pid": 3697925,
+          "start_time": 26677204
+        },
+        "model": "openai-codex/gpt-6.1-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "nra-class-first-name-review",
+        "process": {
+          "pid": 3697928,
+          "start_time": 26677343
+        },
+        "model": "openai-codex/gpt-6-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "nra-domain-mapping",
+        "process": {
+          "pid": 3697958,
+          "start_time": 26677478
+        },
+        "model": "openai-codex/gpt-6-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "nra-ordered-branch-call-review",
+        "process": {
+          "pid": 3697972,
+          "start_time": 26677620
+        },
+        "model": "openai-codex/gpt-6-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "nra-roster-heuristic-map",
+        "process": {
+          "pid": 3697982,
+          "start_time": 26677763
+        },
+        "model": "openai-codex/gpt-6-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "refactor-r1",
+        "process": {
+          "pid": 3697985,
+          "start_time": 26677904
+        },
+        "model": "openrouter/z-ai/glm-5.3-flash",
+        "thinking_level": "off"
+      },
+      {
+        "name": "openhcs-architecture-memory",
+        "process": {
+          "pid": 3698056,
+          "start_time": 26678044
+        },
+        "model": "openai-codex/gpt-6.1-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "openhcs-pr159-viewer-bind-owner",
+        "process": {
+          "pid": 3698145,
+          "start_time": 26678185
+        },
+        "model": "openai-codex/gpt-6.1-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "nominal-refactor-advisor-2",
+        "process": {
+          "pid": 3698148,
+          "start_time": 26678319
+        },
+        "model": "openrouter/z-ai/glm-5.3-flash",
+        "thinking_level": "off"
+      },
+      {
+        "name": "openhcs-helper",
+        "process": {
+          "pid": 3698150,
+          "start_time": 26678458
+        },
+        "model": "openai-codex/gpt-6.1-sol",
+        "thinking_level": "off"
+      },
+      {
+        "name": "openhcs-helper2",
+        "process": {
+          "pid": 3698159,
+          "start_time": 26678599
+        },
+        "model": "openrouter/z-ai/glm-5.3-flash",
+        "thinking_level": "off"
+      },
+      {
+        "name": "comms428",
+        "process": {
+          "pid": 3698182,
+          "start_time": 26678740
+        },
+        "model": "openai-codex/gpt-6.1-sol",
+        "thinking_level": "high"
+      }
+    ],
+    "models_efforts_unchanged": true,
+    "original_unknown_unchanged": {
+      "input_id": "f39210bb4366844c3a898b0010ba9538",
+      "stage": "triage",
+      "session_id": null,
+      "session_file": null,
+      "verdict": null
+    },
+    "original_nra_history_sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+    "original_nra_history_bytes": 41270257
+  },
+  "candidate_pixel_qualification": "Actual compositor once-paint and typed native/ACP accepted. Exported immediate-open SVG/PNG has black foreground; it is not readable physical pixel proof. Ordinary default physical saved-history check remains pending."
 }

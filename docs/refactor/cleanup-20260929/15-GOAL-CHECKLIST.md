@@ -1,3 +1,24 @@
+## 2026-09-30 paired usage fixes published; ordinary launcher acceptance running
+
+Core453/454 +Toad242/247 now installed as Core6feb/Toad8a924/Text2e49/
+SDK0.12.1/native593b in runtime-native-budget-request-progress-20260930.
+The whole installed Native/ACP/Toad continuous fork/open/firstanswer gate
+passed41.783s with2 localhostPOSTs,30 actual request-source updates,0 protocol
+errors and0 remaining fixture processes. Candidate raster was unreadable
+black foreground; once-paint compositor evidence is valid, physical readable
+pixels are not inferred from that PNG. Einstein owns ordinary default physical
+startup against the real original saved NRA history now.
+
+Parent executed the reviewed one-use StoppedOwnerInstallation once:13 original
+idle owners retired, originalroute CAS→593b and5 defaults published at all-stop,
+then same retained credentials/settings launched;26.171s, exit0. Independent
+readback verifies13 exact new owner processes, models/efforts unchanged,41MB
+NRA history identical and original UNKNOWN still triage. No original prompts
+replayed or journals converted. Activation receipt: native-budget-request-progress-
+activation.json. Original operator executable will be removed after closure;
+reviewed hash and execution evidence retained. Performance245 remains independent.
+Clean merged parent246 pin worktree removed normally; source branch retained.
+
 ## 2026-09-30 usage-blocker release: all three implementation checkpoints merged
 
 Core453 merged a4df9589 fixes request-local output allowance and proven
