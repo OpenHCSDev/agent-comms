@@ -1,3 +1,29 @@
+## 2026-09-30 native sidebar custody checkpoint merged
+
+Toad249 merged98bab35f834abb0793d0e066489b751a59393011 after complete
+three-file production review and actual installed89.744s/16-check original
+41MB/13MB scrolling and A/B/A editor/reader resource journey. Production7 lines
+deleted/10 added: delete ChannelGroup.member_rows and its writer; derive ordered
+navigation, session selection and spinner membership from member_container's
+actual native children. Held removal verifies custody through the awaited
+reconcile; baseline navigation already excluded retired rows, so no ghost-row
+bug claim is made. Parent personally reviewed the readable A-return frame.
+There is no demonstrated overall CPU gain or final warm-tab performance claim.
+
+Schrodinger is staging the merged249 source with unchanged liveCore6feb,
+Textual2e49,SDK0.12.1 and native593b. Publication and ordinary installed-default
+acceptance are pending; live remains248 until that publication is verified.
+Heisenberg252 retains the complete CPU/focus/warm/TC1/T9/growing-End scope and
+owns the actual failed candidate's duplicate assistant paint. Kepler251 owns
+continuous submission/queue/native-user visibility with Mendel457's canonical
+input identity. Arendt456 owns the measured native/model/tool latency separately.
+
+The Core6fab/Toadb3b1 candidate passed16 actual native controls and produced
+one saved/native/ACP first-fork answer, but the real UI painted it twice.
+That original failed proof remains /home/ts/wt/g458e/u01/proof; no rerun or
+live-readiness claim hides the defect. Latest read timings and active owners are
+recorded in16-CURRENT-S14-OWNERS.md and the original-clock evidence directory.
+
 ## 2026-09-30 native resident-cost checkpoint merged and UI-only installed
 
 Toad248 merged19970f56899674932584138ff5e6fbe533c4af8f. Two production files
@@ -18,8 +44,8 @@ restart. Ordinary-default physical acceptance passed16.534s: readable original
 history, canonical idle/nullgoal/queue,0 newprotocolerrors, originals unchanged,
 cleanup0. Parent personally viewed the actual physical frame.
 Receipt:evidence/cleanup-live-integration/viewport-native-residency-activation.json.
-Full readiness/sidebar/CPU/focus/TC1/T9/growing-End scope continues in249 under
-Heisenberg, with Kepler read-only profiling support. Goal remains active.
+Full readiness/sidebar/CPU/focus/TC1/T9/growing-End scope continues in252 under
+Heisenberg; Kepler251 owns input visibility. Goal remains active.
 
 ## 2026-09-30 body-cost checkpoint merged and UI-only installed
 
