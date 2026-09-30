@@ -23,6 +23,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .wake import WakeDecision
 from .turn_phase import PreparingPhase, TurnPhase
+from .diagnostics import record_request_progress
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,10 @@ class SelectedParticipant(MroDispatch):
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:
         current = self.comms.registry.require(self.owner.thread.name).turn_state.phase
+        lease = self.owner.thread.turn_lease
+        assert lease is not None
+        for observation in event.phase.request_observations:
+            record_request_progress(self.comms.root, lease, observation)
         self.transition(current.observed(event.phase))
 
     @classmethod

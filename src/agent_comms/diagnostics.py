@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .store_files import _atomic_write_text
+from .field_codec import FieldCodec
 
 if TYPE_CHECKING:
     from .pi_events import Response
@@ -51,6 +53,27 @@ class FailureReason(StrEnum):
     INPUT_MISSING = "current_prompt_input_missing"
     FINAL_STOP_MISSING = "assistant_final_stop_missing"
     QUEUED_INPUT_MISSING = "queued_input_start_missing"
+
+
+def record_request_progress(root, lease, progress, *, publication_started_ns=None):
+    """Append original measurements with the exact existing turn/owner fence.
+
+    This private diagnostic does not contain prompt bodies, headers or credentials,
+    grant retry or participate in lifecycle decisions. Native clocks remain native;
+    receipt and publication spans use the local monotonic clock independently.
+    """
+    directory = root / "diagnostics"
+    directory.mkdir(mode=0o700, exist_ok=True)
+    now = time.monotonic_ns()
+    record = {"turn": FieldCodec.encode(lease), "native": FieldCodec.encode(progress),
+              "received_monotonic_ns": now}
+    if publication_started_ns is not None:
+        record["publication_started_monotonic_ns"] = publication_started_ns
+        record["publication_elapsed_ns"] = now - publication_started_ns
+    path = directory / f"{lease.turn_id}.requests.jsonl"
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(descriptor, "w") as output:
+        output.write(json.dumps(record) + "\n")
 
 
 def terminal_failure_reason(event: dict) -> FailureReason:

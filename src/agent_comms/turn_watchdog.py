@@ -89,7 +89,7 @@ class ProgressWatchdog:
                 self.phase = self.phase.model_progress()
 
     def transition(self, event: PiEvent, active_tools: set[str]) -> None:
-        self.phase = self.phase.on(event, active_tools)
+        self.phase = event.observed_phase(self.phase.on(event, active_tools))
 
     def read_timeout(self, session: TurnSession) -> float | None:
         if session.stats.requested:

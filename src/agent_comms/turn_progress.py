@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING
+import time
 
 from acp.schema import (
     AgentMessageChunk,
@@ -17,7 +18,7 @@ from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
 from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
-from .diagnostics import record_terminal_failure
+from .diagnostics import record_terminal_failure, record_request_progress
 from .messages import MessageType
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
@@ -231,7 +232,15 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.NativePhaseChanged)
     async def native_phase(self, event: events.NativePhaseChanged) -> None:
-        await self.transition(self.phase.observed(event.phase))
+        for observation in event.phase.request_observations:
+            record_request_progress(self.comms.root, self.turn_lease, observation)
+        started = time.monotonic_ns()
+        try:
+            await self.transition(self.phase.observed(event.phase))
+        finally:
+            for observation in event.phase.request_observations:
+                record_request_progress(self.comms.root, self.turn_lease, observation,
+                                        publication_started_ns=started)
 
     @handles(events.StreamSettled)
     async def stream_settled(self, event: events.StreamSettled) -> None:
