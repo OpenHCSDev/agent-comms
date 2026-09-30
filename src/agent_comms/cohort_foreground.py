@@ -83,7 +83,8 @@ def _accept_visible_deliveries(
     before the SQL transaction. All N identities must already be registered.
     Never infer a cohort from an ordinary public message or its body.
     """
-    with bus.log.locked():
+    sealed = sealed_cohort_sequences(store, root_id)
+    with bus.log.certified_read() as source:
         _require_no_private_owner_rename(bus.log.path.parent)
         marker = bus.log._private_marker_unlocked()
         if marker.root_id != root_id:
@@ -91,16 +92,14 @@ def _accept_visible_deliveries(
         after_seq = max(after_seq, marker.admission_after_seq)
         initials = tuple(
             initial
-            for record in bus.log.verified_records_unlocked(marker)
-            for initial in record.deliveries()
+            for initial in source.addressed_deliveries(lookup, after_seq, sealed)
             if initial.message.seq > after_seq
             and any(
                 r.recipient_lookup == lookup and r.canonical_thread == owner_name
                 for r in initial.audience.recipients
             )
         )
-    sealed = sealed_cohort_sequences(store, root_id)
-    unaccepted = tuple(initial for initial in initials if initial.message.seq not in sealed)
+    unaccepted = initials
     if len(unaccepted) > 100:
         raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
     if unaccepted and native_package is not None:

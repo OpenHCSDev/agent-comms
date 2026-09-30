@@ -77,7 +77,7 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
             verified = list(case.bus.log.verified_records_unlocked(marker))
             assert verified[-1].message == changed  # Full strict durable receipt validation succeeds.
             with pytest.raises(
-                RelationViolationError, match="Response publication intent conflicts"
+                RelationViolationError, match="checkpoint prefix tail changed"
             ):
                 case.bus.log._keyed_receipt_unlocked(intent)
         # The public locked read refuses changed bytes at its earlier warm barrier.

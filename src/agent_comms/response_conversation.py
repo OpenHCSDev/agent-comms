@@ -20,12 +20,8 @@ class ResponseConversation:
     @classmethod
     def capture(cls, bus, snapshot):
         marker = bus.log._private_marker_unlocked()
-        committed = {
-            delivery.message.seq: delivery
-            for record in bus.log.verified_records_unlocked(marker)
-            for delivery in record.deliveries()
-        }
-        sources = tuple(committed[assignment.wire_seq] for assignment in snapshot.assignments)
+        sources = bus.log.delivery_cohorts_unlocked(
+            marker.root_id, tuple(assignment.wire_seq for assignment in snapshot.assignments))
         if not sources:
             raise IdentityConflict("Response has no committed conversation source")
         return cls(
