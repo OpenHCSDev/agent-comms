@@ -971,3 +971,28 @@ requires excluding old UI/ACP registry writers: their original codec can restore
 the removed field through metadata updates even when the owner is unchanged.
 Arendt owns the bounded writer proof and old-client retirement condition.
 No legacy reader, root-ID change or format mirror will hide that hazard.
+
+### Goal resumed and final paired installation staged
+
+The owner resumed the persistent goal. get_goal now reports ACTIVE, updated
+1790771254. The earlier BLOCKED paragraph records a historical checkpoint; no
+failed input or provider attempt was replayed to resume work. Full original and
+round-two scope remains intact.
+
+Einstein231 final source6ff0b13eed7b61e7152194b2ccada51cd23269a9 is staged
+noneditable at runtime-c3-reviewed-pair-20260930, Coreea1c275a/Textual2e49cb83,
+SDK0.12.1 and accepted nativee36. One normal frozen68 build passed package
+compatibility;288 Core,273 Toad and249 Textual Python files match exact pins.
+No public root was loaded, provider/input submitted or default changed. The
+matched combined native fork/roster/first-input journey is assigned to Einstein
+using the existing233 driver, before parent-only activation. Component receipts
+are not substituted for this changed-pair acceptance.
+
+A broader process census confirms old Toad2255883/birth21395402 and its
+ACP2255992/birth21395665 on the public root, not merely an absent runtime/bin/toad
+argument. They must leave before field retirement. Existing shutdown paths do
+not prove unsent draft persistence; preserve those drafts before retiring the
+client. An unrelated old worker1973426 is on a disposable l0a fixture root and
+is not part of the public owner batch. Arendt447 owns writer-exclusion proof
+and reusable typed-capture closure. No broad kill, X-session manipulation,
+version mirror or root-ID replacement is authorized by this census.
