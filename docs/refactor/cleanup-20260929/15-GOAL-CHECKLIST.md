@@ -1,3 +1,26 @@
+## 2026-09-30 usage-blocker release: all three implementation checkpoints merged
+
+Core453 merged a4df9589 fixes request-local output allowance and proven
+pre-stream context rejection recovery; Core454 merged6feb634b closes stalled
+subscriber publication and observes actual native request/callback timing.
+Toad242 merged1141a2d6 derives history coverage from the existing presentation
+owner. Parent reviewed their production changes and actual installed receipts.
+Arendt454 final10 preserved a genuinely busy reader and fast controller, retired
+only the nonreader, and recovered619196B canonical history. No whole-turn limit,
+new queue, original input replay or durable format migration.
+
+Einstein's frozen453/242/246 candidate passed both actual native/ACP journeys
+42.73s and actual installedToad continuous sidebar fork/immediate open/first
+answer40.09s. Original failed wrapperu01 is retained; no replay.454 came after
+that freeze and requires matched owner/client phase ABI plus native593b; its
+final paired stage and one actual installed journey gate are now underway.
+Parent owns final publication through existing retained lifecycle; Schrodinger
+owns stable artifact/package, Einstein owns installed paired/default journey,
+Arendt prepares the reviewable one-use stopped installation operation. The
+three changes are merged, not live. Current public3625/Core29b/ceca remains
+unchanged until cutover. Full performance work continues in Heisenberg245 with
+Kepler source/profile support and does not hold up this usage-blocker release.
+
 ## 2026-09-30 all merged changes installed and actual default accepted
 
 Five public defaults now resolve runtime-all-merged-20260930: exactToad3625ce9e
