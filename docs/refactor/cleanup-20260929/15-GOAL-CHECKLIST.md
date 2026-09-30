@@ -1,3 +1,24 @@
+## 2026-09-30 native resident-cost checkpoint merged and UI-only installed
+
+Toad248 merged19970f56899674932584138ff5e6fbe533c4af8f. Two production files
+replace history and trim descendant counting with the existing body resource
+contract. Pending native pruning remains counted; reconstruction reservation
+remains separate from current native custody, without a second cost counter.
+Representative source history35widgets/100checks performs0descendant walks.
+Parent reviewed complete source and readable physical A-return. Actual original
+41MB/13MB saved-history heldUp/Down/reverse/End15idle/A-B-A/draftUndo journey
+passes16checks in84.780s; originals unchanged, cleanup0. CPU still high, around
+102% PageDown and25% idle, so no overall CPU or full responsiveness claim.
+
+Parent published five defaults from one normal68package immutable cohort as
+runtime-viewport-native-residency-20260930: Core6feb,Toad19970f,Textual2e49,
+SDK0.12.1,same native593b. All291Core/273Toadfiles exact and accepted386500df
+production/config equals merged19970f. No route/native/store/ABI change or owner
+restart. Einstein owns the one short ordinary-default physical acceptance now.
+Receipt:evidence/cleanup-live-integration/viewport-native-residency-activation.json.
+Full readiness/sidebar/CPU/focus/TC1/T9/growing-End scope continues in249 under
+Heisenberg, with Kepler read-only profiling support. Goal remains active.
+
 ## 2026-09-30 body-cost checkpoint merged and UI-only installed
 
 Toad245 merged0f638053 after parent source and actual physical A-return review.
