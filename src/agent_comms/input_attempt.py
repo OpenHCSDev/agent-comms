@@ -13,6 +13,7 @@ from .thread_identity import ThreadIncarnation
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
     from .text_digest import TextDigest
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
@@ -74,7 +75,8 @@ class InputAttempt(DeclaredFamily, affix="Input"):
         return False
 
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str
+        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
+        *, snapshot: RegistrySnapshot,
     ) -> StartedInput | None:
         return None
 
@@ -256,7 +258,8 @@ class StartedInput(SentInput):
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
 
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str
+        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
+        *, snapshot: RegistrySnapshot,
     ) -> StartedInput | None:
         """Return this original row's recorded lease/input evidence only.
 
@@ -264,7 +267,7 @@ class StartedInput(SentInput):
         publication source independently validates the original complete lease
         and native ancestry; this receipt never invents their missing proof.
         """
-        if not self.matches_owner(lease.identity.incarnation):
+        if not lease.identity.incarnation.matches_recorded_name(self.owner, snapshot):
             return None
         if not self.matches_admission(lease.admission_generation):
             return None

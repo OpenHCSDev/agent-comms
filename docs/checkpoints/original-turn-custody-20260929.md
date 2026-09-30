@@ -105,3 +105,59 @@ This closes installed resource acceptance and does not close the pending
 ordinary SendReceipt provenance/publication join, initial UI command custody,
 or the whole remaining S14 ledger. No public owner or default runtime changed.
 Do not repeat this completed paid gate.
+
+
+### Ordinary publication consumer preparation
+
+At current mainb71b0ef7 the existing successful TurnProgress consumer discards
+Messaging.send's string result. It therefore cannot join the final native
+reply to the original committed wire envelope. The prepared consumer uses the
+existing send_message operation and its actual Message.reference. A bounded
+local list holds only acquired send resources; it is not a lifecycle, identity,
+input or delivery authority. An ExitStack callback acquired with the first
+committed send flushes those references before lease retirement, including when
+a later target send fails. Chained source-join errors retain the earlier send
+failure. No resend or rollback follows either failure.
+
+Mendel owns the one Transcripts.record_turn_publication relation with original
+TurnLeaseFence, TranscriptCursor, TurnRouting and MessageReference tuple. That
+source derives the actual successful final's nearest native user, requests the
+original StartedInput group, and verifies the full original incarnation and
+certified references independently. The stored input rows did not record birth
+or process; they cannot manufacture that proof. Existing request route
+annotations stay with record_turn_routing. Partial progress notices do not gain
+a final-reply claim. No new store, event, reader fallback or seen list is added.
+
+Crossing experiments: grouped channel inputs and a correction/followup remain
+selected by their actual native ID and text; a renamed following input resolves
+through the existing registry-owned original incarnation relation, preserving
+admission/turn/process checks. A later failed target cannot erase an earlier
+committed wire reference. These are source-owner and acquired-resource closure,
+not per-target status copies. The missing API is named and owned by Mendel;
+consumer preparation is not yet a runnable or Ready messaging checkpoint.
+
+
+### Original input group rename relation
+
+The public started_for_native family now requires one captured RegistrySnapshot
+keyword throughout InputDocument, InputAttempt and StartedInput. The existing
+ThreadIncarnation owns matches_recorded_name, deriving membership from the
+original registry aliases and original birth. Stored names are never upgraded
+to invented birth/process witnesses. Native ID/text, admission and turn still
+match the recorded original input fields; source publication separately owns
+complete live lease/process and certified-wire validation.
+
+One focused original-store/real-registry check passed in0.10seconds. It retains
+the two original grouped bus rows, renames the busy registry owner, records a
+correction under the new name, and retrieves each original row group under the
+original or canonical lease name without changing stored bytes. Foreign
+name/birth, native ID/text, turn/admission and deletion/recreation controls deny
+membership. No fallback reader, optional snapshot or caller alias loop remains.
+
+Mendel's subsequent routing closure replaces persisted full request Message
+copies with original MessageReference values in the existing TurnRouting JSON.
+It requires one quiet certified durable carry, preserving all old annotations;
+no SQL reset, body/time reconstruction or legacy reader. Arendt owns OwnedTurn,
+OwnedSendAdmission and TurnProgress constructor/consumer migration; Mendel owns
+the routing/source relation and Sch owns its two frontend consumers. This is a
+paired source dependency, not a separate installed cohort.

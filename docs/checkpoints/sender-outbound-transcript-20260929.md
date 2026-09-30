@@ -447,3 +447,38 @@ verification is unchanged, and the scoped ratchet must pass before publishing.
 23 affected source/read/notification/ownership controls pass at this checkpoint.
 Sch04 UNKNOWN and its original private evidence remain preserved; Sch215 runs
 the original41MB read-only three-view comparison before another paid journey.
+
+## Exclusive original wire event membership (2026-09-30)
+
+Deleted the native assistant ancestry from SentTranscript and the native user
+ancestry from the original incoming wire projection. Sch215 composition215-01
+proved the real failure on the immutable8691/Toad4e 41MB three-view fixture:
+one original outgoing row produced two AgentResponse bodies and two painted
+headers, with zero native inputs. MroDispatch correctly invokes all C3 handlers;
+the wire row incorrectly belonged to both sent and native-agent consumers.
+
+WireTextTranscript now owns a mandatory original MessageReference. Sent and
+Incoming belong only to that immutable wire stem. Incoming carries the original
+route, text and timestamp; incoming_sources is declaration-owned coverage.
+MarkdownTranscript owns shared preparation for native streaming and immutable
+wire text. OutgoingRoute owns common route behavior without lending native
+streaming membership to a wire record. No dispatcher change, body comparison,
+deduplication, status mirror or new store was introduced.
+
+The durable TurnRouting request format is unchanged at this critical checkpoint.
+Future reference-only routing/API edits are preserved uncommitted in the named
+branch scratch files ordinary-refs-source-api-before-critical-membership.patch
+and ordinary-refs-transcript-events-pre-membership.py. They are excluded from
+this source pin and current real05. Parent must carry existing durable routing
+JSON once under quiet custody before that later paired format activation.
+
+19 affected source/notification/annotation/ownership checks pass in5.03s.
+Sch215 owns the paired incoming/outgoing renderer, categories, fragment and
+Markdown-preparation consumers and the actual mounted composition/new-frame
+control. This source result alone does not claim that paired acceptance.
+
+Preserve real-wire215-05 original native reply79c8/3a6a2261/2e2ae4f5 and its
+original seq2/e66efc014771 publication. Its native reply file is distinct from
+the41MB retained display. No input, prompt, provider replay or archive mutation
+was performed during this source diagnosis. The four prior admission-budget
+probes passed;40s CPU35.49 remains open.

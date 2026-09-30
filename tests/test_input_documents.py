@@ -71,39 +71,85 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
 
 
 def test_original_native_user_receipts_include_group_and_corrected_final_only(tmp_path):
-    from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
-    from agent_comms.turn_lease import TurnLeaseFence
+    import os
 
-    lease = TurnLeaseFence(TurnIdentity(ThreadIncarnation('worker', 123.0), 5), 'turn', 7)
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.registration import Registration
+    from agent_comms.thread_identity import ThreadIncarnation
+    from agent_comms.threads import Thread
+
+    registry = Registration(tmp_path / "registry.json")
+    registry.register(Thread(
+        "worker", frozenset(), str(tmp_path), created_at=123.0,
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    registry.lease_local_turn("worker", "turn")
+    lease = registry.require("worker").turn_lease
+    admission = lease.admission_generation
     store = InputDispositions(tmp_path / InputDispositions.filename)
-    for key, sequence, text in (('bus:1', 1, 'First original'), ('bus:2', 2, 'Second original')):
-        assert store.record(key, seq=sequence, owner='worker', admission=7,
-                            target='worker', text=text)
-        assert store.bind(key, admission=7, turn_id='turn', native_id='a' * 32,
-                          text='Actual grouped native user')
-        assert store.started(key, turn_id='turn', native_id='a' * 32,
-                             text='Actual grouped native user')
-    assert store.record('acp:correction', seq=None, owner='worker', admission=7,
-                        target='worker', text='Distinct correction')
-    assert store.bind('acp:correction', admission=7, turn_id='turn', native_id='b' * 32,
-                      text='Actual corrected native user')
-    assert store.started('acp:correction', turn_id='turn', native_id='b' * 32,
-                         text='Actual corrected native user')
+    for key, sequence, text in (("bus:1", 1, "First original"), ("bus:2", 2, "Second original")):
+        assert store.record(key, seq=sequence, owner="worker", admission=admission,
+                            target="worker", text=text)
+        assert store.bind(key, admission=admission, turn_id="turn", native_id="a" * 32,
+                          text="Actual grouped native user")
+        assert store.started(key, turn_id="turn", native_id="a" * 32,
+                             text="Actual grouped native user")
+    registry.rename("worker", "renamed")
+    assert store.record("acp:correction", seq=None, owner="renamed", admission=admission,
+                        target="renamed", text="Distinct correction")
+    assert store.bind("acp:correction", admission=admission, turn_id="turn", native_id="b" * 32,
+                      text="Actual corrected native user")
+    assert store.started("acp:correction", turn_id="turn", native_id="b" * 32,
+                         text="Actual corrected native user")
     document = store.read()
-    group = document.started_for_native(lease, 'a' * 32, 'Actual grouped native user')
-    assert {row.key for row in group} == {'bus:1', 'bus:2'}
+    original_bytes = store.path.read_bytes()
+    snapshot = registry.snapshot()
+    group = document.started_for_native(
+        lease, "a" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert {row.key for row in group} == {"bus:1", "bus:2"}
     assert all(row is document.rows[row.key] for row in group)
-    assert document.started_for_native(lease, 'b' * 32, 'Actual corrected native user') == (
-        document.rows['acp:correction'],)
-    assert not document.started_for_native(replace(lease, turn_id='foreign'), 'a' * 32,
-                                           'Actual grouped native user')
-    assert not document.started_for_native(replace(lease, admission_generation=5), 'a' * 32,
-                                           'Actual grouped native user')
-    assert not document.started_for_native(lease, 'a' * 32, 'Foreign input body')
-    assert not document.started_for_native(lease, 'c' * 32, 'Actual grouped native user')
-    assert not document.started_for_native(replace(lease, identity=replace(
-        lease.identity, incarnation=ThreadIncarnation('foreign', 123.0))), 'a' * 32,
-        'Actual grouped native user')
+    assert document.started_for_native(
+        lease.renamed("renamed"), "a" * 32, "Actual grouped native user", snapshot=snapshot
+    ) == group
+    assert document.started_for_native(
+        lease, "b" * 32, "Actual corrected native user", snapshot=snapshot
+    ) == (document.rows["acp:correction"],)
+    assert not document.started_for_native(
+        replace(lease, turn_id="foreign"), "a" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        replace(lease, admission_generation=admission + 1), "a" * 32,
+        "Actual grouped native user", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        lease, "a" * 32, "Foreign input body", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        lease, "c" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        replace(lease, identity=replace(
+            lease.identity, incarnation=ThreadIncarnation("foreign", 123.0)
+        )), "a" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        replace(lease, identity=replace(
+            lease.identity, incarnation=ThreadIncarnation("worker", 124.0)
+        )), "a" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert store.path.read_bytes() == original_bytes
+    registry.release_turn(lease)
+    registry.unregister("renamed")
+    registry.remove("renamed")
+    registry.register(Thread(
+        "renamed", frozenset(), str(tmp_path), created_at=321.0,
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    assert not document.started_for_native(
+        lease, "b" * 32, "Actual corrected native user", snapshot=registry.snapshot()
+    )
+    assert store.path.read_bytes() == original_bytes
 
 
 @pytest.mark.parametrize(
