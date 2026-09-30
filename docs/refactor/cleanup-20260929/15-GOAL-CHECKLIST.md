@@ -864,3 +864,26 @@ R1 zero-prompt GetState probe took741ms. The known ready-response discard was
 reproduced before fixing it. Historical seq160 remains UNKNOWN/unreplayed and
 the precise historical IPC cause is not established. This merged checkpoint is
 not default-installed: Arendt442 phased C3 activation is the remaining relation.
+
+### Reconnect publication checkpoint merged
+
+Toad232 merged3d2c7fa7db5e705f29cd0b6e8132098724c27f2b at10:42:03Z,
+reviewed exact81d90013. SnapshotPublication captures the original resource
+cohort through TurnOwner.captured_snapshot before asynchronous preparation,
+matching the existing checkpoint authority. Four production lines deleted,
+three added; no text deduplication or seen registry. Installed native03 keeps
+one canonical reply at one registered/painted response and header after
+reconnect; two distinct original native inputs with equal answer text remain
+two rows/headers after a second reconnect. Two localhost requests, no paid
+calls or input replay, original process unchanged. The changed busy-context
+39-chunk gate also retains one uncovered live response/header across62 samples.
+Final source equals tested e86, ratchet positive delta zero and no owned fixture
+processes remain. This closes the native07 reconnect defect for that matched
+candidate; default activation awaits442 and is not claimed.
+
+Einstein233 proved fork-roster refresh aborted on obsolete TranscriptHistory
+private _loading access. The canonical registration and revision were correct;
+the reader's swallowed AttributeError blocked the entire sidebar refresh.
+Existing public resource-query and PresentedFrame caller closure remain the
+named fix, coordinated with227. No deleted private field, independent timer or
+status copy will be restored.
