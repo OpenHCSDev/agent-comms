@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from .bus_publication import stable_thread_lookup
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import ThreadIncarnation
-from .transcript_events import SentTranscript, UserTranscript
+from .transcript_events import AssistantTranscript, SentTranscript, UserTranscript
 
 if TYPE_CHECKING:
     from .wire_log import WireLog
@@ -167,10 +167,25 @@ class AssignedTranscriptSource:
             return None
         return rows[0]
 
-    def native_events(self, entry, routes):
+    def native_events(self, record, routes, reader):
         from dataclasses import replace
         from .native_entries import TranscriptProjection
 
+        entry = record.entry
+        published = False
+        if entry.final_reply:
+            from .native_runtime_input import NativeRuntimeInput
+
+            user = reader.input_ancestor(record)
+            if user is not None:
+                lookup = stable_thread_lookup(self.recipient.created_at)
+                reference = NativeRuntimeInput.published_reply(self.root, reader, user, lookup)
+                if reference is not None:
+                    originals = self.rows("w.seq=?", (reference.seq,))
+                    published = bool(originals) and (
+                        originals[0].message.reference == reference
+                        and originals[0].audience.sender_lookup == lookup
+                    )
         events = entry.events(
             TranscriptProjection(
                 routes.get(entry.id),
@@ -179,6 +194,8 @@ class AssignedTranscriptSource:
         )
         result = []
         for event in events:
+            if published and isinstance(event, AssistantTranscript):
+                continue
             # An assigned request has one original wire record in this source.
             # Its native prompt is a consumer of that record, not another input.
             if isinstance(event, UserTranscript) and event.routed:
