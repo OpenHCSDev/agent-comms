@@ -197,13 +197,14 @@ class MessageEntry(NativeEntry):
 
     @property
     def tracked_user(self) -> MessageEntry | None:
-        from .native_pi import _DIGEST, _INPUT_ID
+        from .native_pi import _DIGEST
+        from .native_input_record import NativeInputIdText
 
         if self.message.input_id is None:
             return None
+        NativeInputIdText.decode(self.message.input_id)
         if (
             not self.message.user
-            or not _INPUT_ID.fullmatch(self.message.input_id)
             or self.message.input_digest is None
             or not _DIGEST.fullmatch(self.message.input_digest)
             or not self.id

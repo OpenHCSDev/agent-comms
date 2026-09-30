@@ -15,9 +15,9 @@ import os
 import secrets
 import stat
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
@@ -32,6 +32,10 @@ from .coordination_cohort import sealed_cohort_assignments
 from .envelope_claim_transitions import ExistingFileClaim
 from .store_files import _store_lock
 from .threads import Thread
+from .field_codec import FieldCodec
+from .declared_family import DeclaredFamily
+from .message_reference import MessageReference
+from .thread_identity import AdmissionIdentity, ThreadIncarnation
 
 _MAX_BYTES = 1024 * 1024
 
@@ -41,6 +45,68 @@ class PlannedWrite:
     resource: ExistingFileClaim
     contents: bytes
     operation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedWriteBinding:
+    root_id: str
+    source: MessageReference
+    assignment_id: str
+    admission: AdmissionIdentity
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
+    """The existing one-use plan file owns its state and exact source binding."""
+
+    family_discriminator = "status"
+    schema: Literal[1]
+    root_id: str
+    source_seq: int
+    source_message_id: str
+    claim_id: str
+    owner: str
+    incarnation: float
+    admission_epoch: int
+    expected_attempt_ordinal: Literal[1]
+    operation_id: str
+    resource: str
+    contents_b64: str
+    digest: str
+
+    @property
+    def binding(self) -> SelectedWriteBinding:
+        return SelectedWriteBinding(
+            self.root_id, MessageReference(self.source_seq, self.source_message_id),
+            self.claim_id, AdmissionIdentity(ThreadIncarnation(self.owner, self.incarnation), self.admission_epoch),
+        )
+
+    def require_accepted(self):
+        raise IdentityConflict("Selected write intent is already applied or uncertain")
+
+    def __post_init__(self):
+        if len(self.operation_id) != 32:
+            raise IdentityConflict("Selected write intent operation is invalid")
+
+
+class AcceptedWriteIntent(SelectedWriteIntent, declared_name="accepted"):
+    def require_accepted(self):
+        return self
+
+    def planned(self, worktree: str) -> PlannedWrite:
+        raw = base64.b64decode(self.contents_b64, validate=True)
+        if not raw or len(raw) > _MAX_BYTES or hashlib.sha256(raw).hexdigest() != self.digest:
+            raise IdentityConflict("Selected write intent bytes are corrupt")
+        resource = ExistingFileClaim(Path(self.resource))
+        resource.normalized(Path(worktree))
+        return PlannedWrite(resource, raw, self.operation_id)
+
+    def applied(self):
+        return AppliedWriteIntent(**{item.name: getattr(self, item.name) for item in fields(self)})
+
+
+class AppliedWriteIntent(SelectedWriteIntent, declared_name="applied"):
+    pass
 
 
 class SelectedWritePlans:
@@ -84,7 +150,7 @@ class SelectedWritePlans:
             raise IdentityConflict("Selected write plan directory is not private")
         return True
 
-    def _read(self, path: Path) -> dict | None:
+    def _read(self, path: Path) -> SelectedWriteIntent | None:
         if not self._validate_dir():
             return None
         try:
@@ -103,10 +169,10 @@ class SelectedWritePlans:
                 raise IdentityConflict("Selected write intent has unsafe identity")
             with os.fdopen(fd, "rb") as stream:
                 fd = -1
-                record = json.loads(stream.read())
-                if type(record) is not dict:
-                    raise IdentityConflict("Selected write intent is not an object")
-                return record
+                try:
+                    return FieldCodec.decode(SelectedWriteIntent, json.loads(stream.read()))
+                except (ValueError, TypeError) as error:
+                    raise IdentityConflict("Selected write intent is malformed") from error
         finally:
             if fd >= 0:
                 os.close(fd)
@@ -160,23 +226,14 @@ class SelectedWritePlans:
             self._prepare_dir()
             record_path = self._path(source_seq, lookup)
             operation_id = secrets.token_hex(16)
-            record = {
-                "schema": 1,
-                "status": "accepted",
-                "root_id": self.root_id,
-                "source_seq": source_seq,
-                "source_message_id": source_message_id,
-                "claim_id": selected[0].assignment_id,
-                "owner": owner.name,
-                "incarnation": owner.created_at,
-                "admission_epoch": admission_generation,
-                "expected_attempt_ordinal": 1,
-                "operation_id": operation_id,
-                "resource": str(path),
-                "contents_b64": base64.b64encode(raw).decode("ascii"),
-                "digest": hashlib.sha256(raw).hexdigest(),
-            }
-            data = json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
+            record = AcceptedWriteIntent(
+                schema=1, root_id=self.root_id, source_seq=source_seq,
+                source_message_id=source_message_id, claim_id=selected[0].assignment_id,
+                owner=owner.name, incarnation=owner.created_at, admission_epoch=admission_generation,
+                expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
+                contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
+            )
+            data = json.dumps(FieldCodec.encode(record), sort_keys=True, separators=(",", ":")).encode()
             try:
                 fd = os.open(
                     record_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
@@ -207,44 +264,29 @@ class SelectedWritePlans:
         row = self._read(path)
         if row is None:
             return None
-        if (
-            row.get("schema") != 1
-            or row.get("status") != "accepted"
-            or row.get("root_id") != self.root_id
-            or row.get("source_seq") != assignment.wire_seq
-            or row.get("source_message_id") != assignment.message_id
-            or row.get("claim_id") != assignment.assignment_id
-            or row.get("owner") != owner.name
-            or row.get("incarnation") != owner.created_at
-            or row.get("admission_epoch") != admission_generation
-            or row.get("expected_attempt_ordinal") != 1
-        ):
+        row = row.require_accepted()
+        expected = SelectedWriteBinding(
+            self.root_id, assignment.source, assignment.assignment_id,
+            AdmissionIdentity(owner.incarnation, admission_generation),
+        )
+        if row.binding != expected:
             raise IdentityConflict("Selected write intent is stale or uncertain")
-        raw = base64.b64decode(row["contents_b64"], validate=True)
-        if not raw or len(raw) > _MAX_BYTES or hashlib.sha256(raw).hexdigest() != row.get("digest"):
-            raise IdentityConflict("Selected write intent bytes are corrupt")
-        operation_id = row.get("operation_id")
-        if type(operation_id) is not str or len(operation_id) != 32:
-            raise IdentityConflict("Selected write intent operation is invalid")
-        resource = ExistingFileClaim(Path(row["resource"]))
-        resource.normalized(Path(owner.worktree))
-        return PlannedWrite(resource, raw, operation_id)
+        return row.planned(owner.worktree)
 
     def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
         path = self._path(assignment.wire_seq, stable_thread_lookup(owner.created_at))
         row = self._read(path)
-        if (
-            row is None
-            or row.get("status") != "accepted"
-            or row.get("operation_id") != operation_id
-        ):
+        if row is None:
+            raise IdentityConflict("Selected write intent is missing")
+        accepted = row.require_accepted()
+        if accepted.operation_id != operation_id:
             raise IdentityConflict("Selected write intent is no longer unique")
-        row["status"] = "applied"
+        completed = accepted.applied()
         temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         try:
             with os.fdopen(fd, "wb") as stream:
-                stream.write(json.dumps(row, sort_keys=True, separators=(",", ":")).encode())
+                stream.write(json.dumps(FieldCodec.encode(completed), sort_keys=True, separators=(",", ":")).encode())
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, path)

@@ -336,6 +336,10 @@ END"""
 
 @dataclass(frozen=True, slots=True)
 class ReplayAssessments(CoordinatorTable, TypedTable):
+    @property
+    def allows_retry(self) -> bool:
+        return self.replay_safe and self.facts == ReplayFact.NONE and not self.side_effects_possible
+
     execution_id: str = dataclass_field(
         metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
     )

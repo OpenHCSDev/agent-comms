@@ -19,11 +19,13 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_pi import NativeContextProof, NativePiUnavailable
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 from .native_runtime_input import NativeRuntimeInput
+from .native_input_record import NativeInputRecord, NativeInputReference
+from .message_reference import MessageReference
 from .typed_table import TypedRow
 
 
 @dataclass(frozen=True, slots=True)
-class HistoricalNativeInput:
+class HistoricalNativeInput(NativeInputRecord):
     wire_root_id: str
     source_seq: int
     source_message_id: str
@@ -41,6 +43,14 @@ class HistoricalNativeInput:
     # before launch (crash ordering), so equality cannot be established.
     expected_prompt_digest: str | None = None
     expected_prompt_equality_established: bool = False
+
+
+    @property
+    def reference(self) -> NativeInputReference:
+        return NativeInputReference(
+            self.input_id, self.assignment_id, self.stage,
+            self.context.session_id, self.context.request_generation,
+        )
 
 
 @dataclass(frozen=True)
@@ -138,19 +148,10 @@ def read_historical_native_inputs(
         if binding is not None:
             # A binding must name exactly this reserved input; anything else is
             # corruption, not a failed equality join.
-            if (
-                binding.wire_root_id != wire_root_id
-                or binding.stage != row.stage
-                or binding.assignment_id != row.assignment_id
-                or binding.execution_id != row.execution_id
-                or binding.attempt_ordinal != row.attempt_ordinal
-                or binding.owner_lookup != row.owner_lookup
-                or binding.owner_thread != row.owner_thread
-                or binding.owner_generation != row.owner_generation
-                or binding.source_seq != source.wire_seq
-                or binding.message_id != source.message_id
-            ):
+            if binding.identity != row.identity:
                 raise IdentityConflict("prelaunch binding does not match this live proof")
+            if binding.wire_root_id != wire_root_id or binding.source != MessageReference(source.wire_seq, source.message_id):
+                raise IdentityConflict("prelaunch binding names another canonical source")
             equality = expected_prompt_matches_journal(session_file, binding)
         else:
             equality = False

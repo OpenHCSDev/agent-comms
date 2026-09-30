@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
-from .thread_identity import ThreadIncarnation
+from .thread_identity import GenerationCounter, ThreadIncarnation
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -34,7 +34,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     has_started: ClassVar[bool] = False
     has_native_binding: ClassVar[bool] = False
     unresolved: ClassVar[bool] = False
-    cancellation_feedback: ClassVar[str] = "Delivery unconfirmed — input not retried. Inspect delivery before deciding whether to send a new message."
+    cancellation_feedback: ClassVar[str] = (
+        "Delivery unconfirmed — input not retried. Inspect delivery before deciding whether to send a new message."
+    )
 
     @property
     @abstractmethod
@@ -75,8 +77,12 @@ class InputAttempt(DeclaredFamily, affix="Input"):
         return False
 
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
-        *, snapshot: RegistrySnapshot,
+        self,
+        lease: TurnLeaseFence,
+        native_id: str,
+        sent_text: str,
+        *,
+        snapshot: RegistrySnapshot,
     ) -> StartedInput | None:
         return None
 
@@ -108,17 +114,15 @@ class StoredInput(InputAttempt):
     )
 
     def __post_init__(self) -> None:
-        if (
-            not self.key
-            or not self.owner
-            or not self.target
-            or type(self.source_text) is not str
-            or not self.source_text
-            or self.admission <= 0
-        ):
-            raise ValueError("Invalid ACP input identity")
+        try:
+            for value in (self.key, self.owner, self.target, self.source_text):
+                if not FieldCodec.decode(str, value):
+                    raise ValueError("Input identity text cannot be empty")
+            GenerationCounter.require_positive(self.admission)
+        except ValueError as error:
+            raise ValueError("Invalid ACP input identity") from error
         if self.sequence is not None and (
-            self.sequence <= 0
+            FieldCodec.decode(int, self.sequence) <= 0
             or (
                 self.key != f"bus:{self.sequence}"
                 and not self.key.startswith(f"bus:{self.sequence}:owner:")
@@ -258,8 +262,12 @@ class StartedInput(SentInput):
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
 
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
-        *, snapshot: RegistrySnapshot,
+        self,
+        lease: TurnLeaseFence,
+        native_id: str,
+        sent_text: str,
+        *,
+        snapshot: RegistrySnapshot,
     ) -> StartedInput | None:
         """Return this original row's recorded lease/input evidence only.
 
@@ -271,9 +279,11 @@ class StartedInput(SentInput):
             return None
         if not self.matches_admission(lease.admission_generation):
             return None
-        return self if self.matches_native(
-            turn_id=lease.turn_id, native_id=native_id, text=sent_text
-        ) else None
+        return (
+            self
+            if self.matches_native(turn_id=lease.turn_id, native_id=native_id, text=sent_text)
+            else None
+        )
 
     def proves_started(
         self,
@@ -296,7 +306,9 @@ class StartedInput(SentInput):
 class NotSentInput(StoredInput):
     unresolved = True
     public_status = "not_sent"
-    cancellation_feedback = "Not sent — cancellation completed before native delivery. Input not retried."
+    cancellation_feedback = (
+        "Not sent — cancellation completed before native delivery. Input not retried."
+    )
 
     def unsettled_for(self, owner: Thread, pending_key: str | None) -> bool:
         return False
