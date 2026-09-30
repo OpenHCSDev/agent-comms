@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields
@@ -15,6 +16,8 @@ from .messages import Message
 from .messaging import Messaging
 from .native_entries import TranscriptProjection
 from .native_transcript import NativeTranscript
+from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
@@ -99,9 +102,14 @@ class TranscriptReadIdentity:
     session_file: str
     native_revision: tuple[int, int, int, int] | None
     route_revision: TranscriptRouteRevision
-    bus_revision: tuple[int, int, int, int] | None
-    coordination_revision: tuple[int, int, int, int] | None
-    coordination_journal_revision: tuple[int, int, int, int] | None
+    bus_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
+    coordination_revision: tuple[int, int, int, int] | None = field(
+        metadata={"content_exclude": True}
+    )
+    coordination_journal_revision: tuple[int, int, int, int] | None = field(
+        metadata={"content_exclude": True}
+    )
+    reply_revision: PublishedReplyRevision
     read_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
     receipt_frontier: AssignedSourceCursor
     before: TranscriptCursor | None
@@ -112,14 +120,27 @@ class TranscriptReadIdentity:
     def content_thread(self):
         return self.thread.incarnation, self.thread.parent, self.thread.task
 
+    @projected(view="content", name="bus")
+    def content_bus(self):
+        # The certified frozen membership frontier owns relevant appends.
+        # Keep inode custody: replacing the source is never an unrelated append.
+        return self.bus_revision[0] if self.bus_revision is not None else None
+
+    @property
+    def content_identity(self) -> bytes:
+        """Hashable source-owned inputs for existing preparation resources."""
+        return json.dumps(
+            FieldCodec.project(self, "content"), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+
     def same_content(self, other: TranscriptReadIdentity) -> bool:
         """Fence content, including the original native publication proof.
 
         Reader acknowledgements and thread activity do not change page content.
-        Coordinator revisions remain fenced: a published obligation can commit
+        The scoped published relation remains fenced: an obligation can commit
         just after its wire append and replace the native final reply projection.
         """
-        return FieldCodec.project(self, "content") == FieldCodec.project(other, "content")
+        return self.content_identity == other.content_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +189,29 @@ class Transcripts:
         self.routes = TranscriptRoutes(root)
         self.page_reads = 0
 
+    def bind_page_read(
+        self,
+        name: str,
+        identity: TranscriptReadIdentity,
+        *,
+        before: TranscriptCursor | None = None,
+        after: TranscriptCursor | None = None,
+        through: TranscriptCursor | None = None,
+    ) -> TranscriptRead:
+        """Bind the original published witness to this actual source request."""
+        if identity.root != str(self.root):
+            raise StaleRevision("Transcript witness belongs to another root")
+        if (identity.before, identity.after, identity.through) != (before, after, through):
+            raise StaleRevision("Transcript witness belongs to another page window")
+        snapshot = self.registry.snapshot()
+        try:
+            requested = snapshot.owner_identity(name).incarnation
+        except KeyError as error:
+            raise StaleRevision("Transcript request has no current source") from error
+        if identity.thread.incarnation.resolved(snapshot) != requested:
+            raise StaleRevision("Transcript witness belongs to another original thread")
+        return TranscriptRead(self, identity)
+
     def capture_page_read(
         self,
         name: str,
@@ -176,22 +220,40 @@ class Transcripts:
         after: TranscriptCursor | None = None,
         through: TranscriptCursor | None = None,
     ) -> TranscriptRead:
+        read, _sources = self.capture_page_window(
+            name, before=before, after=after, through=through
+        )
+        return read
+
+    def capture_page_window(
+        self,
+        name: str,
+        *,
+        source_limit: int = 1,
+        before: TranscriptCursor | None = None,
+        after: TranscriptCursor | None = None,
+        through: TranscriptCursor | None = None,
+    ) -> tuple[TranscriptRead, tuple[CommittedDelivery, ...]]:
         """Expose the source owner's complete identity without parsing its page.
 
         Native bytes alone are insufficient: input display/routing and older
         bus receipts contribute to the same projection. Registry-owned thread
         metadata also carries inherited fork text and source selection.
         """
+        from .presentation import MessageNotification
+
+        if not 1 <= source_limit <= MessageNotification.window_limit:
+            raise ValueError("Transcript source capture requires a bounded window")
         thread, session_file, _ = self._thread_transcript_source(
             name,
             through.session_file if through is not None else None,
         )
         from .transcript_receipts import AssignedTranscriptSource
 
-        receipt_frontier = AssignedTranscriptSource.for_thread(
+        receipt_frontier, sources = AssignedTranscriptSource.for_thread(
             self.root, thread, self.bus.log
-        ).frontier
-        return TranscriptRead(
+        ).window(limit=source_limit)
+        read = TranscriptRead(
             self,
             TranscriptReadIdentity(
                 str(self.root),
@@ -203,6 +265,15 @@ class Transcripts:
                 file_revision(self.bus.log.path),
                 file_revision(self.root / "coordination.sqlite3"),
                 file_revision(self.root / "coordination.sqlite3-wal"),
+                (
+                    NativeRuntimeInput.publication_revision(
+                        self.root,
+                        NativeTranscript(Path(session_file)),
+                        stable_thread_lookup(thread.created_at),
+                    )
+                    if session_file and Path(session_file).is_file()
+                    else PublishedReplyRevision(0, 0)
+                ),
                 file_revision(self.bus.reads.path),
                 receipt_frontier,
                 before,
@@ -210,6 +281,7 @@ class Transcripts:
                 through,
             ),
         )
+        return read, sources
 
     def thread_transcript(
         self, name: str, *, max_messages: int = 20, max_bytes: int = 64 * 1024

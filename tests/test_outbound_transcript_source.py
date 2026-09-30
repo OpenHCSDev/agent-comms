@@ -10,6 +10,9 @@ from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
+from agent_comms.wire_log import WireLog
+from agent_comms.threads import Thread
+from agent_comms.transcripts import TranscriptCursor
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 import pytest
@@ -87,6 +90,8 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
         )
     after = comms.transcripts.capture_page_read("sender")
     assert not before.current()
+    assert before.content_current()
+    assert before.read() == sender_page
     assert after.identity.receipt_frontier == before.identity.receipt_frontier
     assert after.read() == sender_page
     assert comms.bus.log.path.read_bytes() == wire_before
@@ -112,3 +117,72 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
     assert target_outcome.state == "Checked — no response"
+
+
+def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    before = comms.transcripts.capture_page_read("beta")
+    page = before.read()
+    comms.messaging.send_message("sender", "alpha", "Unrelated original")
+    after = comms.transcripts.capture_page_read("beta")
+    assert before.identity.bus_revision != after.identity.bus_revision
+    assert before.identity.receipt_frontier == after.identity.receipt_frontier
+    assert not before.current()
+    assert before.content_current()
+    assert before.read() == page
+    assert before.identity.content_identity == after.identity.content_identity
+    assert hash(before.identity.content_identity) == hash(after.identity.content_identity)
+    comms.messaging.send_message("sender", "beta", "Related original")
+    assert not before.content_current()
+
+
+def test_open_source_rejects_replaced_wire_inode(tmp_path):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    before = comms.transcripts.capture_page_read("beta")
+    replacement = comms.bus.log.path.with_suffix(".replacement")
+    replacement.write_bytes(comms.bus.log.path.read_bytes())
+    replacement.replace(comms.bus.log.path)
+    with pytest.raises(RelationViolationError):
+        before.content_current()
+
+
+def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, monkeypatch):  # noqa: F811
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    verify = WireLog.verify_before_read_unlocked
+    barriers = []
+
+    def observed(log):
+        if log.path == comms.bus.log.path:
+            barriers.append(True)
+        return verify(log)
+
+    monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
+    view = comms.views.thread_presentation("beta")
+    assert len(barriers) == 1
+    assert view.read_identity.receipt_frontier.sequence == initial.message.seq
+    assert view.notifications[0].message.reference == initial.message.reference
+    assert view.notifications[0].recipient_identity.recipient_lookup == stable_thread_lookup(
+        view.read_identity.thread.created_at
+    )
+
+
+def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    identity = comms.views.thread_presentation("beta").read_identity
+    assert comms.transcripts.bind_page_read("beta", identity).identity is identity
+    with pytest.raises(StaleRevision, match="original thread"):
+        comms.transcripts.bind_page_read("alpha", identity)
+    with pytest.raises(StaleRevision, match="another root"):
+        wire(tmp_path / "other").transcripts.bind_page_read("beta", identity)
+    with pytest.raises(StaleRevision, match="page window"):
+        comms.transcripts.bind_page_read(
+            "beta", identity,
+            before=TranscriptCursor(identity.session_file, 0, identity.receipt_frontier),
+        )
+    comms.registry.rename("beta", "renamed")
+    assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
+    comms.registry.unregister("renamed")
+    comms.registry.remove("renamed")
+    comms.registry.declare(Thread("renamed", frozenset(), str(tmp_path)))
+    with pytest.raises(StaleRevision, match="original thread"):
+        comms.transcripts.bind_page_read("renamed", identity)

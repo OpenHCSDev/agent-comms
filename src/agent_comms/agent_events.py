@@ -237,19 +237,9 @@ class ManualCompactionEnd(CompactionEnd):
         return "" if self.aborted else "Summary: "
 
 
-@dataclass(frozen=True)
-class CompactionProgress(AgentEvent):
+@dataclass(frozen=True, kw_only=True)
+class CompactionProgress(CompactionSummaryProgress):
     chunk_index: int
-    source_bytes_done: int | None = None
-    source_bytes_total: int | None = None
-    summary_phase: str | None = None
-
-    @property
-    def source(self) -> CompactionSourceProgress | None:
-        if self.source_bytes_done is None or self.source_bytes_total is None:
-            return None
-        return CompactionSourceProgress(self.source_bytes_done, self.source_bytes_total,
-                                        self.summary_phase or "unknown")
 
 
 @dataclass(frozen=True)

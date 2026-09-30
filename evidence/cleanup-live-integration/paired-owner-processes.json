@@ -1,0 +1,79 @@
+[
+  {
+    "name": "agent-comms-ux",
+    "pid": 2060356,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "nra-architecture",
+    "pid": 2060437,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "nra-class-first-name-review",
+    "pid": 2060482,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "nra-domain-mapping",
+    "pid": 2060538,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "nra-ordered-branch-call-review",
+    "pid": 2060747,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "nra-roster-heuristic-map",
+    "pid": 2060832,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "openhcs-architecture-memory",
+    "pid": 2060908,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "openhcs-pr159-viewer-bind-owner",
+    "pid": 2061004,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "openhcs-helper",
+    "pid": 2061254,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "openhcs-helper2",
+    "pid": 2061391,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": null
+  },
+  {
+    "name": "comms428",
+    "pid": 2061578,
+    "runtime_matches": true,
+    "native_matches": true,
+    "phase": "PreparingPhase(detail='')"
+  }
+]

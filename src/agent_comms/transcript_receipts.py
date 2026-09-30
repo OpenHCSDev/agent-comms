@@ -152,10 +152,14 @@ class AssignedTranscriptSource:
 
     @property
     def frontier(self):
-        rows = self.rows()
+        return self.window()[0]
+
+    def window(self, *, limit=1):
+        """One certified original window owns both rows and its frontier."""
+        rows = self.rows(limit=limit)
         return AssignedSourceCursor(
             str(self.root), self.recipient, rows[0].message.seq if rows else 0
-        )
+        ), rows
 
     def page_rows(self, traversal, sequence, through, *, limit):
         predicate, parameters = traversal.predicate(sequence, through)

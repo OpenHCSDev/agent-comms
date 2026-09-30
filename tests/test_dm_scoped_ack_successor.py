@@ -12,6 +12,8 @@ from agent_comms.comms import wire
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
+from agent_comms.message_page import MessagePageRequest
+from agent_comms.store_files import _store_lock
 
 
 def _peer(root: Path, name: str) -> Thread:
@@ -26,6 +28,32 @@ def _mark(comms, peer, root, page):
         through=page.newest_seq,
         expected_display_basis=page.display_basis,
     )
+
+
+def test_dm_preparation_releases_native_admission_lock(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    comms.registry.declare(_peer(tmp_path, "peer"))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    for index in range(3):
+        comms.messaging.send("peer", viewer, f"original {index}")
+    read = MessagePageRequest.read
+    prepared = []
+
+    def inspect(request, log):
+        # An independent descriptor must acquire the real admission lock while
+        # the original reader still prepares the page; no replacement reader.
+        with _store_lock(tmp_path / "wire", blocking=False):
+            prepared.append(True)
+        page = read(request, log)
+        comms.messaging.send("peer", viewer, "arrived after opened page")
+        return page
+
+    monkeypatch.setattr(MessagePageRequest, "read", inspect)
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
+    assert prepared == [True]
+    assert page.messages[0].body == "original 2"
+    assert page.display_basis.older_unread
+    assert comms.bus.pending_count(viewer, "peer") == 4
 
 
 def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_path: Path):
@@ -130,7 +158,7 @@ def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, mo
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted")
-    original = comms.bus.dm_history_page
+    original = comms.bus.display_page
 
     def interpose(*args, **kwargs):
         page = original(*args, **kwargs)
@@ -140,7 +168,7 @@ def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, mo
         )
         return page
 
-    monkeypatch.setattr(comms.bus, "dm_history_page", interpose)
+    monkeypatch.setattr(comms.bus, "display_page", interpose)
     with pytest.raises(ValueError, match="changed while paging"):
         comms.views.dm_display_page("peer", worktree=str(tmp_path))
 
