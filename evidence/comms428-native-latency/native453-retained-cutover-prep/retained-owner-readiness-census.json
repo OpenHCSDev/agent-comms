@@ -1,0 +1,538 @@
+{
+  "owner": "Schrodinger453stageprep",
+  "observed_utc": "2026-09-30T17:19:46.446730+00:00",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "runtime_reader": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930/bin/python",
+  "eligible_idle_observations": [
+    {
+      "name": "agent-comms-ux",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "agent-comms-ux",
+            "created_at": 1790049004.0955005
+          },
+          "generation": 1087
+        },
+        "process": {
+          "pid": 3487626,
+          "start_time": 25894703
+        },
+        "admission_generation": 1051
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 7887122,
+        "bytes": 146073899,
+        "mtime_ns": 1790733767039935479,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "comms"
+      ],
+      "worktree": "/home/ts/.agent-comms",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "nra-architecture",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "nra-architecture",
+            "created_at": 1790049182.3907015
+          },
+          "generation": 1088
+        },
+        "process": {
+          "pid": 3487629,
+          "start_time": 25894836
+        },
+        "admission_generation": 1052
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 2659658,
+        "bytes": 41270257,
+        "mtime_ns": 1790716487175340407,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "nra"
+      ],
+      "worktree": "/home/ts/code/projects/nominal-refactor-advisor",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "nra-class-first-name-review",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "nra-class-first-name-review",
+            "created_at": 1790229371.6420214
+          },
+          "generation": 1089
+        },
+        "process": {
+          "pid": 3487708,
+          "start_time": 25894974
+        },
+        "admission_generation": 1053
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T05-56-25-895Z_01a0d1fc-92a7-73f8-bb18-c7b0ea66b194.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 2131083,
+        "bytes": 33922810,
+        "mtime_ns": 1790655649458505842,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "nra"
+      ],
+      "worktree": "/home/ts/code/projects/nominal-refactor-advisor",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "nra-domain-mapping",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "nra-domain-mapping",
+            "created_at": 1790116627.8997042
+          },
+          "generation": 1090
+        },
+        "process": {
+          "pid": 3487789,
+          "start_time": 25895109
+        },
+        "admission_generation": 1054
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-22T22-37-11-574Z_01a0cb44-1415-76ac-b5a0-26d3eb905f55.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 2135684,
+        "bytes": 13212421,
+        "mtime_ns": 1790617151965502838,
+        "read_or_replayed": false
+      },
+      "goal_id": "f24503310f684e5fa0280cb0d3463727",
+      "goal_revision": 13,
+      "tags": [
+        "nra"
+      ],
+      "worktree": "/home/ts/code/projects/nominal-refactor-advisor",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "nra-ordered-branch-call-review",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "nra-ordered-branch-call-review",
+            "created_at": 1790232054.218321
+          },
+          "generation": 1091
+        },
+        "process": {
+          "pid": 3487854,
+          "start_time": 25895254
+        },
+        "admission_generation": 1055
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T06-41-01-603Z_01a0d225-66a2-7297-99ec-8ea7702f4404.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 2131153,
+        "bytes": 34823262,
+        "mtime_ns": 1790430705822292509,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "nra"
+      ],
+      "worktree": "/home/ts/code/projects/nominal-refactor-advisor",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "nra-roster-heuristic-map",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "nra-roster-heuristic-map",
+            "created_at": 1790218471.1256046
+          },
+          "generation": 1092
+        },
+        "process": {
+          "pid": 3487864,
+          "start_time": 25895392
+        },
+        "admission_generation": 1056
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-24T02-54-37-390Z_01a0d156-1f4d-7042-a6bd-b9a7a8f962cf.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 2135372,
+        "bytes": 31647797,
+        "mtime_ns": 1790431475209826027,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "nra"
+      ],
+      "worktree": "/home/ts/code/projects/nominal-refactor-advisor",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "refactor-r1",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "refactor-r1",
+            "created_at": 1790606381.4139948
+          },
+          "generation": 1093
+        },
+        "process": {
+          "pid": 3487868,
+          "start_time": 25895527
+        },
+        "admission_generation": 1057
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openrouter/z-ai/glm-5.3-flash",
+      "thinking_level": "off",
+      "session": null,
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "nra",
+        "refactor"
+      ],
+      "worktree": "/home/ts/wt/nra-refactor2-r1-20260928",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "openhcs-architecture-memory",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-architecture-memory",
+            "created_at": 1790654215.0835924
+          },
+          "generation": 1094
+        },
+        "process": {
+          "pid": 3487904,
+          "start_time": 25895668
+        },
+        "admission_generation": 1058
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-nominal-refactor-advisor--/2026-09-29T04-00-11-362Z_01a0eb51-f263-778e-b2f4-a2d3a9b65d01.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 2132406,
+        "bytes": 41416990,
+        "mtime_ns": 1790694124868455531,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "openhcs"
+      ],
+      "worktree": "/home/ts/code/projects/openhcs",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "openhcs-pr159-viewer-bind-owner",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-pr159-viewer-bind-owner",
+            "created_at": 1790657026.7285714
+          },
+          "generation": 1095
+        },
+        "process": {
+          "pid": 3487906,
+          "start_time": 25895802
+        },
+        "admission_generation": 1059
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T06-28-33-914Z_01a0ebd9-c9fa-7018-9041-3f4fca04885f.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 7911772,
+        "bytes": 42357366,
+        "mtime_ns": 1790724126004721025,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "openhcs"
+      ],
+      "worktree": "/home/ts/.agent-comms",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "nominal-refactor-advisor-2",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "nominal-refactor-advisor-2",
+            "created_at": 1790700391.614946
+          },
+          "generation": 1096
+        },
+        "process": {
+          "pid": 3487916,
+          "start_time": 25895935
+        },
+        "admission_generation": 1060
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "3f052b1775b6bf7a41cefb0374608e1369740d6839b0284871159d92f5344ef5",
+      "model": "openrouter/z-ai/glm-5.3-flash",
+      "thinking_level": "off",
+      "session": null,
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/code/projects/nominal-refactor-advisor",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "openhcs-helper",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper",
+            "created_at": 1790708584.4423254
+          },
+          "generation": 1097
+        },
+        "process": {
+          "pid": 3488065,
+          "start_time": 25896068
+        },
+        "admission_generation": 1061
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 7887398,
+        "bytes": 42916988,
+        "mtime_ns": 1790723931242691608,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "openhcs"
+      ],
+      "worktree": "/home/ts/code/projects/openhcs",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "openhcs-helper2",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "openhcs-helper2",
+            "created_at": 1790713653.7134795
+          },
+          "generation": 1098
+        },
+        "process": {
+          "pid": 3488089,
+          "start_time": 25896208
+        },
+        "admission_generation": 1062
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openrouter/z-ai/glm-5.3-flash",
+      "thinking_level": "off",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 7888084,
+        "bytes": 42825480,
+        "mtime_ns": 1790782125544814845,
+        "read_or_replayed": false
+      },
+      "goal_id": null,
+      "goal_revision": null,
+      "tags": [
+        "openhcs"
+      ],
+      "worktree": "/home/ts/code/projects/openhcs",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    },
+    {
+      "name": "comms428",
+      "selection": {
+        "identity": {
+          "incarnation": {
+            "name": "comms428",
+            "created_at": 1790725198.0008519
+          },
+          "generation": 1099
+        },
+        "process": {
+          "pid": 3488092,
+          "start_time": 25896350
+        },
+        "admission_generation": 1063
+      },
+      "original_interpreter": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/python",
+      "source_binary": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930/bin/pi-comms-native",
+      "original_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "original_root_id": "e206f3766e60451a989ca34df0e2a94b",
+      "original_native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+      "launch_arguments_sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking_level": "high",
+      "session": {
+        "path": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-29T23-39-56-904Z_01a0ef8a-0c69-75a1-86fe-53cd38ab0d18.jsonl",
+        "stat_device": 2084,
+        "stat_inode": 2665625,
+        "bytes": 44168354,
+        "mtime_ns": 1790778833194979323,
+        "read_or_replayed": false
+      },
+      "goal_id": "9a316e24ecf345adad66b8f8cab91494",
+      "goal_revision": 2,
+      "tags": [
+        "comms"
+      ],
+      "worktree": "/home/ts/wt/comms428",
+      "idle_checked_by": "Thread.require_idle",
+      "source_launch_configuration": "RetainedOwnerLaunch.capture exact owner+admission+ProcessIdentity; credentials/settings kept in RAM only, not persisted"
+    }
+  ],
+  "eligible_count": 13,
+  "excluded": [],
+  "seconds": 0.007959641981869936,
+  "public_effects": 0,
+  "fences": 0,
+  "stops": 0,
+  "starts": 0,
+  "prompts": 0,
+  "credential_values_persisted": false,
+  "disposition": "READONLY OBSERVATION ONLY, not input/restart/admission authority; existing operator must freshly recapture and fence exact original selection at cutover."
+}
