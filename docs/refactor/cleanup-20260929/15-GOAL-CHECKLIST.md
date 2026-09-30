@@ -1,3 +1,18 @@
+## Next paired install: native read latency, input and answer custody
+
+Accepted Arendt456 retained-history native completion/cancel checkpoint reduces
+repeated context verification from about2s to38–43ms; original consumed tool
+intervals97–231ms. Final sourcec5f9bb45 is integrating into Einstein458 with
+current main1f42575c, preserving merged42817a43 ancestry and merged461.
+Mendel owns428 scorer/CLI validation against the installed FieldCodec;428 is
+plans and a synthetic fixture, not production task-aware memory activation.
+461's runtime_info.json reset joins the declared quiet runtime-store cutover.
+Parent250 pushed49b80af2 with Kepler251 final11aa9d9e. Heisenberg252 fixes the
+preserved duplicate-answer failure before one corrected joint installed
+native/ACP/UI journey. Full performance continues independently in253.
+The new pair is not installed yet. Send Tristan the requested persistent
+question prompt only after activation and actual affected live-path acceptance.
+
 ## 2026-09-30 native sidebar custody checkpoint merged and installed
 
 Toad249 merged98bab35f834abb0793d0e066489b751a59393011 after complete

@@ -61,7 +61,7 @@ Arendt measured NativeContextProof.read_evidence on an isolated original
 every tool start repeats that full decode. The current fix retains the original
 evidence resource and verifies pinned inode/prefix integrity while decoding
 appended entries, still checking the original indexed context proof. It is in
-progress, not yet installed or measured after the change.
+progress at that measurement; the accepted installed-native results follow below.
 The121-second request already reported158,336 cached input tokens plus7,434
 uncached and1,950 output tokens including516 reasoning tokens. It cannot be
 attributed wholly to a cold prompt. Original usage is retained in model-usage.json;
@@ -75,3 +75,30 @@ separately; no ready flag or topology registry is permitted. Heisenberg retains
 The next250 source pair49557473 normally includes merged249 and251aafb with
 Core458d12f2d87;252's substantive source fix must join before the next actual
 first-fork/continuous-input journey. Frozen failed6fab/b3b remains untouched.
+
+## Accepted read-latency checkpoint and next paired build
+
+Arendt456 published2ae88cdb and final private-ancestor guardc5f9bb45.
+Two noneditable installed Core/native593 runs on the original44.7MB history
+passed completion and cancellation, including legitimate appends during the
+initial typed decode. Repeated context checks took38–43ms; original Python
+tool-event consumption intervals took97–231ms, not pure filesystem I/O.
+The original source hashes were unchanged and acquired readers/children closed.
+Eighteen source controls preserve prefix, inode, current proof, generation and
+private-ancestor refusal. This checkpoint is accepted for integration, not live.
+Actual receipts:456 evidence/native-input-custody/retained-native-tool-{complete,cancel}-20260930.json.
+
+Einstein458 normally integrates current main1f42575c, including merged428
+17a43e02 and merged461. Mendel owns rigorous428 scorer/exporter acceptance
+against the current installed FieldCodec. The merge contains the plan and
+synthetic evaluation fixture, not production S1–S4 implementation or a measured
+model-retention gain. Its source ancestry must remain in the next Core pin.
+461 requires resetting only runtime_info.json under the existing quiet-cutover
+custody before new readers start; native, durable and UNKNOWN records survive.
+
+Parent250 source49b80af2 normally includes merged249 and Kepler251 final11aa9d9e.
+Heisenberg252 owns the remaining live/saved answer-source crossing; Einstein
+and Kepler coordinate one corrected continuous installed native/ACP/UI journey.
+Schrodinger builds the final coherent pair after that source freeze. Current
+live build remains Core6feb/Toad98bab. Tristan requested a persistent question
+notification after the new install passes its affected actual live paths.
