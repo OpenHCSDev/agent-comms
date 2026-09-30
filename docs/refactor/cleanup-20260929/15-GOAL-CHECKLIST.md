@@ -835,3 +835,32 @@ Sch's compatible draft228 gate failed before child opening. Both real failures
 remain open. Heisenberg227 pushed0433dc37: parked sources retain bounded prepared
 pages/reader while final disposal and revision changes revoke them. Its source
 A/B/A reuse passed; actual installed acceptance is still pending.
+
+### First UI default live check complete; native startup checkpoint merged
+
+Kepler's corrected run03 used the normal default launcher, no runtime/ACP
+override, real st on an isolated display and the original 41 MB native history.
+The physical Delete sequence yields abcf without Help. End targets the actual
+native HistoryWindow; End and four stationary seconds retain readable body and
+chrome, scroll59 equals max59 and tail following remains true. The parent
+directly viewed the End and stationary frames. Original source/owner and runtime
+are unchanged; owned UI processes exit zero and cleanup is empty. FFmpeg255 is
+its requested SIGINT, retained in the receipt. No prompts or provider calls.
+The separate review receipt preserves raw recorder assessment and run02 failure:
+evidence/cleanup-live-integration/first-ui-end-keypad-default-verified.json.
+This accepts scoped default startup/Delete/End, not full warm-focus/performance
+or whole-fleet stability. Restarting Toad loads this installed UI cohort.
+
+Core443 merged f124db8bc2813d5216d56ab101330230cec513ec at10:36:42Z, exact
+reviewed76503459. All cold native callers share PersistentPiSession child
+acquisition, NativeStartupAdmission and attestation/watchdog scheduling.
+Duplicate tracked child/reader/stdin/initial identity/response and backend
+prompt-dispatched authorities are deleted; PromptAdmission owns unwritten vs
+writer-entered disposition. The original child failure scope retains bounded
+stderr through existing private diagnostics. Production168 deleted/233 added;
+no readiness or whole-turn cap increase. Actual controlled native readiness,
+EOF, cancel and triage/four-tools/one-publication checks pass; the real configured
+R1 zero-prompt GetState probe took741ms. The known ready-response discard was
+reproduced before fixing it. Historical seq160 remains UNKNOWN/unreplayed and
+the precise historical IPC cause is not established. This merged checkpoint is
+not default-installed: Arendt442 phased C3 activation is the remaining relation.
