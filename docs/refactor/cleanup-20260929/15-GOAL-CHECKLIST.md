@@ -802,3 +802,36 @@ Kepler owns bounded actual normal-launcher startup/Delete/End verification
 without an override or provider call. Installed is not yet live-verified.
 Independent227 warm history/adaptive scroll,228 fork-task/tags,230 action
 ownership,442 phased C3 cutover and443 native startup work continue.
+
+### Actual default Delete accepted; C0 widget action checkpoint merged
+
+Kepler's actual normal-launcher run02 opened the original 41 MB journal and
+the installed first UI cohort without a runtime override. The physical editor
+sequence produced abcf, not Help; the parent viewed phase-edited.png directly.
+Original history stayed unchanged and cleanup had no leftovers. Its additional
+capture exporter queried the logical view rather than its native Screen owner,
+so history-hit/End claims were not accepted from this attempt. Kepler corrected
+only that existing tool boundary and owns the bounded remaining End check.
+
+Toad230 merged 4a0bcc6755bcba2ae7e8108a9608aa6e4eb1eefe at10:33:08Z,
+reviewed exact cd6804a3. NativeAction and the existing declared families own
+binding, availability and effects; native namespaces derive from them.
+225 production lines were deleted and276 added, including replacement of
+Conversation/Question switches and PermissionsScreen's copied options/state.
+One actual native saved-history journey verified block navigation, pointer
+choice, disabled choices, exactly one original callback, permission forwarding,
+declaration-only extension, editor document/undo identity and two-Escape cancel.
+Two localhost native requests, no paid calls, no leaked processes. Permission
+content was injected through the real client controller, not provider-issued;
+no diff-content or full chronology acceptance is claimed. The parent inspected
+the actual question frame and reviewed final source changes. Ratchet positive
+delta zero; three affected guards passed. This checkpoint is not default-live.
+
+That native journey exposed a second rendering of one canonical response after
+reconnect. Original evidence is protected; Schrodinger owns new draft232 via the
+existing captured-source/publication relation, without text deduplication.
+Einstein owns new draft233 for canonical fork registration reaching the roster;
+Sch's compatible draft228 gate failed before child opening. Both real failures
+remain open. Heisenberg227 pushed0433dc37: parked sources retain bounded prepared
+pages/reader while final disposal and revision changes revoke them. Its source
+A/B/A reuse passed; actual installed acceptance is still pending.
