@@ -241,8 +241,7 @@ class FreshPrivateSession:
     selected_model: ClassVar[tuple[str, str]] = ("openrouter", "z-ai/glm-5.3-flash")
     path: Path
     session_id: str
-    device: int
-    inode: int
+    file_identity: FileIdentity
     header_sha256: str
     bootstrap_sha256: str
     bootstrap_size: int
@@ -255,8 +254,7 @@ class FreshPrivateSession:
         key: object,
         path: Path,
         session_id: str,
-        device: int,
-        inode: int,
+        file_identity: FileIdentity,
         header_sha256: str,
         bootstrap_sha256: str,
         bootstrap_size: int,
@@ -267,19 +265,13 @@ class FreshPrivateSession:
             raise TypeError("Fresh-session enrollment cannot be reconstructed from a file")
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "session_id", session_id)
-        object.__setattr__(self, "device", device)
-        object.__setattr__(self, "inode", inode)
+        object.__setattr__(self, "file_identity", file_identity)
         object.__setattr__(self, "header_sha256", header_sha256)
         object.__setattr__(self, "bootstrap_sha256", bootstrap_sha256)
         object.__setattr__(self, "bootstrap_size", bootstrap_size)
         object.__setattr__(self, "bootstrap_leaf_id", bootstrap_leaf_id)
         object.__setattr__(self, "selected_thinking_level", selected_thinking_level)
         object.__setattr__(self, "creator_pid", os.getpid())
-
-    @property
-    def file_identity(self) -> FileIdentity:
-        """Original minted POSIX file identity, never reconstructed enrollment."""
-        return FileIdentity(self.device, self.inode)
 
     def __reduce__(self) -> NoReturn:
         raise TypeError("Fresh-session enrollment cannot cross a process boundary")
@@ -513,8 +505,7 @@ def create_fresh_private_session(
             _MINT,
             path,
             session_id,
-            info.st_dev,
-            info.st_ino,
+            FileIdentity.from_stat(info),
             hashlib.sha256(header).hexdigest(),
             hashlib.sha256(bootstrap).hexdigest(),
             len(bootstrap),
