@@ -19,6 +19,9 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     def replaces(self, owner: OwnerIdentity | None) -> bool:
         return False
 
+    def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
+        return False
+
 
 @dataclass(frozen=True, slots=True)
 class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
@@ -29,6 +32,9 @@ class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
 class LiveThreadOwnerBinding(ThreadOwnerBinding):
     owner: OwnerIdentity
     process: ProcessIdentity
+
+    def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
+        return replacement.replaces(self.owner)
 
     def replaces(self, owner: OwnerIdentity | None) -> bool:
         # The attachment's original owner lease survives PID reuse. Only a

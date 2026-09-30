@@ -35,7 +35,7 @@ from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .transcript_updates import TranscriptReplay
-from .session_load import SessionLoadAdmission
+from .session_load import SessionLoadAdmission, FailedSessionLoadAdmission
 
 
 class SessionLifecycle:
@@ -195,13 +195,18 @@ class SessionLifecycle:
         )
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
+        snapshot = self.comms.registry.snapshot()
+        binding = snapshot.owner_binding(thread.name)
+        snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
+        failed_command = FailedSessionLoadAdmission(binding)
         proxy = self.effects._create_runtime_proxy(thread, session_id)
         try:
             metadata = await proxy.subscribe()
         except (OSError, RuntimeError, TypeError, ValueError) as error:
             await proxy.close()
             raise RequestError.invalid_params(
-                {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}"}
+                {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}",
+                 **failed_command.failure_metadata()}
             ) from error
         self.proxies[session_id] = proxy
         return LoadSessionResponse(

@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .thread_presentation import LiveThreadOwnerBinding
+from .thread_presentation import LiveThreadOwnerBinding, ThreadOwnerBinding
+from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .session_lifecycle import AttachedSessionLifecycle
@@ -21,6 +22,9 @@ class SessionLoadAdmission(DeclaredFamily, affix="SessionLoadAdmission"):
 
     def metadata(self) -> dict:
         return {"agentCommsLoad": FieldCodec.encode(self)}
+
+    def superseded_by(self, binding: ThreadOwnerBinding, attached_owner: OwnerIdentity | None) -> bool:
+        return binding.replaces(attached_owner)
 
     @abstractmethod
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread": ...
@@ -47,3 +51,19 @@ class ExistingSessionLoadAdmission(SessionLoadAdmission):
         if not self.binding.process.alive():
             raise RelationViolationError("Read-only attachment owner exited; no owner was started")
         return snapshot.require_active(thread.name)
+
+
+@dataclass(frozen=True, slots=True)
+class FailedSessionLoadAdmission(SessionLoadAdmission):
+    """The original failed load command's witness; never an input permission."""
+
+    binding: ThreadOwnerBinding
+
+    def failure_metadata(self) -> dict:
+        return {"agentCommsLoadFailure": FieldCodec.encode(self)}
+
+    def superseded_by(self, binding: ThreadOwnerBinding, attached_owner: OwnerIdentity | None) -> bool:
+        return self.binding.superseded_by(binding)
+
+    async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
+        raise RelationViolationError("A failed load command cannot be replayed")
