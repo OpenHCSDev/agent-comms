@@ -15,13 +15,15 @@ import hashlib
 import json
 import os
 import stat
+from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NoReturn
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 from uuid import uuid4
 
 from .pi_vocabulary import ThinkingLevel
+from .declared_family import DeclaredFamily
 from .native_entries import (
     ModelChangeEntry,
     NativeEntry,
@@ -36,12 +38,84 @@ from .native_pi import (
     _read_private_file,
 )
 
+if TYPE_CHECKING:
+    from .pi_payloads import StateData
+
+
 _MINT = object()
 _MAX_STARTUP_APPEND = 2048
 
 
+class FreshRuntimeRule(DeclaredFamily, affix="FreshRuntimeRule"):
+    """Named observed-runtime constraints of the original fresh enrollment."""
+
+    explanation: ClassVar[str]
+
+    @classmethod
+    @abstractmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        raise NotImplementedError
+
+
+class SessionChangedFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source session identity differs"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.session_id != enrolled.session_id
+
+
+class ModelChangedFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source model differs"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return not state.matches_model(enrolled.selected_model)
+
+
+class ThinkingChangedFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source thinking level differs"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return ThinkingLevel.optional_name(state.thinking_level) != enrolled.selected_thinking_level
+
+
+class MessagesPresentFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source is not empty"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.message_count != 0
+
+
+class PendingMessagesFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source pending messages differ"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.pending_message_count != 0
+
+
+class StreamingFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source is not attested idle"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.is_streaming is not False
+
+
+class CompactingFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source compaction state is not idle"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.is_compacting is not False
+
+
 @dataclass(frozen=True, init=False, slots=True, weakref_slot=True)
 class FreshPrivateSession:
+    selected_model: ClassVar[tuple[str, str]] = ("openrouter", "z-ai/glm-5.3-flash")
     path: Path
     session_id: str
     device: int
@@ -81,6 +155,11 @@ class FreshPrivateSession:
 
     def __reduce__(self) -> NoReturn:
         raise TypeError("Fresh-session enrollment cannot cross a process boundary")
+
+    def require_runtime(self, state: StateData) -> None:
+        for rule in FreshRuntimeRule.members_with(FreshRuntimeRule):
+            if rule.violated(self, state):
+                raise NativePiUnavailable(f"{rule.declared_name}: {rule.explanation}")
 
     @staticmethod
     def require_launch_header(path: Path, selected_thinking_level: str | None) -> None:
@@ -245,10 +324,9 @@ class FreshPrivateSession:
                 raise NativePiUnavailable("Selected startup has extra or partial entries")
             model = ModelChangeEntry.read_startup(lines[0])
             thinking = ThinkingLevelChangeEntry.read_startup(lines[1])
-            selected_model = ("openrouter", "z-ai/glm-5.3-flash")
             if (
-                not model.matches_startup(selected_model, self.selected_thinking_level)
-                or not thinking.matches_startup(selected_model, self.selected_thinking_level)
+                not model.matches_startup(self.selected_model, self.selected_thinking_level)
+                or not thinking.matches_startup(self.selected_model, self.selected_thinking_level)
                 or model.parent_id != self.bootstrap_leaf_id
                 or thinking.parent_id != model.id
                 or model.id == thinking.id
@@ -322,8 +400,8 @@ def create_fresh_private_session(
                 "id": model_entry_id,
                 "parentId": None,
                 "timestamp": timestamp,
-                "provider": "openrouter",
-                "modelId": "z-ai/glm-5.3-flash",
+                "provider": FreshPrivateSession.selected_model[0],
+                "modelId": FreshPrivateSession.selected_model[1],
             },
             {
                 "type": "thinking_level_change",

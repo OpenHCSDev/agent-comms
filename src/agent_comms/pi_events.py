@@ -720,7 +720,7 @@ class ToolExecutionEnd(PiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .tool_results import ToolDiff
+        from .native_tools import NativeTool
 
         name = self.tool_name or "tool"
         is_ok = self.is_error is not True
@@ -733,7 +733,7 @@ class ToolExecutionEnd(PiEvent):
             name=name,
             ok=is_ok,
             output=self.result.text() if self.result is not None else "",
-            diff=ToolDiff.from_result(name, self.result, is_ok),
+            diff=NativeTool.for_name(name).result_diff(self.result, is_ok),
         )
 
 

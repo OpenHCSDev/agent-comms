@@ -149,8 +149,13 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
     wire_tag = "type"
     opaque: ClassVar[bool] = False
     text: ClassVar[str] = ""
-    final_text_allowed: ClassVar[bool] = False
     tool_round_allowed: ClassVar[bool] = False
+
+    @property
+    def final_text(self) -> str:
+        from .native_pi import NativePiUnavailable
+
+        raise NativePiUnavailable("Native Pi assistant returned non-text content")
 
     @classmethod
     def wire_member(cls, value):
@@ -174,7 +179,11 @@ class TextContent(PiContent):
 
     text: str = field()
     text_signature: str | None = wire_field("textSignature")
-    final_text_allowed = tool_round_allowed = True
+    tool_round_allowed = True
+
+    @property
+    def final_text(self) -> str:
+        return self.text
 
 
 @dataclass(frozen=True)
@@ -186,7 +195,11 @@ class ThinkingContent(PiContent):
 
     thinking: str = ""
     thinking_signature: str | None = wire_field("thinkingSignature")
-    final_text_allowed = tool_round_allowed = True
+    tool_round_allowed = True
+
+    @property
+    def final_text(self) -> str:
+        return ""
 
 
 @dataclass(frozen=True)
@@ -362,6 +375,9 @@ class UnknownDiagnostic(PiDiagnostic):
 
 @dataclass(frozen=True)
 class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
+    def tracked_end(self, session) -> None:
+        """Non-assistant messages cannot supply a tracked final response."""
+
     @property
     def parts(self) -> tuple[PiContent, ...]:
         return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
@@ -450,6 +466,20 @@ class AbsentMessage(PiMessage):
 
 class AssistantMessage(PiMessage):
     assistant = True
+
+    def tracked_end(self, session) -> None:
+        from .native_pi import NativePiUnavailable
+
+        if self.error_message:
+            session.terminal_error = self.error_message
+            return
+        if self.content is None or isinstance(self.content, str):
+            raise NativePiUnavailable("Native Pi assistant content is malformed")
+        self.stop_reason.tracked(session, self)
+
+    @property
+    def authoritative_text(self) -> str:
+        return "".join(part.final_text for part in self.content)
 
     @property
     def final_reply(self):
@@ -560,7 +590,7 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
     details: Any = None
 
     def transcript_events(self, context):
-        from .tool_results import ToolDiff
+        from .native_tools import NativeTool
         from .transcript_events import ToolEndTranscript
 
         if not self.parts:
@@ -573,7 +603,7 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,
                 ok=not self.is_error,
-                diff=ToolDiff.from_result(self.tool_name, result, not self.is_error),
+                diff=NativeTool.for_name(self.tool_name).result_diff(result, not self.is_error),
             )
         ]
         return events
@@ -672,6 +702,10 @@ class PiModel(PiPayload):
     context_window: int | None = wire_field("contextWindow")
 
     @property
+    def identity(self):
+        return self.provider, self.id
+
+    @property
     def display_name(self):
         name = self.id or self.name
         return f"{self.provider}/{name}" if self.provider and name else name or self.provider
@@ -744,6 +778,9 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     is_streaming: bool | None = wire_field("isStreaming")
     is_compacting: bool | None = wire_field("isCompacting")
 
+    def matches_model(self, identity: tuple[str, str]) -> bool:
+        return self.model is not None and self.model.identity == identity
+
     @property
     def session_busy(self) -> bool:
         return self.is_streaming is True or self.is_compacting is True
@@ -801,6 +838,32 @@ class PiToolResult(PiPayload):
     def text(self, limit=4000):
         text = "".join(part.text for part in self.content)
         return text[:limit] + ("…" if len(text) > limit else "")
+
+
+@dataclass(frozen=True)
+class NativeEditDetails(PiPayload):
+    """Native edit metadata, decoded only when projecting actual edit evidence."""
+
+    patch: str | None = None
+    diff: str | None = None
+    first_changed_line: int | None = wire_field("firstChangedLine")
+
+    @classmethod
+    def capture_diff(cls, raw):
+        from .tool_results import ToolDiff
+
+        try:
+            details = cls.from_wire(raw)
+        except (ValueError, TypeError):
+            # Extension-defined metadata may be opaque. Preserve the original
+            # result and output; unsupported formatting grants no diff evidence.
+            return None
+        if details.patch and details.patch.strip():
+            return ToolDiff(details.patch)
+        if details.diff and details.diff.strip():
+            # This is the external numbered edit format in retained Pi journals.
+            return ToolDiff(details.diff, "numbered")
+        return None
 
 
 class McpCallPolicy(DeclaredFamily, affix="McpCallPolicy"):
