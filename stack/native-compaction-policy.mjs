@@ -9,11 +9,19 @@ const strategies = Object.freeze({
 
 /** One bounded scheduler for every native map and reduction source. */
 export class CompactionPlan {
-    constructor(segments, workers) { Object.assign(this, { segments, workers }); }
-    async execute(consume, controller) {
-        const iterator = this.segments[Symbol.iterator]();
+    #running = new Set();
+    #pending = [];
+    #controller;
+    constructor(segments, workers) {
+        Object.assign(this, { segments, workers });
+        this.startedAtMs = Math.floor(performance.timeOrigin + performance.now());
+    }
+    /** Source orchestration never holds a provider slot while awaiting children. */
+    async execute(consume, controller, segments = this.segments) {
+        // Retain the actual source scope's cancellation authority, not a copy.
+        this.#controller ??= controller;
+        const iterator = segments[Symbol.iterator]();
         let index = 0;
-        let failure;
         const worker = async () => {
             try {
                 while (!controller.signal.aborted) {
@@ -21,13 +29,54 @@ export class CompactionPlan {
                     if (next.done) return;
                     await consume(next.value, index++);
                 }
-            } catch (error) { failure ??= error; controller.abort(error); }
+            } catch (error) { this.#controller.abort(error); controller.abort(error); }
         };
         try {
             await Promise.allSettled(Array.from({ length: this.workers }, worker));
-            if (failure) throw failure;
+            this.#controller.signal.throwIfAborted();
             controller.signal.throwIfAborted();
         } finally { iterator.return?.(); }
+    }
+    /** All leaf requests, including nested reductions, share this owned bound. */
+    run(produce, signal) {
+        signal?.throwIfAborted();
+        return new Promise((resolve, reject) => {
+            const job = { produce, signal, resolve, reject };
+            job.abort = () => {
+                this.#pending.splice(this.#pending.indexOf(job), 1);
+                reject(signal.reason);
+            };
+            signal?.addEventListener('abort', job.abort, { once: true });
+            this.#pending.push(job);
+            this.#drain();
+        });
+    }
+    #drain() {
+        while (this.#pending.length && this.#running.size < this.workers) {
+            const job = this.#pending.shift();
+            job.signal?.removeEventListener('abort', job.abort);
+            const request = Promise.resolve().then(() => {
+                job.signal?.throwIfAborted();
+                return job.produce();
+            });
+            this.#running.add(request);
+            request.then(job.resolve, error => {
+                this.#controller?.abort(error);
+                job.reject(error);
+            }).finally(() => {
+                this.#running.delete(request);
+                this.#drain();
+            });
+        }
+    }
+    progress(phase) {
+        return {
+            sourceBytesDone: this.segments.reduce((sum, source) => sum + source.consumedBytes, 0),
+            sourceBytesTotal: this.segments.reduce((sum, source) => sum + source.sourceBytes, 0),
+            summaryPhase: phase,
+            startedAtMs: this.startedAtMs,
+            observedAtMs: Math.floor(performance.timeOrigin + performance.now()),
+        };
     }
 }
 export class CompactionPolicy {
