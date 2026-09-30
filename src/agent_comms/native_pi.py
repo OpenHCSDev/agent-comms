@@ -22,6 +22,8 @@ from uuid import uuid4
 
 from . import pi_events as pi
 from .native_arguments import NativeArguments
+from .field_codec import FieldCodec
+from .native_input_record import NativeInputCommit, NativeInputIdText
 from .native_entries import NativeEntry, SessionEntry
 from .pi_vocabulary import ThinkingLevel
 from .selected_tool_broker import NativeToolMode
@@ -31,7 +33,6 @@ if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
 
 CAPABILITY = "pi-native-input-v1-live-only"
-_INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 # Every tracked launch must remove Pi session retry, provider transport retry,
 # and overflow compaction-retry before an input can reach any provider.
@@ -165,6 +166,36 @@ class NativeContextRecord:
         }
     )
 
+    @classmethod
+    def from_events(cls, input_id, session_id, input_event, context_event):
+        """Strictly join the two emitted records through the context declaration.
+
+        This is an emitted receipt, not proof of durable inclusion. A journal
+        read must independently corroborate the same complete located record.
+        """
+        record = FieldCodec.decode(cls, {
+            item.metadata.get("wire_name", item.name): getattr(context_event, item.name)
+            for item in fields(cls)
+        })
+        if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
+            raise NativePiUnavailable("Native Pi context names another original input")
+        if record.input_commit != NativeInputCommit.from_event(input_event):
+            raise NativePiUnavailable("Native Pi input/context events disagree")
+        return record
+
+    @property
+    def input_commit(self) -> NativeInputCommit:
+        return NativeInputCommit(self.input_id, self.session_id, self.session_entry_id)
+
+    def __post_init__(self):
+        NativeInputIdText.decode(self.input_id)
+        if _DIGEST.fullmatch(self.llm_context_digest) is None:
+            raise ValueError("Native context has invalid input or digest identity")
+        if not self.session_id or not self.session_entry_id:
+            raise ValueError("Native context lacks committed session identity")
+        if not 0 < self.request_generation <= 2**53 - 1:
+            raise ValueError("Native context generation is outside its native range")
+
     def at(self, session_file: Path) -> NativeContextProof:
         """Locate recorded facts; this does not grant acceptance or replay."""
         return NativeContextProof(
@@ -221,14 +252,6 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             "current": f"SELECT input_id,session_entry_id FROM {table} "
             f"WHERE request_generation=(SELECT MAX(request_generation) FROM {table})",
         }
-
-    def __post_init__(self) -> None:
-        if (
-            self.request_generation < 1
-            or not _INPUT_ID.fullmatch(self.input_id)
-            or not _DIGEST.fullmatch(self.llm_context_digest)
-        ):
-            raise ValueError("Native Pi proof journal contains an invalid row")
 
     @classmethod
     @contextmanager
@@ -318,8 +341,7 @@ class NativeContextProof(NativeContextRecord):
         cls, session_file: Path, input_id: str, *, request_generation: int | None = None
     ) -> NativeContextProof:
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
-        if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
-            raise ValueError("A native context lookup requires a 128-bit input ID")
+        NativeInputIdText.decode(input_id)
         session_file = Path(session_file).absolute()
         header, entries = NativeEntry.read_evidence(session_file)
         tracked = NativeEntry.tracked_users(entries)
@@ -817,8 +839,7 @@ def _session_location(directory: Path, candidate: str) -> Path:
 
 def read_tracked_input_digest(session_file: Path, input_id: str) -> str:
     """Corroborating digest only; this cannot authorize recovery or input replay."""
-    if type(input_id) is not str or _INPUT_ID.fullmatch(input_id) is None:
-        raise ValueError("A tracked input digest lookup requires a 128-bit input ID")
+    NativeInputIdText.decode(input_id)
     _header, entries = NativeEntry.read_evidence(Path(session_file).absolute())
     users = NativeEntry.tracked_users(entries)
     if input_id not in users:
@@ -833,26 +854,12 @@ def _verify_context(
     input_event: pi.InputCommitted,
     context_event: pi.ContextCommitted,
 ) -> NativeContextProof:
-    if (
-        input_event.session_id != session_id
-        or input_event.input_id != input_id
-        or context_event.session_id != session_id
-        or context_event.input_id != input_id
-        or input_event.session_entry_id is None
-        or context_event.session_entry_id != input_event.session_entry_id
-        or context_event.request_generation is None
-        or context_event.request_generation <= 0
-        or context_event.llm_context_digest is None
-        or _DIGEST.fullmatch(context_event.llm_context_digest) is None
-    ):
-        raise NativePiUnavailable("Native Pi input/context events disagree")
+    try:
+        emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(session_file)
+    except (TypeError, ValueError) as error:
+        raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
     proof = NativeContextProof.read_evidence(session_file, input_id)
-    if (
-        proof.session_id != session_id
-        or proof.session_entry_id != input_event.session_entry_id
-        or proof.request_generation != context_event.request_generation
-        or proof.llm_context_digest != context_event.llm_context_digest
-    ):
+    if proof != emitted:
         raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
     return proof
 

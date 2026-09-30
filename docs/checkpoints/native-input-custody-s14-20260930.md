@@ -38,3 +38,29 @@ reader. Parent owns merge/installation/public activation.
 Status: draft opened before substantive implementation; installed acceptance
 pending. Original S14 and binding00-RULES read; newest owner instructions override
 older broad-suite, CI and generic runtime-reset wording.
+
+## First working original identity checkpoint
+
+NativeInputRecord now owns NativeInputIdentity and NativeInputIdText. Reservations,
+prelaunch bindings, historical evidence, current cursor references and selected
+tools consume original projections. Four native identity component rules become
+one identity rule; two committed source-part rules become one MessageReference
+rule. NativeContextRecord strictly joins the emitted receipt then corroborates
+the complete located durable proof; its journal shares the original declaration.
+No schema/wire/store changes in this checkpoint.
+
+Five bounded source controls pass (production-created admission fences, retained
+multi-round context, native journal generation/digest refusal, replaced-file
+refusal). They are source controls, not installed acceptance. A pre-existing
+rule-fixture roster omitted model/thinking/session refusals; their cases are now
+included while deleting the replaced per-component rule cases. Test dependencies
+are owned under `.observations/test-deps`; installed runtimes remain untouched.
+
+Additional assigned scope: selected_pi_route, selected_tool_broker,
+selected_write_plan, recovery_gateway_client and recovery_projection. Parent
+owns fresh_private_session/private_nk_entrypoint/acp_extension validation;
+Einstein owns tracked_turn/turn_output; Mendel owns shared input_attempt and
+canonical retry/state capabilities. SelectedParticipant/selected_turn frame
+calls and SourceCoverage wire read capability belong to Mendel/Sch respectively.
+Remaining release acquisition, compaction source, selected-write and redacted
+retry consumer closure stay in this same draft; no Ready claim yet.

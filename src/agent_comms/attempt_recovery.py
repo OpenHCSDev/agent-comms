@@ -79,15 +79,7 @@ class VerifiedOwnerLoss:
                 execution_id=execution_id,
                 attempt_ordinal=attempt.attempt_ordinal,
             )
-            if source is None or (
-                source.owner_lookup,
-                source.owner_thread,
-                source.owner_generation,
-            ) != (
-                attempt.owner_lookup,
-                attempt.owner_thread,
-                attempt.owner_generation,
-            ):
+            if source is None or source.owner_identity != attempt.owner_identity:
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
             admission_generation = source.sent_owner_admission_generation
             try:
@@ -281,24 +273,8 @@ class RecoveryMonitorCapability:
             binding = read_expected_prompt_binding(store, reserved.input_id)
             if (
                 binding is None
-                or (
-                    binding.execution_id,
-                    binding.attempt_ordinal,
-                    binding.owner_lookup,
-                    binding.owner_thread,
-                    binding.owner_generation,
-                    binding.assignment_id,
-                    binding.stage,
-                )
-                != (
-                    execution_id,
-                    attempt.attempt_ordinal,
-                    loss.owner_lookup,
-                    attempt.owner_thread,
-                    attempt.owner_generation,
-                    reserved.assignment_id,
-                    "full",
-                )
+                or binding.identity != reserved.identity
+                or binding.stage != "full"
                 or not expected_prompt_matches_journal(session_file, binding)
             ):
                 raise RecoveryBlocked("native failure lacks its bound original input")

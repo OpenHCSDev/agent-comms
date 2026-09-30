@@ -17,7 +17,7 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .coordination_errors import StaleFence
-from .native_input_record import NativeInputRecord
+from .native_input_record import NativeInputRecord, NativeInputContext
 from .typed_table import Column, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ class PublishedReplyRevision(TypedRow):
 
 
 @dataclass(frozen=True)
-class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
+class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
     @classmethod
     @contextmanager
     def _publication_read(cls, root):
@@ -264,7 +264,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class CurrentNativeCursor(NativeRuntimeTable, TypedTable):
+class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     wire_root_id: str = field(
         metadata={
             "sql": Column(
@@ -283,6 +283,12 @@ class CurrentNativeCursor(NativeRuntimeTable, TypedTable):
     owner_admission_generation: int = field(
         metadata={"sql": Column(primary_key=True, check="owner_admission_generation>0")}
     )
+    @property
+    def owner_identity(self):
+        from .coordination_tables.participants import OwnerGenerations
+
+        return OwnerGenerations(self.recipient_lookup, self.owner_thread, self.owner_generation)
+
     covered_seq: int = field(metadata={"sql": Column(check="covered_seq>=0")})
     injected_seq: int = field(
         metadata={"sql": Column(check="injected_seq>=0 AND injected_seq<=covered_seq")}
