@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -189,6 +190,7 @@ async def owner_fixture(
             record_fixture_history(inputs, "owner", owner.active_turn.admission_generation)
         info = AgentRuntimeInfo(
             thread="owner",
+            timestamp=time.time(),
             model=fixture["model"],
             context_used=fixture["contextWindow"] - 500,
             context_size=fixture["contextWindow"],
