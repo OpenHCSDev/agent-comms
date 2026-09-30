@@ -284,9 +284,9 @@ def test_current_reservation_wire_has_only_declared_fields(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "mismatch", [None, "owner", "admission", "turn", "sent", "original", "target", "bus"]
+    "mismatch", [None, "owner", "admission", "turn", "sent", "original"]
 )
-def test_only_exact_started_input_proves_original(mismatch):
+def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
     from agent_comms.text_digest import TextDigest
 
     from agent_comms.thread_identity import ThreadIncarnation, TurnId
@@ -318,8 +318,42 @@ def test_only_exact_started_input_proves_original(mismatch):
         proof["sent_digest"] = TextDigest.of("different wrapper")
     elif mismatch == "original":
         proof["original_digest"] = TextDigest.of("different original")
-    elif mismatch == "target":
-        started = replace(started, target="#channel")
-    elif mismatch == "bus":
-        started = replace(started, key="bus:1", sequence=1)
     assert started.proves_started(**proof) is (mismatch is None)
+
+
+@pytest.mark.parametrize(
+    ("key", "sequence", "target"),
+    [("acp:x", None, "owner"), ("acp:x", None, "#channel"), ("bus:1", 1, "#channel")],
+    ids=["owner", "channel", "bus"],
+)
+def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
+    tmp_path, key, sequence, target
+):
+    from selected_summary_cases import admission_identity
+
+    session = tmp_path / "session.jsonl"
+    session.write_text('{"type":"session","id":"source"}\n')
+    source = admission_identity(
+        str(session), text="wrapped input", original_text="original", key=key,
+        turn="turn", owner="owner",
+    ).source
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    assert store.record(
+        key, seq=sequence, owner="owner", admission=1, target=target, text="original"
+    )
+    assert store.bind(key, admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
+    assert store.started(key, turn_id="turn", native_id="a" * 32, text="wrapped input")
+    document = store.read()
+    assert source.original_has_started(document)
+    # A bus/channel delivery is still genuine native-start evidence. It cannot
+    # lend that evidence to a different selected source's original ingress.
+    assert not replace(source, ingress_key="acp:foreign").original_has_started(document)
+    original_bytes = store.path.read_bytes()
+    # Routing cannot be rewritten by recording another target at the original
+    # key. That ownership belongs to first durable acceptance, not start proof.
+    assert not store.record(
+        key, seq=sequence, owner="owner", admission=1, target="#foreign", text="original"
+    )
+    assert store.path.read_bytes() == original_bytes
+    assert store.read().lookup(key).target == target
+    assert source.original_has_started(store.read())

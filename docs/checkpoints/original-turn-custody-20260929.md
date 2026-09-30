@@ -114,8 +114,8 @@ Messaging.send's string result. It therefore cannot join the final native
 reply to the original committed wire envelope. The prepared consumer uses the
 existing send_message operation and its actual Message.reference. A bounded
 local list holds only acquired send resources; it is not a lifecycle, identity,
-input or delivery authority. An ExitStack callback acquired with the first
-committed send flushes those references before lease retirement, including when
+input or delivery authority. An ExitStack callback acquired at publication scope
+entry flushes those references before lease retirement, including when
 a later target send fails. Chained source-join errors retain the earlier send
 failure. No resend or rollback follows either failure.
 
@@ -161,3 +161,54 @@ no SQL reset, body/time reconstruction or legacy reader. Arendt owns OwnedTurn,
 OwnedSendAdmission and TurnProgress constructor/consumer migration; Mendel owns
 the routing/source relation and Sch owns its two frontend consumers. This is a
 paired source dependency, not a separate installed cohort.
+
+
+### Native-start receipt and original ingress test migration
+
+Mendel reproduced two unchanged baseline failures on installed8691: the generic
+StartedInput.proves_started test expected valid channel and bus inputs to be
+refused. Its sole producer consumer, SelectedAdmissionSource.original_has_started,
+owns exact ingress lookup; the generic receipt owns recorded native-start facts,
+not a direct-only routing policy. No production predicate was widened or changed.
+
+Nine focused cases passed in0.14seconds. Existing owner/admission/turn/original
+and sent-digest negatives remain. Actual record/bind/started transitions now
+cover owner, channel and bus delivery. The selected source refuses another
+ingress, and first durable acceptance refuses rewriting the original target;
+original store bytes remain unchanged. The two incorrect generic exclusions
+were removed rather than restored as compatibility booleans. This is test
+contract repair, not a native/installed acceptance claim.
+
+### Actual ordinary publication boundary
+
+Consumer5d612968 and Source4f84338f are integrated normally at2b4b9c85. The
+consumer obtains each final Messaging.send_message reference and passes the
+original lease, checkpoint and reference-only routing to
+Transcripts.record_turn_publication before retirement. TurnProgress derives
+origins from the original reserved input and turn identity from the original
+lease; its duplicate task and turn-ID fields are deleted. The three production
+consumer files delete27lines and add38. The increase registers acquired send
+custody and closes the original source relation. Two fake success tests
+delete59lines; the existing real native fixture now runs the actual OwnedTurn.
+
+The first bounded controlled-provider/native614 run exited1 in32.68seconds:
+final and real-Bash-progress/final both committed their native response and
+actual wire send, then failed at the new Source input digest comparison. The
+503 provider refusal passed and published no completed reply. Native614's
+AgentSession._claimNativeInput hashes the domain-prefixed full request envelope;
+StartedInput.sent_digest hashes the delivered text. Their differing digests are
+different identities, not evidence of changed text. The actual native text and
+original StartedInput text have the same digest. IDEN-1 and BOUND-2 require the
+existing native proof owner here, not another request decoder or reconstruction.
+
+Mendel owns the source correction through the original NativeContextJournal
+point proof and existing tracked native ancestry. Original input ID/text/lease,
+certified original request references and committed publication references remain
+mandatory. Einstein owns the native contract. This checkpoint remains Draft
+until a fresh independent controlled-provider run passes that complete relation.
+
+The first run's original native journals, disposition rows, committed wire
+references and private diagnostics remain under this worktree's
+.native-publication-fixtures/run01. They are not retried or replayed. Its native
+processes have exited. The actual retained41MB lifecycle acceptance above stays
+complete; no repeated paid gate or public/default runtime change occurred.
