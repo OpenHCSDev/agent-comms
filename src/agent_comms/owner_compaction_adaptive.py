@@ -14,7 +14,6 @@ from pathlib import Path
 
 from .agent_events import AgentEvent
 from .backend import PersistentPiSession, _session_revision
-from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue
 from .native_pi import NativePiRpcLaunch
@@ -204,21 +203,12 @@ async def maybe_compact_owner_turn(
     async def summarize(prepared: NativePreparation) -> OwnerSummaryOutcome:
         # Recheck immediately before paid provider work, then after it. The
         # owner source and ingress remain independently fenced by the bridge.
-        current, current_owner_generation = registry.live_owner_with_generation(thread_name)
-        if (
-            current != owner
-            or current_owner_generation != owner_generation
-            or await decision() != settings
-        ):
-            raise RelationViolationError("Adaptive model, owner or settings changed")
+        attestation = owner.compaction_attestation(owner_generation, prepared.witness)
+        attestation.require_registry(registry, owner)
+        settings.require_current(await decision())
         outcome = await summary_strategy(prepared)
-        current, current_owner_generation = registry.live_owner_with_generation(thread_name)
-        if (
-            current != owner
-            or current_owner_generation != owner_generation
-            or await decision() != settings
-        ):
-            raise RelationViolationError("Adaptive source changed after summary")
+        attestation.require_registry(registry, owner)
+        settings.require_current(await decision())
         return outcome
 
     operation = await compact_owner_once(

@@ -15,6 +15,7 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .text_digest import TextDigest
     from .thread_identity import TurnId
+    from .turn_lease import TurnLeaseFence
 
 _NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
 
@@ -71,6 +72,11 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
         return False
+
+    def started_for_native(
+        self, lease: TurnLeaseFence, native_id: str, sent_text: str
+    ) -> StartedInput | None:
+        return None
 
     def pending_for(self, owner: Thread) -> bool:
         return False
@@ -248,6 +254,23 @@ class StartedInput(SentInput):
     has_started = True
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
+
+    def started_for_native(
+        self, lease: TurnLeaseFence, native_id: str, sent_text: str
+    ) -> StartedInput | None:
+        """Return this original row's recorded lease/input evidence only.
+
+        Stored rows record name/admission, not thread birth or process. The
+        publication source independently validates the original complete lease
+        and native ancestry; this receipt never invents their missing proof.
+        """
+        if not self.matches_owner(lease.identity.incarnation):
+            return None
+        if not self.matches_admission(lease.admission_generation):
+            return None
+        return self if self.matches_native(
+            turn_id=lease.turn_id, native_id=native_id, text=sent_text
+        ) else None
 
     def proves_started(
         self,
