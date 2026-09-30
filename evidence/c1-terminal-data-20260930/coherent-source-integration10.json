@@ -1,9 +1,10 @@
 {
-  "source_head": "ba93838e88200de9f3e200a1fcd97b71e9e93a45",
-  "production_tree": "81f15d80f37d6e1c080e1464cef4e1f009f9bbc3",
+  "source_head": "78fe5fe6c93a46246255e41fa367f412d4a66ed8",
+  "production_tree": "2059c87b8f405c6600fbc65710d76963a8ff6d6c",
   "normal_merges": {
     "current_main": "1f42575cb6d50b8f934023827c982eaf07e30858",
-    "native_latency": "2ae88cdb8d02ab3994437fad974d57cc9ae2811f"
+    "native_latency": "2ae88cdb8d02ab3994437fad974d57cc9ae2811f",
+    "native_latency_final": "c5f9bb45"
   },
   "plan_428": {
     "ancestor": "17a43e0271cb661ee893d0ce6b34d2ae6ac6e5d2",
@@ -24,8 +25,8 @@
   },
   "new_production_delta_against_4b8": {
     "files": 6,
-    "added": 185,
-    "deleted": 57,
+    "added": 191,
+    "deleted": 58,
     "contributors": "Arendt native acquired-source resource and Mendel required observation timestamp; not C1-owned deletion count"
   },
   "source_crossing_check": {
@@ -33,7 +34,15 @@
     "seconds": 0.46,
     "log": "coherent-source-focus11.log",
     "boundary": "native evidence custody, Pi terminal payloads and runtime declaration; no paid/native calls",
-    "setup_failure": "coherent-source-focus10.log records candidate68 intentionally lacks dev pytest; no package mutation; used existing source venv"
+    "setup_failure": "coherent-source-focus10.log records candidate68 intentionally lacks dev pytest; no package mutation; used existing source venv",
+    "final_guard_scope": {
+      "owner": "Arendt",
+      "head": "c5f9bb45",
+      "passed": 18,
+      "case": "acquired source checks original ancestor trust before/after observe; permission-loss refusal",
+      "additional_native_run": false,
+      "reason": "unchanged native pipeline already accepted2ae gate; next joint installed pair covers finalguard"
+    }
   },
   "accepted_installed_receipts": {
     "C1": "installed08/installed-receipt.json, original native16PASS; actual saved/live UI duplicate remains failure",
