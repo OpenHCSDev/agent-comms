@@ -14,6 +14,7 @@ from .registration_change import InitialRegistration, RegistrationChange, Update
 from .routing import TurnRouting
 from .restart_refusals import OwnerBusyRefusal, OwnerChangedBeforeFenceRefusal, OwnerGenerationChangedRefusal
 from .thread_identity import GenerationCounter, OwnerIdentity
+from .thread_presentation import ThreadOwnerBinding, LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
     RunningThreadStatus,
@@ -377,6 +378,14 @@ class RegistrySnapshot:
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.aliases.get(name, name)
         return self.threads[canonical].owner_identity(self.owner_generations[canonical])
+
+    def owner_binding(self, name: str) -> ThreadOwnerBinding:
+        try:
+            thread = self.require_active(name)
+            process = thread.require_process()
+        except RelationViolationError:
+            return UnavailableThreadOwnerBinding()
+        return LiveThreadOwnerBinding(self.owner_identity(thread.name), process)
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
         """A read attachment retains its owner lease across startup, not across restart."""
