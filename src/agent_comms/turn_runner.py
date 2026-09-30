@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+import time
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -199,6 +200,7 @@ class TurnRunner:
             raise ValueError("Prepared native model does not match the owner selection")
         return AgentRuntimeInfo(
             thread=thread.name,
+            timestamp=time.time(),
             model=state.model.display_name,
             session_name=state.session_name,
             context_size=state.model.context_window,

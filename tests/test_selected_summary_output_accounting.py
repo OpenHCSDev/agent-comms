@@ -149,6 +149,7 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
                     "acceptance",
                     AgentRuntimeInfo(
                         thread="owner",
+                        timestamp=1.0,
                         model=ready["model"],
                         context_used=399463,
                         context_size=272000,

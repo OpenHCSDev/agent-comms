@@ -101,7 +101,7 @@ def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> N
 class TestAgentRuntimeInfo:
     def test_context_percent_and_persistence(self, tmp_path: Path):
         info = AgentRuntimeInfo(
-            thread="a", model="provider/model", context_used=25, context_size=100
+            thread="a", model="provider/model", context_used=25, context_size=100, timestamp=1.0
         )
         assert info.context_percent == 25
         store = RuntimeInfoStore(tmp_path / "runtime.json")
@@ -109,11 +109,11 @@ class TestAgentRuntimeInfo:
         assert store.read()["a"] == info
 
     def test_unknown_context_stays_unknown(self):
-        assert AgentRuntimeInfo(thread="a", context_size=100).context_percent is None
+        assert AgentRuntimeInfo(thread="a", context_size=100, timestamp=1.0).context_percent is None
 
     def test_negative_context_is_rejected(self):
         with pytest.raises(ValueError, match="negative"):
-            AgentRuntimeInfo(thread="a", context_used=-1)
+            AgentRuntimeInfo(thread="a", context_used=-1, timestamp=1.0)
 
 
 class TestGoalRevision:

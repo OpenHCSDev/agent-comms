@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .locked_store import LockedStore
 
 
@@ -19,9 +19,10 @@ class AgentRuntimeInfo:
     session_name: str | None = None
     context_used: int | None = None
     context_size: int | None = None
-    timestamp: float = field(default_factory=time.time, metadata={"wire_name": "ts"})
+    timestamp: float = field(metadata={"wire_name": "ts", "wire_required": True}, kw_only=True)
 
     def __post_init__(self) -> None:
+        FieldCodec.decode(float, self.timestamp)
         if not self.thread:
             raise RelationViolationError("Runtime-info thread cannot be empty.")
         if self.context_used is not None and self.context_used < 0:
@@ -55,12 +56,6 @@ class RuntimeInfoStore(LockedStore[dict[str, AgentRuntimeInfo]]):
 
     def empty(self) -> dict[str, AgentRuntimeInfo]:
         return {}
-
-    def _decode(self, data: object) -> dict[str, AgentRuntimeInfo]:
-        # Historical missing dates mean unknown, never observation-at-read-time.
-        if isinstance(data, dict):
-            data = {name: {"ts": 0.0, **row} for name, row in data.items()}
-        return super()._decode(data)
 
     def set(self, info: AgentRuntimeInfo) -> None:
         self.update(lambda values: {**values, info.thread: info})

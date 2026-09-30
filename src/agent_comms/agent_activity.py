@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -117,6 +118,7 @@ class AgentActivity:
             self.runtime_info.set(
                 AgentRuntimeInfo(
                     thread=canonical,
+                    timestamp=time.time(),
                     model=model,
                     session_name=session_name,
                     context_used=context_used,
