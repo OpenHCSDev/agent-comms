@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import asynccontextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import importlib.metadata
 import json
@@ -25,6 +26,7 @@ from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import PromptFailureReceipt, ProviderQuotaFailure
 from agent_comms.comms import Comms
 from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 
@@ -133,18 +135,23 @@ async def journey(package: Path, evidence: Path, installed: Path):
         XDG_CONFIG_HOME=str(evidence / "config"), XDG_DATA_HOME=str(evidence / "data"),
         XDG_STATE_HOME=str(evidence / "state"),
     )
+    @asynccontextmanager
+    async def attached(subscriber):
+        async with spawn_agent_process(subscriber, sys.executable, "-m", "agent_comms.acp",
+                                       env=environment, cwd=project) as (client, process):
+            await client.initialize(protocol_version=1, client_capabilities={})
+            await client.load_session(cwd=str(project), session_id="error-native", mcp_servers=[])
+            yield client
+
     subscriber = FailureSubscriber()
     try:
         async with asyncio.timeout(45):
-            async with spawn_agent_process(subscriber, sys.executable, "-m", "agent_comms.acp",
-                                           env=environment, cwd=project) as (client, process):
-                await client.initialize(protocol_version=1, client_capabilities={})
-                await client.load_session(cwd=str(project), session_id="error-native", mcp_servers=[])
+            async with attached(subscriber) as client:
                 response = await client.prompt(session_id="error-native", prompt=[
                     TextContentBlock(type="text", text="One private history input")])
                 assert response.stop_reason == "end_turn"
                 assert len(requests) == 1 and not subscriber.failure_facts
-                await client.load_session(cwd=str(project), session_id="error-native", mcp_servers=[])
+            async with attached(subscriber) as client:
                 assert len(requests) == 1, "Saved-history attach emitted another input"
                 try:
                     await client.prompt(session_id="error-native", prompt=[
@@ -156,13 +163,17 @@ async def journey(package: Path, evidence: Path, installed: Path):
                 assert receipt.notification_published
                 assert isinstance(receipt.failure, ProviderQuotaFailure)
                 assert REASON in receipt.failure.detail
+                (evidence / "failure-boundary.json").write_text(json.dumps({
+                    "receipt": FieldCodec.encode(receipt),
+                    "notifications": [FieldCodec.encode(fact) for fact in subscriber.failure_facts],
+                }, indent=2) + "\n")
                 assert subscriber.failure_facts == [receipt.failure]
                 assert len(requests) == 2 and not provider_errors
                 owner = comms.registry.require("error-native")
                 native = Path(owner.session_file)
                 original = native.read_bytes()
                 dispositions = InputDispositions(root / InputDispositions.filename).read()
-                await client.load_session(cwd=str(project), session_id="error-native", mcp_servers=[])
+            async with attached(FailureSubscriber()) as client:
                 assert len(requests) == 2, "Failure/history reattachment replayed original input"
                 assert native.read_bytes() == original
                 assert InputDispositions(root / InputDispositions.filename).read() == dispositions
