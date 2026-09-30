@@ -25,6 +25,7 @@ from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
 from .thread_identity import AdmissionIdentity, ThreadIncarnation
 from .turn_lease import TurnState
+from .wire_metadata import WireRootIdText
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 
 if TYPE_CHECKING:
@@ -166,10 +167,9 @@ class CursorScope(AttachmentScope):
     owner_pid: int
 
     def __post_init__(self):
+        WireRootIdText.decode(self.wire_root_id)
         if (
             not self.session_id
-            or len(self.wire_root_id) != 32
-            or any(c not in "0123456789abcdef" for c in self.wire_root_id)
             or self.owner_pid <= 0
             or self.admission.admission_generation <= 0
             or self.admission.incarnation.created_at <= 0
