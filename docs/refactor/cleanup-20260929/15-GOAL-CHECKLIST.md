@@ -7,6 +7,46 @@ from GitHub during this checkpoint; merge ancestry was checked against Core7fcf8
 and Toad43949ee. Historical acceptance remains in
 `plans/integration-live-completion-20260928.md` and each code-bearing PR's receipts.
 
+## Current checkpoint — September 30, installed owner/CLI/config pair
+
+Core448/449/445 (including446) and Toad237 are merged. The default five
+executables now select the verified noneditable pair: Core4295d680,
+Toad13f9da11, Textual2e49cb83, SDK0.12.1 and unchanged nativee36.
+After all13 actual executable owners became idle, the integration owner retired
+one exact old Toad client and performed one canonical retained same-format
+owner batch. All13 replacement interpreters were verified in /proc. Original
+41MB NRA native history remained byte-identical; no prompt replay, journal reset
+or route/native-package cutover was performed. Actual normal default UI
+acceptance is assigned to Einstein and remains pending. Installation receipt:
+`evidence/cleanup-live-integration/owner-cli-config-activation.json`.
+
+Parallel outstanding owners and measured progress:
+
+- Mendel, Core450: checkpoint56d362f2 deletes42 production lines and adds44,
+  removes repeated native-package hashing from observation routing and redundant
+  managed-native activity hooks while retaining launch admission verification.
+  Actual private CLI elapsed1.201s→0.479s; seven controls pass. Compiled native
+  extension/actual managed-tool acceptance remains pending. The separate129.898s
+  tool-result-to-assistant gap has no established provider/reasoning attribution.
+  Core450 is neither merged nor installed.
+- Schrodinger, Toad238: tab restoration awaits canonical goal observation before
+  first paint, with a3s read timeout. Navigation-wide causal measurement and the
+  source fix remain pending. A model-capacity failure stopped its last turn;
+  a fresh continuation on the same configured model is active. Arendt has a
+  read-only preparation assignment for takeover if capacity repeats.
+- Heisenberg, Toad236: configurable3-viewport baseline buffer, directional dynamic
+  lookahead and retained preparation measurement are implemented. Physical
+  attempt02 could navigate but correctly refused a stopped private fixture;
+  it provides no physical buffer/scroll acceptance. Canonical private-owner
+  startup and one corrected capture remain pending. Kepler owns the recording
+  driver/CPU correlation and rejects captures without actual history movement.
+
+Nine thinking-level settings changed by the prior startup reader are still
+pending guarded original-incarnation restoration. This activation preserves
+current settings; it does not claim those historical settings have been restored.
+The full original and second-round refactor/C0/T4/retained-memory requirements
+below remain tracked and unfinished. Older checkpoint sections are history.
+
 ## Original named PRs
 
 | Required scope | Verified current disposition | Remaining requirement |
