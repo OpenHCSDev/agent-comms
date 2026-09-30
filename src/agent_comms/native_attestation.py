@@ -48,6 +48,10 @@ class NativeAttestation(ABC):
     state = None
     identity = None
 
+    @property
+    def diagnostic_evidence(self):
+        return {"attestation": "lost"}
+
     def observe(self, data: StateData) -> NativeAttestation:
         return self
 
@@ -70,6 +74,10 @@ class PendingAttestation(NativeAttestation):
             id=f"agent-comms-preflight-{secrets.token_hex(16)}"
         )
     )
+
+    @property
+    def diagnostic_evidence(self):
+        return {"control_command": self.request.to_rpc()}
 
     def accept(self, event: PiEvent) -> ObservedAttestation:
         if not isinstance(event, Response) or event.command is not commands.GetState:
@@ -101,6 +109,10 @@ class PendingAttestation(NativeAttestation):
 class ObservedAttestation(NativeAttestation):
     state: StateData
     observed = True
+
+    @property
+    def diagnostic_evidence(self):
+        return {"session_id": self.state.session_id, "session_file": self.state.session_file}
 
     @property
     def identity(self):
