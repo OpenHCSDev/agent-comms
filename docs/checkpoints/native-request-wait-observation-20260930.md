@@ -114,4 +114,30 @@ retries remain SDK-owned and unobserved.
 `ModelWaitPhase.source` changes the live phase publication ABI. Release requires
 matched owners and clients through the canonical idle batch; durable formats,
 native journals, reservations, UNKNOWN receipts and original proof stores are
-unchanged. Parent owns that cutover. Ready for review/merge, not publicly installed.
+unchanged. Parent owns that cutover; its completed activation is recorded below.
+
+
+## Executed activation and one-use operator retirement
+
+Parent executed the reviewed operator exactly once after the paired Ready gate:
+exit0 in26.171s, thirteen retained owners launched with original configurations
+verified. The existing all-stopped batch published the guarded593b native route
+and five default links before launching the original RAM-only handoff. No effort
+restoration, store conversion or uncertain-input replay was part of this release.
+The private execution receipt remains with parent at
+`.release-private/native-budget-progress-20260930/cutover.json`.
+
+Parent reports the final ordinary default **physical PASS in16.516s**, personally
+reading the frame: exact new pair, canonical goalNone, queue available, owner idle,
+zero errors and cleanup0. Original41MB source and original PID remained stable.
+Thus453/454/Toad242 are live and physically verified. This is the parent's actual
+acceptance evidence, not another gate run by this closure worker.
+
+[Sanitized closure receipt](../../evidence/native-request-wait/activation-closure.json).
+[Exact reviewed operator audit text](../../evidence/native-request-wait/publish-native-budget-progress.audit.txt)
+is retained as a0644 nonexecutable artifact, SHA256
+`abb2556438f1bd483b527c881a801e04adf3a92e85fc7554b73f08ec803793d3`.
+The used `.observations/publish_native_budget_progress.py` executable has been
+deleted. Its text is audit evidence only, not a supported or reusable operator.
+Original native journals, failed-attempt receipts, proof roots and UNKNOWN inputs
+remain protected. Closure changes only docs/evidence; no further public effects.

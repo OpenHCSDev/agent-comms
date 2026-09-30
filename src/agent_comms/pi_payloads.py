@@ -778,8 +778,8 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     is_streaming: bool | None = wire_field("isStreaming")
     is_compacting: bool | None = wire_field("isCompacting")
 
-    def matches_model(self, identity: tuple[str, str]) -> bool:
-        return self.model is not None and self.model.identity == identity
+    def matches_model(self, selected: tuple[str, str]) -> bool:
+        return self.model is not None and self.model.identity == selected
 
     @property
     def session_busy(self) -> bool:
