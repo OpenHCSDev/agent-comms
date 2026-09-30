@@ -1,3 +1,28 @@
+## Current checkpoint: rejected candidate, source correction in progress
+
+Actual queue pending-before-Started/once-chat passes the first input of u02/u03.
+Actual bus u05 passes hot DM/IRC handling, one original/reply body,31 continuous
+open-view samples and global idle. First return answer is saved once and reaches
+ACP, but the UI assertion fails. The entire cohort remains not ready and is not
+published; public scoped253 remains unchanged.
+
+Actual original-window empty-native-to-first-file reproduction reaches the
+undefined agent in CheckpointPublication; using captured self.agent then exposed
+concurrent duplicate-history publication. Heisenberg252 owns both through the
+existing resource/lock contract plus expanded-channel publication. Einstein458
+published m01/u04 failures and verified cleanup[]; Kepler's original modal trace
+shows a pushed dialog object without proved visible controls/focus. No binding
+waiver, original-input replay or unchanged provider rerun is used.
+
+Parent normally merged2512835 and252917c2343 into250187cd59f. Source pivot
+fix deletes1/adds3 production lines; its actual saved-resource pilot passes one
+history/one readable response with original live/old bodies retired. This pilot
+uses Coreba938/Textual2e49, so same-cohort installed ACP acceptance remains due. Schrodinger460
+retains original native/ACP/source evidence and adds failure-only resource/frame
+capture for the next corrected same-build run. Detailed current owners are in
+16-CURRENT-S14-OWNERS.md; original acceptance detail is in
+actual-gate-disposition.json and the named original PR receipts.
+
 ## 2026-09-30 normal candidate installed; physical regression acceptance started
 
 The single normal noneditable stage runtime-native-source-queue-cohort-20260930
