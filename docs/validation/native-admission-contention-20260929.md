@@ -25,3 +25,18 @@ Read-only decoding of the original comms428 retained assistant at `2026-09-30T02
 The noneditable installed wheel decoded the original comms428 saved terminal, not a substituted provider response, into `MessageEnd` and `ProviderConnectionFailure`, then round-tripped the actual ACP failure update. It reports WebSocket1012, the original stage, configured transport and 1,565,058-byte request with `Started — input not retried`. No native input, restart or replay was performed.
 
 Unexpected producer exceptions now propagate to the sole production caller, `OwnedTurn`, after child retirement instead of being replaced with a fabricated invalid-RPC terminal. The duplicate `terminal_seen` flag is deleted. Arendt owns436's existing `TurnProgress.report_failure` consumer: private `source_error` diagnostic publication before public failure feedback and canonical input settlement. Four existing real child-process/steering-lifetime cases pass in 6.60 seconds and verify original exceptions and no fabricated Done. This producer checkpoint requires that consumer closure before readiness.
+
+## Closure map and remaining acceptance
+
+| Existing owner | Changed production file | Owned deleted lines | Evidence |
+| --- | --- | ---: | --- |
+| Raw native admission | `native_prompt_send.py` | 2 | Original contention exception retained by existing diagnostic chain |
+| Coordination connection | `coordination_database.py` | 28 | Actual COMMIT failure plus concurrent-reader/reserved-writer reopen |
+| Schema declaration | `coordination_tables/metadata.py` | 1 | Current metadata validation remains fail-closed; fresh installation rechecks |
+| Pi external payload | `pi_payloads.py` | 8 | Original comms4281012 message and RPC/ACP round-trip |
+| Native producer | `backend.py` | 16 | Original exceptions propagate after actual child and steering retirement |
+| **Owned total** | | **55** | Imported430 and main435 changes excluded |
+
+No-regrowth source ratchet against current main435 passes with no positive deltas. The broader Pi boundary/lifecycle sanity run has 61 passes and three failures in pre-existing lifecycle fixtures (`test_pi_rpc_nominal.py`: audit excursion, overlapping tools and the outdated phase roster). Arendt owns those lifecycle fixtures in436; these are not described as a green suite. All seven affected provider-boundary checks pass.
+
+Readiness requires436's existing failure consumer and the paired430/215 original41MB user-path comparison. Original uncertain inputs, source history and active user owners remain untouched. No deadline increase, proof cache, semantic mirror or extra provider request was introduced. Persistent private probe artifacts remain under the named scratch directory as diagnostic evidence.
