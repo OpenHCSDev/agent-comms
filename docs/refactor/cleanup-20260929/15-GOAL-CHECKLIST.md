@@ -1,3 +1,18 @@
+## 2026-09-30 public launcher acceptance closed
+
+Actual published default normal toad-comms startup now passes without override:
+16.5946s, original41MB NRA saved history readable, fresh canonical ACP Ready/OFF,
+goalNone, empty queue and idle turn facts;0inputs/provider/owner or source change,
+all owned recording processes retired. Einstein receipt commit3b221bd1 under
+its evidence/default-private-launch-startup-20260930/joint-ready-receipt.json.
+This closes241 startup regression; it does not close239 cold peer/CPU or453.
+
+Used parent outside-src paired publication operator is removed in place after
+acceptance; reviewed executable source remains in Git history at e92b660a.
+451 applied-restoration docs/evidence-only closure merged29bbe95d. Both used
+restoration tools were deleted; no compatibility readers, alias or repeated
+cutover path stays in production. All original durable/UNKNOWN history retained.
+
 ## 2026-09-30 startup caller closure, next checkpoint and cleanup
 
 - Actual default launcher gate caught Core450's missed Toad consumer: stale
