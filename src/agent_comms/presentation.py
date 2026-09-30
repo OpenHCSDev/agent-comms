@@ -24,7 +24,7 @@ from .read_basis import ChannelDisplayScope, DMDisplayScope, ViewUnread
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock, file_revision
-from .thread_presentation import ThreadPresentation
+from .thread_presentation import ThreadPresentation, ThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
@@ -480,6 +480,7 @@ class ThreadView:
     runtime: AgentRuntimeInfo | None
     last_seen: float
     goal_execution: GoalExecution | None = None
+    binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
     @staticmethod
     def visible(
@@ -506,6 +507,7 @@ class ThreadView:
             runtime,
             snapshot.last_seen.get(thread.name, 0),
             GoalWaits.execution(thread.goal, waits, snapshot),
+            snapshot.owner_binding(thread.name),
         )
 
     @classmethod
@@ -536,6 +538,9 @@ class ThreadView:
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
+        return replace(self._display_presentation(), binding=self.binding)
+
+    def _display_presentation(self) -> ThreadPresentation:
         if self.status.active and self.activity.diagnostic is not None:
             return self.activity.presentation(self.thread.title or self.thread.name)
         if self.status.active and self.thread.executing and not self.activity.state.busy:
