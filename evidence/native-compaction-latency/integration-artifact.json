@@ -1,0 +1,70 @@
+{
+  "scope": "429 reviewed rolling map admission and ordered persistent reduction checkpoint",
+  "integrated_main": "b7dd7ed0f95905912b02cb549acca26cbc456ad5",
+  "integration_commit": "30542a5475da324ff44d83fe0bbdaba775bab1c7",
+  "previous_actual_native_acp_receipt": "evidence/native-compaction-latency/acceptance.json",
+  "native_sources_unchanged_by_main_integration": true,
+  "installed_c4_integration_gate": {
+    "passed": 5,
+    "seconds": 3.72,
+    "cases": [
+      "tests/test_cursor_load_recovery.py",
+      "tests/test_acp_private_nk_delivery.py::test_unavailable_cursor_metadata_retains_owner_scope",
+      "tests/test_acp_private_nk_delivery.py::test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof",
+      "tests/guards/test_source_proof_ownership.py"
+    ],
+    "native_processes_started": 0
+  },
+  "prepared_native_package": "/home/ts/wt/comms-native-compaction-latency-20260929/stack/.pi-native-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+  "manifest_path": "/home/ts/wt/comms-native-compaction-latency-20260929/stack/pi-native.sha256",
+  "manifest_sha256": "4ab910061590d1e0d02e915478903aec24da5be3a1c76460a1e2896ab40563cc",
+  "native_tree_commitment": "b6c67bbd60acd066e2fa01d3cc41d43c63b1d14c82c42ca0bb01caa7c22f65cd",
+  "manifest_pins": {
+    "dist/cli.js": "8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d",
+    "dist/core/agent-session.js": "b00974709a1c2241fba67f093e4400234da8b9e40de814f0d1766860b3217b9d",
+    "dist/core/compaction/compaction.js": "ac803d997a19a56afd2946cf9038cdb515b4924fd109a14123c158cdd630886a",
+    "dist/core/session-manager.js": "4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67",
+    "dist/modes/rpc/rpc-mode.js": "94000a48d2a8e3c7b1874156ef6e7d4f5a44ad6785bedfd2544b95f210483ecc",
+    "dist/core/agent-session.d.ts": "fced5349c36bc329acf9ed5fe1d8ba63fe29e455e23ac3926a96bd025a9d999c",
+    "dist/core/session-manager.d.ts": "79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0",
+    "dist/modes/rpc/rpc-types.d.ts": "c6e90c36ed4567e30e2318cd1a8d11984b7dd4d1760335be34b6cbd492438fe5",
+    "node_modules/@earendil-works/pi-agent-core/dist/agent.js": "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f",
+    "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js": "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11",
+    "node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts": "794a5d2a97aec537387ea05700a65b7da52c78ccd850c5acd4157037c73fe34f",
+    "node_modules/@earendil-works/pi-agent-core/dist/types.d.ts": "6900f15b09fa7c7ed06a2a04c8f16e9c0bfe61c4889a2bc4d22d8120a78137ec",
+    "node_modules/@earendil-works/pi-ai/dist/types.d.ts": "ae6d784ad8a63299720ecd3628a8c162becee22791208f569723994d709475c5",
+    "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js": "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b",
+    "dist/core/compaction/agent-comms-policy.js": "39af3221e5f74892a6a641cf0e655ccfde344bb3980c23d620eefbff85d5c991",
+    "dist/core/extensions/loader.js": "5aa2488a9695a629a5057659161a0fadac9f6dadd6eee3b5dbd73864ddb7a0c5",
+    "dist/core/package-manager.js": "103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e",
+    "dist/core/agent-session-services.js": "3d951c06ade63eb2e965f9a1b26b9bc7541afb5a5dbd44a7da041af7b0af1c06",
+    "dist/core/settings-manager.js": "26e34462390efffdac8253f83d4a33ccc5125c4f2b8aecc5b2e1b03d979396b6",
+    "dist/core/session-entry-store.js": "456254c763e05b16378c70ee8fa364e138521690cd30bc421805cb62f01a8479",
+    "dist/core/session-context.js": "e9762b81b6dcb400cb761ddcfdb48293ae277bd9ae836359e2a0b1facb84500a",
+    "dist/core/compaction/agent-comms-source.js": "b024ece4021138980f68464f117d452b7faa06a4b51164b2c8ca579a54cf23c6",
+    "dist/core/output-guard.js": "1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d",
+    "dist/core/export-html/index.js": "4fa4e9a0ba80f43b560eb827dbd0985ea56624170b51401b39398d76ffcbcefa",
+    "dist/core/sdk.js": "fc662902a510c19c5b0af7e3cf96742f5d6071c004fe226a992a59cd0bf7522a",
+    "dist/core/native-proof-journal.js": "223b4e3cc99b8f7a46c2243df77bfb02e4127d3101180fe4e2be072a28c98622",
+    "dist/core/native-proof-schema.js": "d2cee72e8e69b5dc8f8d0c84944c1a341e85ed7aa283b94463bafa5b4107ea1c",
+    "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js": "ada3b43980c4fd627cf67c8c7836c0b8118e4fb3b0e7bf49adf3c7b7192c9383",
+    "node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js": "e3572ebbb69891ae0789c90aa018eef981e335a4c1113ff90ec10f53740b0a10"
+  },
+  "canonical_source_sha256": {
+    "stack/native-compaction-policy.mjs": "39af3221e5f74892a6a641cf0e655ccfde344bb3980c23d620eefbff85d5c991",
+    "stack/native-compaction-source.mjs": "b024ece4021138980f68464f117d452b7faa06a4b51164b2c8ca579a54cf23c6",
+    "stack/native-compaction-source.d.ts": "f0f7babc7a79bc3c004e6a32bba16ebca238672484f42cae259e40f1bd071bac",
+    "stack/native-session-storage.patch": "cfb52386fca7d2e3540e5fb9cd4b06cb29c9ab6f6dd005105c832fafa6829d1d",
+    "stack/patch-native-compaction.py": "e3025e7ba1f29287d191a50ad9d0a7ac76f79dc2436a855d1376047841b65114",
+    "stack/native-compaction-selected-summary.mjs": "19f23cfec30c3312a9511d74c604e16ef9c6de448a659250dff4faf8b29d7b51"
+  },
+  "production_lines_deleted": {
+    "policy_and_source_javascript": 18,
+    "source_declaration": 1,
+    "compiled_native_algorithm": 25
+  },
+  "remaining_ownership_gap": "425 shared canonical elapsed/source callback contract; independent of this scheduler checkpoint",
+  "activation_owner": "parent; paired reviewed Core429/native4ab through424 idle fence; no active owner/source mutation or uncertain input replay performed by429",
+  "live_activation": false,
+  "paid_calls": 0
+}

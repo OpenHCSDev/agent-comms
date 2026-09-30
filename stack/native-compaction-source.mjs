@@ -1,5 +1,5 @@
 /** Compaction source traversal and model-sized serialization; no history-sized arrays. */
-import { closeSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { convertToLlm } from '../messages.js';
@@ -64,37 +64,38 @@ export class HistorySummarySource extends SummarySource {
 
 /** Intermediate model results are temporary job data on owned persistent disk. */
 export class ReducedSummarySource extends SummarySource {
-    #directory; #fd; #size = 0; #count = 0;
+    #directory; #size = 0; #count = 0;
     constructor() {
         super();
         const root = process.env.AGENT_COMMS_SESSION_INDEX_DIR ?? join(homedir(), '.cache', 'agent-comms', 'session-indexes');
         mkdirSync(root, {recursive:true, mode:0o700});
         this.#directory = mkdtempSync(join(root,'summary-'));
-        const path = join(this.#directory,'segments');
-        this.#fd = openSync(path, 'wx+',0o600);
-        unlinkSync(path);
-        rmSync(this.#directory, {recursive:true});
-        this.#directory = undefined;
     }
     get count() { return this.#count; }
-    append(text) {
-        const framed = `${this.#count ? '\n\n' : ''}<segment-summary index="${++this.#count}">\n${text}\n</segment-summary>`;
-        const data = Buffer.from(framed); writeFileSync(this.#fd,data); this.#size += data.length;
+    append(text, index = this.#count) {
+        const framed = `${index ? '\n\n' : ''}<segment-summary index="${index + 1}">\n${text}\n</segment-summary>`;
+        const data = Buffer.from(framed);
+        writeFileSync(join(this.#directory, String(index)), data, {flag: 'wx', mode: 0o600});
+        this.#size += data.length;
+        this.#count = Math.max(this.#count, index + 1);
     }
     byteLength() { return this.#size; }
     *pieces() {
         const decoder = new TextDecoder('utf8',{fatal:true});
         const buffer = Buffer.allocUnsafe(64*1024);
-        let position=0;
-        while (position < this.#size) {
-            const n=readSync(this.#fd,buffer,0,Math.min(buffer.length,this.#size-position),position);
-            if (!n) throw new Error('Incomplete compaction reduction source');
-            yield decoder.decode(buffer.subarray(0,n),{stream:true});position+=n;
+        for (let index = 0; index < this.#count; index++) {
+            const fd = openSync(join(this.#directory, String(index)), 'r');
+            try {
+                for (;;) {
+                    const n = readSync(fd, buffer, 0, buffer.length, null);
+                    if (!n) break;
+                    yield decoder.decode(buffer.subarray(0,n), {stream:true});
+                }
+            } finally { closeSync(fd); }
         }
         const final=decoder.decode();if(final)yield final;
     }
     close() {
-        if(this.#fd !== undefined) {closeSync(this.#fd);this.#fd=undefined;}
         if(this.#directory)rmSync(this.#directory,{recursive:true,force:true});this.#directory=undefined;
     }
 }
