@@ -1,0 +1,12 @@
+{
+  "stage": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "0f6380536b87918cc5eec7ec4317266e4bbb4010",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "state": "verified-immutable-cohort",
+  "staging_receipt_sha256": "e7074683472650546f415a22104149694a4642ba4d81964ea7f8ec70b754980b"
+}
