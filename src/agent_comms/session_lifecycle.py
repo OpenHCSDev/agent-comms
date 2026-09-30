@@ -20,6 +20,7 @@ from acp.schema import (
     TerminalAuthMethod,
 )
 
+from .pi_vocabulary import ThinkingLevel
 from .acp_extension import (
     ContextUsage,
     CoordinationChangedUpdate,
@@ -258,12 +259,13 @@ class SessionLifecycle:
                 os.getpid(),
                 thread.worktree,
                 thread.model,
-                thread.thinking_level,
+                ThinkingLevel.optional_name(thread.thinking_level),
                 thread.title or thread.name,
                 usage,
             ),
             GoalChangedUpdate(goal, execution),
-            *self.effects._session_runtime_metadata(thread_name, session_id or thread_name),
+            self.effects.inputs.queue_state(session_id or thread_name),
+            *self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
         )
 
     async def close_proxies(self) -> None:

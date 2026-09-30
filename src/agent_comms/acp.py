@@ -34,7 +34,6 @@ from acp.schema import (
     LoadSessionResponse,
     NewSessionResponse,
     PromptResponse,
-    SessionInfoUpdate,
     SetSessionConfigOptionResponse,
     TextContentBlock,
 )
@@ -52,13 +51,7 @@ from . import agent_events as events
 from . import manual_compaction_bridge
 from .acp_extension import (
     CompactRequest,
-    CursorAdvancedUpdate,
-    CursorEnvelope,
-    CursorScope,
-    EmptyCursorObservation,
     TextRouteUpdate,
-    UnavailableCursorObservation,
-    VerifiedCursorObservation,
     encode_updates,
 )
 from .agent_event_updates import AcpEventConsumer
@@ -69,6 +62,7 @@ from .compaction_result import CompactionResult
 from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import next_sealed_assignment
 from .field_codec import FieldCodec
+from .cursor_publication import CursorPublication
 from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .message_bus import MessageBus
@@ -83,7 +77,6 @@ from .selected_write_authority import AcpSelectedWriteAuthority
 from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
-from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .transcript_updates import TranscriptUpdate
 from .turn_effects import TurnEffects
@@ -132,14 +125,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._private_selected_tool_intent = private_selected_tool_intent
         self._private_nk_native_package = private_nk_native_package
         self._private_nk_wire_root_id = private_nk_wire_root_id
-        self._private_cursor_announced: dict[str, CursorEnvelope] = {}
-        # Local ACP projection order, allocated before any async notification.
-        # This is informational UI ordering, never a native input disposition.
-        self._private_cursor_revisions: dict[str, int] = {}
         self._comms = comms
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
         self._runtime = RuntimeServer(self)
+        self.cursors = CursorPublication(comms, self._runtime, private_nk_wire_root_id)
         self.turns = TurnRunner(
             comms,
             self._runtime,
@@ -351,132 +341,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    def _private_cursor_scope(self, thread_name: str, session_id: str) -> CursorScope | None:
-        root_id = self._private_nk_wire_root_id
-        if root_id is None:
-            return None
-        try:
-            owner, admission_generation = self._comms.registry.live_owner_with_admission(
-                thread_name
-            )
-        except (OSError, ValueError):
-            return None
-        if owner.pid != os.getpid():
-            return None
-        return CursorScope(
-            session_id,
-            root_id,
-            OwnerIdentity(ThreadIncarnation(owner.name, owner.created_at), admission_generation),
-            owner.pid,
-        )
-
-    def _private_cursor_metadata(
-        self, thread_name: str, session_id: str, *, defer_busy: bool = False
-    ) -> CursorEnvelope:
-        """Owner-scoped, ordered informational cursor for trusted ACP attach.
-
-        Every status (including none/unavailable) advances the local projection
-        revision before an async update can be delayed. Only a trusted new/load
-        response or owner-ready may bind a client to this scope; callbacks must
-        never establish authority. Neither cursor nor ACK proves consumption.
-        """
-        root_id = self._private_nk_wire_root_id
-        if root_id is None:
-            raise ValueError("Native cursor requires the configured root")
-        revision = self._private_cursor_revisions.get(session_id, 0) + 1
-        self._private_cursor_revisions[session_id] = revision
-        scope = self._private_cursor_scope(thread_name, session_id)
-        result = CursorEnvelope(scope, revision, UnavailableCursorObservation())
-        if scope is None:
-            return result
-        try:
-            with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
-                bus = MessageBus(
-                    self._comms.root / "bus.jsonl",
-                    self._comms.registry,
-                    private_response_writes=True,
-                )
-                cursor = NativeSourceCursor(bus, store, wire_root_id=root_id).read(
-                    owner_name=thread_name
-                )
-        except BlockingIOError:
-            # A writer holding a nonblocking observation lock did not invalidate
-            # the last observation. On periodic refresh, try again next poll
-            # instead of making the UI alternate between proof and unavailable.
-            # A changed/unknown owner still invalidates immediately; a trusted
-            # load without an observation still reports unavailable.
-            current_scope = self._private_cursor_scope(thread_name, session_id)
-            if defer_busy and current_scope == scope:
-                raise
-            return CursorEnvelope(current_scope, revision, UnavailableCursorObservation())
-        except (OSError, ValueError, sqlite3.Error, CoordinationError):
-            cursor = None
-            unavailable = True
-        else:
-            unavailable = False
-        # A replacement during the read invalidates even a coherent old row.
-        # Fail closed for the newly observed incarnation; a later trusted
-        # snapshot may show its own current cursor.
-        current_scope = self._private_cursor_scope(thread_name, session_id)
-        if current_scope != scope:
-            return CursorEnvelope(current_scope, revision, UnavailableCursorObservation())
-        if unavailable:
-            return result
-        return CursorEnvelope(
-            scope,
-            revision,
-            EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor),
-        )
-
-    async def _publish_private_cursor(
-        self, session_id: str, thread_name: str, *, selected_status: str | None = None
-    ) -> None:
-        """Publish observed owner transitions even when no native input was sent.
-
-        A stopped/re-admitted owner or a new admission with no current cursor
-        must invalidate a previously displayed proof. This is only projection
-        metadata: it never selects, sends, acknowledges, or retries an input.
-        """
-        try:
-            cursor = self._private_cursor_metadata(thread_name, session_id, defer_busy=True)
-        except BlockingIOError:
-            # A busy poll is not a new fact. A settled native turn, however,
-            # may have advanced its durable cursor while this read was busy.
-            # Keep the displayed snapshot and make the idle observer fetch it.
-            if selected_status is not None:
-                self._private_cursor_announced.pop(session_id, None)
-            return
-        announced = self._private_cursor_announced.get(session_id)
-        if selected_status is None and announced is not None and cursor.same_observation(announced):
-            return
-        fields = encode_updates(CursorAdvancedUpdate(cursor, selected_status))
-        try:
-            await self._runtime.session_update(
-                session_id=session_id,
-                update=SessionInfoUpdate(session_update="session_info_update", field_meta=fields),
-            )
-        except (OSError, RuntimeError):
-            self._private_cursor_announced.pop(session_id, None)
-            return  # A disconnected client can read a fresh trusted load later.
-        self._private_cursor_announced[session_id] = cursor
-
-    async def _refresh_private_cursor(self, session_id: str) -> None:
-        """Retry unresolved read projections even when the input source is idle."""
-        announced = self._private_cursor_announced.get(session_id)
-        if announced is None or announced.observation.needs_refresh:
-            await self._publish_private_cursor(session_id, self.sessions.require(session_id))
-
-    def _session_runtime_metadata(self, thread_name: str, session_id: str) -> tuple:
-        """Trusted reads supersede announcements only when their observation changes."""
-        metadata = (self.inputs.queue_state(session_id),)
-        if self._private_nk_wire_root_id is None:
-            return metadata
-        cursor = self._private_cursor_metadata(thread_name, session_id)
-        announced = self._private_cursor_announced.get(session_id, cursor)
-        if not cursor.same_observation(announced):
-            self._private_cursor_announced.pop(session_id, None)
-        return (*metadata, CursorAdvancedUpdate(cursor))
-
     def _private_nk_marker(self) -> str:
         """Require the configured, certified root before any selected request."""
         from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
@@ -511,7 +375,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # Registry admission may change without session/new or session/load.
         # Publish the observed status even when stopped, busy, or no-wake;
         # callbacks may only invalidate a prior client binding, not replace it.
-        await self._publish_private_cursor(session_id, thread_name)
+        await self.cursors.publish(session_id, thread_name)
         if not self.inputs.auto_wake or not self.sessions.runtime_enabled:
             return 0  # Explicitly disabled by owner runtime configuration.
         if self._comms.registry.status(thread_name).stopped:
@@ -583,11 +447,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
                 cursor = None  # projection unavailable; no claim or model retry
             if cursor is not None:
-                await self._publish_private_cursor(session_id, thread_name)
+                await self.cursors.publish(session_id, thread_name)
         else:
             # A disconnected client must not turn a settled claim into an
             # apparent model failure. Reconnect reads the same durable row.
-            await self._publish_private_cursor(
+            await self.cursors.publish(
                 session_id, thread_name, selected_status=result.cursor_status
             )
         return int(result is not None)

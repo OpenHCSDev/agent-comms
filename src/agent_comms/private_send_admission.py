@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .pi_vocabulary import ThinkingLevel
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
@@ -150,7 +151,7 @@ class PrivateSendAdmission:
                     session_file=self.expected_session,
                     provider=provider,
                     model=model,
-                    thinking_level=self.owner.thread.thinking_level,
+                    thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
                     maintenance_root=self.bus.log.path.parent,
                     fresh_selected=self.fresh_selected,
                     selected_tool_mode=selected_tool_mode,
