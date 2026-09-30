@@ -12,7 +12,9 @@ from pathlib import Path
 from agent_comms.coordination_contracts import (
     MAX_REASON_CODE_CHARS,
 )
+from agent_comms.errors import RelationViolationError
 from agent_comms.coordination_errors import (
+    IdentityConflict,
     PublicationUncertain,
     RecoveryBlocked,
     StaleFence,
@@ -35,10 +37,7 @@ _OWNER_LOSS_ISSUER = object()
 class VerifiedOwnerLoss:
     """A native owner's attested release, valid only inside its registry lock."""
 
-    execution_id: str
-    owner_lookup: str
-    owner_generation: int
-    attempt_ordinal: int
+    attempt: AttemptRecord
     _issuer: object = field(repr=False)
     _active: bool = field(repr=False)
     _store: Coordination = field(repr=False)
@@ -60,7 +59,6 @@ class VerifiedOwnerLoss:
         not proof that the input was unsent. Lease expiry or a replaced PID alone
         is insufficient.
         """
-        from agent_comms.bus_publication import stable_thread_lookup
         from agent_comms.comms import Comms
         from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
         from agent_comms.coordination_response import _response_boundary
@@ -81,42 +79,19 @@ class VerifiedOwnerLoss:
             )
             if source is None or source.owner_identity != attempt.owner_identity:
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
-            admission_generation = source.sent_owner_admission_generation
             try:
                 release = comms.owners.releases.read().get(attempt.owner_thread)
             except (OSError, ValueError, TypeError) as error:
                 raise RecoveryBlocked("native owner release receipt is invalid") from error
-            current = registry.threads.get(attempt.owner_thread)
-            if release is None or current is None:
+            if release is None:
                 raise RecoveryBlocked("native owner release receipt is missing")
-            released = release.thread
-            process = released.process_identity
-            valid = (
-                process is not None
-                and current.process_identity == process
-                and (
-                    (admission_generation is not None and release.before >= admission_generation)
-                    or (
-                        admission_generation is None
-                        and registry.statuses[current.name].stopped
-                        and registry.admission_generations[current.name] == release.after
-                    )
-                )
-                and released.name == attempt.owner_thread
-                and released.incarnation == current.incarnation
-                and stable_thread_lookup(current.created_at) == attempt.owner_lookup
-                and registry.admission_generations[current.name] >= release.after
-                and current.active_turn is None
-                and not process.alive()
-            )
-            if not valid:
-                raise RecoveryBlocked("native owner release does not prove loss of this admission")
+            try:
+                release.require_native_loss(registry, source)
+            except (ValueError, IdentityConflict, RelationViolationError) as error:
+                raise RecoveryBlocked(f"native owner release does not prove loss of this admission: {error}") from error
             proof = object.__new__(cls)
             for name, value in (
-                ("execution_id", execution_id),
-                ("owner_lookup", attempt.owner_lookup),
-                ("owner_generation", attempt.owner_generation),
-                ("attempt_ordinal", attempt.attempt_ordinal),
+                ("attempt", attempt),
                 ("_issuer", _OWNER_LOSS_ISSUER),
                 ("_active", True),
                 ("_store", store),
@@ -128,31 +103,14 @@ class VerifiedOwnerLoss:
                 object.__setattr__(proof, "_active", False)
 
 
-def _owner_loss_verified(
-    _proof: VerifiedOwnerLoss | None,
-    _execution_id: str,
-    _owner_lookup: str,
-    _owner_generation: int,
-    _attempt_ordinal: int,
-    _store: Coordination,
-) -> bool:
-    """Only the scoped observer can attest this store's exact lost owner."""
-    try:
-        return (
-            type(_proof) is VerifiedOwnerLoss
-            and _proof._issuer is _OWNER_LOSS_ISSUER
-            and _proof._active
-            and _proof._store is _store
-            and (
-                _proof.execution_id,
-                _proof.owner_lookup,
-                _proof.owner_generation,
-                _proof.attempt_ordinal,
-            )
-            == (_execution_id, _owner_lookup, _owner_generation, _attempt_ordinal)
-        )
-    except AttributeError:
-        return False  # An uninitialized/forged object has no issuer or scope.
+    def owns(self, store: Coordination, attempt: AttemptRecord) -> bool:
+        """Only this acquired, unexpired observer attests the original attempt."""
+        try:
+            if self._issuer is not _OWNER_LOSS_ISSUER or not self._active or self._store is not store:
+                return False
+            return self.attempt.authority == attempt.authority and self.attempt.owner_identity == attempt.owner_identity
+        except AttributeError:
+            return False  # Uninitialized objects have no acquired issuer/custody.
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -216,7 +174,7 @@ class RecoveryMonitorCapability:
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("UNKNOWN abandonment cannot resolve frozen publication")
             cls._require_native_session_exited(
-                store.session.path.parent / "native-sessions" / loss.owner_lookup
+                store.session.path.parent / "native-sessions" / loss.attempt.owner_lookup
             )
             return cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
                 execution_id,
@@ -266,7 +224,7 @@ class RecoveryMonitorCapability:
                 attempt_ordinal=attempt.attempt_ordinal,
             )
             assert reserved is not None  # Already joined by the release observer.
-            session_dir = store.session.path.parent / "native-sessions" / loss.owner_lookup
+            session_dir = store.session.path.parent / "native-sessions" / loss.attempt.owner_lookup
             session_file = Path(session_file).absolute()
             if session_file.parent != session_dir:
                 raise RecoveryBlocked("native failure session belongs to another owner")
@@ -366,9 +324,7 @@ class RecoveryMonitorCapability:
                 expected_pointer_revision,
             ):
                 raise StaleRevision("monitor CAS is stale")
-            if not isinstance(owner_loss, VerifiedOwnerLoss) or not _owner_loss_verified(
-                owner_loss, execution_id, attempt.owner_lookup, owner_generation, ordinal, store
-            ):
+            if not isinstance(owner_loss, VerifiedOwnerLoss) or not owner_loss.owns(store, attempt):
                 raise RecoveryBlocked("monitor requires an observed release of this exact owner")
             now = store.session.now(max(attempt.updated_at_ms, evidence.observed_at_ms))
             self._record_replay_observation(snapshot, evidence, replay_facts)

@@ -77,6 +77,10 @@ class AdmissionIdentity:
     incarnation: ThreadIncarnation
     admission_generation: int
 
+    def includes(self, previous: AdmissionIdentity) -> bool:
+        """Order only within this exact registry admission allocation domain."""
+        return self.incarnation == previous.incarnation and self.admission_generation >= previous.admission_generation
+
 
 @dataclass(frozen=True, slots=True)
 class TurnIdentity:

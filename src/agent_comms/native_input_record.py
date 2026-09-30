@@ -84,6 +84,15 @@ class NativeInputRecord(ABC):
             generation=self.owner_generation,
         )
 
+    def require_recorded_owner(self, thread):
+        """Join original coordinator naming/birth; this grants no live ownership."""
+        from .bus_publication import stable_thread_lookup
+        from .coordination_errors import IdentityConflict
+
+        expected = OwnerGenerations(owner_lookup=stable_thread_lookup(thread.created_at), owner_thread=thread.name, generation=self.owner_generation)
+        if self.owner_identity != expected:
+            raise IdentityConflict("Native input belongs to another recorded owner")
+
     @property
     def identity(self) -> NativeInputIdentity:
         return NativeInputIdentity(

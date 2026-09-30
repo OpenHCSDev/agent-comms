@@ -64,3 +64,32 @@ canonical retry/state capabilities. SelectedParticipant/selected_turn frame
 calls and SourceCoverage wire read capability belong to Mendel/Sch respectively.
 Remaining release acquisition, compaction source, selected-write and redacted
 retry consumer closure stay in this same draft; no Ready claim yet.
+
+## Acquired released-owner checkpoint
+
+The released-owner observer now retains the original `AttemptRecord` and delegates
+registry/process/admission loss to `OwnerReleaseReceipt.require_native_loss`.
+`AdmissionIdentity.includes` orders only the same registry admission allocation
+domain. Four copied attempt fields and `_owner_loss_verified` are deleted. Proof
+validity ends with the acquired exclusion scope; neither journal absence nor a
+replaced process grants an unwritten-input disposition.
+
+The obsolete test fixture which minted an unacquired owner-loss grant is deleted
+with its two fake-grant transition tests. Frozen publication still refuses both
+ordinary nonpublication transitions. The existing process-backed recovery fixture
+now revokes its real registry owner before failure settlement instead of patching
+the deleted `SelectedRequest._uncertain_failure` method. Fourteen affected recovery,
+forgery, released/live/process, ambiguity and frozen-publication controls passed
+in 6.12 seconds. These are source controls with synthetic native content, not
+installed/native acceptance.
+
+The selected-write file now declares accepted/applied members and one binding
+projection from its original source/admission fields. Seven ACP selected-write
+controls passed, including accepted/uncertain/no-replay paths. Original file keys,
+mode, atomic replacement and directory fsync ordering are retained.
+
+Recovery projection consumes Mendel's public execution retry capability; that
+shared dependency is required before its reader controls. Parent459 owns common
+POSIX observations; Arendt will consume that original FileRevision and path-role
+contract rather than retain tuple revision or socket validators. Selected
+compaction acquisition and the actual installed whole journey remain in progress.
