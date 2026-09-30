@@ -1,3 +1,34 @@
+## 2026-09-30 startup caller closure, next checkpoint and cleanup
+
+- Actual default launcher gate caught Core450's missed Toad consumer: stale
+  private_nk_launch import in maintenance_ingress prevented ACP startup. Parent
+  published the pair before this external UI gate passed; native/in-process
+  checks did not prove the missing boundary. Original failing footage retained.
+- Toad241 merged b2006bfe:2 production lines deleted/5 added, existing
+  PrivateNkLaunch.from_environment plus validate; no alias or new launch policy.
+  Normal immutable runtime-private-launch-caller staged68 dependencies, identical
+  Corea80/Textual2e49/SDK0.12.1/nativececa. Actual installed CANDIDATE normal
+  toad-comms startup read original41MB NRA saved history; peer click attached
+  canonically, A return kept readable history/editor/draft.28.789s, no native
+  input/provider/restart/source change, cleanup0. Peer cold body unproved.
+  Parent published five defaults only after that positive. Einstein verifies
+  actual default selection separately; this does not close453 or full239.
+- Toad239 bounded-admission checkpoint merged8512c2cb:59 production lines
+  deleted/95 added, five files. Source loop55evictions/53restores per0.8s became
+  zero through original budget owner. Actual16-check saved-history/video/scroll/
+  End/idle/A-B-A/draft/Undo journey passed85s at oldCore4295 pair. Whole UI CPU
+  unchanged80-83%scroll/10%idle; no50ms/fullwarm claim. Heisenberg242 inherits
+  complete foreground/residency/velocity/void/editor/TC1/T9 scope, including
+  canonical Saved history not loaded status despite retained visible history.
+- Model capacity943717 is explicitly declared by currentOpenRouter metadata;
+  no90%-of-context inference was proved.453 owns desired allowance versus
+  capability, shared pre-dispatch/final-payload budget and secondary rejection
+  recovery. Static131072 is not forced over legitimate newer capability.
+- User explicitly authorized deleting unused worktrees. Schrodinger owns bounded
+  merged/clean/inactive/unreferenced worktree and disposable-output cleanup;
+  preserve active/protected sessions, native pins, UNKNOWN, unreviewed changes,
+  registered resumable agent directories and runtime editable references.
+
 ## 2026-09-30 paired public activation and deeper generation-budget finding
 
 - Public defaults now use runtime-managed-tool-bus-custody-20260930:
