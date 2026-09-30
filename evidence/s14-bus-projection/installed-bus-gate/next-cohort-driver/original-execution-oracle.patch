@@ -1,0 +1,41 @@
+--- a/tests/canonical_wire_conversation_installed_pilot.py
++++ b/tests/canonical_wire_conversation_installed_pilot.py
+@@ -22,6 +22,7 @@
+ from agent_comms.threads import Thread
+ from agent_comms.comms import wire
+ from agent_comms.field_codec import FieldCodec
++from agent_comms.coordinator import Coordination
+ from agent_comms.native_runtime_input import NativeRuntimeInput
+ from agent_comms.transcript_events import WireTextTranscript, UserTranscript
+ from agent_comms.coordination_tables.assignments import WakeAssignment
+@@ -410,7 +411,14 @@
+             native_reply_proof = original_native_reply_proof(comms, original, response)
+             evidence.joinpath('original-native-reply-proof.json').write_text(
+                 json.dumps(native_reply_proof, indent=2))
+-            await until(pilot, lambda: not comms.registry.require('beta').executing)
++            # The original execution owns its settlement. Five unrelated
++            # ambient triages may still own later turns in this same thread.
++            with Coordination(str(comms.root / 'coordination.sqlite3')) as store:
++                await until(pilot, lambda: store.snapshots.get(
++                    native_reply_proof['execution_id']).completed_response())
++                original_terminal = store.snapshots.get(native_reply_proof['execution_id'])
++                receipt['original_terminal'] = FieldCodec.encode(original_terminal)
++            record_phase(receipt, evidence, 'original_terminal_before_paint')
+             # Additional real channel inputs may legitimately move this reply
+             # off the tail. Navigate its original body before requiring paint.
+             with app._context():
+@@ -472,6 +480,14 @@
+                 assert sum(body.source == response.body for body in recipient.contents.query(AgentResponse)) == 1
+                 assert all(window._exception is None for window in (app, sender_app, irc_app))
+             record_phase(receipt, evidence, 'same_open_31s_complete')
++            def beta_idle():
++                observed = comms.registry.require('beta')
++                receipt['after_31s_beta'] = FieldCodec.encode(observed)
++                return not observed.executing
++            try:
++                await until(pilot, beta_idle)
++            finally:
++                record_phase(receipt, evidence, 'after_31s_idle_witness')
+             beta_screen = app.selected_session
+             with app._context():
+                 await ThreadTarget('alpha').open(NavigationContext(app, app.selected_mode, app.project_dir, user))
