@@ -32,6 +32,7 @@ from .restart_queue import cancel as cancel_restart
 from .restart_queue import enqueue as enqueue_restart
 from .restart_queue import status as restart_status
 from .thread_management import ForkSpec
+from .thread_status import ThreadStatus
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
@@ -87,6 +88,10 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
     action_order: ClassVar[int] = 0
+
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return True
 
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
@@ -725,8 +730,16 @@ class CommsForkTool(ToolRequest):
         return {"forked": child.name, "pid": child.pid}
 
 
+class OwnerLifecycleControl:
+    """Commands that act on the owner lifecycle share its eligibility query."""
+
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return status.allows_owner_control()
+
+
 @dataclass(frozen=True, kw_only=True)
-class CommsStopTool(ToolRequest):
+class CommsStopTool(OwnerLifecycleControl, ToolRequest):
     label = "Stop Comms Thread"
     description = "Stop a thread after verifying that its process owns the registered identity."
     context = "thread"
@@ -739,7 +752,7 @@ class CommsStopTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStartTool(ToolRequest):
+class CommsStartTool(OwnerLifecycleControl, ToolRequest):
     label = "Start Comms Thread"
     description = (
         "Start a stopped agent thread with its saved conversation and configuration. "
@@ -751,12 +764,16 @@ class CommsStartTool(ToolRequest):
     action_order = 21
     name: str = tool_field("Thread to start", binding=SubjectBinding)
 
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return status.allows_owner_start(owner_pid=owner_pid)
+
     def apply(self, comms: Comms) -> JsonObject:
         return asdict(comms.owners.start(self.name))
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsQueueRestartTool(ToolRequest):
+class CommsQueueRestartTool(OwnerLifecycleControl, ToolRequest):
     label = "Queue Idle Owner Restart"
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
@@ -797,7 +814,7 @@ class CommsCancelRestartTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsArchiveTool(ToolRequest):
+class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
     context = "thread"

@@ -142,3 +142,22 @@ separate selected-native injected-original versus coverage gap. It is not
 closed by430 source/handling sanity checks. Current priority430 contributes
 canonical source identity and original-recipient handling to Schrodinger215;
 native acceptance is serialized after425 and431, without replaying failed input.
+
+The declared control seam is now implemented here and paired in Toad216, in
+/home/ts/wt/toad-declared-owner-controls-20260929. Arendt approved only this
+capability and ThreadAction.available consumer change. ToolRequest declares
+availability; OwnerLifecycleControl is a shared nominal capability, with start
+owning its distinct start query. Existing ThreadStatus members own lifecycle
+eligibility. Deleted all three allows_control string-policy methods and migrated
+the actual Toad consumer to its declared command. No policy roster, stored flag,
+status/turn mirror or competing turn model was added. Both projects' current
+source scans contain no allows_control callers/definitions.
+
+The existing Toad thread_action_deletion_pilot guard now rejects that retired
+consumer too. Its real introduction cccbe4aa created the file and grew the scoped
+attribute witness from0 to1; candidate0. control-guard-history.json in Toad216's
+named scratch records this exact scope, not a global historical debt claim.
+63 focused status/family checks pass4.22s after main integration; the actual Toad
+menu declarations consume the paired capability for archived/running/stopped
+states. These source checks do not prove mounted/installed menu or native turn
+readiness. Those acceptance obligations and six-file turn consumers remain open.
