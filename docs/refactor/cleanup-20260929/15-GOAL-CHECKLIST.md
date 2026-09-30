@@ -1,3 +1,30 @@
+## 2026-09-30 paired public activation and deeper generation-budget finding
+
+- Public defaults now use runtime-managed-tool-bus-custody-20260930:
+  Corea80c1502 / Toad308deb81 / Textual2e49 / ACP SDK0.12.1 / nativececa.
+  One canonical all-stopped retained restart returned13 new verified owners.
+  Original private root and41MB NRA native source SHA unchanged; original
+  f39210bb UNKNOWN native entry/verdict remain NULL and were not replayed.
+  Nine original configured OFF selections restored through reviewed451 member;
+  other original configuration preserved. Original user To ad process exited
+  once through identity-bound SIGINT. New launcher remains toad-comms.
+- Combined installed native fork-first-input and saved-restart automatic channel
+  reply journeys passed in42.44s; exactly2+5 controlled localhost requests,
+  first fork answer9.522s,168 canonical ACP observations;0paid/public inputs.
+  Raw/terminal receipts under /home/ts/wt/g452e; Einstein owns current actual
+  default-launcher saved-history/A-B-A UI acceptance. No completeReady claim.
+- Core453 draft is Mendel-owned and replaces wording-only recovery scope with
+  generation-policy/catalog authority/final request budgeting. Actual persisted
+  remote model catalog overrides packaged GLM output131072 with943717 and
+  context1048576 with1048575. Request builder then requested643482 using an
+  input estimate400997 while provider counted432636. Resolver proof is offline;
+  exact historical options object was not retained. Source/metadata producer
+  provenance is being checked; no arbitrary cap or static-catalog workaround.
+- Heisenberg239 actual physical first recording proves readable scroll phases,
+  End/idle and draft/undo, but cold peer selection failed. Kepler owns correction
+  to the existing recorder's selected-identity wait and joined CPU/video analysis;
+  the failing footage is retained, not counted as readiness.
+
 ## 2026-09-30 15:30Z paired release and exact budget recurrence
 
 - Core452 merged a80c15025624eec3ed6bd93ef6173cfb66a193b6, including450;
