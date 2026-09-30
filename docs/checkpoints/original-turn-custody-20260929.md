@@ -1,5 +1,15 @@
 # Original turn resources and journal settlement continuation
 
+Current delivered checkpoint: original resource custody plus ordinary native
+publication is Ready after the installed41MB lifecycle gate and fresh actual
+native Source/consumer gate recorded below. Main1e967af4 is integrated normally;
+production src is unchanged from the tested ordinary d6b5c706 source. The native
+gate used reviewed native614; main's later shared scheduling has its separate439
+receipt. Mendel owns the required quiet certified durable routing carry before
+a future paired installation. Parent owns integration/activation. Remaining S14
+initial command custody and broader lifecycle closure stay with Arendt; those
+are not included in this useful checkpoint. No repeat of completed gates.
+
 ## Separate failure consumer checkpoint
 
 Core436 `f955ee52fa702d95192cc297e926caa9e9ccba28` consumes the original exception rethrown by Einstein434. TurnProgress writes its private traceback to the existing turn diagnostic before attempting a safe public Error. OwnedTurn joins the original native child even if diagnostic or public failure delivery raises. Production changes: 3 lines deleted, 16 added; the existing real-owner fixture verifies private cause retention after transport disconnect, no private error text in public events, and no replay.
