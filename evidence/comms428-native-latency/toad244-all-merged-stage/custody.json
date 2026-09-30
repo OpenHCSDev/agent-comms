@@ -1,0 +1,11 @@
+{
+  "state": "BUILT-MERGED-PAIR",
+  "owner": "Schrodinger244stage",
+  "planned_core": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+  "current_planned_toad": "b932042fd5c250143f0a57a4ede92b4f3d7cf3e0",
+  "stage_created": true,
+  "public_mutations": false,
+  "stage": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+  "frozen_toad": "b932042fd5c250143f0a57a4ede92b4f3d7cf3e0",
+  "reason": "Parent authorizes current all-merged release without waiting243 draft. No candidate UI started until source/preflight passes."
+}

@@ -1,0 +1,50 @@
+{
+  "state": "READY-IMMUTABLE-PAIRED-STAGE-AWAITING-PARENT-ACTIVATION",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+  "pins": {
+    "agent-comms": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+    "batrachian-toad": "b932042fd5c250143f0a57a4ede92b4f3d7cf3e0",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "frozen_packages": 68,
+  "source_proof": {
+    "agent-comms": {
+      "pin": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+      "python_files_equal": 290,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "b932042fd5c250143f0a57a4ede92b4f3d7cf3e0",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "native_trust": "Unchanged canonical stable ceca, prior reviewed full proof reused",
+  "metadata_published_from_same_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3577829,
+        "start_ticks": 26214036,
+        "returncode": 0
+      }
+    ]
+  },
+  "builds": 1,
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "paid_calls": 0,
+  "native_inputs": 0,
+  "accepted_scope": "Merged-head244 normal package/source provenance; unchanged Core/native acceptance reused. Einstein actual normal candidate launcher/ACP/41MB saved history A/B/A must pass BEFORE parent UI-default publication; backend differs only in two documented checkpoint files, no owner restart.",
+  "remaining_scope": "Known provider output-budget decoder defect remains Mendel453-owned; no budget fix claim. Parent UI-default only after Einstein actual candidate CLI acceptance; no backend/route/native/globalTS/owner updates."
+}

@@ -1,0 +1,11 @@
+{
+  "state": "PACKAGE-READY-ACTUAL-CANDIDATE-UI-PENDING",
+  "owner": "Schrodinger package stage",
+  "actual_ui_gate_owner": "Einstein",
+  "activation_owner": "Parent",
+  "public_mutations": false,
+  "owners_restarted": false,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "source_only_verification_retry": null
+}

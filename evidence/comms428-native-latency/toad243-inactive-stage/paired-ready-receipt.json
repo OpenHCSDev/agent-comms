@@ -1,0 +1,50 @@
+{
+  "state": "READY-IMMUTABLE-PAIRED-STAGE-AWAITING-PARENT-ACTIVATION",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-provider-login-candidate-20260930",
+  "pins": {
+    "agent-comms": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+    "batrachian-toad": "82f454cd5a1e5fa82483f37e802c598eba84efe0",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "frozen_packages": 68,
+  "source_proof": {
+    "agent-comms": {
+      "pin": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+      "python_files_equal": 290,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-provider-login-candidate-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "82f454cd5a1e5fa82483f37e802c598eba84efe0",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-provider-login-candidate-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "native_trust": "Unchanged canonical stable ceca, prior reviewed full proof reused",
+  "metadata_published_from_same_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3561234,
+        "start_ticks": 26168806,
+        "returncode": 0
+      }
+    ]
+  },
+  "builds": 1,
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "paid_calls": 0,
+  "native_inputs": 0,
+  "accepted_scope": "UI-only243 normal package/source provenance; unchanged Core/native acceptance reused. Einstein actual normal candidate launcher/ACP/provider-login modal/native PTY/cancel must pass BEFORE parent UI-default publication.",
+  "remaining_scope": "Known provider output-budget decoder defect remains Mendel453-owned; no budget fix claim. Parent UI-default only after Einstein actual candidate CLI acceptance; no backend/route/native/globalTS/owner updates."
+}
