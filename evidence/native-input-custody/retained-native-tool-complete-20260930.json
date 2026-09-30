@@ -28,5 +28,6 @@
   "wheel_sha256": "13997f523d2b7aec37898858185f442b0b41d1d985fcea845ec27ea617b156be",
   "native": "593b978a717ae8f6",
   "gate": "Noneditable Core wheel with actual selected native pipeline and localhost provider; no Toad UI, public input or paid provider call",
-  "limits": "Tool intervals use original event consumption in one Python process; not pure filesystem I/O or native producer timestamps"
+  "limits": "Tool intervals use original event consumption in one Python process; not pure filesystem I/O or native producer timestamps",
+  "tested_production_head": "2ae88cdb8d02ab3994437fad974d57cc9ae2811f"
 }

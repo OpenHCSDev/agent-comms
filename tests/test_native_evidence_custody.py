@@ -32,7 +32,7 @@ def test_acquired_source_observes_new_context_generation(tmp_path):
 
 
 @pytest.mark.parametrize("damage", [
-    "prefix", "truncate", "replace", "symlink", "permissions",
+    "prefix", "truncate", "replace", "symlink", "permissions", "ancestor_permissions",
     "duplicate_input", "non_user_input", "malformed_append", "proof",
 ])
 def test_acquired_source_never_reuses_evidence_after_damage(tmp_path, damage):
@@ -57,6 +57,8 @@ def test_acquired_source_never_reuses_evidence_after_damage(tmp_path, damage):
             session.symlink_to(original_path)
         elif damage == "permissions":
             session.chmod(0o644)
+        elif damage == "ancestor_permissions":
+            session.parent.chmod(0o777)
         elif damage in ("duplicate_input", "non_user_input"):
             entry = json.loads(original.splitlines()[1])
             entry["id"] = "duplicate"
