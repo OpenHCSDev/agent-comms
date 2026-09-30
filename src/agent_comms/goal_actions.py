@@ -84,7 +84,7 @@ class GoalActionContext:
 
     @property
     def report_turn(self) -> str:
-        return self.thread.active_turn.id if self.thread.active_turn is not None else ""
+        return self.thread.turn_state.report_turn
 
     @property
     def model_report(self) -> bool:
@@ -116,7 +116,10 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         if not isinstance(self, ctx.actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
         self.check_grant(ctx)
-        if ctx.model_report and ctx.thread.last_goal_report_turn == ctx.report_turn:
+        if ctx.model_report and any(
+            entry.reports_turn(ctx.report_turn)
+            for entry in ctx.goals.registry.goal_history(ctx.thread.name)
+        ):
             raise ValueError("This goal was already reported in this turn.")
         goal = self.change(ctx)
         self.before_publish(goal, ctx)
@@ -124,9 +127,6 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             replace(
                 ctx.thread,
                 goal=goal,
-                last_goal_report_turn=(
-                    ctx.report_turn if ctx.model_report else ctx.thread.last_goal_report_turn
-                ),
             ),
             ctx.goals.registry.status(ctx.thread.name),
         )
@@ -210,7 +210,7 @@ class ActiveGoalAction(
                     replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
                 )
                 raise ValueError(refusal)
-            elif not generation.lifecycle.allows_resume(thread.active_turn is not None):
+            elif not generation.lifecycle.allows_resume(thread.turn_state.managed_id is not None):
                 raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
 
@@ -295,6 +295,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         )
         # Commit scheduling authority first. A crash before the registry
         # progress update must leave this same goal waiting, not runnable.
+        reporting_lease = thread.turn_lease
         ctx.goals.waits.record(
             GoalWait(
                 goal.id,
@@ -303,8 +304,10 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 ctx.goals.bus.log.latest_sequence(),
                 wait_targets,
                 owner_created_at=thread.created_at,
-                report_turn_id=thread.active_turn.id if thread.active_turn else None,
-                report_turn_generation=(thread.turn_generation if thread.active_turn else None),
+                report_turn_id=reporting_lease.turn_id if reporting_lease is not None else None,
+                report_turn_generation=(
+                    reporting_lease.identity.generation if reporting_lease is not None else None
+                ),
                 target_turn_generations=tuple(
                     (
                         snapshot.threads[

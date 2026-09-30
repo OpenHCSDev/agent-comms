@@ -19,6 +19,15 @@ def test_no_mutation_aggregate_or_compatibility_dispatch():
     failures = []
     for path in SOURCE.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Name)
+                and node.id == "last_goal_report_turn"
+                or isinstance(node, ast.Attribute)
+                and node.attr in {"last_goal_report_turn", "allows_control"}
+                or isinstance(node, ast.Constant)
+                and node.value == "last_goal_report_turn"
+            ):
+                failures.append((path, node.lineno))
             if isinstance(node, ast.Name) and node.id == "MutationStore":
                 failures.append((path, node.lineno))
             if isinstance(node, ast.ClassDef) and node.name == "MutationStore":

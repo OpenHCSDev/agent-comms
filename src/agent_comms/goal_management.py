@@ -186,7 +186,7 @@ class Goals:
             snapshot = self.registry.snapshot()
             canonical = snapshot.aliases.get(name, name)
             owner = snapshot.threads.get(canonical)
-            if owner is None or owner.active_turn is not None:
+            if owner is None or owner.turn_state.managed_id is not None:
                 return ()
             goal = owner.goal
             if goal is None or not goal.state.active:
@@ -241,13 +241,16 @@ class Goals:
                 fence.identity.incarnation.name, fence.identity.incarnation.name
             )
             source = snapshot.threads.get(canonical)
+            observed = (
+                source.observed_turn(snapshot.admission_generations.get(canonical, 0))
+                if source is not None
+                else None
+            )
             if (
                 source is None
-                or source.created_at != fence.identity.incarnation.created_at
-                or source.active_turn is not None
-                or source.turn_generation != fence.identity.generation
-                or source.last_finished_turn_id != fence.turn_id
-                or snapshot.admission_generations.get(canonical) != fence.admission_generation
+                or source.turn_state.managed_id is not None
+                or observed is None
+                or not observed.matches(fence.renamed(canonical))
                 or not snapshot.statuses[canonical].active
             ):
                 return ()

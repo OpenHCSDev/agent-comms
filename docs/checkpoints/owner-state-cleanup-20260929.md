@@ -161,3 +161,46 @@ named scratch records this exact scope, not a global historical debt claim.
 menu declarations consume the paired capability for archived/running/stopped
 states. These source checks do not prove mounted/installed menu or native turn
 readiness. Those acceptance obligations and six-file turn consumers remain open.
+
+## Canonical turn consumers and goal-report mirror deletion
+
+Normally integrated main72062939 (merged425 and431) atf524e42b. Watchdog uses
+TurnSession.awaiting_native_attestation; that session capability and all three
+backend callers delegate NativeAttestation.observed. Goal reports use the public
+TurnState.report_turn. Standby captures its original Thread.turn_lease rather
+than reconstructing the reporting identity. Wait graph and idle recovery read
+the public turn projection. Terminal wait release compares the original
+FinishedTurnFence with Thread.observed_turn under current admission, preserving
+rename, birth, generation and stale-callback rejection.
+
+Deleted9 production lines implementing the competing report mirror: Thread's
+last_goal_report_turn field and validator (5), plus GoalAction's read/write sites
+(4). The once-per-turn gate now derives committed Goal.reported_turn revisions
+from the existing goal_history owner for the original thread incarnation. Clear,
+replacement and cold reopen cannot erase the historical report. No new store,
+report flag, seen list or compatibility field was added. Arendt approved the
+disjoint Thread deletion alongside his AdmissionIdentity builder work.
+
+Extended the existing mutation guard to forbid the retired report field and
+ThreadStatus.allows_control callers. Real history0c94f4ce introduced six guarded
+AST occurrences across declarations.py/operations.py; the prior head has zero,
+and today's moved Thread/GoalAction declarations have zero. Named scratch
+goal-report-mirror-guard-history.json traces the actual original paths rather
+than falsely counting a later file move as debt introduction.
+
+58 focused source/owner controls pass (56 in7.86s plus two correctly configured
+private socket/scheduler controls in1.39s). Four fake-stream standby tests fail
+identically on unmodified main72062939: their streams omit actual InputStarted,
+so the public RequestError correctly retains an unstarted original. One also
+uses an obsolete emission callback signature. Baseline4FAIL2.64s is retained
+in422 scratch; these are fixture migration debt, not production compatibility
+requests or installed acceptance.
+
+The removed registry field is a hard format cutover. Parent owns the quiet
+cutover: preserve registry/native history, original input/UNKNOWN and committed
+goal_history. If an old active turn's only report evidence is the retired field
+without a committed journal revision, do not erase its report guard or fabricate
+a journal receipt; complete the existing idle boundary before format conversion.
+No old-field reader is added to production. Paired421/216 actual installed goal,
+menu/control, release and noReplay acceptance remains pending serial native slot.
+All five family rows and all six assigned consumer files remain tracked above.
