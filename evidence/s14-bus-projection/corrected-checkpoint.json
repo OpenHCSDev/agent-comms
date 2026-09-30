@@ -1,0 +1,19 @@
+{
+  "base_revision": "3b216396ca2edaa89493edbf99439c3e821ca71f",
+  "head_revision": "e1b69731624dec5ee786408a56d3778025b1ff57",
+  "positive_deltas": {},
+  "nonzero_deltas": {
+    "TypeIdentity": -21,
+    "LongBooleanChain": -11,
+    "BooleanChainTerms:src/agent_comms/bus_activity_index.py": -9,
+    "BooleanChainTerms:src/agent_comms/bus_display_index.py": -15,
+    "BooleanChainTerms:src/agent_comms/presentation.py": -7,
+    "BooleanChainTerms:src/agent_comms/private_bus_checkpoint.py": -11,
+    "BooleanChainTerms:src/agent_comms/proven_source_coverage.py": -6,
+    "BooleanChainTerms:src/agent_comms/wake_candidate_index.py": -27,
+    "ForeignAbsenceProbe:src/agent_comms/presentation.py": -1,
+    "StringSubscript": -13
+  },
+  "required_guard_exit": 0,
+  "readiness": "SOURCE-ONLY; actual installed continuous DM/channel acceptance pending"
+}
