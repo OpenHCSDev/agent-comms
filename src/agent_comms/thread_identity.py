@@ -6,6 +6,7 @@ does not create a new historical thread; a new turn does not change its owner.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -21,6 +22,14 @@ if TYPE_CHECKING:
 class ThreadIncarnation:
     name: str
     created_at: float
+
+    def __post_init__(self) -> None:
+        from .field_codec import FieldCodec
+
+        if not FieldCodec.decode(str, self.name):
+            raise ValueError("Thread incarnation requires a recorded name")
+        if not math.isfinite(FieldCodec.decode(float, self.created_at)):
+            raise ValueError("Thread incarnation requires a finite birth")
 
     def resolved(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
@@ -67,6 +76,7 @@ class TurnId:
 @dataclass(frozen=True, slots=True)
 class OwnerIdentity:
     """An allocation from RegistryDocument.owners, used with process proof."""
+
     incarnation: ThreadIncarnation
     generation: int
 
@@ -74,6 +84,7 @@ class OwnerIdentity:
 @dataclass(frozen=True, slots=True)
 class AdmissionIdentity:
     """An allocation from RegistryDocument.admissions, never an owner lease."""
+
     incarnation: ThreadIncarnation
     admission_generation: int
 

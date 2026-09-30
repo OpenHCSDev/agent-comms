@@ -15,9 +15,12 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
+from typing import Literal
 
 from .errors import RelationViolationError
 from .message_reference import MessageReference
+from .field_codec import FieldCodec
+from .thread_identity import GenerationCounter, TurnId
 
 
 class ClaimTransitionError(ValueError):
@@ -128,6 +131,18 @@ class AssignmentBinding:
     source: MessageReference
     execution_id: str
 
+    def __post_init__(self) -> None:
+        _text(self.assignment_id, "Assignment ID")
+        _text(self.recipient_lookup, "Recipient lookup")
+        _text(self.source.message_id, "Source message ID")
+        _text(self.execution_id, "Execution ID")
+        if ":" in self.execution_id:
+            raise ClaimTransitionError("Execution ID cannot contain a colon.")
+        if FieldCodec.decode(int, self.source.seq) <= 0:
+            raise ClaimTransitionError("Assignment source sequence must be positive.")
+        if FieldCodec.decode(int, self.revision) <= 0:
+            raise ClaimTransitionError("Assignment revision must be positive.")
+
 
 @dataclass(frozen=True, slots=True)
 class WakeAdmission:
@@ -150,8 +165,11 @@ class WakeAdmission:
     @property
     def binding(self) -> AssignmentBinding:
         return AssignmentBinding(
-            self.wake_assignment_id, self.wake_revision, self.recipient_lookup,
-            self.source, self.execution_id,
+            self.wake_assignment_id,
+            self.wake_revision,
+            self.recipient_lookup,
+            self.source,
+            self.execution_id,
         )
 
     @property
@@ -159,38 +177,27 @@ class WakeAdmission:
         return MessageReference(self.source_seq, self.source_message_id)
 
     def __post_init__(self) -> None:
-        for label, value, size in (
-            ("Wire root", self.wire_root_id, 32),
-            ("Recipient lookup", self.recipient_lookup, 32),
-            ("Operation ID", self.operation_id, 32),
-        ):
-            if (
-                type(value) is not str
-                or len(value) != size
-                or any(character not in "0123456789abcdef" for character in value)
-            ):
-                raise ClaimTransitionError(f"{label} must be lowercase hex.")
-        if (
-            type(self.source_seq) is not int
-            or self.source_seq <= 0
-            or type(self.wake_revision) is not int
-            or self.wake_revision <= 0
-            or type(self.version) is not int
-            or self.version != 1
-            or type(self.owner_admission_generation) is not int
-            or self.owner_admission_generation <= 0
-            or type(self.participant_generation) is not int
-            or self.participant_generation <= 0
-            or type(self.attempt_ordinal) is not int
-            or self.attempt_ordinal <= 0
-        ):
-            raise ClaimTransitionError("Wake admission version or revision is invalid.")
-        _text(self.source_message_id, "Source message ID")
-        _text(self.execution_id, "Execution ID")
-        if not (type(self.turn_id) is str and 0 < len(self.turn_id) <= 128):
-            raise ClaimTransitionError("Wake admission turn ID is invalid.")
-        if ":" in self.execution_id:
-            raise ClaimTransitionError("Execution ID cannot contain a colon.")
+        from .wire_metadata import WireRootIdText
+
+        WireRootIdText.decode(self.wire_root_id)
+        _generation(self.recipient_lookup)
+        _generation(self.operation_id)
+        try:
+            FieldCodec.decode(Literal[1], self.version)
+            AssignmentBinding(
+                self.wake_assignment_id,
+                self.wake_revision,
+                self.recipient_lookup,
+                self.source,
+                self.execution_id,
+            )
+            GenerationCounter.require_positive(self.owner_admission_generation)
+            GenerationCounter.require_positive(self.participant_generation)
+            if FieldCodec.decode(int, self.attempt_ordinal) <= 0:
+                raise ValueError("attempt ordinal must be positive")
+        except ValueError as error:
+            raise ClaimTransitionError("Wake admission version or revision is invalid.") from error
+        TurnId.for_registration(self.turn_id)
         if (
             type(self.wake_assignment_id) is not str
             or not self.wake_assignment_id.startswith("cohort-v1:")
@@ -264,6 +271,17 @@ class ClaimOwner:
     message_id: str
     admission: WakeAdmission | None = None
 
+    def __post_init__(self) -> None:
+        _resource(self.resource)
+        _text(self.owner, "Owner")
+        _text(self.incarnation, "Incarnation")
+        _generation(self.generation)
+        _text(self.message_id, "Message ID")
+        if type(self.seq) is not int or self.seq <= 0:
+            raise ClaimTransitionError("Claim sequence must be a positive exact integer.")
+        if self.admission is not None and type(self.admission) is not WakeAdmission:
+            raise ClaimTransitionError("Claim owner requires a typed wake admission.")
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimProjection(Mapping[str, ClaimOwner]):
@@ -276,12 +294,7 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
         if type(self.last_seq) is not int or self.last_seq < 0:
             raise ClaimTransitionError("Projection sequence must be a nonnegative exact integer.")
         if not isinstance(self._claims, Mapping) or any(
-            type(key) is not str
-            or type(value) is not ClaimOwner
-            or value.resource != key
-            or type(value.seq) is not int
-            or value.seq <= 0
-            or value.seq > self.last_seq
+            type(value) is not ClaimOwner or value.resource != key or value.seq > self.last_seq
             for key, value in self._claims.items()
         ):
             raise ClaimTransitionError("Previous projection is malformed.")
