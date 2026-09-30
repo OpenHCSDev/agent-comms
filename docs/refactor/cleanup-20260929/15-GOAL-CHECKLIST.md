@@ -1,3 +1,23 @@
+## 2026-09-30 usage fixes live and actual ordinary default accepted
+
+453/454/242/247 are LIVE: Core6feb, Toad8a924, Textual2e49, SDK0.12.1,
+native593b; five defaults and all13 retained owners match. Einstein's actual
+ordinary toad-comms nra-architecture physical startup passed16.516s, no override,
+no input/provider call,0 new protocol errors, cleanup0. Parent personally viewed
+readable original41MB saved history and Ready/OFF; canonical goalNone, execution
+None, queueavailableempty and idle arrived. Original source hash and fresh owner
+identity unchanged; original UNKNOWN remains triage. Actual candidate full
+native/ACP/Toad journey passed41.783s beforehand. No uncertain prompt replay.
+
+453 corrects request-local output allowance and proven pre-stream budget
+recovery.454 isolates a stalled subscriber from owner publication and measures
+actual provider/callback progress.242 derives retained history coverage from
+its existing owner. These tested checkpoints do not close all scroll/cache/CPU
+or compaction latency bugs. Heisenberg245 and Kepler profile support continue
+independently. One-use operator removal is Arendt-owned; hash/proof retained.
+Parent clean merged pin worktrees are being removed normally after no refs;
+source branches and live/previous published prefixes protected.
+
 ## 2026-09-30 paired usage fixes published; ordinary launcher acceptance running
 
 Core453/454 +Toad242/247 now installed as Core6feb/Toad8a924/Text2e49/

@@ -1,5 +1,5 @@
 {
-  "state": "PUBLISHED-RETAINED-OWNERS-VERIFIED-ORDINARY-DEFAULT-UI-PENDING",
+  "state": "PUBLISHED-RETAINED-OWNERS-AND-ACTUAL-DEFAULT-LIVE-VERIFIED",
   "owner": "parent",
   "pins": {
     "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
@@ -281,7 +281,7 @@
   },
   "paid_calls": 0,
   "original_input_replays": 0,
-  "remaining_scope": "Publication+fresh ordinarydefault acceptance pending. Full CPU/cache/focus/growing-End inToad245 continues separately; wholeproviderlatency/all11API proof not claimed.",
+  "remaining_scope": "Wholeperformance245 remains active; no all-eleven-provider or fullproviderwait/compaction latency claim.",
   "readback": {
     "state": "PUBLIC-ROUTE-DEFAULTS-RETAINED-OWNERS-VERIFIED-UI-PENDING",
     "route": {
@@ -427,5 +427,133 @@
     "original_nra_history_sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
     "original_nra_history_bytes": 41270257
   },
-  "candidate_pixel_qualification": "Actual compositor once-paint and typed native/ACP accepted. Exported immediate-open SVG/PNG has black foreground; it is not readable physical pixel proof. Ordinary default physical saved-history check remains pending."
+  "candidate_pixel_qualification": "Actual compositor once-paint and typed native/ACP accepted. Exported immediate-open SVG/PNG has black foreground; it is not readable physical pixel proof. Ordinary default physical saved-history check remains pending.",
+  "default_acceptance": {
+    "state": "ACTUAL-PUBLISHED-DEFAULT-STARTUP-ACP-SAVED-HISTORY-PASS",
+    "overall_product_ready": false,
+    "scope": "One normal startup-only check of published default launcher links; no A/B/A, scroll, auth or provider repeat",
+    "normal_command": [
+      "/home/ts/bin/toad-comms",
+      "nra-architecture"
+    ],
+    "default_selection": "PATH agent-comms-acp",
+    "runtime": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin",
+    "runtime_override": false,
+    "pins": {
+      "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+      "batrachian-toad": "8a924e1d6c4a32098876f7885cc06c7173d499fa",
+      "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+    },
+    "sdk": "0.12.1",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "duration_seconds": 16.51630195096368,
+    "ui_runs": 1,
+    "physical_frame": "phase-startup.png personally viewed: retained original NRA history visibly readable, selected nra-architecture; Ready/OFF; preserved historical10:15 PromptSendUnknown cards. No fresh failure inferred from retained historical cards.",
+    "initialize_reply": true,
+    "session_load_reply": true,
+    "fresh_protocol_errors": 0,
+    "canonical_acp_facts": [
+      {
+        "session_id": "nra-architecture",
+        "fact": {
+          "kind": "coordination_changed",
+          "thread": {
+            "name": "nra-architecture",
+            "created_at": 1790049182.3907015
+          },
+          "wire_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+          "owner_pid": 3697925,
+          "worktree": "/home/ts/code/projects/nominal-refactor-advisor",
+          "model": "openai-codex/gpt-6.1-sol",
+          "thinking_level": "off",
+          "title": "nra-architecture",
+          "context_usage": {
+            "used": 94579,
+            "size": 272000
+          }
+        }
+      },
+      {
+        "session_id": "nra-architecture",
+        "fact": {
+          "kind": "goal_changed",
+          "goal": null,
+          "execution": null
+        }
+      },
+      {
+        "session_id": "nra-architecture",
+        "fact": {
+          "kind": "queue_changed",
+          "scope": {
+            "session_id": "nra-architecture",
+            "admission": {
+              "incarnation": {
+                "name": "nra-architecture",
+                "created_at": 1790049182.3907015
+              },
+              "admission_generation": 1078
+            },
+            "owner_pid": 3697925
+          },
+          "revision": 2,
+          "projection": {
+            "kind": "available",
+            "items": [],
+            "restored": []
+          }
+        }
+      },
+      {
+        "session_id": "nra-architecture",
+        "fact": {
+          "kind": "turn_changed",
+          "state": {
+            "active": null,
+            "finished_turn_id": "6cfdff5d9a2bfb4226320d69d34a58fb"
+          }
+        }
+      }
+    ],
+    "original_before": {
+      "identity": {
+        "pid": 3697925,
+        "start_time": 26677204
+      },
+      "active_turn": null,
+      "source_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+      "bytes": 41270257,
+      "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c"
+    },
+    "original_after": {
+      "identity": {
+        "pid": 3697925,
+        "start_time": 26677204
+      },
+      "active_turn": null,
+      "source_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+      "bytes": 41270257,
+      "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c"
+    },
+    "source_and_owner_unchanged": true,
+    "cleanup": {
+      "remaining_owned_pids": [],
+      "errors": [],
+      "all_tracked_owned_identities_absent": true
+    },
+    "terminal_capture_completed": true,
+    "wrapper_exit_code": 0,
+    "raw_receipt": "/home/ts/.cache/agent-scratch/comms-default-native-budget-progress-20260930/capture/receipt.json",
+    "raw_protocol_logs": "/home/ts/.cache/agent-scratch/comms-default-native-budget-progress-20260930/state/toad/logs/Agent_Comms_2026-09-30T14_00_37_261362.txt",
+    "native_inputs": 0,
+    "provider_calls": 0,
+    "paid_calls": 0,
+    "default_changes_by_worker": 0,
+    "public_owner_restarts": 0,
+    "unknown_replays": 0,
+    "remaining_scope": "Historical UNKNOWN preserved. Scope is changed final454 default launcher, canonical ACP initialization/load and saved history only. Earlier453/242 native controls and final454 matched journey accepted separately. No repeat scroll, paid provider/API-fleet/performance readiness claim.",
+    "fresh_postcutover_baseline": true,
+    "live_verified_scope": "Actual published ordinary default launcher, selected saved history and canonical initialized goal/queue/idle facts only; no provider input/fullperformance claim."
+  },
+  "parent_review": "Personally viewed readable actual physical startup frame: original saved NRA inbound/outbound history, Ready/OFF, no stale busy indicator. Historical10:15UNKNOWN preserved, not a new error."
 }
