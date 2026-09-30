@@ -1,0 +1,102 @@
+{
+  "owner": "Schrodinger450",
+  "source_base": "93f4b11010ce5d5c6d59e26fc03d9819c4afa1ec",
+  "source_current": "9e797954123e93111fb14c1d202c2494bd683e4a",
+  "pins": {
+    "source_head": "93f4b11010ce5d5c6d59e26fc03d9819c4afa1ec",
+    "candidate_tree": "10798d3bd729c1a4cc1998d05eeb54a9e1ba94477aa6c7d6705763ceb394eb0f",
+    "manifest_sha256": "ceca2c05cf0ae07bc7bfab3831387bbf7f54a122675f26264f240dc5476b6e47",
+    "new_build_selector": "ceca2c05cf0ae07b",
+    "changed_files": [
+      "agent-comms-extensions/global-agent-comms/index.mjs",
+      "dist/agent-comms-imports.json"
+    ],
+    "old_diagnostic_pins_unchanged": true,
+    "old_native_e36_unchanged": true,
+    "fresh_capture": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/fresh-unverified/node_modules/@earendil-works/pi-coding-agent",
+    "scratch_owner": "Schrodinger450"
+  },
+  "canonical_prepare": {
+    "exit": 0,
+    "recipe": "stack/bin/prepare-pi-native",
+    "log": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/canonical-build03.log",
+    "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+    "offline_locked_dependencies": 95
+  },
+  "installed_package": {
+    "ok": true,
+    "package": "/home/ts/wt/comms428-native-wait-custody-20260930/stack/.pi-native-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+    "cli": "/home/ts/wt/comms428-native-wait-custody-20260930/stack/.pi-native-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+    "installed_manifest": "/home/ts/.cache/agent-scratch/comms428-native-wait-custody-20260930/installed/lib/python3.14/site-packages/agent_comms/_native/pi-native.sha256",
+    "manifest_sha256": "ceca2c05cf0ae07bc7bfab3831387bbf7f54a122675f26264f240dc5476b6e47",
+    "full_tree_ancestry_owner_mode_nlink_validation": true,
+    "default_mutation": false,
+    "native_inputs": 0
+  },
+  "wheel_sha256": "015f1ba5307e749e8cf9091619720e657d7a8b7bbdea0121f957f76b921da807",
+  "wheel_python_sources_exact": 290,
+  "wheel_manifest_exact": true,
+  "production_discovery": {
+    "ok": true,
+    "source_snapshot_sha256": "40a4a85d790a5e9a156c7a412ce6f23da8b215ca7f8168e5468dff888a7bcb87",
+    "compiled_bytes": 4338,
+    "discovered_extensions": [
+      "/home/ts/wt/comms428-native-wait-custody-20260930/stack/.pi-native-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent/agent-comms-extensions/global-agent-comms/index.mjs",
+      "/home/ts/wt/comms428-native-wait-custody-20260930/stack/.pi-native-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent/agent-comms-extensions/global-project-sync/index.mjs"
+    ],
+    "inline_factories": 0,
+    "handlers": [
+      "session_start"
+    ],
+    "tool_count": 32,
+    "saved_native_session": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/packaged-discovery02/sessions/2026-09-30T15-08-30-119Z_01a0f2dc-2a26-76fe-9cb6-a4d46ef91feb.jsonl",
+    "saved_state": "Native-generated header only, no retained message history claim",
+    "tool_timings": [
+      {
+        "name": "read",
+        "hook_before_ms": 498.4133320000003,
+        "tool_ms": 2.8413729999997486,
+        "hook_after_ms": 0.2986759999998867
+      },
+      {
+        "name": "edit",
+        "hook_before_ms": 469.38415699999996,
+        "tool_ms": 5.089653999999882,
+        "hook_after_ms": 0.0532309999998688
+      },
+      {
+        "name": "read",
+        "hook_before_ms": 474.4507880000001,
+        "tool_ms": 0.7262860000000728,
+        "hook_after_ms": 0.029175000000122964
+      }
+    ],
+    "network": "kernel-denied",
+    "provider_prompts": 0,
+    "native_inputs": 0,
+    "limits": "Actual packaged DefaultResourceLoader discovery through supported private settings extension paths and production manifest, native hooks and builtin read/edit/read. No extensionFactories, inline compilation, provider call or ACP turn. Default global source remains old and paired deployment is parent-owned."
+  },
+  "fixture_process_references": [],
+  "failed_probe_preserved": {
+    "path": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/packaged-discovery01",
+    "cause": "Receipt serializer used source declaration rather than entry declaration after actual read/edit/read passed; corrected receipt construction only."
+  },
+  "scratch_custody": {
+    "owner": "Schrodinger450",
+    "bundle": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930",
+    "borrowed_cli": "/home/ts/.cache/agent-scratch/comms428-native-wait-custody-20260930/installed",
+    "protected_native": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017",
+    "cleanup": "Preserve candidate package and proof/private saved header roots until parent deployment acceptance; npm/fresh-unverified disposable afterward with process/reference checks."
+  },
+  "limits": [
+    "Default global TS source remains old. Parent paired source/package deployment is required before default discovery.",
+    "No ACP/provider-turn/public activation acceptance.",
+    "Original 129.898s native model interval remains unattributed."
+  ],
+  "deletion_accounting": {
+    "new_packaging_production_lines_deleted": 0,
+    "pin_lines_replaced": 1,
+    "previous_source_checkpoint_deleted": 40,
+    "previous_source_checkpoint_added": 44
+  }
+}
