@@ -85,3 +85,36 @@ observed launch interpreter, even if its reader understands the same schema.
 The old720 capture receipt remains historical, not a current owner witness.
 Heisenberg owns the actual default entrypoint gate. Parent's private441 preimages
 and the reviewed operator remain protected; no repeat public batch is authorized.
+
+## Required active-route publication closure
+
+The first batch correctly launched e36 owners but only pinned its local service;
+the durable default ActiveRoute still selected4ab. Parent corrected the existing
+publisher under route-directory EX using the authentic original expected value,
+target preflight, durable replacement and exact600-mode readback. No restart or
+input replay accompanied that correction. Parent owns its private route receipt.
+
+The442 phase must own original admission, ALL stop, both Thread carrier changes,
+guarded target ActiveRoute publication, THEN target launch. Use the existing
+_publish_active_route_locked(expected=original) through its declared acquired
+publication capability. Neither PrivateNkLaunch nor a second route record is
+default publication authority. Acquire original route custody in the canonical
+lock order, rather than adding a late route EX/wire inversion or operator loop.
+
+## Receiving live native-preflight S14 incident
+
+Arendt receives the actual refactor-r1 reserved old-channel TRIAGE failure after
+first ship, not a new user input. The diagnostic5a71d2b95ecda3268ea166ff25496e1b
+is preserved UNKNOWN with no retry/drain restart. Its installed000 traceback ends
+inside attest before admit_prompt; the prompt send boundary was never entered.
+Existing NativeStartupAdmission must own the same cold initialization for tracked,
+backend and preparation. The actual command/attestation capability must own
+no-prompt failure disposition, not a deadline string/NULL-field chain. Existing
+private diagnostic ownership must retain bounded startup stderr and command proof
+for all consumers; no bespoke logging authority or deadline increase.
+
+Mendel confirms PersistentPiSession acquisition/readiness is disjoint from his
+merged C3/goal source. Einstein has no competing native-startup patch. Full C3
+phase source remains uncommitted while the urgent incident's causal proof is
+established. Timestamp-only original operator proof and source call ordering are
+recorded in native-preflight-incident-20260930.md; originals/preimages stay private.
