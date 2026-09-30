@@ -1,0 +1,12 @@
+{
+  "stage": "/home/ts/.local/share/agent-comms/runtime-native-budget-source-resume-20260930",
+  "pins": {
+    "agent-comms": "a4df958946a35d9b9f57c610764da8a559039f83",
+    "batrachian-toad": "7da9c061ca69848a64620bac19a67cf58bfe918d",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba/node_modules/@earendil-works/pi-coding-agent",
+  "state": "verified-immutable-cohort",
+  "staging_receipt_sha256": "c2d2073e08b445db665a85e260231d4e19c4845a7ec4f296aa79f11c801c7cab"
+}

@@ -1,0 +1,22 @@
+{
+  "live_process_refs": [],
+  "external_installed_refs": [],
+  "registry_refs": [],
+  "root_config_refs": [],
+  "current_route": {
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "version": 1,
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b"
+  },
+  "candidate_sizes": [
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-native-budget-source-resume-20260930",
+      "allocated_bytes": 78282752
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba",
+      "allocated_bytes": 203198464
+    }
+  ]
+}

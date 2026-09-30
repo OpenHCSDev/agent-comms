@@ -1,0 +1,20 @@
+{
+  "removed": [
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-native-budget-source-resume-20260930",
+      "allocated_bytes": 78282752
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba",
+      "allocated_bytes": 203198464
+    }
+  ],
+  "allocated_bytes_before": 281481216,
+  "home_available_before": 20005679104,
+  "home_available_after": 20227432448,
+  "net_free_delta": 221753344,
+  "concurrent_writes_possible": true,
+  "all_original_fixtures_journals_UNKNOWN_raw_proofs_preserved": true,
+  "native761_stock_source_preserved": true,
+  "current593b_and_previous_allmerged_ceca_preserved": true
+}

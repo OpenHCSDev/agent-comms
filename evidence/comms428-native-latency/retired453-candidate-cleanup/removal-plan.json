@@ -1,0 +1,15 @@
+{
+  "targets": [
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-native-budget-source-resume-20260930",
+      "allocated_bytes": 78282752
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba",
+      "allocated_bytes": 203198464
+    }
+  ],
+  "source_preserved": "/home/ts/wt/comms-native-endpoint-budget-recovery-20260930/stack/.pi-native-7616293d01862aba",
+  "historical_fixture_references": "retired terminal proofs, no active or pending/retry lane per fixture owner; preserved unchanged",
+  "current_and_previous_published": "protected"
+}

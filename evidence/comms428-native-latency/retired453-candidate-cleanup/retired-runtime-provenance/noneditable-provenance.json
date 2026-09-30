@@ -1,0 +1,35 @@
+[
+  {
+    "path": "lib/python3.14/site-packages/textual-8.2.8.dist-info/direct_url.json",
+    "value": {
+      "url": "https://github.com/OpenHCSDev/textual.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347",
+        "requested_revision": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+      }
+    }
+  },
+  {
+    "path": "lib/python3.14/site-packages/batrachian_toad-0.6.20.dist-info/direct_url.json",
+    "value": {
+      "url": "https://github.com/OpenHCSDev/toad.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "7da9c061ca69848a64620bac19a67cf58bfe918d",
+        "requested_revision": "7da9c061ca69848a64620bac19a67cf58bfe918d"
+      }
+    }
+  },
+  {
+    "path": "lib/python3.14/site-packages/agent_comms-0.1.0.dist-info/direct_url.json",
+    "value": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "a4df958946a35d9b9f57c610764da8a559039f83",
+        "requested_revision": "a4df958946a35d9b9f57c610764da8a559039f83"
+      }
+    }
+  }
+]

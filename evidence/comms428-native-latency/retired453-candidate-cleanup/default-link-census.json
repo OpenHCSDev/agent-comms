@@ -1,0 +1,74 @@
+[
+  {
+    "path": "/home/ts/bin/iso_wbfs",
+    "resolved": "/home/ts/.dotfiles/home/code/scripts/iso_wbfs.sh"
+  },
+  {
+    "path": "/home/ts/bin/check_structure",
+    "resolved": "/home/ts/programs/biobb_structure_checking/biobb_structure_checking/check_structure.py"
+  },
+  {
+    "path": "/home/ts/bin/fightcade",
+    "resolved": "/home/ts/games/Fightcade/Fightcade2.sh"
+  },
+  {
+    "path": "/home/ts/bin/toggle_cmd",
+    "resolved": "/home/ts/.dotfiles/home/code/scripts/toggle_cmd"
+  },
+  {
+    "path": "/home/ts/bin/livepeer_bench",
+    "resolved": "/home/ts/programs/livepeer-linux-amd64/livepeer_bench"
+  },
+  {
+    "path": "/home/ts/bin/xwax_cache.sh",
+    "resolved": "/home/ts/.dotfiles/home/code/scripts/media/xwax_cache.sh"
+  },
+  {
+    "path": "/home/ts/bin/livepeer",
+    "resolved": "/home/ts/programs/livepeer-linux-amd64/livepeer"
+  },
+  {
+    "path": "/home/ts/bin/rate.sh",
+    "resolved": "/home/ts/.dotfiles/home/code/scripts/rate.sh"
+  },
+  {
+    "path": "/home/ts/bin/sync_pl",
+    "resolved": "/home/ts/.dotfiles/home/code/scripts/media/sync_pl.sh"
+  },
+  {
+    "path": "/home/ts/bin/void",
+    "resolved": "/home/ts/programs/void_ide/bin/void"
+  },
+  {
+    "path": "/home/ts/bin/lean",
+    "resolved": "/home/ts/.elan/bin/lean"
+  },
+  {
+    "path": "/home/ts/bin/geneSCF",
+    "resolved": "/home/ts/programs/geneSCF/geneSCF"
+  },
+  {
+    "path": "/home/ts/bin/beat_detect.py",
+    "resolved": "/home/ts/.dotfiles/home/code/scripts/media/beat_detect.py"
+  },
+  {
+    "path": "/home/ts/bin/playlists.py",
+    "resolved": "/home/ts/.dotfiles/home/code/scripts/media/playlists.py"
+  },
+  {
+    "path": "/home/ts/bin/fiji",
+    "resolved": "/home/ts/programs/Fiji.app/ImageJ-linux64"
+  },
+  {
+    "path": "/home/ts/bin/livepeer_cli",
+    "resolved": "/home/ts/programs/livepeer-linux-amd64/livepeer_cli"
+  },
+  {
+    "path": "/home/ts/bin/livepeer_router",
+    "resolved": "/home/ts/programs/livepeer-linux-amd64/livepeer_router"
+  },
+  {
+    "path": "/home/ts/bin/toad-comms",
+    "resolved": "/home/ts/.agent-comms/stack/bin/toad-comms"
+  }
+]
