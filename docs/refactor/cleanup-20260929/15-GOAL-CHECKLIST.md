@@ -1,3 +1,65 @@
+## 2026-09-30 ratchet pair merged; queue regression remains a release requirement
+
+Requested item3 is published and merged: NRA15 c6f156089bf65b74584506ca4b52153445aabb07
+into its existing checkpoint/native-proof-performance-20260914 base, and Core466
+07fff8c107d8e11200c85943af2012eac0dffdfb into main. NRA14 is superseded by15.
+The exact code/package pin remains d392c5e4cd189ce1203127a746337ad498a0330d.
+One collector is shared by the original audit Measure and original Core ratchet;
+the installed command rejects actual421 growth from0 to6 primitive handlers.
+Parent verified installed/source bytes, both historical Git specimen hashes and
+the collector inside the rebuilt skill archive. No copied detector or dynamic
+skill filesystem dependency was added. Production deletion count:1 NRA and1 Core;
+NRA also deletes1 test line. Existing per-function StringDispatch/TypeSwitch and
+their arm measures remain admitted. The canonical notification to the actual
+OpenHCS owner was committed as message8e683bf1000c/sequence260; notification is
+not a claim of recipient processing or an OpenHCS installation. Evidence:
+evidence/builtin-handler-ratchet-20260930/openhcs-pin-notification.json.
+
+Core465 is merged03e9e4b66f6d62c4387c5c004f55fab5003987a4:21production
+linesdeleted/35added, original same-ACP attachment close/join before replacement.
+Actual noneditable SDK/native repeated-load/failure/reattach acceptance passed.
+Core463/465/466 are merged, but current live Core remains6feb.
+
+Tristan confirmed the scoped253 UI appears to work, but the message does not
+appear queued before delivery. He clarified that this previously worked well;
+treat it as a regression, not a new feature. Kepler251 owns the original input
+transition; Heisenberg owns its compositor handoff contribution. Original u02
+recording proves a transient Queued+Submitting double caption. No strict
+assertion was waived. Acceptance must physically show Enter -> queued -> one
+confirmed chat message for idle and busy owners, including held admission;
+successful final response alone does not pass this requirement.
+
+Heisenberg252 publishes a3ffa1d5 (proof ad4a32d4):49production linesdeleted/
+149added across5files. Source completion now retries through the existing pager
+and worker completion events, and wire claims can transfer while anonymous
+native output remains held. Actual app/private-wire source pilot passes with
+original native prefix90, Sent1/Incoming1/receipt frontier2 and saved answer
+transferred once after ordered completion. This is source evidence, not the
+joint installed native/ACP/UI acceptance. Caption handoff remains open.
+
+Einstein458 f83267e2 deletes28/adds108 production lines across2files: original
+input/context events and terminal data now own Pending/Observed and
+Pending/Completed/Ambiguous/Failed states. Parent reviewed preserved duplicate
+commit refusal, context replacement, failure precedence, tool-round reset and
+unique streamed/final response obligations.41 affected source controls pass;
+next installed journey is pending. Arendt467 f997cc85 deletes27/adds76
+production lines across4files for complete recorded vs unrecorded original
+SQL context. Its installed readonly original462 partial-row probe refuses
+before minting a reference, preserving the source hash. Prepared-model and
+selected-start consumer closure is still publishing under Arendt's narrow
+shared-file grant; no full467 acceptance is inferred from the partial-row probe.
+
+Einstein458 has normally integrated merged463/465/466 (latest cd6c4b88).
+The next package manifest includes the one lightweight audit distribution;
+derive its actual dependency set rather than retaining the old68 count.
+Next paired freeze follows467 and the original queue/caption/source completion
+closure. Preserve failed old candidates and uncertain inputs; do not rerun the
+unchanged c075 pair. SessionRevision remains parent-owned after the requested
+456/458/459/462 stack merges. Full warm/render/scroll work continues in254.
+Mendel performs independent verified disposable-output/worktree cleanup while
+462 awaits integration; current home headroom12.7GiB is a warning, not permission
+to delete saved histories, raw proofs, active roots or unreviewed work.
+
 ## 2026-09-30 scoped253 installed and ordinary user entrypoint verified
 
 Toad253 mergedade1496216bab216fbc8f52b69ab7eaec376f030,10production
@@ -46,7 +108,7 @@ These are the next integration dependencies, not new parallel coordinators.
 | --- | --- | --- |
 | Standing prompt replacement | Core464, parent | Merged674abadf;3linesdeleted/16added. Exact reviewed file is now present in live .pi/APPEND_SYSTEM.md, preserving old file/mode. Receipt:evidence/standing-live-verification-rules-20260930/live-file-replacement.json. Existing processes are not claimed to have reread it. |
 | Typed external ACP error payload | Core463, Arendt; parent shared FieldCodec builder | Parent contribution88c9e03f normally merged into463. One shared untagged JSON shape capability, no alternate codec; typed error rewrite and installed SDK/ACP error journey underway. Full deletion count follows published rewrite. |
-| Builtin MroDispatch ratchet | NRA14, Kepler | Extend original measure owner, prove growth on421 historical specimen, rebuild same skill archive and notify actual OpenHCS consumer of exact pin. Existing per-function StringDispatch/TypeSwitch admission also reviewed. |
+| Builtin MroDispatch ratchet | NRA15/Core466, Kepler | Both merged; NRA14 superseded. Original installed ratchet rejects actual421 growth0->6; source/specimen/archive equality verified. Exact pin notification committed to actual OpenHCS owner as8e683bf1000c/260. Production linesdeleted:1 NRA,1 Core;1 additional NRA test line. No claim of downstream installation. |
 | SessionRevision value | New PR after456/458/459/462 merge, parent | Deferred dependency as requested. Convert compaction_outcomes first and all13module positional/None/private-import consumers in one PR; no implementation competing with active stack. |
 | No new None-as-state in stack | Each original source owner; parent integration | Parent4595743a8c5 replaces nullable revision/exact_size policy fields with explicit check types,13production linesdeleted/36added.48checks pass2.62s including real pinned native SessionManager. Einstein owns next affected installed journey and458 payload state review; Arendt reviews456 resource/domain distinction; Mendel reviews457/462. Review remains open until published receiving receipts/fixes. |
 

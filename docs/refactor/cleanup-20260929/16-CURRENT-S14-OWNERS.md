@@ -1,3 +1,29 @@
+## Current release owners after ratchet pair merge
+
+NRA15 merged c6f15608 into its declared checkpoint base, Core466 merged07fff8c1
+into main. Kepler's item3 source/installed command/archive proof is accepted;
+parent committed exact d392c5e4 pin notification to openhcs-architecture-memory
+as canonical message8e683bf1000c/sequence260. No recipient-processing claim.
+Core465 merged03e9e4b6 after original installed attachment close/join acceptance.
+Merged463/465/466 are not yet in the live Core6feb installation.
+
+Queue regression: Kepler251 owns original submission/queue/native transfer;
+Heisenberg owns the proven compositor handoff defect. User confirms prior queue
+worked; physical Enter must show queued then a single delivered chat entry.
+Original u02 double caption is a failure, not an oracle waiver or Ready result.
+Heisenberg252 a3ffa1d5/ad4a32d4 publishes source completion retry and bounded
+wire/native transfer, actual source pilot passing. Einstein owns the next real
+joint installed journey after the meaningful caption and467 source closure.
+
+Einstein458 cd6c4b88 normally includes current main463/465/466 and original
+f83267e2 named commit/terminal states. Arendt467 owns recorded/unrecorded SQL
+context plus narrowly granted selected-start/prepared-model consumer closure.
+Parent reviewed f997cc85 partial-row refusal and f83267e2 original lifecycle
+semantics; source proofs do not establish next-cohort UI readiness. Mendel462
+retains certified-reply ownership and performs independent verified disposable
+cleanup while integration dependencies finish. Parent owns delayed SessionRevision
+after456/458/459/462 merge. Heisenberg254 owns remaining full performance scope.
+
 ## Latest actual live and active delivery owners
 
 Live UI checkpoint253:runtime-body-readiness-20260930,Core6feb/Toadade149/
@@ -23,7 +49,7 @@ parent-owned after requestedstackmerges.
 Core464 prompt is merged and exact authorized live project file replaced,
 old preimage retained. Core463 Arendt owns typed provider-error root/children
 and render behavior; parent88c9 owns the common FieldCodec JSON-shape capability.
-NRA14 Kepler owns builtin handler ratchet/historical specimen/per-function
+NRA15/Core466 Kepler owns builtin handler ratchet/historical specimen/per-function
 admission/archive/consumer pin closure. Parent owns deferred SessionRevision
 after456/458/459/462 merges. No other agent edits adaptive/manual compaction
 for that deferred task.
@@ -49,14 +75,14 @@ Audited Core6feb634b (291 Python files) and Toad8a924e1d (273). Whole-source AST
 | Bus source/index and projection custody | Schrodinger | Core460: bus_activity_index, bus_display_index, presentation, private_bus_checkpoint, proven_source_coverage, wake_candidate_index. No second index/schema/cache identity roster. |
 | Pi terminal data and original C1/TC2/T2 caller closure | Einstein | Core458: tracked_turn, turn_output and their native payload owners/consumers. ACP official SDK and original strict extension retained. |
 | Private launch and minted source validation | Parent Codex | Core459: private_nk_entrypoint, acp_extension, fresh_private_session, private_path and private_send_admission; shared PiModel/StateData extension submitted by Einstein. Existing WireRootIdText, FieldCodec and path representation reused; preserve unforgeable fresh enrollment, no filesystem authority mirror. |
-| Retained workspace/rendering, TC1/T4/T9 | Heisenberg | Toad245/248/249 installed and ordinary default accepted. Draft253 owns the full CPU/focus/warm/resource/End scope;252 owns first-fork duplicate answer paint. Remaining Toad six-plus sites: transcript_publication269, streaming_markdown67, transcript_history769. Shared T5 owner coordination explicit. |
+| Retained workspace/rendering, TC1/T4/T9 | Heisenberg | Toad245/248/249/253 installed and ordinary default accepted. Draft254 owns remaining CPU/focus/warm/resource/End scope;252 owns source completion and caption/answer transfer. Remaining Toad six-plus sites at the audited baseline: transcript_publication269, streaming_markdown67, transcript_history769. Shared T5 owner coordination explicit. |
 | Continuous input submission, queue and native-user presentation | Kepler | Toad251: original submission/queue/input handlers, with Heisenberg's explicit shared-file grant. Backend facts remain with Mendel457/Arendt456; no second queue or accepted-input mirror. |
 
 Correction after direct source reading: todos280 is a six-term exact uncertain-transfer retry decision, not repository-path grammar. Its whole Todo assignment/transfer/release/state workflow is reassigned to Mendel457, the coordination-state integration owner. Current durable row remains the authority; no retry may replay an uncertain native/provider side effect. It is included in S14 closure. File names here refer to src/agent_comms or src/toad as appropriate. Every shared type has one builder; contributors request extensions rather than copying schema, identity, validation or lifecycle semantics.
 
 Original C4 fresh current closure: HistoryViews496 and CommsAgent418, all291 Core installed source files equal accepted6feb, retired cursor APIs/maps absent. Schrodinger is checking the complete ownership/guard/public attachment proof, not extracting below-threshold classes. Original C0/C1/C2/TC2 sites that already landed receive a current closure note; old source-only or draft status is not copied forward as incomplete work. Toad116/142 source-return, loaded cohorts and complete resource acceptance remain with the workspace owner, independent of the useful245 body-cost checkpoint.
 
-Latest installed user build: Core6feb/Toad98bab/Textual2e49/SDK0.12.1/native593b,13 retained original owners; ordinary physical default saved-history acceptance16.678s. The current native/owner ABI remains unchanged. No original prompts or UNKNOWN inputs are replayed. CI deferred; actual affected installed user paths remain mandatory.
+Latest installed user build: Core6feb/Toadade149/Textual2e49/SDK0.12.1/native593b,13 retained original owners; ordinary physical default saved-history acceptance34.633s. The current native/owner ABI remains unchanged. No original prompts or UNKNOWN inputs are replayed. CI deferred; actual affected installed user paths remain mandatory.
 
 
 ## 2026-09-30 shared source owner published

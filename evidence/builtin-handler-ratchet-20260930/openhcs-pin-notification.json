@@ -1,0 +1,12 @@
+{
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "sender": "agent-comms-ux",
+  "target": "openhcs-architecture-memory",
+  "message_id": "8e683bf1000c",
+  "sequence": 260,
+  "nra_code_pin": "d392c5e4cd189ce1203127a746337ad498a0330d",
+  "nra_merge": "c6f156089bf65b74584506ca4b52153445aabb07",
+  "core_merge": "07fff8c107d8e11200c85943af2012eac0dffdfb",
+  "scope": "canonical committed pin notification; no claim of recipient processing or OpenHCS installation",
+  "initial_failure": "@ prefix rejected by Message constructor before publisher; corrected to canonical thread name"
+}
