@@ -11,7 +11,6 @@ from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
-from .goal_pauses import GoalPauseEvent
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -50,7 +49,7 @@ class OwnerControlInvocable:
 @dataclass(frozen=True)
 class GoalPrecondition:
     goal_id: str | None = None
-    expected_status: str | None = None
+    expected_state: GoalState | None = None
     expected_goal: Goal | None = None
     expected_owner: ProcessIdentity | None = None
 
@@ -65,8 +64,8 @@ class GoalPrecondition:
             raise ValueError("Goal changed during resume; refresh its state.")
         if self.goal_id is not None and (goal is None or goal.id != self.goal_id):
             raise ValueError("This goal was replaced or cleared; refresh its state.")
-        if self.expected_status is not None and (
-            goal is None or goal.state.declared_name != self.expected_status
+        if self.expected_state is not None and (
+            goal is None or goal.state != self.expected_state
         ):
             pause = goal.state.pause_source if goal is not None else None
             raise ValueError(
@@ -84,7 +83,7 @@ class GoalActionContext:
 
     @property
     def report_turn(self) -> str:
-        return self.thread.active_turn.id if self.thread.active_turn is not None else ""
+        return self.thread.turn_state.report_turn
 
     @property
     def model_report(self) -> bool:
@@ -116,7 +115,10 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         if not isinstance(self, ctx.actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
         self.check_grant(ctx)
-        if ctx.model_report and ctx.thread.last_goal_report_turn == ctx.report_turn:
+        if ctx.model_report and any(
+            entry.reports_turn(ctx.report_turn)
+            for entry in ctx.goals.registry.goal_history(ctx.thread.name)
+        ):
             raise ValueError("This goal was already reported in this turn.")
         goal = self.change(ctx)
         self.before_publish(goal, ctx)
@@ -124,17 +126,11 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             replace(
                 ctx.thread,
                 goal=goal,
-                last_goal_report_turn=(
-                    ctx.report_turn if ctx.model_report else ctx.thread.last_goal_report_turn
-                ),
             ),
             ctx.goals.registry.status(ctx.thread.name),
         )
         if not self.preserve_wait and ctx.thread.goal is not None:
             ctx.goals.waits.clear(ctx.thread.goal.id)
-        if goal is not None and goal.state.pause_source is not None:
-            # Audit only; current pause authority is already durable in Goal.
-            ctx.goals.pauses.record(GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source))
         return goal
 
     @abstractmethod
@@ -210,7 +206,7 @@ class ActiveGoalAction(
                     replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
                 )
                 raise ValueError(refusal)
-            elif not generation.lifecycle.allows_resume(thread.active_turn is not None):
+            elif not generation.lifecycle.allows_resume(thread.executing):
                 raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
 
@@ -295,6 +291,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         )
         # Commit scheduling authority first. A crash before the registry
         # progress update must leave this same goal waiting, not runnable.
+        reporting_lease = thread.turn_lease
         ctx.goals.waits.record(
             GoalWait(
                 goal.id,
@@ -303,8 +300,10 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 ctx.goals.bus.log.latest_sequence(),
                 wait_targets,
                 owner_created_at=thread.created_at,
-                report_turn_id=thread.active_turn.id if thread.active_turn else None,
-                report_turn_generation=(thread.turn_generation if thread.active_turn else None),
+                report_turn_id=reporting_lease.turn_id if reporting_lease is not None else None,
+                report_turn_generation=(
+                    reporting_lease.identity.generation if reporting_lease is not None else None
+                ),
                 target_turn_generations=tuple(
                     (
                         snapshot.threads[

@@ -109,7 +109,10 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
     )
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
     reopened = Comms(comms.root)
-    assert reopened.registry.require("owner").last_goal_report_turn == "same-assistant-turn"
+    assert any(
+        entry.reports_turn("same-assistant-turn")
+        for entry in reopened.registry.goal_history("owner")
+    )
     with pytest.raises(ValueError, match="already reported"):
         invoke_tool(
             reopened,
@@ -323,7 +326,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
                 "owner",
                 ActiveGoalAction(
                     expect=GoalPrecondition(
-                        expected_goal=saved, expected_status=prior.declared_name, goal_id=saved.id
+                        expected_goal=saved, goal_id=saved.id
                     ),
                     progress="stale second resume",
                 ),
