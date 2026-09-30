@@ -1,3 +1,25 @@
+## 2026-09-30 login crash and provider-wait active ownership
+
+- New actual user login crash: Terminal_crash_2026-09-30T12_15_29_613337.txt,
+  ActionModal receives obsolete four-positional arguments from
+  Conversation.action_provider_login. Einstein owns the complete modal caller
+  closure through existing LoginAction, coordinated with Heisenberg's disjoint
+  Conversation history/viewport methods. Acceptance is the installed provider
+  chooser and terminal handoff up to credentials; no account changes. Not fixed
+  or live yet.
+- Arendt owns draft Core454, source936dc62b, persistent worktree
+  comms-native-request-wait-observation-20260930. Existing request/callback/ACP
+  observation will distinguish delayed provider from blocked local publication;
+  historical129.898s remains unallocated. Mendel453 owns shared provider-adapter
+  edits; Kepler contributes existing ProfileTrace clock/video joins. No whole
+  turn deadline, UNKNOWN replay, new observation store or speculative diagnosis.
+- Mendel453 is correcting a review-found vision case: serialized base64 must
+  not be counted as ordinary text. Adapter-owned projections feed the existing
+  text/image estimator. Actual retained native fork acceptance remains required
+  before publishing the corrected budget artifact;453 is not live.
+- Heisenberg242 is actively continuing canonical history binding and foreground
+  publication/resource work after239's merge.239 remains merged but not installed.
+
 ## 2026-09-30 public launcher acceptance closed
 
 Actual published default normal toad-comms startup now passes without override:
