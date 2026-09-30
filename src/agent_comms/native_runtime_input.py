@@ -71,8 +71,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
         from .message_reference import MessageReference
         from .recovery_projection import _preflight
 
-        if user.input_id is None:
-            return None
         database = root / "coordination.sqlite3"
         failure = _preflight(database)
         if failure == "missing":
@@ -106,11 +104,17 @@ class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
                 original.attempt_ordinal,
             ):
                 return None
-            obligation = ResponseObligation.one(db, execution_id=original.execution_id)
-            if obligation is None or not obligation.lifecycle.published:
-                return None
-            return MessageReference(
-                obligation.lifecycle.receipt_seq, obligation.lifecycle.receipt_message_id
+            return next(
+                (
+                    MessageReference(
+                        obligation.lifecycle.receipt_seq, obligation.lifecycle.receipt_message_id
+                    )
+                    for obligation in ResponseObligation.select(
+                        db, where="execution_id=?", parameters=(original.execution_id,)
+                    )
+                    if obligation.lifecycle.published
+                ),
+                None,
             )
 
     input_id: str = field(
