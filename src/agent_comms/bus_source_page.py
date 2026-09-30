@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Annotated, Self
 
 from .bus_publication import StableLookupText
+from .coordination_errors import IdentityConflict
 from .field_codec import FieldCodec
 
 
@@ -41,6 +42,11 @@ class CoveragePage(AddressedPage):
         super().__post_init__()
         if self.after_seq and not self.partial:
             raise ValueError("Noninitial coverage page must declare partial coverage")
+
+    def require_exhausted(self, has_more: bool) -> None:
+        """An unqualified coverage request cannot admit a truncated prefix."""
+        if has_more and not self.partial:
+            raise IdentityConflict("source coverage exceeded its bounded private initial scan")
 
 
 @dataclass(frozen=True, kw_only=True)
