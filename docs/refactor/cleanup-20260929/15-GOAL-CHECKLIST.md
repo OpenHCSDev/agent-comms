@@ -1010,3 +1010,49 @@ proceed at quiet activation after the paired native journey passes. Public
 sessions, wire, goals, UNKNOWN inputs and recovered private preimages remain
 protected. Physical236 work copies its original source before cutover so its
 private recording does not block the usage-critical installation.
+
+### Current paired release merged and public C3 cutover completed
+
+Toad231 Ready95ab9c39 merged eeb328da1499edad29af753cdacb80e5fe5a09ef
+at12:42:51Z. Its source, dependency and lock equal tested6ff0b13e; only
+receipts/docs follow the installed pin. One continuous real installed native/ACP
+App journey passes fork/tags, sidebar roster, cold child opening before RPC,
+inherited history, physical Enter, one canonical input/reply and settled source.
+Two loopback requests, zero paid calls/replays/UNKNOWN and zero owned process
+leaks. No new st recording is claimed by that Pilot journey.
+
+Parent published all five default entrypoints to runtime-c3-reviewed-pair,
+preventing fresh default old-format writers. User's earlier old225 UI had already
+exited before pidfd acquisition, so no signal was sent to it. Its replacement
+firstUI client3186733/birth24764806 received one authorized SIGINT through pidfd
+after all13 owners were verified idle; it exited within15s and ACP3186917 also
+exited. A fresh public-root census found no remaining nonworker clients. The
+reviewed442 operator then completed the canonical all-idle fenced batch with
+exit0/stderr0:13 original workers retired, both Thread carriers transformed,
+expected ActiveRoute published before all13 replacement launches.
+
+Actual nra native history remains41,270,257 bytes/hash888b79c4 unchanged.
+Name/incarnation, worktree, tags, native session, model/backend, goal and
+goal-history comparisons have no differences. Both retired-field counts are
+zero. Private original preimages and operator output remain protected under
+.release-private/c3-reviewed-pair-20260930; sanitized cutover receipt is
+evidence/cleanup-live-integration/c3-paired-cutover.json. No provider calls or
+uncertain-input replay accompany the operation. Fresh normal-default st/Xvfb
+attachment/editor/End acceptance is actively running with Einstein; live
+verification remains pending until reviewed.
+
+Post-cutover verification found a concrete configuration-read defect:
+ThinkingLevelConfigOption.selection persists a fallback during session_options
+construction. Nine explicit off fields became medium/low on worker load.
+Existing native history and original settings preimages are preserved; native
+configuration/catalog policy is being traced before repair. Arendt owns the
+whole read/explicit-mutation boundary and its reproducer. This installation
+does NOT claim unchanged thinking settings or full stability. No blind
+configuration write, failed-input retry or repeated cutover will hide it.
+
+Heisenberg236 completed both original private source copies and certified the
+original process/native hash before cutover, then released the public-process
+witness. Its private physical recording can continue independently using the
+existing typed-capture capability. Sch445/237 and Mendel446 implement original
+journal outcome source coverage and deletion of synthesized compaction notices;
+the changed cancellation journey is still pending and excluded from this build.

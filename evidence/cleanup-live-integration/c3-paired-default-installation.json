@@ -25,5 +25,10 @@
       "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/toad"
     }
   ],
-  "phase": "new_launchers_published_before_original_client_retirement"
+  "phase": "paired_owners_and_formats_installed_actual_default_verification_running",
+  "toad_release_merge": "eeb328da1499edad29af753cdacb80e5fe5a09ef",
+  "core_release_merge": "ea1c275ae849c0bb7ac8b32f500096c820fc263a",
+  "owner_cutover_receipt": "c3-paired-cutover.json",
+  "actual_default_acceptance": "pending Einstein isolated terminal capture",
+  "thinking_selection_discrepancy": "Nine original explicit off settings changed during worker load; Arendt owns read-versus-mutation closure; settings retention not claimed"
 }
