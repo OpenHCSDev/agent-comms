@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .registration import Registration
 
 __all__ = ["OwnerCompactionAttestation"]
 
@@ -67,3 +68,8 @@ class OwnerCompactionAttestation:
         owner.thread.require_turn(TurnId(self.turn_id), owner.admission_generation)
         if owner.thread.goal_checkpoint != self.goal_checkpoint:
             raise RelationViolationError("canonical owner goal revision changed")
+
+    def require_registry(self, registry: Registration, expected: Thread) -> None:
+        """Recheck source custody without holding the registry during provider work."""
+        with registry.guard_owner_compaction(expected, self):
+            pass

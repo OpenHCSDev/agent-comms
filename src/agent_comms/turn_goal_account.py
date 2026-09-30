@@ -7,8 +7,8 @@ owns only the live turn's permits and observations, never a reconstructed grant.
 from __future__ import annotations
 
 from collections.abc import Callable
-from contextlib import suppress
-from dataclasses import dataclass, field
+from contextlib import ExitStack, suppress
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
 from acp import RequestError
@@ -37,7 +37,6 @@ class VerifiedGoalSettlement(MroDispatch):
     permit: LaunchPermit | None
     goal: Goal
     turn: TurnId
-    recorded: bool = field(default=False, init=False)
 
     @property
     def progress_witness(self) -> str:
@@ -52,15 +51,11 @@ class VerifiedGoalSettlement(MroDispatch):
         # An owner pause prevents another launch, not recording verified work.
         if self.permit is not None:
             self.permit.record_verified_progress(self.store, self.progress_witness)
-        self.recorded = True
 
     @handles(CompletedGoal)
     def completion(self, state: CompletedGoal) -> None:
-        if self.permit is None:
-            self.recorded = True
-        elif self.goal.reported_turn == self.turn.value:
+        if self.permit is not None and self.goal.reported_turn == self.turn.value:
             self.permit.record_verified_completion(self.store, self.completion_witness)
-            self.recorded = True
 
 
 class OriginGoalSettlement(VerifiedGoalSettlement):
@@ -96,14 +91,13 @@ class TurnGoalAccount:
     owner: Thread
     turn: TurnId
     lease: TurnLeaseFence
-    admission: int
     permit: LaunchPermit | None
     open_store: Callable[[], GoalAttemptStore]
     pending_origins: dict[str, str]
+    claims: ExitStack
     originated: dict[str, LaunchPermit | None] = field(default_factory=dict, init=False)
     unattributed_usage: list[tuple[str, PiUsage]] = field(default_factory=list, init=False)
-    successful_tool_observed: bool = field(default=False, init=False)
-    resolved: bool = field(default=False, init=False)
+    productive_tool: events.ToolEnd | None = field(default=None, init=False)
 
     @staticmethod
     def reserve(*, owner, comms, store, open_store, ready_grant, autonomous):
@@ -155,7 +149,7 @@ class TurnGoalAccount:
 
     def tool_ended(self, event: events.ToolEnd) -> None:
         if event.ok:
-            self.successful_tool_observed = True
+            self.productive_tool = event
         if event.name != "comms_set_goal" or event.ok is not True:
             return
         goal = self.comms.registry.require(self.thread_name).goal
@@ -168,6 +162,7 @@ class TurnGoalAccount:
         self.originated[goal.id] = None
         grant = store.ready_grant(goal.id, 1)
         permit = store.claim_launch(store.reserve(goal.id, 1, ready_grant=grant))
+        self.claims.callback(permit.retire_unverified, store)
         self.originated[goal.id] = permit
         for response_id, usage in self.unattributed_usage:
             permit.record_provider_usage(store, response_id, usage.to_wire())
@@ -183,53 +178,48 @@ class TurnGoalAccount:
         )
 
     def current_active_goal(self) -> Goal | None:
-        if self.permit is None or self.owner.goal is None or not self.owner.goal.state.active:
+        if self.permit is None:
             return None
         owner = self.comms.registry.require(self.thread_name)
-        if owner.worktree != self.owner.worktree:
-            return None
-        goal = owner.goal
-        if goal is None or goal.id != self.owner.goal.id or not goal.state.active:
-            return None
-        return goal
+        return owner.continuation_goal(self.owner)
 
     def done(self, event: events.Done) -> None:
         if self.current_active_goal() is None:
             return
         if not event.ok:
             self.block_current("Backend turn failed; inspect local diagnostics before resuming.")
-        elif not self.successful_tool_observed and not str(event.text or "").strip():
+        elif self.productive_tool is None and not str(event.text or "").strip():
             self.block_current(
                 "Backend reported success without assistant output "
                 "or tool activity; inspect the session before resuming."
             )
 
-    def settle(self, terminal_ok: bool | None, failure: dict) -> None:
+    def settle_original(self, terminal: events.Done | None) -> None:
         if self.permit is None:
             return
-        if terminal_ok is None and self.current_active_goal() is not None:
+        if terminal is None and self.current_active_goal() is not None:
             self.block_current("Backend turn ended without a result; inspect local diagnostics.")
         store = self.open_store()
         current = self.comms.registry.require(self.thread_name).goal
-        if terminal_ok is True and current is not None and current.id == self.owner.goal.id:
-            result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
-            result.dispatch_sync(current.state)
-            self.resolved = result.recorded
-        if self.resolved:
+        if terminal is not None and terminal.ok:
+            if current is not None and current.id == self.owner.goal.id:
+                result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
+                result.dispatch_sync(current.state)
+        if self.permit.has_verified_progress(store):
             return
         snapshot = self.comms.registry.snapshot()
         observation = None
-        if terminal_ok is not True:
+        if terminal is None or not terminal.ok:
             observation = FailedTurnObservation.from_terminal(
                 self.permit.reservation,
                 owner=self.owner,
                 goal=self.owner.goal,
                 lease=self.lease,
                 turn_id=self.turn.value,
-                admission=self.admission,
+                admission=self.lease.admission_generation,
                 current_owner=snapshot.threads.get(self.thread_name),
                 current_admission=snapshot.admission_generations.get(self.thread_name),
-                reason=terminal_failure_reason(failure),
+                reason=terminal_failure_reason(asdict(terminal) if terminal is not None else {}),
             )
         with suppress(StaleAttemptError):
             self.permit.reservation.fail(
@@ -237,20 +227,20 @@ class TurnGoalAccount:
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
-        self.resolved = True
         if current is not None and current.id == self.owner.goal.id:
             self.block_current("Goal turn ended without verified terminal progress.")
 
-    def finish(self, terminal_ok: bool | None) -> None:
+    def finish(self, terminal: events.Done | None) -> None:
+        """Settle all original grants once from the actual producer terminal event."""
+        self.settle_original(terminal)
         for goal_id, permit in self.originated.items():
             current = self.comms.registry.require(self.thread_name).goal
             store = self.open_store()
-            recorded = False
-            if terminal_ok is True and current is not None and current.id == goal_id:
-                result = OriginGoalSettlement(store, permit, current, self.turn)
-                result.dispatch_sync(current.state)
-                recorded = result.recorded
-            if not recorded:
+            if terminal is not None and terminal.ok:
+                if current is not None and current.id == goal_id:
+                    result = OriginGoalSettlement(store, permit, current, self.turn)
+                    result.dispatch_sync(current.state)
+            if permit is None or not permit.has_verified_progress(store):
                 if permit is not None:
                     with suppress(StaleAttemptError):
                         permit.reservation.fail(
@@ -270,8 +260,3 @@ class TurnGoalAccount:
                     )
             if self.pending_origins.get(self.thread_name) == goal_id:
                 self.pending_origins.pop(self.thread_name, None)
-        if self.permit is not None and not self.resolved:
-            with suppress(StaleAttemptError):
-                self.permit.reservation.fail(
-                    self.open_store(), "Goal attempt ended without a verified terminal result."
-                )

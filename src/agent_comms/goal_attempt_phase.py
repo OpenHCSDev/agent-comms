@@ -15,6 +15,7 @@ from .lifecycle import LifecycleState
 class GoalAttemptPhase(DeclaredFamily, LifecycleState, affix="Attempt"):
     terminal: ClassVar[bool] = False
     launched: ClassVar[bool] = False
+    verified_progress: ClassVar[bool] = False
 
     def require_failure(self) -> None:
         raise FailureNotObserved("missing_binding")
@@ -48,7 +49,7 @@ class FailedAttempt(GoalAttemptPhase):
 
 
 class SucceededAttempt(GoalAttemptPhase):
-    terminal = True
+    terminal = verified_progress = True
 
     @classmethod
     def successors(cls):

@@ -83,12 +83,36 @@ class RegistryWorktreeRule(ReservationRule):
         return check.actual.worktree != check.expected.worktree
 
 
+class RegistryModelRule(ReservationRule):
+    check_type = RegistryIdentityCheck
+    explanation = "The captured owner's selected model changed."
+
+    def violated(self, check: RegistryIdentityCheck) -> bool:
+        return check.actual.model != check.expected.model
+
+
+class RegistryThinkingRule(ReservationRule):
+    check_type = RegistryIdentityCheck
+    explanation = "The captured owner's thinking level changed."
+
+    def violated(self, check: RegistryIdentityCheck) -> bool:
+        return check.actual.thinking_level != check.expected.thinking_level
+
+
+class RegistrySessionRule(ReservationRule):
+    check_type = RegistryIdentityCheck
+    explanation = "The captured owner's native session changed."
+
+    def violated(self, check: RegistryIdentityCheck) -> bool:
+        return check.actual.session_file != check.expected.session_file
+
+
 class RegistryTurnRule(ReservationRule):
     check_type = RegistryAdmissionCheck
     explanation = "The exact captured active turn changed."
 
     def violated(self, check: RegistryAdmissionCheck) -> bool:
-        return check.actual.active_turn != check.expected.active_turn
+        return check.actual.turn_lease != check.expected.turn_lease
 
 
 class RegistryGoalRule(ReservationRule):

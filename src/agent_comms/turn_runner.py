@@ -81,10 +81,6 @@ class CompactionObservation(MroDispatch):
     async def summary_progress(self, event):
         await self.publish(self.phase.compacting().measured(event.operation_id, event.source))
 
-    @handles(events.CompactionProgress)
-    async def native_progress(self, event):
-        await self.publish(self.phase.compacting().measured("", event.source))
-
     @handles(events.CompactionEnd)
     async def end(self, event):
         await self.publish(self.phase.compaction_ended())

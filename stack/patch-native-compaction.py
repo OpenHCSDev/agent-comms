@@ -31,6 +31,8 @@ STREAM_SUMMARY = """    const produce = async () => {
         const stream = await (streamFn ?? streamSimple)(model, context, requestOptions);
         for await (const event of stream) {
             if (event.type === 'text_delta') callbacks?.onSummaryText?.(event.delta, callbacks?.sourceProgress);
+            else if (event.type === 'start' || event.type === 'thinking_delta')
+                callbacks?.onSummaryProgress?.(callbacks?.sourceProgress);
         }
         return stream.result();
     };
@@ -54,10 +56,15 @@ LIMIT_HELPER = """function summarySource(messages, previousSummary) {
         : transcript;
 }
 function sourceCallbacks(callbacks, done, total, phase) {
-    return { ...callbacks, sourceProgress: {
+    return { ...callbacks, get sourceProgress() { return {
         sourceBytesDone: (callbacks?.sourceOffset ?? 0) + done,
         sourceBytesTotal: callbacks?.sourceTotal ?? total,
         summaryPhase: phase ?? callbacks?.sourcePhase ?? "history",
+        startedAtMs: callbacks.sourceStartedAt,
+        observedAtMs: Math.floor(performance.timeOrigin + performance.now()),
+    }; }, onSummaryResponse(usage, completed) {
+        callbacks?.onSummaryResponse?.(usage, completed
+            ? sourceCallbacks(callbacks, total, total, phase).sourceProgress : undefined);
     } };
 }
 function summaryChunkEnd(source, start, byteLimit) {
@@ -173,7 +180,7 @@ BOUNDED = """    // Keep provider prompts byte-bounded without pretending the ch
             signal?.removeEventListener("abort", abort);
         }
     }
-    if (!boundedChunk) callbacks = sourceCallbacks(callbacks, sourceBytes, sourceBytes);
+    if (!boundedChunk) callbacks = sourceCallbacks(callbacks, 0, sourceBytes);
 """
 
 
@@ -190,8 +197,9 @@ COMPACT_PREPARATION = "    const { firstKeptEntryId, messagesToSummarize, turnPr
 SOURCE_TOTAL = """    const historyBytes = messagesToSummarize.length || !isSplitTurn
         ? Buffer.byteLength(summarySource(messagesToSummarize, previousSummary), 'utf8') : 0;
     const prefixBytes = isSplitTurn ? Buffer.byteLength(summarySource(turnPrefixMessages), 'utf8') : 0;
-    callbacks = { ...callbacks, sourceTotal: historyBytes + prefixBytes, sourceOffset: 0, sourcePhase: "history" };
-    callbacks.onSummaryStart?.({ sourceBytesDone: 0, sourceBytesTotal: callbacks.sourceTotal, summaryPhase: "history" });
+    callbacks = { ...callbacks, sourceTotal: historyBytes + prefixBytes, sourceOffset: 0, sourcePhase: "history",
+        sourceStartedAt: Math.floor(performance.timeOrigin + performance.now()) };
+    callbacks.onSummaryStart?.(sourceCallbacks(callbacks, 0, callbacks.sourceTotal, "history").sourceProgress);
 """
 PREFIX_CALL = "        const turnPrefixResult = await generateTurnPrefixSummary("
 PREFIX_OFFSET = '        callbacks = { ...callbacks, sourceOffset: historyBytes, sourcePhase: "current-turn" };\n'
@@ -233,9 +241,7 @@ def main(path: Path) -> None:
                             'import { streamSimple } from "@earendil-works/pi-ai/compat";', 1)
     source = source.replace(
         TOKEN_LIMIT,
-        "const maxTokens = boundedChunk "
-        "? policy.summaryTokens(model, byteLimit, reserveTokens) "
-        ": Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);",
+        "const maxTokens = policy.summaryTokens(model, byteLimit, reserveTokens);",
     )
     source = source.replace(
         PROMPT_END,

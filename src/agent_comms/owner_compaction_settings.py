@@ -41,6 +41,10 @@ class PiCompactionDecision(PiCompactionSettings):
     enabled: bool = field(metadata={"settings_exclude": True})
     trigger: bool = field(metadata={"settings_exclude": True})
 
+    def require_current(self, current: PiCompactionDecision) -> None:
+        if current != self:
+            raise PiSettingsEvidenceError("Selected native compaction settings changed")
+
 
 @dataclass(frozen=True)
 class CompactionDecisionRequest:

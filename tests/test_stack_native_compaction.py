@@ -590,11 +590,11 @@ async def test_saved_history_compacts_after_native_user_start(case: str, monkeyp
         assert len([event for event in events if isinstance(event, ae.ProviderUsage)]) == len(calls)
         source_progress = [event for event in events if isinstance(event, ae.CompactionProgress)]
         assert source_progress[0].chunk_index == 0
-        assert source_progress[0].source_bytes_done == 0
-        assert source_progress[-1].source_bytes_done == source_progress[-1].source_bytes_total
+        assert source_progress[0].source.source_bytes_done == 0
+        assert source_progress[-1].source.source_bytes_done == source_progress[-1].source.source_bytes_total
         assert all(
-            event.source_bytes_total == source_progress[0].source_bytes_total
-            and event.source_bytes_done
-            >= (source_progress[index - 1].source_bytes_done if index else 0)
+            event.source.source_bytes_total == source_progress[0].source.source_bytes_total
+            and event.source.source_bytes_done
+            >= (source_progress[index - 1].source.source_bytes_done if index else 0)
             for index, event in enumerate(source_progress)
         )

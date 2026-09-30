@@ -61,11 +61,14 @@ COMPACTION_CALL = (
 )
 BOUNDED_COMPACTION_CALL = (
     "        let responseIndex = 0;\n"
+    "        const operationId = crypto.randomUUID();\n"
     "        // Summary work uses low reasoning even when the user turn requests high reasoning.\n"
     '        const callbacks = { ...this._summarizationRetryCallbacks({ source: "compaction", reason }), '
-    'onSummaryStart: (progress) => this._emit({ type: "compaction_progress", reason, chunkIndex: responseIndex, ...progress }), '
-    'onSummaryResponse: (usage, progress) => this._emit({ type: "compaction_progress", reason, '
-    "chunkIndex: ++responseIndex, usage, ...progress }) };\n"
+    'onSummaryStart: (source) => this._emit({ type: "compaction_progress", reason, operationId, chunkIndex: responseIndex, source }), '
+    'onSummaryProgress: (source) => this._emit({ type: "compaction_progress", reason, operationId, chunkIndex: responseIndex, source }), '
+    'onSummaryText: (text, source) => this._emit({ type: "compaction_progress", reason, operationId, chunkIndex: responseIndex, text, source }), '
+    'onSummaryResponse: (usage, source) => this._emit({ type: "compaction_progress", reason, operationId, '
+    "chunkIndex: ++responseIndex, usage, source }) };\n"
     "        return compact(preparation, requestModel, apiKey, headers, customInstructions, "
     'signal, "low", this.agent.streamFunction, env, '
     "{ enabled: false, maxRetries: 0, provider: { maxRetries: 0 } }, callbacks, undefined);"

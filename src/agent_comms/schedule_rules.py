@@ -54,8 +54,8 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     inputs.comms.registry.status(owner.name).require_running()
                 except RelationViolationError:
                     continue
-                goal = owner.goal
-                if goal is not None and goal.state.active:
+                goal = owner.active_goal
+                if goal is not None:
                     pending = [turn for turn in pending if turn.goal_id == goal.id]
                 if not pending:
                     continue

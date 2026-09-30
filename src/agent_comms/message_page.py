@@ -13,8 +13,6 @@ from typing import TYPE_CHECKING
 from .bus_page_index import BusPageIndex, StaleBusPageIndexError
 from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayBasis, MessageDisplayScope
-from .store_files import _iter_jsonl_records
-from .wire_metadata import WireMetadata
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoryCursor
@@ -234,11 +232,10 @@ class MessagePageRequest:
             except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
                 # A disposable index cannot replace the durable wire authority.
                 pass
-            marker = log._private_marker_unlocked() if log.path.exists() else WireMetadata()
-            return self.collect(
-                log._public_page_record(record, size, marker)
-                for record, size in _iter_jsonl_records(log.path)
-            )
+        # A missing derived index does not grant a reader the writer's lock for
+        # a full scan. The canonical log owns the opened inode and byte bound.
+        with log._record_snapshot(need_sequence=False) as (_, records):
+            return self.collect(records)
 
     def indexed(self, index, log) -> MessagePage:
         window = PageWindow(self.limit, self.max_bytes)

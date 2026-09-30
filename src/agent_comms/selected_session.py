@@ -12,7 +12,6 @@ from .coordination_response import _response_boundary
 from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .maintenance_barrier import MaintenanceBarrier
-from .native_input_owner import RegistryOwner
 from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAction
 
 if TYPE_CHECKING:
@@ -58,14 +57,9 @@ class SelectedSession:
         # Original wire→bus→registry→store→journal order spans exclusive file
         # creation, fsync and enrollment. No historical-file coverage inference.
         with _response_boundary(participant.bus) as registry, participant.store.session.read():
-            actual = RegistryOwner.capture(
-                registry,
-                participant.owner.thread.name,
-                "fresh-session owner changed before enrollment",
-            )
             try:
-                actual.require_exact(
-                    registry, participant.owner.thread, participant.owner.admission_generation
+                participant.owner.require_snapshot(
+                    registry, "fresh-session owner changed before enrollment"
                 )
             except RelationViolationError as error:
                 raise StaleFence("fresh-session owner changed before enrollment") from error

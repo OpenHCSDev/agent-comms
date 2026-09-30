@@ -258,7 +258,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
                     if (type?.startsWith("toolcall_")) invalidEvent = true;
                     if (invalidEvent && !slot.controller.signal.aborted) slot.controller.abort();
                     if (!invalidEvent && (type === "start" || type === "done" ||
-                        type === "error" || (type === "thinking_delta" && event.delta.length)))
+                        type === "error"))
                         progress();
                     if (!invalidEvent && type !== "done" && type !== "error") visible.push(event);
                     if (type === "done" || type === "error") terminal = event;
@@ -312,6 +312,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             request.customInstructions, slot.controller.signal, "low", selectedStream, undefined,
             { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
             { onSummaryText: progress,
+              onSummaryProgress: source => progress("", source),
               onSummaryStart: source => progress("", source),
               onSummaryResponse: (_usage, source) => progress("", source) }, undefined);
         await Promise.allSettled([...inFlight]);

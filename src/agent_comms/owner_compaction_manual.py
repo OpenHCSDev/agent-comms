@@ -16,7 +16,6 @@ from .compaction_errors import CompactionJournalError
 from .compaction_records import SelectedSummaryAttempt
 from .compaction_result import CommittedCompactionResult
 from .compaction_states import ManualCommittedSummary
-from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
@@ -98,9 +97,9 @@ async def compact_manual_owner(
 
     async def summarize(prepared: NativePreparation):
         nonlocal summary_text
-        current, current_generation = runner.comms.registry.live_owner_with_generation(thread_name)
-        if current != owner or current_generation != generation or await decision() != settings:
-            raise RelationViolationError("Manual selected source changed before summary")
+        attestation = owner.compaction_attestation(generation, prepared.witness)
+        attestation.require_registry(runner.comms.registry, owner)
+        settings.require_current(await decision())
         for refusal in refusals:
             bridge.journal.summaries.retire_refused(refusal)
         source = {
@@ -136,9 +135,8 @@ async def compact_manual_owner(
             reason="manual",
         )
         summary = result.manual_summary(bridge.journal)
-        current, current_generation = runner.comms.registry.live_owner_with_generation(thread_name)
-        if current != owner or current_generation != generation or await decision() != settings:
-            raise RelationViolationError("Manual selected source changed after summary")
+        attestation.require_registry(runner.comms.registry, owner)
+        settings.require_current(await decision())
         summary_text = summary.text
         return summary
 

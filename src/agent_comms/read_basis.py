@@ -168,25 +168,25 @@ class DMDisplayBasis:
             peer_thread = snapshot.threads[peer_name]
             viewer_names, peer_names = scope.first_names, scope.second_names
             marker_revision = file_revision(marker_path)
-            page = bus.dm_history_page(
-                viewer_name,
-                peer_name,
-                before=before,
-                after=after,
-                limit=limit,
-                max_bytes=max_bytes,
-            )
-            older_unread = False
-            if page.has_older and page.messages:
-                seen = bus.reads.seen_sequences(viewer_name, snapshot)
-                with bus.log._record_snapshot(need_sequence=False) as (_, records):
-                    older_unread = any(
-                        scope.unread_before(message, page.messages[0].seq, seen)
-                        for message, _ in records
-                    )
+            bus_identity = bus.reads.bus_identity(bus.log.path)
+        # Native admission uses this same wire lock. Page preparation and the
+        # older-unread scan use opened source boundaries, outside admission.
+        page = bus.display_page(
+            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
+        )
+        older_unread = False
+        if page.has_older and page.messages:
+            seen = bus.reads.seen_sequences(viewer_name, snapshot)
+            with bus.log._record_snapshot(need_sequence=False) as (_, records):
+                older_unread = any(
+                    scope.unread_before(message, page.messages[0].seq, seen)
+                    for message, _ in records
+                )
+        with _store_lock(root / "wire"):
             if (
                 file_revision(registry.store.path) != revision
                 or file_revision(marker_path) != marker_revision
+                or bus.reads.bus_identity(bus.log.path) != bus_identity
             ):
                 raise ValueError("DM display changed while paging; refresh the page.")
             root_info = root.stat()
