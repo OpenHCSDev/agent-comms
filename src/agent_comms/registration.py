@@ -321,11 +321,7 @@ class Registration:
             return document.last_seen.get(name, 0.0)
 
     def require(self, name: str) -> Thread:
-        with self.store.reading() as document:
-            name = document.aliases.get(name, name)
-            if name not in document.threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            return document.threads[name]
+        return self.snapshot().require(name)
 
     def status(self, name: str) -> ThreadStatus:
         with self.store.reading() as document:

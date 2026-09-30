@@ -1,0 +1,22 @@
+{
+  "ready": true,
+  "installed_stage": "/home/ts/wt/toad-compaction-outcome-coverage-20260930/.artifacts/installed-outcome-candidate02",
+  "installed_core": "2ed2ee3f41292e2bb94b9c40b0a227a620bd1fa3",
+  "installed_toad": "da3967557aa9a8c0fb23970b279ce418e12562f8",
+  "ready_toad_source_identical": true,
+  "driver_head": "17e290f4d7fdaaceca44358ae94b3fa432cc7486",
+  "original_cancel_fixture": "/home/ts/wt/cw237c01",
+  "original_native_cancel_positive": [
+    "partial_and_progress",
+    "canonical_UNKNOWN_once",
+    "older_source_snapshot",
+    "physical_tab_return"
+  ],
+  "original_cancel_terminal_failure": "Fresh ACP decoder: Unknown TranscriptEvent name compaction_outcome",
+  "affected_continuation": "cold load, source-read, physical tab return, ACP reconnect; exit0",
+  "no_new_compaction_or_prompts": true,
+  "public_defaults_changed": false,
+  "remaining_separate_scope": "Mid-compaction tab-switch hang, Heisenberg236 with source interaction Schrodinger445",
+  "production_added": 6,
+  "production_deleted": 20
+}
