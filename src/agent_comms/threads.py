@@ -119,6 +119,18 @@ class Thread:
             object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
 
+    def initialized_native_configuration(
+        self, *, model: str | None, thinking_level: str | None
+    ) -> Thread:
+        """The native producer may fill unset fields, never replace a selection."""
+        return replace(
+            self,
+            model=self.model if self.model is not None else model,
+            thinking_level=(
+                self.thinking_level if self.thinking_level is not None else thinking_level
+            ),
+        )
+
     @property
     def pid(self) -> int:
         """Numeric OS projection of the sole stored process authority."""

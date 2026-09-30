@@ -71,7 +71,7 @@ async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_childre
     assert len(children) == 2
     auth = native.config / "auth.json"
     auth.write_text("{}\n")
-    unavailable = await model_catalog.describe(config, thread)
+    unavailable = await model_catalog.describe(thread)
     assert unavailable.current_value == "response-local/fixture"
     assert "response-local/fixture" in {choice.value for choice in unavailable.options}
     assert len(children) == 3

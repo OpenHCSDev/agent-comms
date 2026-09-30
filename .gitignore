@@ -40,3 +40,8 @@ coverage.xml
 /activity_latest.json
 /.native-init-fixtures/
 /.phase-fixtures/
+/.catalog-fixtures/
+/.configuration-fixtures/
+/.proof-runtime/
+/.focused-tests/
+/.orphan-cleanup-receipt.json
