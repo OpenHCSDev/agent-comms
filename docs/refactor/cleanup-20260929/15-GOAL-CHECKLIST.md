@@ -104,8 +104,9 @@ refactoring scopes below.
 
 ## Current fleet and resource constraint
 
-Six Codex workers retain assigned work: Heisenberg224, Arendt436, Schrodinger215,
-Mendel430/421, Kepler221 and Einstein's presentation-read/idle-CPU investigation.
+Six Codex workers retain assigned work: Heisenberg224, Arendt's cutover/S14
+continuation, Schrodinger215, Mendel's C0 markdown boundary, Kepler's child
+shutdown investigation and Einstein's presentation-read/idle-CPU investigation.
 Core422 fixture closure is merged;434/437/438 are merged checkpoints. A worker
 claim is not proof of a running turn. Kepler's latest capacity failure has a
 resume submission; Heisenberg remains the integration owner for224. The owner now
@@ -589,3 +590,62 @@ and no active turns, including no stale stored active turn on stopped records.
 This supports the existing cutover's admission path but does not replace its
 atomic idle/process fence at execution time. Home free27.8GiB, RAM available
 15.6GiB and swap used15.6GiB; only bounded existing lanes continue.
+
+### Merged goal/control checkpoint and accepted durable routing carry
+
+Core421 merged2519fb65 and Toad216 merged4d239091. The reviewed exact heads
+were0b3a965a ande2014d81 after normal436 integration. The continuous installed
+actual App/native/ACP control journey passed with four localhost requests:
+cold saved history, Resume/Pause without cancelling a held native turn, completion,
+A/channel/A draft and undo, cold original goal source, Stop/Start and fresh visible
+reply. This is mounted-app acceptance, not default st activation. The latest
+checkpoint deletes104 production lines, adds22 and removes the entire
+GoalPauseEvents store/module and all consumers. Full six-file/five-family C3
+closure remains open under Arendt's shared custody/S14 work.
+
+Actual readonly C3 decoding of the original720 registry refuses the retired
+last_goal_report_turn member. Removal must cover RegistryDocument.threads and
+OwnerReleaseReceipt.thread, under one lifecycle that owns original admission,
+all-stop, declared member removal and target-format replacement launch. No
+production legacy decoder or silent drop is admitted. This later C3 cutover does
+not hold the first436/215 release, whose Thread declarations still match720.
+
+Core441 merged2244bf5c at exact51c87fa7. Its genuine old720 annotation fixture
+converted both routing tables under the original certified writer descriptor;
+installed436 Source and actual Toade59 painted the original request and native
+answer once. Three routing cells and one expired reply-only registry control
+were covered. Wire/native/UNKNOWN and nonrouting data remained unchanged.
+Corrupting the final original envelope refused the whole operation before any
+mutation, including earlier valid cells. Zero provider calls or input replays.
+Parent reviewed the guarded registry writer, FULL SQL transaction and durable
+private recovery preimages. This removes the first release's missing routing
+migration artifact; actual live execution is still pending the paired gate.
+
+### Physical failure and coherent messaging continuation
+
+Toad224's actual immutable stage capture completed57.197s with1076 GIL samples,
+zero profiler errors and no owned leftovers. An individually inspected End
+frame at35.5833s has blank BODY with chrome present; numerical screening counted
+the mouse and Jump-to-latest control as body pixels and missed it. Later idle
+paint is readable. Idle CPU61.34percent is not an improvement over57.55percent.
+Heisenberg owns the original frame sequence and same-window publication fix;
+source destination-removal control passes, but the physical followup is unproven.
+
+Sch's corrected real-app context control passed hot Processing/Responded in both
+DMs and IRC, one original paint/header,31s idle and three distinct replies after
+actual tab clicks. Its later history assertion failed and cold completion was
+not reached. The next declared pair000a31c5/Toad56a7a9ec/Text650/nativee36 is
+normally installed and trusted; Toad source is unchanged frome59. Its fresh
+control finds two registered histories for the same file with different covered
+frontiers, and the older original visibly paints again. Source-frontier acceptance
+precedes async preparation/mount. Sch owns publication admission at the existing
+window history lock; Heisenberg owns resource retirement/layout. No seen-ID list,
+text deduplication or local widget-count workaround is admitted.
+
+Einstein440/225 owns canonical revision observation and idle CPU. Review found
+that the proposed subscription's publisher stopped when the channel bar was
+closed; the shared observation owner must continue independently of roster
+visibility. Kepler owns the preserved ACP shutdown/renderer descriptor failure
+trace, coordinating existing child ownership with Arendt and Sch. Mendel takes
+the unclaimed original C0 markdown-it rule/registry boundary with a draft before
+sustained work. No new worker fleet or duplicate shared-file owner was created.

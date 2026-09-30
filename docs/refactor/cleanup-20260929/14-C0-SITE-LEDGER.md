@@ -20,7 +20,11 @@ closure through432. Production consumers remain with their existing builders.
 
 The initial packaged StringDispatch/TypeSwitch collectors found the listed
 Core sites; the five C3 rows above were reread at source34a3a84b after implementation.
-This is source progress, not merged, installed or live closure. The collectors
+The useful C3 checkpoint is now merged through Core4212519fb65 and counterpart
+Toad2164d239091, with continuous installed actual native/ACP/mounted-App goal
+and control acceptance. It is not default-installed or full C3 closure: Arendt
+retains shared send custody and initial old-format admission/all-stop/member
+removal/target-launch ownership. The collectors
 also identify valid external codec
 and path cases below. Nested function/class scopes are measured separately.
 This source screen supplies witnesses; the implementation owner must still
@@ -55,3 +59,16 @@ only that retired runtime member while preserving the complete canonical
 goal_history, original native witnesses, blocked attempts and UNKNOWN inputs.
 The current active registry contains114 such members,17 nonempty. This is a
 one-time outside-src cutover, not an old-format reader or a registry reset.
+
+Mendel now owns the still-open conversation_markdown::resolve_tokens row,
+following the original C0 library-rule/registry target. Its fresh census and
+draft must honor the actual MarkdownIt/Textual token contract, pure prepared
+syntax and current-root filesystem resolution. This is disjoint from Sch's
+source publication and Heisenberg's mount/layout ownership; those shared files
+require their consent before changes.
+
+The retired last_goal_report_turn also occurs inside OwnerReleaseReceipt.thread
+in owner_release_receipts.json. Actual C3 decoding of the original live registry
+refuses it before the present after_stopped hook. Arendt's later single lifecycle
+cutover owns that initial admission crossing and both runtime containers;
+canonical goal history, native proofs and original recovery preimages survive.
