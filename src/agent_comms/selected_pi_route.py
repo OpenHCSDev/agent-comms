@@ -13,8 +13,7 @@ from .backend import PersistentPiSession
 from .native_pi import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_settings import PiCompactionDecision
-from .pi_commands import AgentCommsCompactionSettings, GetState, PiCommand
-from .pi_payloads import StateData
+from .pi_commands import AgentCommsCompactionSettings, PiCommand
 from .pi_events import Response
 from .pi_rpc import PiRpcChannel
 from .pi_summary_payloads import SelectedModel
@@ -113,26 +112,4 @@ async def read_selected_compaction_decision(
         expected_package=expected_package,
         timeout=timeout,
         max_response=16384,
-    )
-
-
-async def read_selected_state(
-    persistent: PersistentPiSession, *, session_file: str,
-    expected_package: Path, timeout: float = 3.0,
-) -> StateData:
-    """Read the original idle child's state under its existing observation custody."""
-    source = NativeSessionIdentity(persistent.custody.idle().identity.session_id, session_file)
-    request = GetState(id=secrets.token_hex(16))
-
-    def decode(raw: bytes, request: GetState) -> StateData:
-        if not raw.endswith(b"\n"):
-            raise SelectedPiProbeUnknownError("Incomplete selected state response")
-        state = PiRpcChannel.decode_record(raw, strict=True).require_request(request)
-        if state.identity != source:
-            raise SelectedPiProbeUnknownError("Selected native state names another session")
-        return state
-
-    return await _exchange_observation(
-        persistent, request, source.session_file, source.session_id, decode,
-        expected_package=expected_package, timeout=timeout,
     )
