@@ -1,8 +1,9 @@
-"""The assignment ledger owns inbound history, including passive receipts.
+"""The canonical wire owns incoming and outgoing conversation history.
 
 Native bytes and committed wire sequences are independent source coordinates.
 A display cursor advances each only when that source's record is consumed.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -11,10 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_publication import stable_thread_lookup
-from .notification_assignment import NotificationAssignment
-from .routing import TurnRouting
+from .routing import MessageRoute, TurnRouting
 from .thread_identity import ThreadIncarnation
-from .transcript_events import UserTranscript
+from .transcript_events import SentTranscript, UserTranscript
 
 if TYPE_CHECKING:
     from .wire_log import WireLog
@@ -80,7 +80,7 @@ class EarlierTranscript(TranscriptTraversal):
         return reader.reverse(cursor.offset)
 
     def predicate(self, sequence, through):
-        return "w.wire_seq<=?", (sequence,)
+        return "w.seq<=?", (sequence,)
 
     def chooses_native(self, native_time, receipt_time):
         return native_time is None or native_time >= receipt_time
@@ -105,7 +105,7 @@ class LaterTranscript(TranscriptTraversal):
         return reader.forward(cursor.offset, through.offset)
 
     def predicate(self, sequence, through):
-        return "w.wire_seq>? AND w.wire_seq<=?", (sequence, through.wire_seq)
+        return "w.seq>? AND w.seq<=?", (sequence, through.wire_seq)
 
     def chooses_native(self, native_time, receipt_time):
         return native_time is None or native_time <= receipt_time
@@ -134,53 +134,79 @@ class AssignedTranscriptSource:
         return cls(root, thread.incarnation, log)
 
     def rows(self, predicate="1", parameters=(), *, limit=1, ascending=False):
-        return NotificationAssignment.select(
-            self.root, f"w.recipient_lookup=? AND ({predicate})",
-            (stable_thread_lookup(self.recipient.created_at), *parameters), limit=limit, ascending=ascending,
-        )
+        from .private_bus_checkpoint import conversation_sources_unlocked
+
+        with self.log.locked():
+            if not self.log.path.exists():
+                return ()
+            marker = self.log._private_marker_unlocked()
+            return conversation_sources_unlocked(
+                self.log,
+                marker,
+                stable_thread_lookup(self.recipient.created_at),
+                predicate,
+                parameters,
+                limit=limit,
+                ascending=ascending,
+            )
 
     @property
     def frontier(self):
         rows = self.rows()
-        return AssignedSourceCursor(str(self.root), self.recipient,
-                                    rows[0].assignment.wire_seq if rows else 0)
+        return AssignedSourceCursor(
+            str(self.root), self.recipient, rows[0].message.seq if rows else 0
+        )
 
     def owns(self, sequence):
-        return bool(self.rows("w.wire_seq=?", (sequence,)))
+        return bool(self.rows("w.seq=?", (sequence,)))
 
     def next(self, traversal, sequence, through):
         predicate, parameters = traversal.predicate(sequence, through)
         rows = self.rows(predicate, parameters, ascending=traversal.ascending)
         if not rows:
             return None
-        source = rows[0].assignment.source
-        message = self.log.message_by_id(source.message_id)
-        if message is None or message.seq != source.seq:
-            raise ValueError("Assigned transcript source has no matching durable wire message")
-        return message
+        return rows[0]
 
-    def native_events(self, entry, routes, messaging):
+    def native_events(self, entry, routes):
         from dataclasses import replace
         from .native_entries import TranscriptProjection
 
-        events = entry.events(TranscriptProjection(
-            routes.get(entry.id), routes.input_display(entry.input_id),
-            messaging.sent_tool_message,
-        ))
+        events = entry.events(
+            TranscriptProjection(
+                routes.get(entry.id),
+                routes.input_display(entry.input_id),
+            )
+        )
         result = []
         for event in events:
             # An assigned request has one original wire record in this source.
             # Its native prompt is a consumer of that record, not another input.
             if isinstance(event, UserTranscript) and event.routed:
-                remaining = tuple(message for message in event.routing.requests
-                                  if not self.owns(message.seq))
+                remaining = tuple(
+                    message for message in event.routing.requests if not self.owns(message.seq)
+                )
                 if not remaining:
                     continue
                 event = replace(event, routing=TurnRouting(remaining, event.routing.reply))
             result.append(event)
         return tuple(result)
 
-    @staticmethod
-    def events(message):
-        return (UserTranscript(message.body, timestamp=message.timestamp,
-                               routing=TurnRouting((message,))),)
+    def events(self, original):
+        message = original.message
+        if original.audience.sender_lookup == stable_thread_lookup(self.recipient.created_at):
+            return (
+                SentTranscript(
+                    message.body,
+                    timestamp=message.timestamp,
+                    source=message.reference,
+                    routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))),
+                ),
+            )
+        return (
+            UserTranscript(
+                message.body,
+                timestamp=message.timestamp,
+                source=message.reference,
+                routing=TurnRouting((message,)),
+            ),
+        )
