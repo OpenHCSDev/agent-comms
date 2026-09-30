@@ -23,26 +23,26 @@ class RecallMeasurementTests(unittest.TestCase):
             with self.subTest(condition=condition):
                 score = self.scenario.score(condition, self.exact)
                 self.assertEqual(
-                    (score["questions"], score["correct"], score["stale"], score["missing"]),
+                    (score.questions, score.correct, score.stale, score.missing),
                     (21, 21, 0, 0),
                 )
 
     def test_old_answers_fail_after_correction_and_goal_replacement(self):
         answers = {item.identity: self.exact["r1"] for item in self.scenario.rounds}
         score = self.scenario.score(Condition.RECENT_ONLY, answers)
-        self.assertEqual([item["correct"] for item in score["rounds"]], [7, 4, 2])
-        self.assertEqual([item["stale"] for item in score["rounds"]], [0, 3, 5])
+        self.assertEqual([item.correct for item in score.rounds], [7, 4, 2])
+        self.assertEqual([item.stale for item in score.rounds], [0, 3, 5])
 
     def test_missing_answers_are_not_silently_removed_from_denominator(self):
         score = self.scenario.score(Condition.BOUNDED, {})
-        self.assertEqual((score["questions"], score["correct"], score["missing"]), (21, 0, 21))
+        self.assertEqual((score.questions, score.correct, score.missing), (21, 0, 21))
 
     def test_nearly_matching_identifier_and_invented_completion_are_wrong(self):
         self.exact["r3"]["symbol"] = "frameowner"
         self.exact["r3"]["input"] = "COMPLETED"
         score = self.scenario.score(Condition.TASK_MEMORY, self.exact)
-        self.assertEqual(score["correct"], 19)
-        self.assertEqual(score["stale"], 1)
+        self.assertEqual(score.correct, 19)
+        self.assertEqual(score.stale, 1)
 
     def test_new_question_uses_existing_scoring_contract(self):
         original = self.scenario.rounds[0]
@@ -52,8 +52,23 @@ class RecallMeasurementTests(unittest.TestCase):
         extended = replace(original, questions=original.questions + (extra,))
         answers = self.exact["r1"] | {"artifact": "artifact-3"}
         score = extended.score(answers)
-        self.assertEqual((score["questions"], score["correct"]), (8, 8))
-        self.assertEqual(original.score(self.exact["r1"])["questions"], 7)
+        self.assertEqual((score.questions, score.correct), (8, 8))
+        self.assertEqual(original.score(self.exact["r1"]).questions, 7)
+
+    def test_round_and_scenario_totals_derive_from_their_outcomes(self):
+        score = self.scenario.score(Condition.BOUNDED, self.exact)
+        first = score.rounds[0]
+        shortened = replace(first, answers=first.answers[:1])
+        changed = replace(score, rounds=(shortened,) + score.rounds[1:])
+        self.assertEqual((shortened.questions, shortened.correct), (1, 1))
+        self.assertEqual((changed.questions, changed.correct), (15, 15))
+        self.assertEqual((score.questions, score.correct), (21, 21))
+
+    def test_caller_cannot_supply_an_independent_total(self):
+        score = self.scenario.score(Condition.BOUNDED, self.exact)
+        for view in (score, score.rounds[0]):
+            with self.subTest(view=view), self.assertRaises(TypeError):
+                replace(view, correct=999)
 
     def test_unknown_round_or_question_is_rejected(self):
         for answers in ({"r4": {}}, {"r1": {"invented": "answer"}}):

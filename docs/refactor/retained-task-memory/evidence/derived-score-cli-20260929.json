@@ -1,0 +1,167 @@
+{
+  "baseline": "b0c94e4a",
+  "comparisons": [
+    {
+      "case": "exact",
+      "condition": "full-context",
+      "questions": 21,
+      "correct": 21,
+      "stale": 0,
+      "missing": 0
+    },
+    {
+      "case": "exact",
+      "condition": "bounded",
+      "questions": 21,
+      "correct": 21,
+      "stale": 0,
+      "missing": 0
+    },
+    {
+      "case": "exact",
+      "condition": "task-memory",
+      "questions": 21,
+      "correct": 21,
+      "stale": 0,
+      "missing": 0
+    },
+    {
+      "case": "exact",
+      "condition": "recent-only",
+      "questions": 21,
+      "correct": 21,
+      "stale": 0,
+      "missing": 0
+    },
+    {
+      "case": "stale",
+      "condition": "full-context",
+      "questions": 21,
+      "correct": 13,
+      "stale": 8,
+      "missing": 0
+    },
+    {
+      "case": "stale",
+      "condition": "bounded",
+      "questions": 21,
+      "correct": 13,
+      "stale": 8,
+      "missing": 0
+    },
+    {
+      "case": "stale",
+      "condition": "task-memory",
+      "questions": 21,
+      "correct": 13,
+      "stale": 8,
+      "missing": 0
+    },
+    {
+      "case": "stale",
+      "condition": "recent-only",
+      "questions": 21,
+      "correct": 13,
+      "stale": 8,
+      "missing": 0
+    },
+    {
+      "case": "missing",
+      "condition": "full-context",
+      "questions": 21,
+      "correct": 0,
+      "stale": 0,
+      "missing": 21
+    },
+    {
+      "case": "missing",
+      "condition": "bounded",
+      "questions": 21,
+      "correct": 0,
+      "stale": 0,
+      "missing": 21
+    },
+    {
+      "case": "missing",
+      "condition": "task-memory",
+      "questions": 21,
+      "correct": 0,
+      "stale": 0,
+      "missing": 21
+    },
+    {
+      "case": "missing",
+      "condition": "recent-only",
+      "questions": 21,
+      "correct": 0,
+      "stale": 0,
+      "missing": 21
+    },
+    {
+      "case": "modified",
+      "condition": "full-context",
+      "questions": 21,
+      "correct": 19,
+      "stale": 1,
+      "missing": 0
+    },
+    {
+      "case": "modified",
+      "condition": "bounded",
+      "questions": 21,
+      "correct": 19,
+      "stale": 1,
+      "missing": 0
+    },
+    {
+      "case": "modified",
+      "condition": "task-memory",
+      "questions": 21,
+      "correct": 19,
+      "stale": 1,
+      "missing": 0
+    },
+    {
+      "case": "modified",
+      "condition": "recent-only",
+      "questions": 21,
+      "correct": 19,
+      "stale": 1,
+      "missing": 0
+    },
+    {
+      "case": "partial",
+      "condition": "full-context",
+      "questions": 21,
+      "correct": 1,
+      "stale": 0,
+      "missing": 20
+    },
+    {
+      "case": "partial",
+      "condition": "bounded",
+      "questions": 21,
+      "correct": 1,
+      "stale": 0,
+      "missing": 20
+    },
+    {
+      "case": "partial",
+      "condition": "task-memory",
+      "questions": 21,
+      "correct": 1,
+      "stale": 0,
+      "missing": 20
+    },
+    {
+      "case": "partial",
+      "condition": "recent-only",
+      "questions": 21,
+      "correct": 1,
+      "stale": 0,
+      "missing": 20
+    }
+  ],
+  "export_match": true,
+  "provider_calls": 0
+}

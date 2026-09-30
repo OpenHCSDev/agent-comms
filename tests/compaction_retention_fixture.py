@@ -1,15 +1,18 @@
 """Synthetic repeated-compaction recall oracle. No provider or runtime mutation.
 
 Run directly to export public history/questions, or use --answers FILE to score
-one condition's recorded answers. Oracle answers never appear in exported inputs.
+one condition's recorded answers. Oracle metadata is omitted from exported questions.
 Exact-match scoring deliberately measures identifiers/state, not prose quality.
 """
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import argparse
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from enum import Enum
+from itertools import chain
 import json
 from pathlib import Path
 
@@ -28,6 +31,84 @@ class AnswerScore:
     correct: bool
     stale: bool
     missing: bool
+
+
+class ScoreView(ABC):
+    """Derive every aggregate from owned outcomes, never stored count replicas."""
+
+    @property
+    @abstractmethod
+    def outcomes(self) -> Iterator[AnswerScore]:
+        """Yield the authoritative per-answer outcomes for this view."""
+
+    @property
+    def questions(self) -> int:
+        return sum(1 for _ in self.outcomes)
+
+    @property
+    def correct(self) -> int:
+        return sum(outcome.correct for outcome in self.outcomes)
+
+    @property
+    def stale(self) -> int:
+        return sum(outcome.stale for outcome in self.outcomes)
+
+    @property
+    def missing(self) -> int:
+        return sum(outcome.missing for outcome in self.outcomes)
+
+    def public_totals(self) -> dict:
+        return {
+            "questions": self.questions,
+            "correct": self.correct,
+            "stale": self.stale,
+            "missing": self.missing,
+        }
+
+
+@dataclass(frozen=True)
+class ScoredRound(ScoreView):
+    source: RecallRound
+    answers: tuple[tuple[Question, AnswerScore], ...]
+
+    @property
+    def identity(self) -> str:
+        return self.source.identity
+
+    @property
+    def outcomes(self) -> Iterator[AnswerScore]:
+        return (outcome for _, outcome in self.answers)
+
+    def public(self) -> dict:
+        return {
+            "round": self.identity,
+            **self.public_totals(),
+            "answers": {question.identity: asdict(outcome) for question, outcome in self.answers},
+        }
+
+
+@dataclass(frozen=True)
+class ScoredScenario(ScoreView):
+    source: RecallScenario
+    condition: Condition
+    rounds: tuple[ScoredRound, ...]
+
+    @property
+    def identity(self) -> str:
+        return self.source.identity
+
+    @property
+    def outcomes(self) -> Iterator[AnswerScore]:
+        return chain.from_iterable(item.outcomes for item in self.rounds)
+
+    def public(self) -> dict:
+        return {
+            "scenario": self.identity,
+            "condition": self.condition.value,
+            "synthetic": True,
+            "rounds": [item.public() for item in self.rounds],
+            **self.public_totals(),
+        }
 
 
 @dataclass(frozen=True)
@@ -62,24 +143,17 @@ class RecallRound:
             "questions": [question.public() for question in self.questions],
         }
 
-    def score(self, answers: dict[str, str]) -> dict:
+    def score(self, answers: dict[str, str]) -> ScoredRound:
         unexpected = answers.keys() - {question.identity for question in self.questions}
         if unexpected:
             raise ValueError(f"Unknown questions in {self.identity}: {sorted(unexpected)}")
-        results = tuple(
-            question.score(answers.get(question.identity)) for question in self.questions
+        return ScoredRound(
+            self,
+            tuple(
+                (question, question.score(answers.get(question.identity)))
+                for question in self.questions
+            ),
         )
-        return {
-            "round": self.identity,
-            "questions": len(results),
-            "correct": sum(result.correct for result in results),
-            "stale": sum(result.stale for result in results),
-            "missing": sum(result.missing for result in results),
-            "answers": {
-                question.identity: asdict(result)
-                for question, result in zip(self.questions, results)
-            },
-        }
 
 
 @dataclass(frozen=True)
@@ -90,21 +164,15 @@ class RecallScenario:
     def public(self) -> dict:
         return {"scenario": self.identity, "rounds": [item.public() for item in self.rounds]}
 
-    def score(self, condition: Condition, answers: dict[str, dict[str, str]]) -> dict:
+    def score(self, condition: Condition, answers: dict[str, dict[str, str]]) -> ScoredScenario:
         unexpected = answers.keys() - {item.identity for item in self.rounds}
         if unexpected:
             raise ValueError(f"Unknown rounds: {sorted(unexpected)}")
-        scores = [item.score(answers.get(item.identity, {})) for item in self.rounds]
-        return {
-            "scenario": self.identity,
-            "condition": condition.value,
-            "synthetic": True,
-            "rounds": scores,
-            "questions": sum(item["questions"] for item in scores),
-            "correct": sum(item["correct"] for item in scores),
-            "stale": sum(item["stale"] for item in scores),
-            "missing": sum(item["missing"] for item in scores),
-        }
+        return ScoredScenario(
+            self,
+            condition,
+            tuple(item.score(answers.get(item.identity, {})) for item in self.rounds),
+        )
 
 
 def coding_scenario() -> RecallScenario:
@@ -253,7 +321,7 @@ def main() -> None:
     scenario = coding_scenario()
     result = scenario.public()
     if args.answers is not None:
-        result = scenario.score(args.condition, decode_answers(args.answers.read_text()))
+        result = scenario.score(args.condition, decode_answers(args.answers.read_text())).public()
     print(json.dumps(result, indent=2))
 
 

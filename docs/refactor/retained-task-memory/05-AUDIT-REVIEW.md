@@ -15,8 +15,8 @@ state duplication ever. Every consumer must derive from its authoritative source
 - [x] Run skill census/overlay and verify findings against source.
 - [x] Record refreshed source-owner receipts after merged main changes.
 - [x] Rerun the eight provider-free scorer/exporter checks successfully.
-- [ ] Replace the scorer's implicit aggregate record with an authoritative derived
-      view, migrate all callers and rescan. Do not store duplicate score totals.
+- [x] Replace implicit aggregate records with source-derived score views,
+      migrate all callers and complete a fresh contextual scan. No stored totals.
 - [ ] Publish tested review/evidence update to the existing PR428 branch.
 
 ## Source and exact coverage
@@ -138,9 +138,53 @@ native JavaScript proof remain separate from this scaffold review.
 
 Owner: `comms428`. Audit JSON and caches are under
 `/home/ts/.cache/agent-scratch/comms428-audit-20260929`; preserve commands and
-receipts before removing owned scratch after workers exit. The tool defect's
-failed stderr remains until the receiving owner has the evidence it needs.
+receipts before removing owned scratch after workers exit. The tool defect's failed stderr is retained in the package evidence before owned
+scratch is retired.
 Headroom warning: 12.3 GiB RAM available, 19.6 GiB home disk free, 11.0 GiB swap
 used. Runs use the existing interpreter and skill APIs, one worker, bounded
 shell/tool deadlines, no extra agents or full test fleet. No live state or
 provider calls are involved.
+
+## Derived-score implementation checkpoint
+
+`ScoreView` owns the shared counting algorithm as read-only properties.
+`ScoredRound` yields its owned per-answer outcomes; `ScoredScenario` traverses
+those same round outcomes without copying/flattening them into stored state.
+Their identities derive from the original round/scenario objects; question IDs
+also derive from the original Question references. No count fields, second fact
+registry, cache, status mirror or independently writable freshness flag exists.
+CLI dictionaries are created only by owner-local publication methods.
+
+RecallRound/RecallScenario now return typed views; internal tests consume their
+public properties rather than interpreting anonymous dictionaries. The obsolete
+raw aggregation and internal dictionary callers were deleted in place. Public
+CLI output remains unchanged. This is an authored migration checked against the
+admitted relation and actual behavior, not an invented NRA DSL/equivalence proof.
+
+[After-edit audit](evidence/derived-score-audit-20260929.json) binds both changed
+sources by SHA256 and records all nine original classes, 85 completed detectors,
+zero omissions and the same declared context. Compared with the initial scaffold:
+
+| Measurement | Before | After |
+| --- | --- | --- |
+| String-keyed subscripts | 30 | 10 |
+| Overlay raw-shape sites | 3 | 0 |
+| NRA unmodeled aggregate-shape leads | 2 | 0 |
+| Total raw NRA findings | 4 | 1 |
+
+The remaining lead is `ScoredScenario.public:return` repeating the words
+condition/rounds. The method is on the determining class itself and exports a
+value-only condition name and each round's public projection; it does not maintain
+another record or state authority. This is an owner-local boundary projection,
+not the earlier internal raw consumer. Keep the lead visible for independent
+review; do not suppress the detector or claim zero findings/global cleanliness.
+
+Ten provider-free tests pass. The added behavior checks prove totals change when
+the referenced outcomes change and reject caller-supplied count values. Existing
+fixed-denominator/stale/new-question assertions are unchanged in strength.
+[CLI comparison receipt](evidence/derived-score-cli-20260929.json) records 20
+baseline/candidate score pairs (five answer sets, four condition labels) plus the
+actual exporter match. All decoded CLI results equal baseline `b0c94e4a`; none
+calls a provider or mutates native state. The small baseline Python/answers files
+were created in owned persistent scratch and removed after the run. These checks
+establish the scaffold's exercised behavior, not model recall or native usability.

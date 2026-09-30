@@ -14,8 +14,10 @@ source revision, unresolved failure and input disposition. Later rounds supersed
 corrections, rename source, replace goal and change commit. They deliberately keep
 failure/input unresolved. This is a seed fixture, not representative coverage.
 
-Question owns its expected answer and stale answers; RecallRound derives scores;
-RecallScenario derives totals. Condition labels are value-only experiment names,
+Question owns its expected answer and stale answers; RecallRound computes answer
+outcomes. ScoredRound/ScoredScenario derive counts through the shared ScoreView
+contract, without stored totals or copied source identities. Condition labels are
+value-only experiment names,
 not production behavior dispatch. New question/scenario does not require an edit
 to the scoring algorithm (MEMB-1/IMPL-5 avoidance). Truth comes from authored
 fixture events, not candidate summaries (IDEN-1).
