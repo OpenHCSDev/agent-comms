@@ -691,3 +691,24 @@ strict C3 original-format admission/cutover; no compatibility bridge is added.
 Einstein225/440 current-main large-history CPU capture depends on that authentic
 original typed private-fixture capability, with no public mutation. Source
 closed-bars receipt updates pass, but large-history CPU improvement is unproven.
+
+### First backend cohort installed; default UI gate pending
+
+The parent's single441 operation completed exit0 against the original certified
+root e206f3766e60451a989ca34df0e2a94b. All13 original idle executable owners
+were fenced, stopped and replaced through the canonical lifecycle. Target
+registry checks confirm all13 expected replacement PIDs alive with no active
+turn. Original routing cells and active-turn routing counts were both zero;
+the original wire/history/native witnesses and uncertain inputs were retained.
+Recovery preimages and exact operation output are private persistent resources
+under .release-private, mode700/600; never add them to Git or remove them during
+worktree cleanup. There was no original input replay or paid provider call.
+
+All five default .local/bin launchers now resolve to
+runtime-canonical-source-publication-20260930/bin, the exact accepted
+Core000/Toad173/Text650/SDK0.12.1/nativee36 cohort. The staging and installation
+receipts record the exact source/native verification and old/new links. This
+installs215 and the Core436/439 cohort, not future Core421/Toad216 C3 or
+Toad224/226. Heisenberg owns the final normal toad-comms nra-architecture
+isolated ST/Xvfb original-history/default-entrypoint gate. Installed is not
+yet default-UI-live-verified; the full goal remains active.
