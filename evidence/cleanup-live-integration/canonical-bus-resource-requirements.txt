@@ -9,7 +9,7 @@ annotated-types==0.8.0
 anyio==4.14.2
 attrs==26.1.0
 bashlex==0.18
-batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@fc538a3ac53279008735bf3e69bef3b41e256eba
+batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@4e1277aefc07831cd693675e42c19457477a9ce1
 certifi==2026.7.22
 click==8.4.0
 format-currency==0.0.10
