@@ -148,7 +148,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             and thread.created_at == target.created_at
             and status is not None
             and status.running
-            and thread.turn_state.managed_id is not None
+            and thread.executing
         )
 
     @staticmethod

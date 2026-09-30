@@ -43,6 +43,7 @@ from agent_comms.comms import wire
 from agent_comms.compaction_result import RefusedCompactionResult
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
+from agent_comms.goal_states import ActiveGoal
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.native_pi import CAPABILITY
@@ -785,7 +786,7 @@ class TestAgentTurn:
             wire(wired.root).goals.update_goal(
                 name,
                 ActiveGoalAction(
-                    expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
+                    expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
                     progress="independently verified newer progress",
                 ),
             )
@@ -892,7 +893,7 @@ class TestAgentTurn:
             wire(wired.root).goals.update_goal(
                 "proj",
                 ActiveGoalAction(
-                    expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
+                    expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
                     progress="independently verified newer progress",
                 ),
             )
@@ -929,7 +930,7 @@ class TestAgentTurn:
             wired.goals.update_goal(
                 "proj",
                 ActiveGoalAction(
-                    expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
+                    expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
                     progress="Completed a verified step",
                 ),
                 actor=ModelInvocable,
@@ -1033,7 +1034,7 @@ class TestAgentTurn:
         goal = wired.registry.require("proj").goal
         if owner_paused:
             assert goal.state.declared_name == "paused"
-            assert wired.goals.goal_pause("proj").source.declared_name == "owner"
+            assert wired.registry.require("proj").goal.state.pause_source.declared_name == "owner"
             agent.turns.goals.schedule_goal("proj")
             assert not agent.inputs.pending_turns.get("proj")
         store = GoalAttemptStore(wired.root / "goal-private")

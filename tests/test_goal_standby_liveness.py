@@ -197,7 +197,7 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert "without a qualifying direct reply" in continued.progress
     assert reopened.goals.goal_execution("owner").state.value == "runnable"
     assert reopened.goals.goal_wait("owner") is None
-    assert reopened.goals.goal_pause("owner") is None
+    assert reopened.registry.require("owner").goal.state.pause_source is None
     assert reopened.goals.release_waits_after_terminal_turn(child_fence) == ()
     assert reopened.registry.require("owner").goal == continued
     assert not (comms.root / "goal-private").exists()
@@ -290,7 +290,7 @@ def test_owner_pause_still_prevents_quiet_dependency_release(tmp_path):
     fence = _finish(comms, "child", "child-turn")
     assert comms.goals.release_waits_after_terminal_turn(fence) == ()
     assert comms.registry.require("owner").goal == paused
-    assert comms.goals.goal_pause("owner").source.declared_name == "owner"
+    assert comms.registry.require("owner").goal.state.pause_source.declared_name == "owner"
     assert comms.goals.goal_wait("owner") is None
 
 

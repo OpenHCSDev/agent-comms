@@ -309,9 +309,9 @@ class OwnerLifecycle:
             yield
 
     def _stop_process(self, thread: Thread, admission_generation: int) -> None:
-        assert thread.process_identity is not None
+        identity = thread.require_process()
         with suppress(ProcessLookupError):
-            ObservedProcess(thread.process_identity).stop_sync(
+            ObservedProcess(identity).stop_sync(
                 guard=lambda: self._signal_guard(thread, admission_generation),
             )
 

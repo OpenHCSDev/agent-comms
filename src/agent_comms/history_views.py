@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .catalog_store import ChannelCatalog
-from .goal_pauses import GoalPauseEvents
 from .goal_waits import GoalWaits
 from .registration import Registration
 
@@ -505,9 +504,6 @@ class HistoryViews:
                 "status": snapshot.statuses[name].declared_name,
                 "is_fork": t.is_fork,
                 "pending": pending[name],
-                "goal_pause": (
-                    pause.to_wire() if (pause := GoalPauseEvents.for_goal(t.goal)) else None
-                ),
                 "goal_execution": (
                     asdict(execution)
                     if (execution := GoalWaits.execution(t.goal, waits, snapshot))

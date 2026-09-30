@@ -58,6 +58,9 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def after_unverified_completion(self, diagnostic: str) -> GoalState:
         return self
 
+    def require_model_resume(self) -> None:
+        raise ValueError("This goal cannot be resumed; refresh its state.")
+
     def require_active(self) -> None:
         from .errors import RelationViolationError
 
@@ -185,6 +188,10 @@ class PausedGoal(OpenGoal, FromOpenGoal):
     @property
     def protected(self) -> bool:
         return self.source.protects_pause
+
+    def require_model_resume(self) -> None:
+        if instruction := self.source.instruction():
+            raise ValueError(instruction)
 
     def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
         super().check_transition(nxt, owner=owner)

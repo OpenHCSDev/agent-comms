@@ -11,7 +11,6 @@ from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
 from .goal_mentions import bind_goal_mentions
-from .goal_pauses import GoalPauseEvent
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -50,7 +49,7 @@ class OwnerControlInvocable:
 @dataclass(frozen=True)
 class GoalPrecondition:
     goal_id: str | None = None
-    expected_status: str | None = None
+    expected_state: GoalState | None = None
     expected_goal: Goal | None = None
     expected_owner: ProcessIdentity | None = None
 
@@ -65,8 +64,8 @@ class GoalPrecondition:
             raise ValueError("Goal changed during resume; refresh its state.")
         if self.goal_id is not None and (goal is None or goal.id != self.goal_id):
             raise ValueError("This goal was replaced or cleared; refresh its state.")
-        if self.expected_status is not None and (
-            goal is None or goal.state.declared_name != self.expected_status
+        if self.expected_state is not None and (
+            goal is None or goal.state != self.expected_state
         ):
             pause = goal.state.pause_source if goal is not None else None
             raise ValueError(
@@ -132,9 +131,6 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         )
         if not self.preserve_wait and ctx.thread.goal is not None:
             ctx.goals.waits.clear(ctx.thread.goal.id)
-        if goal is not None and goal.state.pause_source is not None:
-            # Audit only; current pause authority is already durable in Goal.
-            ctx.goals.pauses.record(GoalPauseEvent(goal.id, goal.revision, goal.state.pause_source))
         return goal
 
     @abstractmethod
@@ -210,7 +206,7 @@ class ActiveGoalAction(
                     replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
                 )
                 raise ValueError(refusal)
-            elif not generation.lifecycle.allows_resume(thread.turn_state.managed_id is not None):
+            elif not generation.lifecycle.allows_resume(thread.executing):
                 raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
 

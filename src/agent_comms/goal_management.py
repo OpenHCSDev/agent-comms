@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
 from .goal_history import GoalHistoryEntry
-from .goal_pauses import GoalPauseEvent, GoalPauseEvents
 from .goal_waits import GoalInputReview, GoalReplyScope, GoalWait, GoalWaits
 from .registration import Registration
 
@@ -36,11 +35,6 @@ class Goals:
         self.bus = bus
         self._wire_lock_path = root / "wire"
         self.waits = GoalWaits(root / GoalWaits.filename)
-        self.pauses = GoalPauseEvents(root / GoalPauseEvents.filename)
-
-    def goal_pause(self, name: str) -> GoalPauseEvent | None:
-        """Project the pause source carried by the current goal."""
-        return GoalPauseEvents.for_goal(self.registry.require(name).goal)
 
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
@@ -104,7 +98,7 @@ class Goals:
             raise ValueError("This goal was replaced or cleared; refresh its state.")
         if not goal.state.active:
             raise ValueError(
-                (pause.owner_instruction if (pause := self.goal_pause(thread.name)) else None)
+                (pause.instruction() if (pause := goal.state.pause_source) else None)
                 or "This goal is no longer active; refresh its state."
             )
         if not wait_for:
@@ -186,7 +180,7 @@ class Goals:
             snapshot = self.registry.snapshot()
             canonical = snapshot.aliases.get(name, name)
             owner = snapshot.threads.get(canonical)
-            if owner is None or owner.turn_state.managed_id is not None:
+            if owner is None or owner.executing:
                 return ()
             goal = owner.active_goal
             if goal is None:
@@ -248,7 +242,7 @@ class Goals:
             )
             if (
                 source is None
-                or source.turn_state.managed_id is not None
+                or source.executing
                 or observed is None
                 or not observed.matches(fence.renamed(canonical))
                 or not snapshot.statuses[canonical].active

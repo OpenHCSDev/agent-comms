@@ -326,7 +326,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
                 "owner",
                 ActiveGoalAction(
                     expect=GoalPrecondition(
-                        expected_goal=saved, expected_status=prior.declared_name, goal_id=saved.id
+                        expected_goal=saved, goal_id=saved.id
                     ),
                     progress="stale second resume",
                 ),

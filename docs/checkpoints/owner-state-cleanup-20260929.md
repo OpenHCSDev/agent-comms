@@ -215,3 +215,64 @@ The full six-file backend/goal/owner/watchdog consumer and paired216 installed
 acceptance remain required; this source result does not close them. Urgent430/215
 hot source/read-frontier and434 writer correction take the next coherent native
 journey. No global runtime, registry format or saved journal was changed here.
+
+## Current C3 deletion and complete consumer census (2026-09-30)
+
+Normally integrated main439 at23c417f2. Delete the entire66-line goal_pauses.py,
+its duplicate writer and adapter event, Goals.pauses/goal_pause, the redundant
+HistoryViews.list_threads goal_pause key, and the unused passive failure pause
+argument. Current Goal.state carries pause source and its declaration owns model
+resume eligibility. The original goal_history journal preserves every committed
+revision. GoalPrecondition now carries the declared expected GoalState instead
+of comparing status strings; resume uses the original complete Goal CAS. Original
+Thread.executing supplies dependency/idle queries, not managed-id absence tests.
+All production and test consumers were searched; no retired pause-store import,
+writer, reader, method or duplicate failure parameter remains. Toad216's existing
+owner-pause pilot now reads the same original Goal, with no adapter.
+
+Delete the obsolete pause-store golden test and injected second-store failure
+case. Existing journal failure/crash/UNKNOWN controls remain. Eight synthetic
+backend-stream failure cases are replaced by the existing retained-native/ACP
+failure journey, now also pausing through the actual owner command at the held
+localhost response boundary. EOF/cancellation remains covered by the existing
+actual native lifecycle control; observation abort/sync/crash controls remain
+with the actual attempt store. No production compatibility mechanism is added.
+
+Repeated mirror evidence extends the existing mutation guard. Its scoped pause
+witness grows0->7 at original3cdc0569 and is zero now; the preceding report-mirror
+witness remains enforced. Evidence: goal-pause-mirror-guard-history.json. This
+is a declared-owner guard extension, not another audit framework.
+
+### All six required consumer files
+
+| File | Canonical authority and remaining true boundary |
+| --- | --- |
+| coordination_response.py | RecoverySnapshot, execution/attempt/obligation members and original RegistryOwner own admission/finality; absent SQL/source proof is a real rejection boundary. |
+| owner_lifecycle.py | OwnerRestartSelection and OwnerReleaseReceipt own birth/admission/process custody; stopping obtains Thread.require_process. Optional reviewed launch and explicit environment/argument inputs remain genuine caller boundaries. |
+| goal_actions.py | Current Goal owns pause/transition data; committed original goal_history owns the once-per-turn report. Optional private owner grant and requested CAS fields remain explicit authority inputs. |
+| backend.py | Existing NativeCustody and NativeAttestation own native resource/reopen/readiness. Optional actual asyncio pipes/tasks/listeners remain resource boundaries. The _maintenance_wire_locked callback marker remains an OPEN shared custody row. |
+| turn_watchdog.py | TurnSession delegates attestation to NativeAttestation.observed; watchdog clocks and historical irreversible-work observations are bounded runtime resources, never input/goal/retry grants. Optional finish tasks/deadlines remain real runtime bounds. |
+| goal_management.py | Current Goal, committed journal, original input/disposition and GoalWait owners supply reports, reviews and dependency state. Thread.executing and original finished-turn fence retain rename/birth/admission/source custody. Optional cleared goals and absent exact wait/turn evidence remain real boundaries. |
+
+Arendt explicitly owns the remaining send-custody marker closure across initial
+backend send, forwarded turn_inputs and OwnedSendAdmission AFTER the frozen
+61506 paired gate. Keep that row open here; do not add a competing boundary,
+private active-turn probe or custody boolean. All five family rows remain in
+this PR: mention resolution, BOTH relationship edits, maintenance lifecycle,
+ACP error shape boundary and declared control availability. Parent's C4 builder
+is untouched except the approved obsolete list_threads pause projection.
+
+### Durable cutover and acceptance limits
+
+Preserve existing goal_pause_events.json as historical evidence; do not erase it
+or read it as current authority. No live file cleanup or new store is required.
+Preserve registry/native bytes, goal_history and UNKNOWN. The exact original
+14C0 last_goal_report_turn carry/idle rule above is unchanged, including retained
+snapshots and any unjournaled active report. Parent owns quiet cutover; no legacy
+reader or fabricated journal receipt is introduced.
+
+89 focused source controls pass (85 in4.24s plus4 recovery checks in0.84s
+with the explicit native-package fixture environment).
+This is an in-progress source checkpoint. Paired216 installed goal/menu/native
+acceptance is required next; source tests do not close C3 or authorize activation.
+Scratch ownership and preserved original proofs remain as declared above.

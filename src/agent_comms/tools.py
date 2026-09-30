@@ -25,7 +25,7 @@ from .goal_actions import (
     ModelInvocable,
     SetGoalAction,
 )
-from .goal_states import ActiveGoal, PausedGoal
+from .goal_states import ActiveGoal
 from .messages import MessageType
 from .relationships import RelationshipEdit
 from .restart_queue import cancel as cancel_restart
@@ -478,7 +478,7 @@ class CommsGoalTool(ToolRequest):
         )
         command = replace(
             command,
-            expect=GoalPrecondition(goal_id=self.goal_id, expected_status=ActiveGoal.declared_name),
+            expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
         goal, execution = comms.goals.goal_snapshot(name)
@@ -502,22 +502,15 @@ class CommsResumeGoalTool(ToolRequest):
         name = _executing_thread()
         goal_id = self.goal_id
         current = comms.registry.require(name).goal
-        if current is None or current.id != goal_id or (not isinstance(current.state, PausedGoal)):
+        if current is None or current.id != goal_id:
             raise ValueError("This goal cannot be resumed; refresh its state.")
-        pause = comms.goals.goal_pause(name)
-        if pause is None:
-            raise ValueError(
-                "Pause source is unavailable; the owner must resume through the goal controls."
-            )
-        if pause.owner_instruction is not None:
-            raise ValueError(pause.owner_instruction)
+        current.state.require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
             name,
             ActiveGoalAction(
                 expect=GoalPrecondition(
                     expected_goal=current,
-                    expected_status=current.state.declared_name,
                     goal_id=goal_id,
                 ),
                 progress=progress,

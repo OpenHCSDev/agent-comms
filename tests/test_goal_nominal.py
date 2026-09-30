@@ -52,7 +52,7 @@ def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypat
     comms.registry.register(replace(comms.registry.require("worker"), goal=paused))
     edited = comms.goals.update_goal("worker", EditGoalAction(text="Revised objective"))
     assert edited.state.source.declared_name == "spend_cap"
-    assert comms.goals.goal_pause("worker").owner_instruction == SpendCapPause().instruction()
+    assert comms.registry.require("worker").goal.state.pause_source.instruction() == SpendCapPause().instruction()
     assert wire(comms.root).registry.require("worker").goal.state.source == SpendCapPause()
     failed = comms.goals.block_goal_after_failed_turn(
         "worker", started_goal=goal, expected_worktree=str(comms.root), diagnostic="Backend failed"
@@ -119,9 +119,8 @@ def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action):
     changed = comms.goals.update_goal("worker", action, actor=OwnerInvocable)
     assert changed.id == paused.id and changed.revision == paused.revision + 1
     assert isinstance(changed.state, PausedGoal) and isinstance(changed.state.source, OwnerPause)
-    # Prove the current state survives without its audit document and through
-    # both ordinary immutable rewrites and a new process-style registry load.
-    (comms.root / "goal_pause_events.json").unlink()
+    # Immutable rewrites and cold reopen retain the original source in Goal.
+    assert not (comms.root / "goal_pause_events.json").exists()
     rewritten = replace(changed, progress="new report", revision=changed.revision + 1)
     comms.registry.register(replace(comms.registry.require("worker"), goal=rewritten))
     assert wire(comms.root).registry.require("worker").goal.state == paused.state
