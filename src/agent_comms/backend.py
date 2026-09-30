@@ -52,6 +52,7 @@ from .turn_admission import UnacknowledgedPrompt
 from .turn_inputs import InputForwarding
 from .extension_ui import ExtensionUiSession
 from .turn_output import TurnOutput
+from .turn_phase import TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import ProgressWatchdog
@@ -366,6 +367,11 @@ class TurnSession:
 
     def notify_input_started(self, public_id, native_id, text):
         return self.native_start is None or self.native_start(public_id, native_id, text)
+
+    def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
+        """Publish the actual observer phase without storing another phase copy."""
+        if self.watchdog.phase != previous:
+            yield events.NativePhaseChanged(self.watchdog.phase)
 
     @property
     def started_input(self):
