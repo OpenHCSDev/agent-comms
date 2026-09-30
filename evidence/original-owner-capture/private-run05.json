@@ -1,0 +1,20 @@
+{
+  "complete": true,
+  "authentic_original_python": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python",
+  "original_registry_read_only": true,
+  "original_releases_read_only": true,
+  "strict_target_registry": true,
+  "strict_target_release": true,
+  "preserved_release_before_after": [
+    1,
+    2
+  ],
+  "distinct_original_arguments_retained": true,
+  "credentials_RAM_only": true,
+  "changed_admission_refused": true,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_mutations": 0,
+  "target": "Current C3 declarations at Core2244bf5c; source boundary only",
+  "source_gate": "original installed720; no installed225/UI claim"
+}

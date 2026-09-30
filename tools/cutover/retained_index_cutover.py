@@ -11,14 +11,14 @@ import sys
 from typing import ClassVar
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.owner_cutover import OwnerCutover
+from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.native_package import verify_native_package
 from agent_comms.wire_metadata import WireRootIdText
 from checkpoint_schema import declared_schema_digest
 
 
 @dataclass(frozen=True)
-class RetainedIndexCutover(OwnerCutover):
+class RetainedIndexCutover(StoppedOwnerInstallation):
     original_python: Path
     wire_root_id: str
     native_package: Path
