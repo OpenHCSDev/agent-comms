@@ -55,7 +55,7 @@ class CompactionCase(EffectCase):
     def body(self):
         return (
             ae.CompactionStart("test"),
-            ae.CompactionProgress(1),
+            ae.CompactionProgress(chunk_index=1),
             ae.ToolStart("tool", "read", "Read after summary"),
             ae.CompactionEnd(summary="summary"),
             ae.AgentInfo(model="model", session_name="saved", context_used=20, context_size=1000),

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from time import time
 from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -154,8 +153,11 @@ class SettlingStatsPhase(TurnPhase):
 class CompactionPhase(StallExempt, Excursion):
     resume: TurnPhase = field(default_factory=ModelWaitPhase)
     operation_id: str = ""
-    started_at: float = field(default_factory=time)
     source: CompactionSourceProgress | None = None
+
+    @property
+    def started_at(self) -> float | None:
+        return self.source.started_at_ms / 1000 if self.source is not None else None
 
     @property
     def summary(self) -> str:
@@ -172,7 +174,7 @@ class CompactionPhase(StallExempt, Excursion):
         return phase.following_compaction(self)
 
     def following_compaction(self, previous: CompactionPhase) -> TurnPhase:
-        return replace(self, operation_id=previous.operation_id, started_at=previous.started_at,
+        return replace(self, operation_id=previous.operation_id,
                        source=self.source if self.source is not None else previous.source)
     @classmethod
     def starts(cls, event: pi.PiEvent) -> bool:

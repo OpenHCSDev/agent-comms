@@ -1,0 +1,1 @@
+{"preparedNative":"/home/ts/wt/comms-native-compaction-progress-20260929/stack/.pi-native-b68dfdced9148b50/node_modules/@earendil-works/pi-coding-agent","cases":[{"sourceBytes":27,"calls":1,"budget":4096,"progressEvents":2,"streamedChunks":1,"elapsedMs":32},{"sourceBytes":765000,"calls":7,"budget":4096,"progressEvents":14,"streamedChunks":7,"elapsedMs":96}]}

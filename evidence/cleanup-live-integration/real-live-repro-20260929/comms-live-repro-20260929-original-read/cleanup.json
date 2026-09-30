@@ -1,0 +1,102 @@
+{
+  "remaining_owned_pids": [],
+  "errors": [],
+  "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+  "processes": [
+    {
+      "pid": 2156495,
+      "start_ticks": 21054002,
+      "returncode": 0
+    },
+    {
+      "pid": 2156497,
+      "start_ticks": 21054010,
+      "returncode": 1
+    },
+    {
+      "pid": 2156498,
+      "start_ticks": 21054012,
+      "returncode": 0
+    },
+    {
+      "pid": 2156570,
+      "start_ticks": 21054071,
+      "returncode": 0
+    },
+    {
+      "pid": 2156572,
+      "start_ticks": 21054080,
+      "returncode": 0
+    },
+    {
+      "pid": 2156499,
+      "start_ticks": 21054016,
+      "custody": "verified launch identity transferred to installed ObservedProcess"
+    },
+    {
+      "pid": 2156574,
+      "start_ticks": 21054090,
+      "returncode": 0
+    },
+    {
+      "pid": 2156575,
+      "start_ticks": 21054091,
+      "returncode": 255
+    },
+    {
+      "pid": 2157050,
+      "start_ticks": 21055294,
+      "returncode": 0
+    },
+    {
+      "pid": 2157270,
+      "start_ticks": 21056120,
+      "returncode": 0
+    },
+    {
+      "pid": 2157319,
+      "start_ticks": 21056141,
+      "returncode": 0
+    },
+    {
+      "pid": 2157497,
+      "start_ticks": 21056552,
+      "returncode": 0
+    },
+    {
+      "pid": 2157498,
+      "start_ticks": 21056565,
+      "returncode": 0
+    },
+    {
+      "pid": 2157643,
+      "start_ticks": 21056976,
+      "returncode": 0
+    },
+    {
+      "pid": 2157644,
+      "start_ticks": 21056987,
+      "returncode": 0
+    },
+    {
+      "pid": 2157679,
+      "start_ticks": 21057398,
+      "returncode": 0
+    },
+    {
+      "pid": 2157680,
+      "start_ticks": 21057411,
+      "returncode": 0
+    },
+    {
+      "pid": 2159291,
+      "start_ticks": 21058923,
+      "returncode": 0
+    },
+    {
+      "pid": 2159307,
+      "start_ticks": 21058953,
+      "returncode": 0
+    }
+  ]
+}
