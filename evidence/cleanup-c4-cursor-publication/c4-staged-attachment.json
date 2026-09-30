@@ -1,0 +1,14 @@
+{
+  "log": "/home/ts/.local/state/toad/logs/Agent_Comms_2026-09-29T19_50_04_949966.txt",
+  "load": [
+    {
+      "load_completed": true,
+      "error": null
+    }
+  ],
+  "saved_events": 32,
+  "prompt_count": 0,
+  "installed_core": "deda0dec32132de46c3f4ce9e5e129b0755c6317",
+  "toad": "cd79181128683ef724e0d060d29fae5155d9a7d2",
+  "scope": "actual staged toad-comms attachment; default unchanged"
+}
