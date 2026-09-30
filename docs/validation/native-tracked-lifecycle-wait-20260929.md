@@ -8,7 +8,7 @@ Trace existing TurnSession/watchdog/TrackedTurn/BoundedRun/private admission dec
 
 Existing installed actual native/RPC and controlled-provider real-tool journey across the former90s boundary; stall/cancel/native failure cause with durable UNKNOWN/no replay. Source checks supplement that continuous journey. No live paid input or active-owner restart. CI deferred.
 
-Draft opened before long implementation. Persistent worktree: /home/ts/wt/comms-native-tracked-lifecycle-wait-20260929. No readiness claimed yet.
+Draft opened before long implementation. Persistent worktree: /home/ts/wt/comms-native-tracked-lifecycle-wait-20260929. Installed acceptance is complete; production activation remains parent-owned.
 
 ## Published source checkpoint and ownership closure
 
@@ -20,4 +20,10 @@ Read-only journal links comms428inputc907 to its actual selected native session.
 
 The [source checkpoint](../../evidence/native-tracked-lifecycle/source-checkpoint.json) lists the12 owned changed production files,94 production lines deleted relative to the integrated425 head, and separate test counts. This excludes C4/425 imported changes and test-line deletions. Initial source gates passed146 and54 cases; only the shared-phase consumer correction was rerun,74 passing in46.40s. No broad200-test repeat.
 
-The noneditable candidate is rebuilt at the published source head. Remaining acceptance is the owned installed actual selected/native journey: one real95s bash tool and native answer crossing the former90 boundary, followed by actual cancellation and native EOF with retained source cause/UNKNOWN/no replay. Run tests/test_tracked_native_lifecycle.py with PI_COMPACTION_TEST_PACKAGE pointing to the unchanged canonical native4ab prepared package. The shared serial slot is assigned Arendt425 next, then431, then214. No readiness/live claim until that gate passes. No active user owner, installed default or paid route was changed.
+## Actual installed acceptance
+
+The noneditable wheel built from08ced729 and unchanged canonical native4ab passed the continuous selected/native journey: **3 passed in106.04s, exit0**. The actual bash tool slept95 seconds and produced a native answer at98.006 seconds, crossing the removed90-second whole-turn clock. Actual cancellation completed at2.508 seconds and native EOF at2.652 seconds. Every case recorded exactly one native user input and matching proof, retired its native children, and rejected replay without further provider requests. EOF persisted the original chained NativePiUnavailable with native exit/stderr in the existing private diagnostic. Cancellation retains the original raw UNKNOWN marker; it does not fabricate a successful terminal disposition.
+
+[Acceptance receipt](../../evidence/native-tracked-lifecycle/acceptance.json) and [native run output](../../evidence/native-tracked-lifecycle/native-acceptance.log) preserve timings, exact source/native commitments and the user journey. The provider responses are controlled localhost responses; application admission, SQLite state, actual CLI/RPC, selected tool socket, bash process and native saved history are real. Initial fixture setup failed to register a renamed fixture before any native process; the test now imports the existing sealed tmp_path fixture by its declared name. Production source was unchanged between the installed build and this correction.
+
+All owned fixture children are retired and disposable roots are removed by the existing fixture owner. The serial native slot was returned directly to425 and214. No paid calls, live user input, installed default or active user process was changed. This is installed candidate acceptance, not a claim that the live default has already been activated. Parent432 owns coherent425/431 integration and reviewed activation.

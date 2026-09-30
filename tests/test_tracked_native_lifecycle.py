@@ -19,7 +19,7 @@ from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
-from test_coordinated_runtime import _root  # noqa: F401
+from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Reviewed prepared native package required")
@@ -45,8 +45,8 @@ class CodingProvider(LoopbackProvider):
                             "arguments": json.dumps(
                                 {
                                     "command": (
-                                    "printf native-started > native-started; "
-                                    f"sleep {self.seconds}; "
+                                        "printf native-started > native-started; "
+                                        f"sleep {self.seconds}; "
                                         "printf native-tool-finished"
                                     ),
                                     "timeout": self.seconds + 10,
@@ -63,9 +63,8 @@ class CodingProvider(LoopbackProvider):
 
 @pytest.mark.parametrize("outcome", ["complete", "cancel", "exit"])
 async def test_installed_selected_long_tool_and_uncertain_cleanup(
-    private_root, monkeypatch, outcome
+    tmp_path, monkeypatch, outcome  # noqa: F811 - pytest injects the imported fixture
 ):
-    tmp_path = private_root
     package = Path(PACKAGE).resolve(strict=True)
     # The default acceptance crosses the removed whole-turn90 boundary. A shorter
     # environment override is for fixture development, never evidence of that gate.

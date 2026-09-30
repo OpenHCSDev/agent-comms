@@ -1,5 +1,5 @@
 {
-  "checkpoint": "source_ready_installed_native_gate_pending_serial_slot",
+  "checkpoint": "installed_native_acceptance_passed",
   "source_head": "08ced72919490fa5be87deb7bc9a3b504da97ef2",
   "normally_integrated425": "dc2754156cb5a381b3556f7713b78fb283f458e8",
   "main_base": "7fcf826a",
@@ -91,7 +91,6 @@
     "DurableTurn active tool set",
     "raw PiEvent phase reconstruction in durable consumer"
   ],
-  "remaining_gate": "noneditable installed actual selected/native coding95s bash answer + cancel/EOF source-cause durable UNKNOWN/noReplay; serial after Arendt425, before214",
   "candidate_python": "/home/ts/.cache/agent-scratch/comms-native-tracked-lifecycle-wait-20260929/installed/bin/python",
   "native_package": "/home/ts/wt/comms-native-compaction-latency-20260929/stack/.pi-native-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
   "scratch_owner": "431; installed candidate and fixture logs; generated private native fixtures cleaned by existing TemporaryDirectory and child retirement",
@@ -106,5 +105,6 @@
     "durable_context_uncommitted": true,
     "source_read_only": true,
     "cause": "whole-turn deadline strongly indicated by source/91.84s timing; exact original exception absent from old diagnostic"
-  }
+  },
+  "acceptance_receipt": "acceptance.json"
 }

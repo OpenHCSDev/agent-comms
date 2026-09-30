@@ -1,0 +1,44 @@
+{
+  "installed_source_head": "08ced72919490fa5be87deb7bc9a3b504da97ef2",
+  "artifact": "noneditable installed wheel",
+  "python": "/home/ts/.cache/agent-scratch/comms-native-tracked-lifecycle-wait-20260929/installed/bin/python",
+  "native_commitment": "4ab910061590d1e0d02e915478903aec24da5be3a1c76460a1e2896ab40563cc",
+  "native_tree": "b6c67bbd60acd066e2fa01d3cc41d43c63b1d14c82c42ca0bb01caa7c22f65cd",
+  "journey": "SelectedExecution -> durable admission -> actual Pi CLI/RPC -> selected coding tool socket -> real bash -> native answer/cancel/EOF -> retained raw UNKNOWN and no replay",
+  "provider": "localhost controlled OpenAI-completions responses; real native and application path",
+  "results": [
+    {
+      "outcome": "complete",
+      "elapsed_seconds": 98.0063877220091,
+      "provider_posts": 2,
+      "saved_inputs": 1,
+      "native_children_retired": true,
+      "no_replay": true
+    },
+    {
+      "outcome": "cancel",
+      "elapsed_seconds": 2.507861218007747,
+      "provider_posts": 1,
+      "saved_inputs": 1,
+      "native_children_retired": true,
+      "no_replay": true
+    },
+    {
+      "outcome": "exit",
+      "elapsed_seconds": 2.651508590002777,
+      "provider_posts": 1,
+      "saved_inputs": 1,
+      "native_children_retired": true,
+      "no_replay": true
+    }
+  ],
+  "passed": 3,
+  "seconds": 106.04,
+  "exit_code": 0,
+  "production_lines_deleted": 94,
+  "live_activation": false,
+  "paid_calls": 0,
+  "fixture_setup_correction": "initial collection could not locate private_root; imported existing sealed tmp_path fixture under its declared name before any native process started",
+  "source_errors": "EOF diagnostic retains original chained NativePiUnavailable and native exit/stderr",
+  "cleanup": "all actual children retired; existing sealed TemporaryDirectory disposes isolated fixture state; serial slot returned"
+}
