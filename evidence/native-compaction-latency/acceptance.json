@@ -1,0 +1,51 @@
+{
+  "checkpoint": "ready_for_parent_merge_and_paired_activation",
+  "baseline_native": "7817b54ec2534555",
+  "candidate_native": "4ab910061590d1e0",
+  "representative_saved_bytes": 42817440,
+  "selected_source_bytes": 703450,
+  "baseline": {
+    "provider_posts": 9,
+    "history_map_seconds": 1.7939745170006063,
+    "provider_workflow_seconds": 2.7430597209895495
+  },
+  "candidate": {
+    "provider_posts": 9,
+    "history_map_seconds": 1.0453293790051248,
+    "provider_workflow_seconds": 1.9587370189838111
+  },
+  "controlled_workflow_reduction_percent": 28.592986729534154,
+  "native_cases": {
+    "baseline_positive": {
+      "passed": 1,
+      "seconds": 11.66
+    },
+    "candidate_positive_and_overrun": {
+      "passed": 2,
+      "seconds": 21.2
+    },
+    "positive_original_bindings": 1,
+    "overrun_original_bindings": 0,
+    "overrun_posts": 4,
+    "overrun_preserved_source_and_unknown": true
+  },
+  "installed_continuous_acp": {
+    "passed": 1,
+    "seconds": 18.35,
+    "two_compactions": true,
+    "two_distinct_originals_started_once": true,
+    "publication_before_original_binding": true,
+    "provider_posts": [
+      4
+    ]
+  },
+  "native_ordered_resource": [
+    "reverse_completion_chronology",
+    "unicode_across_read_boundary",
+    "byte_count",
+    "normal_close_removes_job_directory"
+  ],
+  "elapsed_source_contract": "425 shared owner followup; not an implemented429checkpoint feature",
+  "live_activation": false,
+  "paid_calls": 0
+}

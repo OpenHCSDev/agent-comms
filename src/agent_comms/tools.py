@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import ClassVar, Literal
 
+from .pi_vocabulary import ThinkingLevel
 from .channel_management import TagAction
 from .channel_targets import is_channel_target
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
@@ -238,8 +239,8 @@ class CommsModelTool(ToolRequest):
         "Thread to change (defaults to the executing thread)", default=None, binding=SubjectBinding
     )
     model: str = tool_field("Provider/model identifier")
-    thinking_level: Literal["off", "minimal", "low", "medium", "high", "xhigh", "max"] = tool_field(
-        "Optional Pi thinking level", default=""
+    thinking_level: str = tool_field(
+        "Optional Pi thinking level", default="", choices=ThinkingLevel.names
     )
 
     def apply(self, comms: Comms) -> JsonObject:
@@ -257,7 +258,7 @@ class CommsModelTool(ToolRequest):
         return {
             "thread": thread.name,
             "model": thread.model,
-            "thinking_level": thread.thinking_level,
+            "thinking_level": ThinkingLevel.optional_name(thread.thinking_level),
         }
 
 
