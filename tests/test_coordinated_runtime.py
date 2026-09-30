@@ -487,8 +487,8 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
         ).fetchone()
         assert coverage is not None and coverage[:3] == (
             fresh.session_id,
-            fresh.device,
-            fresh.inode,
+            fresh.file_identity.device,
+            fresh.file_identity.inode,
         )
         assert db.execute(
             "SELECT input_id,status FROM private_raw_inputs WHERE session_file=?",
@@ -534,7 +534,7 @@ async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 1 and len(witnessed) == 1
-    assert witnessed[0][:2] == (result.fresh_session.device, result.fresh_session.inode)
+    assert witnessed[0].identity == result.fresh_session.file_identity
     assert result.fresh_session.selected_thinking_level == "high"
     result.fresh_session.verify_saved_identity()
     rows = [json.loads(row) for row in result.fresh_session.path.read_text().splitlines()]

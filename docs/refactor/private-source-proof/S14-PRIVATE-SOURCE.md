@@ -53,3 +53,19 @@ private/native/ACP first-input journey and one public default entrypoint check.
 Full S14 remains open until all owning workflows have zero long chains and
 reviewed deletion/consumer closure. Shared owner commit is an integration
 checkpoint, not a standalone readiness or merge claim.
+
+
+The mint now stores its one FileIdentity value directly, deleting separate
+device/inode fields and the property that rebuilt it. The existing journal
+insertion consumes that value at its typed SQL boundary; no persisted field or
+journal format changes. The old scalar attributes and tuple-slice accesses are
+deleted, not kept as compatibility properties. Coordinated-runtime assertions
+use the same identity/size obligations through the nominal receipt. Native
+producer migration remains Arendt456's live shared-file claim.
+
+The real reviewed593b optional SessionManager control passed22 checks in2.55s,
+including both formerly optional native cases. Actual POSIX private role test
+passed1check0.04s; binding its Unix socket uses the open directory through
+/proc/self/fd because the persistent worktree test path exceeds Linux sun_path,
+then inspects the actual named inode. The initial long-path failure is retained;
+no fake stat, skipped role assertion or production limit change was introduced.
