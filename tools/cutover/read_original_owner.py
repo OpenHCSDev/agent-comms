@@ -11,11 +11,12 @@ import sys
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.registration import Registration
-from thread_format_retirement import GoalReportMemberRetirement
+from owner_read_projection import OwnerReadProjection
 
 
 def main():
-    root, name = sys.argv[1:]
+    root, name, projection_name = sys.argv[1:]
+    projection = OwnerReadProjection.decode(projection_name)
     registry_path = Path(root) / 'registry.json'
     if not registry_path.is_file() or not registry_path.with_name('.registry.json.lock').is_file():
         raise ValueError('Original registry and existing shared lock are required')
@@ -29,7 +30,7 @@ def main():
         )
         selection.require_current(snapshot)
         packet = {
-            'document': GoalReportMemberRetirement.threads(FieldCodec.encode(document)),
+            'document': projection.project(document),
             'selection': FieldCodec.encode(selection),
         }
         print(json.dumps(packet), flush=True)
