@@ -9,7 +9,8 @@ Audited Core6feb634b (291 Python files) and Toad8a924e1d (273). Whole-source AST
 | Bus source/index and projection custody | Schrodinger | Core460: bus_activity_index, bus_display_index, presentation, private_bus_checkpoint, proven_source_coverage, wake_candidate_index. No second index/schema/cache identity roster. |
 | Pi terminal data and original C1/TC2/T2 caller closure | Einstein | Core458: tracked_turn, turn_output and their native payload owners/consumers. ACP official SDK and original strict extension retained. |
 | Private launch and minted source validation | Parent Codex | Core459: private_nk_entrypoint, acp_extension, fresh_private_session, private_path and private_send_admission; shared PiModel/StateData extension submitted by Einstein. Existing WireRootIdText, FieldCodec and path representation reused; preserve unforgeable fresh enrollment, no filesystem authority mirror. |
-| Retained workspace/rendering, TC1/T4/T9 | Heisenberg, Kepler profile helper | Toad245/248 checkpoints merged and installed. Draft249 owns the full CPU/focus/warm/resource/End scope. Remaining Toad six-plus sites: transcript_publication269, streaming_markdown67, transcript_history769. Shared T5 owner coordination explicit. |
+| Retained workspace/rendering, TC1/T4/T9 | Heisenberg | Toad245/248 checkpoints merged and installed. Draft249 owns the full CPU/focus/warm/resource/End scope. Remaining Toad six-plus sites: transcript_publication269, streaming_markdown67, transcript_history769. Shared T5 owner coordination explicit. |
+| Continuous input submission, queue and native-user presentation | Kepler | Toad251: original submission/queue/input handlers, with Heisenberg's explicit shared-file grant. Backend facts remain with Mendel457/Arendt456; no second queue or accepted-input mirror. |
 
 Correction after direct source reading: todos280 is a six-term exact uncertain-transfer retry decision, not repository-path grammar. Its whole Todo assignment/transfer/release/state workflow is reassigned to Mendel457, the coordination-state integration owner. Current durable row remains the authority; no retry may replay an uncertain native/provider side effect. It is included in S14 closure. File names here refer to src/agent_comms or src/toad as appropriate. Every shared type has one builder; contributors request extensions rather than copying schema, identity, validation or lifecycle semantics.
 
@@ -33,3 +34,24 @@ No journal or durable row format changed by this ephemeral receipt API.
 248 is installed and ordinarydefault liveverified after exactmergedsource pairing;
 full remaining performance scope is active249, with no fifty-millisecond or full
 warm/CPU claim. Original S14/T9 zero-long-chain completion remains open.
+
+## Latest live basic-read timings and active latency owner
+
+Arendt456 owns the remaining native/model/tool latency investigation independently
+of the paired release gate. Original comms428 request clocks and journal reads are
+retained in evidence/cleanup-live-integration/latest-read-timings-20260930.
+The newest three reads had preceding model requests of10.968s,8.217s and16.001s,
+then journal call-to-result gaps of0.717s,0.829s and0.750s. These gaps include
+managed tool execution and persistence; they do not isolate filesystem work.
+The longest completed observed model request took120.935s with145.753ms total
+tracked native callbacks, first delta36.423s. Assistant message timestamps mark
+model-request creation, not tool start. Remaining work allocates original native
+tool start/end, context verification and result publication through the existing
+measurement owners, and verifies a fix on representative installed retained
+history. No provider-capacity or latency-resolution claim is made.
+
+The immutable Core6fab/Toadb3b1 candidate passed16 installed native controls but
+failed the first-fork UI journey: one native answer was mounted/painted twice.
+Original proof is preserved at /home/ts/wt/g458e/u01/proof. Heisenberg owns the
+frontend source/publication crossing, Arendt checks the canonical producer;
+Kepler251 keeps input/queue visibility. This candidate is not live-ready.
