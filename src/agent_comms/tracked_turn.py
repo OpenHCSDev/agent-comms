@@ -7,21 +7,19 @@ import math
 import os
 import re
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, AsyncExitStack
 from pathlib import Path
 
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
-from .child_process import AttachedChild
 from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
-from .native_custody import PiSessionChild
+from .native_attestation import AttestationError
 from .native_pi import (
-    CAPABILITY,
     NativeContextProof,
     NativePiPromptRejected,
     NativePiRpcLaunch,
@@ -68,14 +66,11 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         )
         self.command = command
         self.provider, self.model = provider, model
-        self.proc: AttachedChild | None = None
-        self.initial_session_id: str | None = None
         self.prompt_send_boundary = prompt_send_boundary
         self.maintenance_root = maintenance_root
         self.fresh_selected, self.selected_revision = fresh_selected, selected_revision
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
         self.tool_socket: OwnerToolSocket | None = None
-        self.prompt_response: pi.Response | None = None
         self.input_event: pi.InputCommitted | None = None
         self.context_event: pi.ContextCommitted | None = None
         self.text_parts: list[str] = []
@@ -152,71 +147,52 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         return await turn.complete()
 
     async def complete(self) -> NativeTurnResult:
-        self.watchdog.launching(asyncio.get_running_loop().time, self.session_file)
-        self.watchdog.reading(True)
-        try:
-            await self.open_tools()
-            async with asyncio.timeout(self.watchdog.read_timeout(self)):
-                self.proc = await AttachedChild.start(
-                    self.launch.argv, cwd=self.launch.cwd, env=self.launch.env
-                )
-            self.watchdog.spawned(False)
+        async with AsyncExitStack() as custody:
+            custody.callback(self.startup.release)
+            await self.open_tools(custody)
+            self.native = await self.native_session.open(
+                self.launch,
+                self.session_file,
+                reuse=False,
+                require_input_id=True,
+                startup=self.startup,
+                finish_event=self.finish_event,
+                watchdog=self.watchdog,
+            )
+            custody.push_async_callback(self.native_session.close)
+            await custody.enter_async_context(self.native.failures())
+            custody.callback(self.native.reader.pending.cancel_all)
             if self.tool_socket is not None:
-                self.tool_socket.expected_pid = self.proc.pid
-            self.stdin = self.proc.stdin
-            assert self.stdin is not None and self.proc.stdout is not None
-            self.reader = PiRpcChannel(self.proc.stdout)
-            assert self.proc.stderr is not None
-            self.stderr_task = asyncio.create_task(PiSessionChild.stderr_tail(self.proc.stderr))
+                self.tool_socket.expected_pid = self.native.proc.pid
+            self.watchdog.reading(True)
             try:
-                await self.attest()
-                await self.admit_prompt()
-                while not self.finished:
-                    event = await self.next_event()
-                    async for update in self.consume_native_event(event):
-                        if self.observe_event is not None:
-                            await self.observe_event(update)
-                    if not self.finished and self.observe_event is not None:
-                        await self.observe_event(event)
-                return self.result()
-            finally:
-                self.reader.pending.cancel_all()
-                await self.proc.stop()
-                await asyncio.gather(self.stderr_task, return_exceptions=True)
-        except SelectedToolDenied as error:
-            raise NativePiUnavailable(str(error)) from error
-        except PromptSendUnknown as error:
-            raise NativePiUnavailable(
-                f"Native Pi prompt send is UNKNOWN; no retry: {error}"
-            ) from error
-        except TimeoutError as error:
-            raise NativePiUnavailable(
-                f"Native Pi tracked operation expired; send may be UNKNOWN; "
-                f"{self.watchdog.expired_wait(self)}"
-            ) from error
-        except OSError as error:
-            raise NativePiUnavailable(
-                f"Native Pi tracked transport failed; send may be UNKNOWN; "
-                f"{type(error).__name__}: {error}"
-            ) from error
-        finally:
-            if self.proc is not None:
-                await self.proc.stop()
-            if self.tool_socket is not None:
-                await self.tool_socket.close()
+                try:
+                    await self.attest()
+                    await self.admit_prompt()
+                    while not self.finished:
+                        event = await self.next_event()
+                        async for update in self.consume_native_event(event):
+                            if self.observe_event is not None:
+                                await self.observe_event(update)
+                        if not self.finished and self.observe_event is not None:
+                            await self.observe_event(event)
+                    return self.result()
+                except (SelectedToolDenied, PromptSendUnknown, TimeoutError, OSError) as error:
+                    raise NativePiUnavailable(
+                        f"Native Pi operation failed: {type(error).__name__}: {error}"
+                    ) from error
+            except NativePiUnavailable as error:
+                self.admission.raise_native_failure(error, self.native.attestation)
 
-    async def open_tools(self) -> None:
+    async def open_tools(self, custody: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:
             self.tool_socket = self.selected_tool_mode.socket(
                 self.launch.session_dir, os.urandom(32).hex()
             )
+            custody.push_async_callback(self.tool_socket.close)
             await self.tool_socket.start()
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(self.tool_socket.path)
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = self.tool_socket.token
-
-    @property
-    def awaiting_native_attestation(self):
-        return self.initial_session_id is None
 
     @property
     def started_input(self):
@@ -233,59 +209,58 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def next_event(self) -> pi.PiEvent:
         try:
-            event = await asyncio.wait_for(
-                self.reader.receive(strict=True), timeout=self.watchdog.read_timeout(self)
-            )
+            raw = await self.watchdog.read(self)
+            event = PiRpcChannel.decode_record(raw, strict=True) if raw else None
         except (UnicodeError, ValueError, TypeError) as error:
             raise NativePiUnavailable(
                 f"Native Pi RPC record is invalid or incomplete; {type(error).__name__}: {error}"
             ) from error
         if event is None:
-            await self.proc.finish()
-            stderr = await self.stderr_task
+            await self.native.proc.finish()
+            stderr = await self.native.stderr_task
             raise NativePiUnavailable(
-                f"Native Pi RPC record is incomplete; native exit={self.proc.returncode}; "
+                f"Native Pi RPC record is incomplete; native exit={self.native.proc.returncode}; "
                 f"stderr={stderr or '(empty)'}"
             )
         return event
 
     async def send(self, command: commands.PiCommand) -> None:
-        payload = self.reader.encode(command)
+        payload = self.native.reader.encode(command)
         if self.maintenance_root is not None:
             try:
                 with _store_lock(self.maintenance_root / "wire"):
                     MaintenanceBarrier(
                         self.maintenance_root / "registry.json"
                     ).assert_open_unlocked()
-                    self.stdin.write(payload)
+                    self.native.proc.stdin.write(payload)
             except RelationViolationError as error:
                 raise NativePiUnavailable(
                     "Maintenance closed before Pi capability preflight"
                 ) from error
         else:
-            self.stdin.write(payload)
-        await asyncio.wait_for(self.stdin.drain(), timeout=self.watchdog.read_timeout(self))
+            self.native.proc.stdin.write(payload)
+        await asyncio.wait_for(
+            self.native.proc.stdin.drain(), timeout=self.watchdog.read_timeout(self)
+        )
 
     async def attest(self) -> None:
-        request = commands.GetState(id="native-capability")
+        request = self.native.attestation.request
         await self.send(request)
         event = await self.next_event()
-        if not isinstance(event, pi.Response) or self.reader.correlate(event) is not request:
+        if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
             raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
-        state = event.data
-        if (
-            event.success is not True
-            or state is None
-            or state.native_input_proof_capability != CAPABILITY
-            or not state.session_id
-        ):
-            raise NativePiUnavailable("Patched persisted Pi capability is unavailable")
-        if state.session_file is None:
-            raise NativePiUnavailable("Native Pi omitted its private session file")
+        try:
+            observed = self.native.attestation.accept(event)
+        except AttestationError as error:
+            raise NativePiUnavailable(str(error)) from error
+        state = observed.state
+        if observed.identity is None:
+            raise NativePiUnavailable("Native Pi omitted its private session identity")
         self.active_session_file = _session_location(self.launch.session_dir, state.session_file)
         if self.session_file is not None and self.active_session_file != self.session_file:
             raise NativePiUnavailable("Native Pi rebound its session")
-        self.initial_session_id = state.session_id
+        self.native.attestation = observed
+        self.startup.release()
         if self.fresh_selected is not None:
             self.attest_selected(state)
 
@@ -315,25 +290,26 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def admit_prompt(self) -> None:
         self.watchdog.await_input()
+        self.admission = self.admission.dispatch()
         if self.prompt_send_boundary is None:
             await self.send(self.command)
         else:
             await send_fenced_prompt(
-                self.stdin,
-                self.reader.encode(self.command),
+                self.native.proc.stdin,
+                self.native.reader.encode(self.command),
                 self.prompt_boundary,
                 timeout=self.watchdog.read_timeout(self),
             )
 
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:
-        request = self.reader.correlate(event)
+        request = self.native.reader.correlate(event)
         if event.id == self.command.id:
             if request is not self.command:
                 raise NativePiUnavailable("Native Pi prompt acknowledgement differs")
             if event.success is not True:
                 raise NativePiPromptRejected(event)
-            self.prompt_response = event
+            self.admission = self.admission.acknowledge(event)
         elif issubclass(event.command, commands.MutatesSession):
             raise NativePiUnavailable("Native Pi session identity changed during a turn")
 
@@ -388,12 +364,16 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.final_messages.append("".join(item.text for item in message.content))
 
     def context_proof(self) -> NativeContextProof:
-        if self.prompt_response is None or self.input_event is None or self.context_event is None:
+        if (
+            not self.admission.acknowledged
+            or self.input_event is None
+            or self.context_event is None
+        ):
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
         return _verify_context(
             self.active_session_file,
             self.command.input_id,
-            self.initial_session_id,
+            self.native.attestation.identity.session_id,
             self.input_event,
             self.context_event,
         )

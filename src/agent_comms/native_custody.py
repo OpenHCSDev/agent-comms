@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -54,6 +55,19 @@ class PiSessionChild:
         await self.proc.stop()
         await asyncio.gather(self.stderr_task, return_exceptions=True)
 
+    @asynccontextmanager
+    async def failures(self):
+        """Retain original bounded child output before transporting its failure."""
+        try:
+            yield
+        except BaseException as error:
+            await self.close()
+            stderr = await self.stderr_task
+            error.add_note(f"Original native child stderr:\n{stderr or '(empty)'}")
+            if isinstance(error, NativePiUnavailable):
+                error.native_stderr = stderr
+            raise
+
 
 class NativeCustody(ABC):
     """State owns the legal child capabilities, including its retirement successor."""
@@ -94,7 +108,9 @@ class NativeCleanupFailed(RuntimeError):
 
     def __init__(self, successor, error):
         self.successor = successor
-        super().__init__(f"Native process retired, but cleanup failed: {type(error).__name__}: {error}")
+        super().__init__(
+            f"Native process retired, but cleanup failed: {type(error).__name__}: {error}"
+        )
 
 
 @dataclass
