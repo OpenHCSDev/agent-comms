@@ -1,0 +1,15 @@
+{
+  "owner": "Schrodinger453nativeprep",
+  "purpose": "reviewed native453 stable independent regular copy only, matching installed source/manifest trust; next merged paired stage separate",
+  "source": "/home/ts/wt/comms-native-endpoint-budget-recovery-20260930/stack/.pi-native-7616293d01862aba",
+  "destination": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba",
+  "source_head": "60ecf89fdc149872a8e980e8e0d1c2ce775fc4f1",
+  "installed_verifier": "/home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930/installed/bin/python",
+  "copy_function": "shutil.copy2 (no hardlinks)",
+  "public_route_changed": false,
+  "default_source_changed": false,
+  "owners_restarted": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "state": "PREPARING"
+}

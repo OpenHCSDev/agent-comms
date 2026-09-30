@@ -1,0 +1,32 @@
+{
+  "owner": "Schrodinger453nativeprep",
+  "purpose": "reviewed native453 stable independent regular copy only, matching installed source/manifest trust; next merged paired stage separate",
+  "source": "/home/ts/wt/comms-native-endpoint-budget-recovery-20260930/stack/.pi-native-7616293d01862aba",
+  "destination": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba",
+  "source_head": "60ecf89fdc149872a8e980e8e0d1c2ce775fc4f1",
+  "installed_verifier": "/home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930/installed/bin/python",
+  "copy_function": "shutil.copy2 (no hardlinks)",
+  "public_route_changed": false,
+  "default_source_changed": false,
+  "owners_restarted": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "state": "READY-STABLE-NATIVE-COPY-FULL-INSTALLED-TRUST",
+  "copy_and_fulltrust_seconds": 2.614813863998279,
+  "completed_utc": "2026-09-30T16:59:52.930739+00:00",
+  "cli": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "files": 19184,
+  "logical_bytes": 138366055,
+  "root_mode": "0700",
+  "native_manifest_sha256": "7616293d01862aba5bdbe17adce2a3171955bdd08da716a53c0d8523e2f3a04c",
+  "native_fulltree": "21fcd78ad743ed5e96d5b0e329988db4b0915a3e29e8259564ddae3ebf78ca91",
+  "manifest_matches_reviewed_git_source": true,
+  "installed_manifest": "/home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930/installed/lib/python3.14/site-packages/agent_comms/_native/pi-native.sha256",
+  "full_installed_trust": true,
+  "verifier_core_distribution_direct_url": {
+    "url": "file:///home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930/wheels/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "scope": "Stable native copy and full original trust verification against accepted453 installed Core manifest only; no next merged pair/source or public readiness claim",
+  "remaining": "Next exact mergedCore453/pairedToad normal68 stage + matchingmanifest verification; parent owns retained idle/fenced operator cutover"
+}
