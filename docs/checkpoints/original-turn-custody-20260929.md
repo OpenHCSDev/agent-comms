@@ -161,3 +161,20 @@ no SQL reset, body/time reconstruction or legacy reader. Arendt owns OwnedTurn,
 OwnedSendAdmission and TurnProgress constructor/consumer migration; Mendel owns
 the routing/source relation and Sch owns its two frontend consumers. This is a
 paired source dependency, not a separate installed cohort.
+
+
+### Native-start receipt and original ingress test migration
+
+Mendel reproduced two unchanged baseline failures on installed8691: the generic
+StartedInput.proves_started test expected valid channel and bus inputs to be
+refused. Its sole producer consumer, SelectedAdmissionSource.original_has_started,
+owns exact ingress lookup; the generic receipt owns recorded native-start facts,
+not a direct-only routing policy. No production predicate was widened or changed.
+
+Nine focused cases passed in0.14seconds. Existing owner/admission/turn/original
+and sent-digest negatives remain. Actual record/bind/started transitions now
+cover owner, channel and bus delivery. The selected source refuses another
+ingress, and first durable acceptance refuses rewriting the original target;
+original store bytes remain unchanged. The two incorrect generic exclusions
+were removed rather than restored as compatibility booleans. This is test
+contract repair, not a native/installed acceptance claim.
