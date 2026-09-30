@@ -89,6 +89,7 @@ async def test_actual_retained_stale_source_never_reserves_or_sends(retained_sum
 @pytest.mark.parametrize("changed", ["model", "settings"])
 async def test_actual_selected_mismatch_refuses_without_provider_or_replay(retained_summary, changed):
     from agent_comms.compaction_records import SelectedSummarySource
+    from agent_comms.compaction_states import RetiredRefusalSummary
     from agent_comms.field_codec import FieldCodec
     from agent_comms.pi_summary_payloads import SummaryDeclinedData
 
@@ -114,6 +115,21 @@ async def test_actual_selected_mismatch_refuses_without_provider_or_replay(retai
     with pytest.raises(CompactionJournalError, match="never replay"):
         await run(source=FieldCodec.encode(source))
     assert native.provider.posts == calls
+    journal.summaries.refuse(result.operation_id, result.reason)
+    assert journal.summaries.get(result.operation_id) == attempt
+    with pytest.raises(CompactionJournalError, match="refusal transition"):
+        journal.summaries.refuse(result.operation_id, "different native reason")
+    with pytest.raises(CompactionJournalError, match="commit reservation"):
+        attempt.state.require_commit_reservation()
+    journal.summaries.retire_refused(attempt)
+    retired = journal.summaries.get(result.operation_id)
+    assert isinstance(retired.state, RetiredRefusalSummary)
+    assert retired.state.decline_reason == result.reason
+    with pytest.raises(CompactionJournalError, match="changed"):
+        journal.summaries.retire_refused(attempt)
+    assert journal.summaries.get(result.operation_id) == retired
+    assert native.provider.posts == calls
+    assert native.session.read_bytes() == original
 
 
 @pytest.mark.parametrize("termination", ["timeout", "cancel", "disconnect"])
@@ -254,6 +270,19 @@ def test_unknown_summary_wire_preserves_only_valid_provider_detail(reason, detai
         _summary_response((json.dumps(frame) + "\n").encode(), request, 1200)
 
 
+def test_summary_file_metadata_uses_transport_without_retired_count_or_total_budget():
+    from agent_comms.selected_pi_summary_rpc import _summary_response
+
+    request = selected_request()
+    frame = summarized_frame(request)
+    files = [f"{n}/" + "x" * 3990 for n in range(3800)]
+    frame["data"]["result"]["details"]["readFiles"] = files
+    raw = (json.dumps(frame) + "\n").encode()
+    assert len(raw) > 8 * 1024 * 1024
+    result = _summary_response(raw, request, 1200)
+    assert result.result.details.read_files == tuple(files)
+
+
 async def test_retained_native_summary_preserves_source_and_blocks_replay(native_backend):
     """The SDK owns saved entries, the native child owns summary metadata."""
     from agent_comms.backend import _session_revision
@@ -392,19 +421,10 @@ async def test_reader_keeps_partial_record_on_cancel_and_enforces_bound():
     "mismatch", [None, "operation", "witness", "model", "settings", "missing", "reason"]
 )
 def test_failed_receipt_requires_exact_attestation(mismatch):
-    from agent_comms.owner_compaction_settings import PiCompactionSettings
-    from agent_comms.pi_commands import AgentCommsSummarizeCompaction
-    from agent_comms.pi_summary_payloads import SelectedModel, SummaryFailedData
+    from agent_comms.pi_summary_payloads import SummaryFailedData
     from agent_comms.selected_pi_summary_rpc import SelectedSummaryFailed, _summary_response
 
-    request = AgentCommsSummarizeCompaction(
-        id="selected",
-        version=1,
-        operation_id="a" * 32,
-        witness=NativeWitness("session", "/saved.jsonl", "leaf", "kept", "1:2:3:4:5"),
-        selected=SelectedModel("fixture", "fixture", 32768),
-        settings=PiCompactionSettings(2048, 1024),
-    )
+    request = selected_request()
     data = request.to_rpc()
     data.pop("id")
     data.pop("type")

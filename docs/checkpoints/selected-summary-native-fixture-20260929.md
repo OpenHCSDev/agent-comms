@@ -120,3 +120,46 @@ disconnect higher contracts belong to existing
 covered source identity and the four standby fake-stream gaps remain open here;
 Schrodinger was asked for the current higher215 coverage before deleting them.
 This checkpoint is not READY and does not alter production or the installed app.
+
+### Actual native negative checkpoint
+
+The owner authorized three independent native/local lanes; that supersedes the
+old serial-across-agents condition above. Each case in this lane remains serial,
+with its own private source, root, journal and child. No shared package mutation,
+public input replay, paid call or physical capture. Resource preflight: 29.8 GiB
+home free, 16.1 GiB available RAM, warning for 15.9 GiB used swap; the owner
+explicitly authorized these bounded isolated controls under that warning.
+
+Run01: seven cases passed, two failed in 47.32 seconds. The two model/settings
+journeys reached refusal recovery but the new assertion misspelled the declared
+state name (`retired-refusal` versus `retired_refusal`). Replacing that assertion
+with `isinstance(..., RetiredRefusalSummary)` preserves the same obligation.
+Run02 reran ONLY those two cases: two passed in 10.87 seconds. All nine native
+negative journeys are now covered: before-reservation stale package/session/
+sidecar; model/settings refusal plus exact recovery; actual in-flight timeout,
+cancellation and disconnect with durable UNKNOWN and reaped custody; known joined
+provider failure preserving source without original replay. Every case checks
+actual saved bytes/inputs and provider request counts. Fixture teardown requires
+that all children are dead.
+
+Exact package remains the reviewed
+`/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent`;
+Core source is PR422's normal main72062939 integration, not current installed
+Core/native614 acceptance. Logs:
+`/home/ts/.cache/agent-scratch/comms-selected-summary-negative-closure-20260930/native-negative-run01.log`
+and `native-negative-run02.log`. Owned private fixture roots stay in this WT's
+`.native-negative-run01` and `.native-negative-run02` (5,627,897 bytes total),
+including failed/UNKNOWN journal evidence, pending review. No large build output.
+
+27 strict RPC controls now pass in 0.25 seconds, including the original 3,800
+file paths and greater-than-8-MiB serialized record accepted without the retired
+aggregate/count budget. The positive journey's AST still equals 24e710c exactly:
+`ce097d04d2acadd3ea7a054298b854af724e93e036234f568f99928f4032a19d`.
+Its prior 5.45-second proof is not rerun.
+
+Schrodinger confirmed that215's original41-MiB installed journey failed before
+native byte admission and therefore does NOT close the injected/covered/reconnect
+fixture gap; retain that obligation. Arendt granted this worker the four standby
+fake-stream migrations, excluding her production435/436 and common fixture
+builders. Her real cancel/next-reply acceptance does not cover dependency wait
+terminal-versus-settled or delayed stale callbacks; those contracts remain here.
