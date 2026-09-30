@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Literal
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, file_revision
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .typed_table import Column, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
 
@@ -73,6 +73,32 @@ class DeliverySources(CheckpointTable, TypedTable):
     message_id: str
     offset: int = field(metadata={"sql": Column(check="offset>=0")})
     length: int = field(metadata={"sql": Column(check="length>0")})
+    sender_lookup: str
+    indexes = (Index(("sender_lookup", "seq")),)
+
+    def delivery(self, stream, root_id: str) -> CommittedDelivery:
+        """A pointer has no message authority: resolve its original frozen row."""
+        from .bus_publication import CommittedDelivery, unique_wire_object
+
+        stream.seek(self.offset)
+        raw = stream.read(self.length)
+        if len(raw) != self.length or not raw.endswith(b"\n"):
+            raise RelationViolationError("Certified initial row changed.")
+        original = CommittedDelivery.from_wire(
+            json.loads(raw, object_pairs_hook=unique_wire_object), root_id
+        )
+        if (
+            original.message.reference != self.reference
+            or original.audience.sender_lookup != self.sender_lookup
+        ):
+            raise RelationViolationError("Certified source differs from its frozen wire row.")
+        return original
+
+    @property
+    def reference(self):
+        from .message_reference import MessageReference
+
+        return MessageReference(self.seq, self.message_id)
 
 
 @dataclass(frozen=True)
@@ -525,7 +551,7 @@ def certified_delivery_page_unlocked(
         ):
             rows = DeliverySources.read(
                 db.execute(
-                    f"SELECT i.seq,i.message_id,i.offset,i.length FROM {Addressed.declared_name} a "
+                    f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} FROM {Addressed.declared_name} a "
                     f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
                     "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
                     (lookup, after, limit + 1),
@@ -542,17 +568,8 @@ def certified_delivery_page_unlocked(
                 raise RelationViolationError("Certified initial high-water is invalid.")
             initials = []
             for row in rows[:limit]:
-                stream.seek(row.offset)
-                raw = stream.read(row.length)
-                if len(raw) != row.length or not raw.endswith(b"\n"):
-                    raise RelationViolationError("Certified initial row changed.")
-                record = json.loads(raw, object_pairs_hook=unique_wire_object)
-                initial = CommittedDelivery.from_wire(record, witness.root_id)
-                if (
-                    initial.message.seq != row.seq
-                    or initial.message.message_id != row.message_id
-                    or not any(r.recipient_lookup == lookup for r in initial.audience.recipients)
-                ):
+                initial = row.delivery(stream, witness.root_id)
+                if not any(r.recipient_lookup == lookup for r in initial.audience.recipients):
                     raise RelationViolationError("Certified initial lookup differs from bus row.")
                 initials.append(initial)
             if (
@@ -570,6 +587,53 @@ def certified_delivery_page_unlocked(
         raise
     except (sqlite3.Error, OSError, ValueError, TypeError) as error:
         raise RelationViolationError("Certified initial page is unavailable.") from error
+
+
+def conversation_sources_unlocked(
+    bus: WireLog,
+    marker: WireMetadata,
+    lookup: str,
+    predicate: str,
+    parameters: tuple,
+    *,
+    limit: int,
+    ascending: bool,
+):
+    """Read a bounded conversation from the existing certified source index.
+
+    Sender and recipients come from the original frozen audience, never today's
+    name binding. Caller holds the bus lock. This read cannot install or repair
+    a checkpoint, grant delivery, or advance any native-input cursor.
+    """
+    path = _path(bus.path)
+    with closing(_connect(path, readonly=True)) as db, bus.path.open("rb") as stream:
+        saved = _saved(db)
+        marker.seal.check_final(saved, path)
+        if (
+            saved.root_id != marker.root_id
+            or saved.through_seq != marker.last_seq
+            or file_revision(bus.path.stat()) != saved.revision
+        ):
+            raise RelationViolationError("Conversation source needs a current certificate.")
+        rows = DeliverySources.read(
+            db.execute(
+                f"SELECT w.* FROM {DeliverySources.declared_name} w "
+                f"WHERE (w.sender_lookup=? OR EXISTS(SELECT 1 FROM {Addressed.declared_name} a "
+                f"WHERE a.seq=w.seq AND a.lookup=?)) AND ({predicate}) "
+                f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?",
+                (lookup, lookup, *parameters, limit),
+            )
+        )
+        originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
+        for original in originals:
+            if original.audience.sender_lookup != lookup and not any(
+                recipient.recipient_lookup == lookup for recipient in original.audience.recipients
+            ):
+                raise RelationViolationError("Conversation index differs from frozen membership.")
+        marker.seal.check_final(saved, path)
+        if file_revision(bus.path.stat()) != saved.revision:
+            raise RelationViolationError("Conversation source changed during read.")
+        return originals
 
 
 def addressed_source_pointers_unlocked(
@@ -593,7 +657,7 @@ def addressed_source_pointers_unlocked(
             raise RelationViolationError("Current source pointers require an unchanged checkpoint.")
         rows = DeliverySources.read(
             db.execute(
-                f"SELECT i.seq,i.message_id,i.offset,i.length FROM {Addressed.declared_name} a "
+                f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} FROM {Addressed.declared_name} a "
                 f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
                 "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq DESC LIMIT ?",
                 (lookup, marker.admission_after_seq, limit),

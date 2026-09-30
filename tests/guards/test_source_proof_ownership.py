@@ -17,13 +17,17 @@ RETIRED = {
     "_last_source_proof",
     "_source_witness",
     "_source_witness_unlocked",
+    "sent_tool_message",
+    "AgentTextTranscriptUpdate",
 }
 
 
 def test_no_retired_cursor_procedures_or_callers():
     for path in SOURCE.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Name, ast.alias)):
+            if isinstance(
+                node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef, ast.Name, ast.alias)
+            ):
                 name = node.id if isinstance(node, ast.Name) else node.name
                 assert name not in RETIRED, (path, name)
 
@@ -42,3 +46,15 @@ def test_source_proof_owners_stay_within_s7_bounds():
                 assert node.end_lineno - node.lineno + 1 <= 100, (name, node.name)
     reader = ast.parse((SOURCE / "proven_source_coverage.py").read_text())
     assert not any(isinstance(n, ast.Attribute) and n.attr == "triage" for n in ast.walk(reader))
+
+
+def test_outbound_transcript_cannot_be_recreated_from_a_tool_result():
+    """History ad9bde97 added live and saved synthetic send append sites."""
+    for filename, retired in (
+        ("turn_progress.py", "AgentTextTranscriptUpdate"),
+        ("pi_payloads.py", "SentTranscript"),
+    ):
+        assert not any(
+            isinstance(node, ast.Name) and node.id == retired
+            for node in ast.walk(ast.parse((SOURCE / filename).read_text()))
+        )

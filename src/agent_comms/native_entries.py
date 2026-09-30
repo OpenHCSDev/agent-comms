@@ -5,14 +5,12 @@ from __future__ import annotations
 import json
 import re
 from abc import abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, ClassVar, Literal
 
 from .pi_vocabulary import ThinkingLevel
 from .declared_family import DeclaredFamily
-from .messages import Message
 from .pi_payloads import PiMessage, PiPayload
 from .pi_rpc import unique_fields
 from .routing import TurnRouting
@@ -24,7 +22,6 @@ from .transcript_routes import InputDisplay
 class TranscriptProjection:
     routing: TurnRouting | None = None
     input_display: InputDisplay | None = None
-    sent_tool_message: Callable[[str, str, bool], Message | None] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -147,7 +144,9 @@ class SelectedFreshMarker(PiPayload):
 
     strict_fields = True
     schema: Literal[1]
-    thinking_level: str = field(metadata={"wire_name": "thinkingLevel", "wire_choices": ThinkingLevel.selected_names})
+    thinking_level: str = field(
+        metadata={"wire_name": "thinkingLevel", "wire_choices": ThinkingLevel.selected_names}
+    )
 
 
 @dataclass(frozen=True, kw_only=True)

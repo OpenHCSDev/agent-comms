@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .activity import Activity, ActivityState
+from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex
 from .channel_targets import is_channel_target
@@ -25,6 +26,7 @@ from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock, file_revision
 from .thread_presentation import ThreadPresentation
 from .thread_status import ThreadStatus
+from .thread_identity import ThreadIncarnation
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -44,12 +46,17 @@ if TYPE_CHECKING:
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
 
-    recipient: str
+    recipient_identity: FrozenRecipient
     state: str
     detail: str
     priority: int = 3
     busy: bool = False
     message: Message | None = None
+    displayed_to: tuple[ThreadIncarnation, ...] = ()
+
+    @property
+    def recipient(self) -> str:
+        return self.recipient_identity.canonical_thread
 
     @classmethod
     def window(
@@ -73,13 +80,27 @@ class MessageNotification:
         rows = NotificationAssignment.select(
             root, f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
         )
-        owners = NotificationAssignment.active_owners(registry.snapshot())
+        snapshot = registry.snapshot()
+        owners = NotificationAssignment.active_owners(snapshot)
+        reads = ReadLedger(root / ReadLedger.filename)
+        document = reads.read()
+        originals = {message.reference: message for message in messages}
         for receipt in rows:
             notification = receipt.project(owners)
             source = receipt.assignment.source
             key = (source.seq, source.message_id)
             if key in result:
-                result[key].append(notification)
+                result[key].append(
+                    replace(
+                        notification,
+                        displayed_to=reads.displayed_recipient(
+                            originals[source],
+                            notification.recipient_identity,
+                            snapshot,
+                            document=document,
+                        ),
+                    )
+                )
         return {key: tuple(rows) for key, rows in result.items()}
 
     @classmethod
@@ -92,26 +113,23 @@ class MessageNotification:
         delivery or a read acknowledgement, and never schedules another turn.
         """
         from .bus_publication import stable_thread_lookup
-        from .notification_assignment import NotificationAssignment
 
         if not 1 <= limit <= 20:
             raise ValueError("Recent notification limit must be between 1 and 20")
         owner = registry.require(name)
-        rows = NotificationAssignment.select(
-            root,
-            "w.recipient_lookup=?",
-            (stable_thread_lookup(owner.created_at),),
-            limit=limit,
+        from .transcript_receipts import AssignedTranscriptSource
+
+        sources = AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit)
+        lookup = stable_thread_lookup(owner.created_at)
+        messages = tuple(source.message for source in sources)
+        projected = cls.window(root, registry, messages)
+        return tuple(
+            replace(notification, message=source.message)
+            for source in sources
+            for notification in projected[source.message.seq, source.message.message_id]
+            if source.audience.sender_lookup == lookup
+            or notification.recipient_identity.recipient_lookup == lookup
         )
-        result = []
-        owners = NotificationAssignment.active_owners(registry.snapshot())
-        for receipt in rows:
-            notification = receipt.project(owners)
-            source = receipt.assignment.source
-            message = log.message_by_id(source.message_id)
-            if message is not None and message.seq == source.seq:
-                result.append(replace(notification, message=message))
-        return tuple(result)
 
 
 @dataclass(frozen=True, slots=True)

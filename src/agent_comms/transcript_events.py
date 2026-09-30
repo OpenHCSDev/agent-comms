@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .declared_family import DeclaredFamily
+from .message_reference import MessageReference
 from .routing import TurnRouting
 from .tool_results import ToolDiff
 from .transcript_merge import EventMerge, StreamingMerge
@@ -15,6 +16,7 @@ from .transcript_merge import EventMerge, StreamingMerge
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     routing: TurnRouting | None = None
+    source: MessageReference | None = None
     # Original journal event time in Unix seconds; None is unrecorded, never now.
     timestamp: float | None = None
 
