@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sqlite3
 import sys
 
@@ -21,6 +22,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.registry_document import RegistryDocument
 from agent_comms.threads import Thread
 from seed_thread_retirement_fixture import historical_reservation, ready
 
@@ -38,6 +40,29 @@ def prompt_count(root):
         count = len(PrivateRawInput.select(db))
     assert not list((root/'native-sessions').rglob('*.jsonl'))
     return count
+
+
+def old_client_write_case(stage, root, original_python, environment):
+    """Quarantine the destructive negative after all fixture workers retire."""
+    copied = stage/'old-client-wire'
+    shutil.copytree(root, copied)
+    RegistryDocument.from_wire(json.loads((copied/'registry.json').read_text()))
+    result = subprocess.run([original_python, str(Path(__file__).with_name('old_thread_client_probe.py')),
+                             str(copied)], env=environment, capture_output=True, text=True, timeout=8)
+    (stage/'old-client-stderr.txt').write_text(result.stderr)
+    assert result.returncode == 0, result.stderr
+    evidence = json.loads(result.stdout)
+    try:
+        RegistryDocument.from_wire(json.loads((copied/'registry.json').read_text()))
+    except ValueError as error:
+        assert "Unknown fields for Thread: ['last_goal_report_turn']" in str(error)
+        evidence['target_strict_reader_refuses'] = str(error)
+    else:
+        raise AssertionError('Target accepted the old client reintroduced member')
+    assert prompt_count(copied) == 0
+    evidence['public_activation_requires_old_client_retirement'] = True
+    (stage/'old-client-sanitized-receipt.json').write_text(json.dumps(evidence, indent=2)+'\n')
+    return evidence
 
 
 def main():
@@ -138,6 +163,7 @@ def main():
                  historical_reservation_sha256=source['historical_reservation_sha256'],
                  historical_assignment_ineligible=True, blocked_goal_not_resumed=True,
                  prompt_count=0, fixture_processes_retired=True)
+    proof['old_client_format_negative'] = old_client_write_case(stage, root, original_python, environment)
     (stage/'sanitized-receipt.json').write_text(json.dumps(proof, indent=2)+'\n')
     print(json.dumps(proof), flush=True)
 
