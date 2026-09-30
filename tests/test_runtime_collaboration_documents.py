@@ -19,16 +19,26 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 
 async def test_installed_native_observation_producers_preserve_dates_without_input(native_backend, monkeypatch):
     import asyncio
+    import os
 
     from agent_comms.comms import Comms
+    from agent_comms.native_session_prepare import NativeSessionPreparation
     from delivery_owner_fixture import canonical_agent
 
     native = native_backend
+    arguments = ["--provider=response-local", "--model=fixture", "--thinking=off", "--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"]
+    # Establish the saved native model/settings through its real owner. A
+    # never-opened fresh journal legitimately gains configuration entries.
+    await NativeSessionPreparation.open(
+        native.persistent, "pi", arguments, worktree=str(native.project),
+        environment=dict(os.environ), session_file=str(native.session),
+    )
+    await native.persistent.close()
     history = native.session.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     agent = canonical_agent(
         Comms(native.root), auto_wake=False, runtime_enabled=False,
-        agent_args=["--provider=response-local", "--model=fixture", "--thinking=off", "--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"],
+        agent_args=arguments,
     )
     child = None
     try:
