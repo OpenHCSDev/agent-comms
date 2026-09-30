@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from contextlib import AsyncExitStack, ExitStack
 from abc import abstractmethod
 from pathlib import Path
 
@@ -47,14 +48,14 @@ class ToolCase(EffectCase):
 
     async def assert_effect(self, execution, progress):
         await super().assert_effect(execution, progress)
-        assert progress.goals.successful_tool_observed
+        assert progress.goals.productive_tool == self.body()[2]
 
 
 class CompactionCase(EffectCase):
     def body(self):
         return (
             ae.CompactionStart("test"),
-            ae.CompactionProgress(1),
+            ae.CompactionProgress(chunk_index=1),
             ae.ToolStart("tool", "read", "Read after summary"),
             ae.CompactionEnd(summary="summary"),
             ae.AgentInfo(model="model", session_name="saved", context_used=20, context_size=1000),
@@ -126,18 +127,16 @@ async def owner_turn(comms, tmp_path):
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", reply_targets=("#comms",))
-    assert execution.admit()
-    execution.begin()
-    execution.prepare_prompt()
-    execution.open_stream()
-    progress = execution.progress
     try:
-        yield execution, progress
+        async with AsyncExitStack() as resources:
+            with ExitStack() as permits:
+                assert execution.admit(permits)
+                execution.begin(resources)
+                execution.prepare_prompt()
+                execution.open_stream(resources, permits)
+                resources.enter_context(permits.pop_all())
+                yield execution, execution.progress
     finally:
-        if comms.registry.require(name).active_turn is not None:
-            await owner.turns.settle_turn(
-                session.session_id, name, execution.turn_id, execution.turn_lease
-            )
         await owner.shutdown()
 
 
@@ -293,10 +292,12 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
     execution = OwnedTurn(
         owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
     )
-    assert execution.admit()
-    execution.begin()
+    resources, permits = AsyncExitStack(), ExitStack()
+    assert execution.admit(permits)
+    execution.begin(resources)
     execution.prepare_prompt()
-    execution.open_stream()
+    execution.open_stream(resources, permits)
+    resources.enter_context(permits.pop_all())
     progress = execution.progress
     waiting_owner(execution)
     try:
@@ -325,6 +326,8 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             assert any(row.notice and "[Open diagnostic]" in row.body for row in rows)
             assert not any(row.body == "Native response lifecycle." for row in rows)
     finally:
+        await resources.aclose()
+        permits.close()
         await owner.shutdown()
 
 
@@ -409,9 +412,11 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
         await owner.shutdown()
 
 
-async def test_recovery_failure_report_preserves_original_and_does_not_duplicate(
+async def test_failure_publication_preserves_private_cause_after_transport_disconnect(
     owner_turn, monkeypatch
 ):
+    import json
+
     execution, progress = owner_turn
     emitted = []
     emit = execution.runner.effects._emit_event
@@ -423,11 +428,15 @@ async def test_recovery_failure_report_preserves_original_and_does_not_duplicate
             raise ConnectionError("error notification transport closed")
 
     monkeypatch.setattr(execution.runner.effects, "_emit_event", disconnect_after_error)
-    original = ValueError("original failure")
+    original = ValueError("private original failure")
     await progress.report_failure(original)
-    await progress.report_failure(original)
-    assert [event.text for event in emitted] == ["original failure"]
-    assert progress.failure_reported
+    record = execution.runner.comms.root / "diagnostics" / (execution.turn_id + ".json")
+    diagnostic = json.loads(record.read_text())
+    assert "ValueError: private original failure" in diagnostic["source_error"]
+    assert len(emitted) == 1
+    assert "private original failure" not in emitted[0].text
+    assert record.as_uri() in emitted[0].text
+    assert diagnostic["outcome"] == "failed; inputs must not be replayed automatically"
 
 
 async def test_relay_entrypoint_terminal_publication_releases_real_wait(

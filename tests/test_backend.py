@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.compaction_progress import CompactionSourceProgress
 from agent_comms.image_inputs import ImageInput
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_rpc import PiRpcChannel
@@ -335,14 +336,11 @@ for line in sys.stdin:
             + "print('[]', flush=True)\ntime.sleep(60)\n",
         )
         owner = asyncio.current_task()
-        events = [
-            event
-            async for event in backend.stream_agent_events(
+        with pytest.raises(ValueError, match="Pi RPC record has wrong type"):
+            async for _ in backend.stream_agent_events(
                 stub, [], "task", str(tmp_path), steering_queue=asyncio.Queue()
-            )
-        ]
-        assert events[-1].ok is False
-        assert events[-1].reason_code == "pi_invalid_rpc_event"
+            ):
+                pass
         assert pid_file.exists()
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
@@ -1593,13 +1591,16 @@ prompt = json.loads(sys.stdin.readline())
 emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
 emit({"type": "compaction_start", "reason": "threshold"})
 time.sleep(0.25)
-emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 0,
-      "sourceBytesDone": 0, "sourceBytesTotal": 1000, "summaryPhase": "history"})
-emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 1,
-      "sourceBytesDone": 500, "sourceBytesTotal": 1000, "summaryPhase": "history",
+emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 0, "operationId": "auto-native",
+      "source": {"sourceBytesDone": 0, "sourceBytesTotal": 1000, "summaryPhase": "history",
+                 "startedAtMs": 1000, "observedAtMs": 1250}})
+emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 1, "operationId": "auto-native",
+      "source": {"sourceBytesDone": 500, "sourceBytesTotal": 1000, "summaryPhase": "history",
+                 "startedAtMs": 1000, "observedAtMs": 1500},
       "usage": {"totalTokens": 10}})
-emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 2,
-      "summaryPhase": "synthesis", "usage": {"totalTokens": 11}})
+emit({"type": "compaction_progress", "reason": "threshold", "chunkIndex": 2, "operationId": "auto-native",
+      "source": {"sourceBytesDone": 1000, "sourceBytesTotal": 1000, "summaryPhase": "synthesis",
+                 "startedAtMs": 1000, "observedAtMs": 1750}, "usage": {"totalTokens": 11}})
 emit({"type": "compaction_end", "reason": "threshold", "result": {"summary": "saved",
       "usage": {"totalTokens": 21}},
       "aborted": False, "willRetry": False})
@@ -1634,10 +1635,12 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
         ]
         progress = [e for e in events if isinstance(e, ae.CompactionProgress)]
         assert progress[0] == ae.CompactionProgress(
-            chunk_index=0, source_bytes_done=0, source_bytes_total=1000, summary_phase="history"
+            reason="threshold", operation_id="auto-native", chunk_index=0,
+            source=CompactionSourceProgress(0, 1000, "history", 1000, 1250)
         )
-        assert progress[1].source_bytes_done == 500
-        assert progress[2].summary_phase == "synthesis"
+        assert progress[1].source.source_bytes_done == 500
+        assert progress[1].source.elapsed_ms == 500
+        assert progress[2].source.summary_phase == "synthesis"
         assert [e.usage.total_tokens for e in events if isinstance(e, ae.ProviderUsage)] == [
             10,
             11,
@@ -2016,13 +2019,11 @@ signal.signal(signal.SIGTERM, lambda *_: None)
 while True: time.sleep(0.1)
 """,
         )
-        events = [
-            event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
-        ]
-        assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
-        assert events[-1].ok is False
-        assert events[-1].reason_code == "pi_invalid_rpc_event"
-        assert "NoneType" not in events[-1].text
+        observed = []
+        with pytest.raises(ValueError):
+            async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path)):
+                observed.append(event)
+        assert not [event for event in observed if isinstance(event, ae.Done)]
         assert pid_file.exists()
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
@@ -2063,9 +2064,10 @@ while True: time.sleep(0.1)
         stream = backend.stream_agent_events(stub, [], "work", str(tmp_path), steering_queue=queue)
         try:
             if exit_mode == "malformed":
-                async with asyncio.timeout(4):
-                    events = [event async for event in stream]
-                assert events[-1].reason_code == "pi_invalid_rpc_event"
+                with pytest.raises(ValueError):
+                    async with asyncio.timeout(4):
+                        async for _ in stream:
+                            pass
             else:
                 async with asyncio.timeout(4):
                     while not isinstance(await stream.__anext__(), ae.Chunk):

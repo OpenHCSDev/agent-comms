@@ -28,6 +28,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
+from .agent_events import Done
 from .comms import Comms
 from .coordination_errors import CoordinationError
 from .input_attempt import InputAttempt
@@ -460,6 +461,14 @@ class InputDrain(FutureInputQueue):
             await self.emit_input_delivery_changed(session_id)
         if self.queued_inputs.get(session_id, {}).pop(input_id, None):
             await self.emit_queue_state(session_id)
+
+    def continue_in_project(
+        self, session_id: str, terminal: Done, original_project: str, current_project: str
+    ) -> None:
+        if self.closing or current_project == original_project:
+            return
+        if continuation := terminal.project_continuation(current_project):
+            self.pending_turns.setdefault(session_id, []).append(continuation)
 
     async def finish_turn_inputs(
         self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]

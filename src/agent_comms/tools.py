@@ -648,7 +648,7 @@ class CommsSendTool(ToolRequest):
 
     def apply(self, comms: Comms) -> JsonObject:
         message = comms.messaging.send_message(self.sender, self.target, self.body, self.type)
-        return {"id": message.message_id, "message": message.to_wire()}
+        return {"id": message.message_id}
 
 
 @dataclass(frozen=True, kw_only=True)

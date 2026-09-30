@@ -19,6 +19,8 @@ from agent_comms.goals import Goal
 from agent_comms.owner_compaction_gate import OwnerCompactionAttestation
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
+from agent_comms.native_input_owner import RegistryOwner
+from agent_comms.turn_phase import CompactionPhase
 
 FENCE = {
     "session_file": "/tmp/pr48-fence/session.jsonl",
@@ -88,6 +90,32 @@ def test_recheck_binds_same_store_revision(tmp_path) -> None:
     first = attest(registry, leased, leased_generation)
     second = attest(registry, leased, leased_generation)
     assert first.registry_revision == second.registry_revision
+
+
+def test_native_progress_keeps_captured_compaction_source(tmp_path) -> None:
+    registry, owner, generation = make_registry(tmp_path)
+    captured, generation = lease(registry, owner, generation, "turn-1")
+    registry.transition_turn(captured.turn_lease, CompactionPhase())
+    current = registry.require(captured.name)
+    assert current != captured
+    assert current.turn_lease == captured.turn_lease
+    attest(registry, captured, generation)
+    proof = RegistryOwner(
+        thread=captured, admission_generation=captured.active_turn.admission_generation
+    )
+    proof.require_snapshot(registry.snapshot(), "selected session changed")
+
+
+@pytest.mark.parametrize("change", [
+    {"model": "other/model"}, {"thinking_level": "high"},
+    {"session_file": "/different/session.jsonl"}, {"worktree": "/different/worktree"},
+])
+def test_progress_permission_does_not_admit_source_changes(tmp_path, change) -> None:
+    registry, owner, generation = make_registry(tmp_path)
+    captured, generation = lease(registry, owner, generation, "turn-1")
+    registry.register(replace(captured, **change))
+    with pytest.raises(RelationViolationError):
+        attest(registry, captured, generation)
 
 
 @pytest.mark.parametrize(

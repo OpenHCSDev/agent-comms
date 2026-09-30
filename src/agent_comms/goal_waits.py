@@ -173,8 +173,8 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            goal = thread.goal
-            wait = rows.get(goal.id) if goal is not None and goal.state.active else None
+            goal = thread.active_goal
+            wait = rows.get(goal.id) if goal is not None else None
             if wait is not None and (
                 goal is None
                 or wait.owner_created_at != thread.created_at
@@ -190,10 +190,10 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_goal = peer.goal
+                peer_goal = peer.active_goal
                 peer_wait = (
                     rows.get(peer_goal.id)
-                    if peer_goal is not None and peer_goal.state.active
+                    if peer_goal is not None
                     else None
                 )
                 if peer_wait is not None and (

@@ -6,10 +6,10 @@ thinking indicators and tool-call cards.
 
 Events are frozen nominal values declared in :mod:`agent_events`.
 
-The runner never raises on backend failure; it yields ``done`` with
-``ok=False`` and the error as text. Callers own presentation. Provider
-failures that Pi reports as a completed assistant message (for example an
-exhausted usage limit) also fail the turn, carrying ``errorMessage``.
+Native terminal failures yield ``done`` with ``ok=False``. Unexpected producer
+faults retain their original exception for the existing owner-turn failure
+publisher after child retirement. Provider failures reported as an assistant
+message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 """
 
 from __future__ import annotations
@@ -227,7 +227,7 @@ async def stream_agent_events(
     persistent_session: PersistentPiSession | None = None,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
 ) -> AsyncIterator[events.AgentEvent]:
-    """Run the backend and yield events. Always ends with a ``done`` event.
+    """Run the backend; native completion ends with a ``done`` event.
 
     The no-progress watchdog applies only while waiting for the model. A running
     tool has no deadline in this intentionally incomplete first slice: preventing
@@ -236,7 +236,6 @@ async def stream_agent_events(
     coordinator, never this transport adapter.
     """
     owner = asyncio.current_task()
-    terminal_seen = False
     startup = NativeStartupAdmission(
         Path(
             (env_extra or {}).get("AGENT_COMMS_ROOT")
@@ -286,24 +285,17 @@ async def stream_agent_events(
                     ).run()
                 ) as stream:
                     async for event in stream:
-                        if isinstance(event, events.Done):
-                            terminal_seen = True
                         yield event
             finally:
                 startup.release()
                 if owner is not None:
                     await terminate_task_process(owner)
     except Exception:
-        # A malformed RPC row cannot certify a completed turn. Preserve no
-        # raw payload/stderr in the wire response and always reap the child.
+        # The owner-turn publisher owns diagnostic privacy and input settlement.
+        # Preserve the producer's original cause instead of fabricating a terminal.
         if owner is not None:
             await terminate_task_process(owner)
-        if not terminal_seen:
-            yield events.Done(
-                ok=False,
-                reason_code="pi_invalid_rpc_event",
-                text="Pi RPC returned an invalid event; this turn was not completed.",
-            )
+        raise
 
 
 class TurnSession:

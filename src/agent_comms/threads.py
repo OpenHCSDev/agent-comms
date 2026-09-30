@@ -187,6 +187,21 @@ class Thread:
         assert self.goal is not None
         return self.goal
 
+    @property
+    def active_goal(self) -> Goal | None:
+        """Project the original goal's declaration; retain no activity copy."""
+        goal = self.goal
+        return goal if goal is not None and goal.state.active else None
+
+    def continuation_goal(self, original: Thread) -> Goal | None:
+        """The current active goal still belongs to this captured project/goal."""
+        if self.worktree != original.worktree:
+            return None
+        goal, captured = self.active_goal, original.active_goal
+        if goal is None or captured is None:
+            return None
+        return goal if goal.id == captured.id else None
+
     def require_active_goal(self, goal_id: str) -> Goal:
         goal = self.goal
         if goal is None:

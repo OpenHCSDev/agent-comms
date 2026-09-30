@@ -7,6 +7,7 @@ store at a quiet migration; admission remains fenced by the root authority.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -17,7 +18,7 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .coordination_errors import StaleFence
 from .native_input_record import NativeInputRecord
-from .typed_table import Column, TypedTable
+from .typed_table import Column, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -51,7 +52,116 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
 
 
 @dataclass(frozen=True)
+class PublishedReplyRevision(TypedRow):
+    """Derived identity of this source's immutable published native relations."""
+
+    through_seq: int
+    inputs: int
+
+
+@dataclass(frozen=True)
 class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
+    @classmethod
+    @contextmanager
+    def _publication_read(cls, root):
+        from .coordinated_runtime_schema import assert_native_runtime_schema
+        from .coordination_response import _assert_response_schema
+        from .errors import RelationViolationError
+        from .recovery_projection import _preflight
+
+        database = root / "coordination.sqlite3"
+        failure = _preflight(database)
+        if failure == "missing":
+            yield None
+            return
+        if failure:
+            raise RelationViolationError("Native reply source has an invalid coordinator")
+        with closing(
+            sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.05)
+        ) as db:
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA query_only=ON")
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("BEGIN")
+            assert_native_runtime_schema(db)
+            _assert_response_schema(db)
+            yield db
+
+    @classmethod
+    def publication_revision(cls, root, reader, owner_lookup):
+        """Read only this native source's committed original reply relations.
+
+        Published receipts and their input/attempt links are immutable. Their
+        maximum sequence and cardinality change on publication or proof reset;
+        unrelated owner activity cannot revoke a prepared page. No counter or
+        projection is persisted, and the read closes before presentation work.
+        """
+        from .coordination_tables.executions import ExecutionRecord
+        from .coordination_tables.responses import ResponseObligation
+
+        with cls._publication_read(root) as db:
+            if db is None:
+                return PublishedReplyRevision(0, 0)
+            return PublishedReplyRevision.read(
+                db.execute(
+                    "SELECT COALESCE(MAX(o.receipt_seq),0) AS through_seq, COUNT(*) AS inputs "
+                    f"FROM {cls.declared_name} n JOIN {ExecutionRecord.declared_name} e "
+                    "ON e.execution_id=n.execution_id AND e.owner_lookup=n.owner_lookup "
+                    "AND e.current_attempt_ordinal=n.attempt_ordinal "
+                    f"JOIN {ResponseObligation.declared_name} o ON o.execution_id=n.execution_id "
+                    "WHERE n.stage='full' AND n.owner_lookup=? AND n.session_file=? "
+                    "AND n.session_id=? AND n.session_entry_id IS NOT NULL "
+                    "AND o.receipt_seq IS NOT NULL",
+                    (owner_lookup, str(reader.path), reader.session_id),
+                )
+            )[0]
+
+    @classmethod
+    def published_reply(cls, root, reader, user, owner_lookup):
+        """Join the original tracked input to its exact published execution.
+
+        This is a read-only projection of existing records. It never enrolls a
+        native input, installs a schema, advances a cursor, or authorizes retry.
+        The SQLite reader is closed before any wire read or presentation work.
+        """
+        from .coordination_tables.executions import ExecutionRecord
+        from .coordination_tables.responses import ResponseObligation
+        from .message_reference import MessageReference
+
+        session_id = reader.session_id
+        with cls._publication_read(root) as db:
+            if db is None:
+                return None
+            rows = cls.select(db, where="input_id=? AND stage='full'", parameters=(user.input_id,))
+            if not rows:
+                return None
+            original = rows[0]
+            if (
+                original.owner_lookup,
+                original.session_file,
+                original.session_id,
+                original.session_entry_id,
+            ) != (owner_lookup, str(reader.path), session_id, user.id):
+                return None
+            execution = ExecutionRecord.one(db, execution_id=original.execution_id)
+            if (execution.owner_lookup, execution.lifecycle.current_attempt_ordinal) != (
+                original.owner_lookup,
+                original.attempt_ordinal,
+            ):
+                return None
+            return next(
+                (
+                    MessageReference(
+                        obligation.lifecycle.receipt_seq, obligation.lifecycle.receipt_message_id
+                    )
+                    for obligation in ResponseObligation.select(
+                        db, where="execution_id=?", parameters=(original.execution_id,)
+                    )
+                    if obligation.lifecycle.published
+                ),
+                None,
+            )
+
     input_id: str = field(
         metadata={
             "sql": Column(
