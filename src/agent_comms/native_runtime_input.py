@@ -287,7 +287,7 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     def owner_identity(self):
         from .coordination_tables.participants import OwnerGenerations
 
-        return OwnerGenerations(self.recipient_lookup, self.owner_thread, self.owner_generation)
+        return OwnerGenerations(owner_lookup=self.recipient_lookup, owner_thread=self.owner_thread, generation=self.owner_generation)
 
     covered_seq: int = field(metadata={"sql": Column(check="covered_seq>=0")})
     injected_seq: int = field(
