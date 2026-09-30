@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from .bus_publication import stable_thread_lookup
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import ThreadIncarnation
-from .transcript_events import AssistantTranscript, SentTranscript, UserTranscript
+from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
 
 if TYPE_CHECKING:
     from .wire_log import WireLog
@@ -221,10 +221,11 @@ class AssignedTranscriptSource:
                 ),
             )
         return (
-            UserTranscript(
+            IncomingTranscript(
                 message.body,
                 timestamp=message.timestamp,
                 source=message.reference,
+                route=MessageRoute(message.sender, (message.target,)),
                 routing=TurnRouting((message,)),
             ),
         )
