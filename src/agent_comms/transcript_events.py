@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .declared_family import DeclaredFamily
@@ -23,6 +23,13 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     @property
     def text_size(self) -> int:
         return 0
+
+    @property
+    def native_inputs(self) -> frozenset[str]:
+        return frozenset()
+
+    def with_native_input(self, native_id: str | None) -> TranscriptEvent:
+        return self
 
     @property
     @abstractmethod
@@ -61,7 +68,17 @@ class AgentTextTranscript(LiveTextTranscript):
         return self.routing is not None and self.routing.reply is not None
 
 
+@dataclass(frozen=True)
 class UserTranscript(TextTranscript):
+    native_id: str | None = field(default=None, kw_only=True)
+
+    def with_native_input(self, native_id: str | None) -> UserTranscript:
+        return replace(self, native_id=native_id)
+
+    @property
+    def native_inputs(self) -> frozenset[str]:
+        return frozenset((self.native_id,)) if self.native_id is not None else frozenset()
+
     @property
     def routed(self) -> bool:
         return self.routing is not None and bool(self.routing.requests)

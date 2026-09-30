@@ -15,6 +15,26 @@ class LoopbackProvider:
         self.tool_call = None
         self.response_gate = None
 
+    def response_chunks(self):
+        if self.tool_call is None:
+            yield {"content": self.text}, None
+            yield {}, "stop"
+            return
+        name, arguments = self.tool_call
+        self.tool_call = None
+        assert any(tool["function"]["name"] == name for tool in self.requests[-1]["tools"])
+        yield {
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "local-tool-once",
+                    "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(arguments)},
+                }
+            ]
+        }, None
+        yield {}, "tool_calls"
+
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)
@@ -61,30 +81,15 @@ class LoopbackProvider:
                         "object": "chat.completion.chunk",
                         "created": 1,
                         "model": "fake-compact",
-                        "choices": [{"index": 0, "delta": delta, "finish_reason": reason}],
+                        "choices": [
+                            {"index": 0, "delta": delta, "finish_reason": reason}
+                        ],
                     }
                     return b"data: " + json.dumps(chunk).encode() + b"\n\n"
 
-                if self.tool_call is None:
-                    delta, reason = {"content": self.text}, "stop"
-                else:
-                    name, arguments = self.tool_call
-                    self.tool_call = None
-                    assert any(
-                        tool["function"]["name"] == name for tool in self.requests[-1]["tools"]
-                    )
-                    delta = {
-                        "tool_calls": [
-                            {
-                                "index": 0,
-                                "id": "local-tool-once",
-                                "type": "function",
-                                "function": {"name": name, "arguments": json.dumps(arguments)},
-                            }
-                        ]
-                    }
-                    reason = "tool_calls"
-                body = event(delta, None) + event({}, reason) + b"data: [DONE]\n\n"
+                body = b"".join(
+                    event(delta, reason) for delta, reason in self.response_chunks()
+                ) + b"data: [DONE]\n\n"
                 writer.write(
                     b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
                     + str(len(body)).encode()

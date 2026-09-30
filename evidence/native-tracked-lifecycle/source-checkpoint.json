@@ -1,0 +1,110 @@
+{
+  "checkpoint": "installed_native_acceptance_passed",
+  "source_head": "08ced72919490fa5be87deb7bc9a3b504da97ef2",
+  "normally_integrated425": "dc2754156cb5a381b3556f7713b78fb283f458e8",
+  "main_base": "7fcf826a",
+  "source_cases": {
+    "initial_affected": {
+      "passed": 146,
+      "skipped": 1,
+      "seconds": 7.82
+    },
+    "initial_admission_unknown": {
+      "passed": 54,
+      "seconds": 22.5
+    },
+    "corrective_shared_phase_caller_closure": {
+      "passed": 74,
+      "seconds": 46.4
+    }
+  },
+  "production_delta_relative_to_integrated425": [
+    {
+      "file": "src/agent_comms/attempt_states.py",
+      "added": 12,
+      "deleted": 5
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "added": 19,
+      "deleted": 0
+    },
+    {
+      "file": "src/agent_comms/diagnostics.py",
+      "added": 6,
+      "deleted": 0
+    },
+    {
+      "file": "src/agent_comms/durable_turn.py",
+      "added": 14,
+      "deleted": 21
+    },
+    {
+      "file": "src/agent_comms/native_tool_call.py",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "file": "src/agent_comms/pi_events.py",
+      "added": 7,
+      "deleted": 7
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "added": 5,
+      "deleted": 4
+    },
+    {
+      "file": "src/agent_comms/selected_request.py",
+      "added": 4,
+      "deleted": 1
+    },
+    {
+      "file": "src/agent_comms/selected_result.py",
+      "added": 4,
+      "deleted": 1
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "added": 6,
+      "deleted": 0
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "added": 93,
+      "deleted": 49
+    },
+    {
+      "file": "src/agent_comms/turn_watchdog.py",
+      "added": 26,
+      "deleted": 6
+    }
+  ],
+  "production_lines_deleted": 94,
+  "deleted_authorities": [
+    "tracked whole-turn BoundedRun deadline",
+    "tracked self.deadline",
+    "tracked timeout90/default300cap",
+    "DurableTurn current cache",
+    "DurableTurn model_started cache",
+    "DurableTurn phase",
+    "DurableTurn active tool set",
+    "raw PiEvent phase reconstruction in durable consumer"
+  ],
+  "candidate_python": "/home/ts/.cache/agent-scratch/comms-native-tracked-lifecycle-wait-20260929/installed/bin/python",
+  "native_package": "/home/ts/wt/comms-native-compaction-latency-20260929/stack/.pi-native-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+  "scratch_owner": "431; installed candidate and fixture logs; generated private native fixtures cleaned by existing TemporaryDirectory and child retirement",
+  "live_activation": false,
+  "paid_calls": 0,
+  "old_failure": {
+    "input_id": "c907fb439aa8de8b81f7e1b7456fa571",
+    "sequence": 228,
+    "native_source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/native-sessions/a125774bd1a95db869f78268c9fd0e06/2026-09-29T23-59-57-534Z_01a0ef9c-5e5d-71d0-8838-409f034c4bf2.jsonl",
+    "assistant_tool_rounds": 10,
+    "last_tool_terminal": "2026-09-30T00:01:22.229Z",
+    "durable_context_uncommitted": true,
+    "source_read_only": true,
+    "cause": "whole-turn deadline strongly indicated by source/91.84s timing; exact original exception absent from old diagnostic"
+  },
+  "acceptance_receipt": "acceptance.json"
+}
