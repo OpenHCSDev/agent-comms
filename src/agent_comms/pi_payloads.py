@@ -732,6 +732,9 @@ class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
     def session_busy(self) -> bool:
         return False
 
+    def require_request(self, request):
+        raise ValueError("Native response data does not declare this selected request")
+
     @classmethod
     def wire_member(cls, value):
         return cls if cls is not PiResponseData else cls.decode(value.get("kind"))

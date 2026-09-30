@@ -147,6 +147,11 @@ class SelectedSummaryData(PiResponseData):
     version: Literal[1]
     operation_id: str = field(metadata={"wire_name": "operationId"})
 
+    def require_request(self, request):
+        if self.operation_id != request.operation_id:
+            raise ValueError("Selected summary belongs to another operation")
+        return self
+
     @abstractmethod
     def response(self, request, tokens_before):
         """Interpret this native outcome without granting commit or replay authority."""
@@ -315,3 +320,12 @@ class CompactionSettingsData(PiResponseData):
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
     decision: PiCompactionDecision
+
+    def require_request(self, request):
+        from .native_session_reopen import NativeSessionIdentity
+
+        original = NativeSessionIdentity(request.session_id, request.session_file)
+        observed = NativeSessionIdentity(self.session_id, self.session_file)
+        if observed != original or self.selected != request.selected:
+            raise ValueError("Selected settings source changed")
+        return self.decision

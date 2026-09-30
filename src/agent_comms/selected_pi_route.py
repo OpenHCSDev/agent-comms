@@ -83,22 +83,7 @@ def _read_settings_response(
     if not raw.endswith(b"\n") or len(raw) > 16384:
         raise SelectedPiProbeUnknownError("Incomplete selected settings response")
     response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=16384)
-    if (
-        not isinstance(response, Response)
-        or response.id != request.id
-        or response.command is not type(request)
-        or response.success is not True
-    ):
-        raise SelectedPiProbeUnknownError("Unmatched selected settings response")
-    data = response.data
-    if (
-        data is None
-        or data.session_id != request.session_id
-        or data.session_file != request.session_file
-        or data.selected != request.selected
-    ):
-        raise SelectedPiProbeUnknownError("Selected settings source changed")
-    return data.decision
+    return response.require_request(request).require_request(request)
 
 
 async def read_selected_compaction_decision(
