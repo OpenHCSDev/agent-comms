@@ -57,7 +57,8 @@ class SelectedParticipant(MroDispatch):
         lease = self.owner.thread.turn_lease
         assert lease is not None
         for observation in event.phase.request_observations:
-            record_request_progress(self.comms.root, lease, observation)
+            record_request_progress(self.comms.root, lease, observation,
+                                    native_process=event.native_process)
         self.transition(current.observed(event.phase))
 
     @classmethod

@@ -235,6 +235,7 @@ class TurnProgress(events.AgentEventConsumer):
     async def native_phase(self, event: events.NativePhaseChanged) -> None:
         for observation in event.phase.request_observations:
             record_request_progress(self.comms.root, self.turn_lease, observation,
+                                    native_process=event.native_process,
                                     publication=self.publication_measurements)
         await self.transition(self.phase.observed(event.phase))
 

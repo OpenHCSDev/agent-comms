@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
@@ -16,6 +17,8 @@ from uuid import uuid4
 
 from .store_files import _atomic_write_text
 from .field_codec import FieldCodec
+
+_LOG = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .pi_events import Response
@@ -80,24 +83,29 @@ class PublicationMeasurements:
                 self.maximum_started_ns, self.maximum_finished_ns = started, finished
 
 
-def record_request_progress(root, lease, progress, *, publication=None):
+def record_request_progress(root, lease, progress, *, native_process, publication=None):
     """Append original measurements with the exact existing turn/owner fence.
 
     This private diagnostic does not contain prompt bodies, headers or credentials,
     grant retry or participate in lifecycle decisions. Native clocks remain native;
     receipt and publication spans use the local monotonic clock independently.
     """
-    directory = root / "diagnostics"
-    directory.mkdir(mode=0o700, exist_ok=True)
     now = time.monotonic_ns()
     record = {"turn": FieldCodec.encode(lease), "native": FieldCodec.encode(progress),
-              "received_monotonic_ns": now}
+              "native_process": FieldCodec.encode(native_process),
+              "recorded_monotonic_ns": now}
     if publication is not None:
-        record["publication"] = FieldCodec.encode(publication)
-    path = directory / f"{lease.turn_id}.requests.jsonl"
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-    with os.fdopen(descriptor, "w") as output:
-        output.write(json.dumps(record) + "\n")
+        record["publication_completed_cumulative"] = FieldCodec.encode(publication)
+    try:
+        directory = root / "diagnostics"
+        directory.mkdir(mode=0o700, exist_ok=True)
+        path = directory / f"{lease.turn_id}.requests.jsonl"
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(descriptor, "w") as output:
+            output.write(json.dumps(record) + "\n")
+    except OSError:
+        # Optional observation cannot change an admitted original's outcome.
+        _LOG.warning("Native request timing diagnostic unavailable", exc_info=True)
 
 
 def terminal_failure_reason(event: dict) -> FailureReason:

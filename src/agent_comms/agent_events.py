@@ -17,6 +17,7 @@ from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
 from .tool_results import ToolDiff
+from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -73,6 +74,7 @@ class PromptCancelled(AgentEvent):
 class NativePhaseChanged(AgentEvent):
     """Actual native observer phase; never reconstructed from visible chunks."""
     phase: TurnPhase
+    native_process: ProcessIdentity | None = None
 
 
 @dataclass(frozen=True)

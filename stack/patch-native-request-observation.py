@@ -55,6 +55,11 @@ def main(package):
     helper = package / "node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js"
     helper.write_bytes(Path(__file__).with_name("native-request-observation.mjs").read_bytes())
     helper.with_suffix(".d.ts").write_bytes(Path(__file__).with_name("native-request-observation.d.ts").read_bytes())
+    retry = helper.with_name("provider-retry.js")
+    replace_once(retry, "            return await request();",
+                 "            return await request(maxRetries - retriesRemaining);")
+    replace_once(retry.with_suffix(".d.ts"), "request: () => Promise<T>",
+                 "request: (attempt: number) => Promise<T>")
     declaration = '    onRequestProgress?: (progress: import("../../pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress) => void;\n'
     for name in ("agent.d.ts", "types.d.ts"):
         path = core / name

@@ -47,6 +47,24 @@ class SocketClient:
         self.token = secrets.token_hex(32)
         self.pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
+    async def send(self, payload: dict[str, Any]) -> None:
+        """Bound this subscriber's output without borrowing the owner turn."""
+        if self.writer.is_closing():
+            raise ConnectionError("Runtime subscriber is closed")
+        record = (json.dumps(payload) + "\n").encode()
+        transport = self.writer.transport
+        low_water, high_water = transport.get_write_buffer_limits()
+        # One original saved snapshot must fit. Retain the transport's existing
+        # configured budget when it is larger; no second output queue is owned.
+        transport.set_write_buffer_limits(high=max(high_water, len(record)), low=low_water)
+        self.writer.write(record)
+        await asyncio.sleep(0)
+        _, high_water = transport.get_write_buffer_limits()
+        if transport.get_write_buffer_size() > high_water:
+            transport.abort()
+            self.disconnected()
+            raise ConnectionError("Runtime subscriber stopped reading; attach to canonical history again")
+
     async def permission(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         if len(self.pending) >= 4:
             return None
@@ -55,21 +73,8 @@ class SocketClient:
         self.pending[request_id] = future
         task = asyncio.current_task()
         try:
-            self.writer.write(
-                (
-                    json.dumps(
-                        {
-                            "permissionRequest": {
-                                "id": request_id,
-                                **payload,
-                            }
-                        }
-                    )
-                    + "\n"
-                ).encode()
-            )
-            await asyncio.wait_for(self.writer.drain(), timeout=2)
-            # Cancellation can race wait_for's completion of a fast drain.
+            await self.send({"permissionRequest": {"id": request_id, **payload}})
+            # Cancellation can race completion of a fast socket handoff.
             # A pending owner cancel must not become a 15-second dialog wait.
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError
@@ -95,12 +100,7 @@ class SocketClient:
         self.pending.clear()
 
     async def session_update(self, *, session_id: str, update: Any) -> None:
-        self.writer.write(
-            (
-                json.dumps({"update": update.model_dump(by_alias=True, exclude_none=True)}) + "\n"
-            ).encode()
-        )
-        await self.writer.drain()
+        await self.send({"update": update.model_dump(by_alias=True, exclude_none=True)})
 
 
 class OwnerIdentityChangedError(RuntimeError):
@@ -241,8 +241,7 @@ class RuntimeServer:
         except (Exception, asyncio.CancelledError) as error:
             if not isinstance(error, asyncio.CancelledError):
                 try:
-                    writer.write((json.dumps(_owner_error(error)) + "\n").encode())
-                    await writer.drain()
+                    await client.send(_owner_error(error))
                 except (ConnectionError, OSError):
                     pass
         finally:

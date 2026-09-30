@@ -31,10 +31,10 @@ export class NativeRequestObservation {
         observeRequest({ onRequestProgress: this.observer }, progress);
     };
 
-    async callback(name, action, announce = true) {
+    async callback(name, action, announce = true, detail = "Publishing model response") {
         const started = process.hrtime.bigint();
         if (announce) this.observe({ stage: "callback", callback: name,
-            detail: `Applying native callback: ${name}` });
+            detail });
         try { return await action(); }
         finally {
             const duration = process.hrtime.bigint() - started;
@@ -49,9 +49,9 @@ export class NativeRequestObservation {
     options(config) {
         return { ...config, onRequestProgress: this.observe,
             onPayload: (payload, model) => this.callback("before_provider_request",
-                () => config.onPayload?.(payload, model)),
+                () => config.onPayload?.(payload, model), true, "Preparing model request"),
             onResponse: (response, model) => this.callback("after_provider_response",
-                () => config.onResponse?.(response, model)) };
+                () => config.onResponse?.(response, model), true, "Reading provider response") };
     }
 
     async emit(event, publish) {
