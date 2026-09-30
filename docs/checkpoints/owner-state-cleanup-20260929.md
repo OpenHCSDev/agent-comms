@@ -205,3 +205,13 @@ a journal receipt; complete the existing idle boundary before format conversion.
 No old-field reader is added to production. Paired421/216 actual installed goal,
 menu/control, release and noReplay acceptance remains pending serial native slot.
 All five family rows and all six assigned consumer files remain tracked above.
+
+Normally integrated main433 ea7cbaed at47210dfb, retaining its AdmissionIdentity
+declaration and public callers together with this branch's typed refusal guard.
+All five affected families pass78 focused source checks in8.12s: goal mention
+resolution, both relationship edit layers, maintenance lifecycle, ACP failure
+boundary and declared thread command capability, plus the existing deletion guard.
+The full six-file backend/goal/owner/watchdog consumer and paired216 installed
+acceptance remain required; this source result does not close them. Urgent430/215
+hot source/read-frontier and434 writer correction take the next coherent native
+journey. No global runtime, registry format or saved journal was changed here.
