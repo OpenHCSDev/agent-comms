@@ -43,7 +43,8 @@ class OriginalTypedCapture:
         observed = self.observe(name)
         snapshot = observed.document.snapshot()
         source = observed.selection.require_current(snapshot)
-        retained = RetainedOwnerLaunch.capture(source, snapshot)
+        retained = RetainedOwnerLaunch.capture(source, snapshot,
+            interpreter=str(self.original_python))
         captured = CapturedOriginalOwner(self, observed.selection, source, retained)
         captured.require_current()
         return captured

@@ -38,6 +38,9 @@ The target snapshot is derived by that document, rather than decoded through a
 new Mapping codec. Existing RetainedOwnerLaunch captures credentials and args
 from the exact process in RAM; credentials never cross the JSON pipe or receipt.
 A second fresh original read closes the capture-to-/proc acquisition race.
+The requested original interpreter must equal the source process's observed
+argv interpreter. A same-schema reader from a retired installation cannot
+silently replace this original launch relation.
 
 GoalReportMemberRetirement is the ONE outside-src member operation for both
 RegistryDocument.threads and OwnerReleaseReceipt.thread. A repeated operation
@@ -79,6 +82,15 @@ The actual read-only nra-architecture capture also passed through the authentic
 full original process proof revalidated, credentials not serialized, public
 mutations0/native inputs0. Its sanitized receipt is in evidence/original-owner-capture.
 The225 consumer must still pass its current installed Core440/Toad22540s journey.
+
+First441 is now executed by parent: default Core000/Toad173/Text650/nativee36,
+13 replacement owners, original Thread schema retained. Future source capture
+must use `/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python`,
+the actual new producer, rather than the earlier720 interpreter. The earlier
+actual-source receipt is historical; source capture is acquired afresh without
+replaying an original input. Einstein owns that one updated fixture boundary.
+Private441 receipt/preimages and tools remain protected through the default
+entrypoint gate and source archival. No duplicate restart is performed here.
 
 ## Remaining public lifecycle
 

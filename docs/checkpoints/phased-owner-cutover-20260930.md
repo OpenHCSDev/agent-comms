@@ -77,3 +77,11 @@ edits and actual installed40s UI/CPU acceptance. Original public root is readonl
 The full public phased lifecycle remains independent of the first441 release.
 Exact API, proof commands, owned artifacts and limits are in
 ../validation/original-owner-capture-20260930.md.
+
+Parent completed first441 with13 replacement processes and selected the approved
+Core000/Toad173/Text650/e36 default. This did not change Thread format. Original
+capture now uses that actual producer interpreter and refuses a different
+observed launch interpreter, even if its reader understands the same schema.
+The old720 capture receipt remains historical, not a current owner witness.
+Heisenberg owns the actual default entrypoint gate. Parent's private441 preimages
+and the reviewed operator remain protected; no repeat public batch is authorized.
