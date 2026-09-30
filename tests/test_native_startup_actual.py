@@ -190,14 +190,18 @@ async def test_actual_tracked_unresponsive_native_owns_not_sent_witness(
     assert children and all(not child.alive() for child in children)
 
 
-async def test_actual_tracked_waiting_for_startup_cancels_without_prompt(native_backend):
+async def test_actual_tracked_waiting_for_startup_cancels_without_prompt(native_backend, monkeypatch):
     owner = native_backend
+    # SelectedExecution library callers supply their original root explicitly;
+    # they need not be launched with a worker's ambient root environment.
+    monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     entered = asyncio.Event()
     original = owner.session.read_bytes()
 
     class WaitingTracked(TrackedTurnSession):
         async def open_tools(self, custody):
             await super().open_tools(custody)
+            assert self.startup.directory == owner.root / "runtime" / "native-startup"
             entered.set()
 
     with ExitStack() as held:
