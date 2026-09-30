@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+from types import SimpleNamespace
 from collections.abc import Mapping
 
 import pytest
@@ -13,11 +14,17 @@ from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_events import MessageEnd, Response, UnknownPiEvent
 from agent_comms.pi_payloads import (
     AssistantMessage,
+    MissingData,
+    MissingToolResult,
+    ProvidedToolResult,
+    ReportedModel,
     StateData,
     TextContent,
     ToolCallContent,
     UnknownData,
+    UnreportedModel,
 )
+from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import PiRpcChannel
 
 
@@ -75,11 +82,49 @@ def test_command_owns_response_schema_and_unknown_data_stays_opaque():
     assert isinstance(response.data, UnknownData) and response.data.payload == [7, "opaque"]
 
 
+def test_optional_native_observations_have_named_absence_and_one_serialization():
+    ack = decode({"type": "response", "command": "prompt", "success": True})
+    assert isinstance(ack.data, MissingData)
+    assert not ack.data.session_busy
+    with pytest.raises(ValueError, match="no data"):
+        ack.data.require_payload()
+    for state_wire in ({}, {"model": None}):
+        state = StateData.from_wire(state_wire)
+        assert isinstance(state.model, UnreportedModel)
+        assert not state.matches_model(("p", "m"))
+        with pytest.raises(ValueError, match="owner selection"):
+            state.model.require_selection(None)
+        assert FieldCodec.decode(StateData, FieldCodec.encode(state)) == state
+    reported = StateData.from_wire({"model": {"provider": "p", "id": "m"}})
+    assert isinstance(reported.model, ReportedModel)
+    assert reported.matches_model(("p", "m"))
+    assert reported.model.require_selection("p/m") is reported.model
+    for result_wire in ({}, {"result": None}, {"result": {"content": []}}):
+        event = decode({"type": "tool_execution_end", **result_wire})
+        assert isinstance(event.result, ProvidedToolResult if "result" in result_wire and result_wire["result"] == {"content": []} else MissingToolResult)
+        assert event.result.text() == ""
+        assert event.result.edit_diff(True) is None
+        assert FieldCodec.decode(type(event), FieldCodec.encode(event)) == event
+
+
+def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
+    event = decode({
+        "type": "message_end",
+        "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
+    })
+    session = SimpleNamespace(terminal_error=None)
+    event.message.tracked_end(session)
+    assert session.terminal_error == "original provider rejection"
+
+
 @pytest.mark.parametrize(
     "record",
     [
         {"type": "message_update", "assistantMessageEvent": {"type": "text_delta"}},
         {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text"}]}},
+        {"type": "message_end", "message": {"role": "assistant", "content": None}},
+        {"type": "message_end", "message": {"role": "assistant", "content": "invalid"}},
+        {"type": "message_end", "message": {"role": "assistant"}},
         {"type": "response", "command": "get_state", "data": "invalid"},
         {"type": "message_start", "message": {"role": "user", "inputId": 42}},
         {"type": "context_committed", "requestGeneration": True},

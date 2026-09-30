@@ -196,8 +196,7 @@ class TurnRunner:
             environment=self.native_environment(thread, thread.worktree),
             session_file=thread.session_file,
         )
-        if state.model is None or state.model.display_name != thread.model:
-            raise ValueError("Prepared native model does not match the owner selection")
+        state.model.require_selection(thread.model)
         return AgentRuntimeInfo(
             thread=thread.name,
             timestamp=time.time(),
