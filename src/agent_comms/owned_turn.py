@@ -357,17 +357,13 @@ class OwnedTurn:
                 self.runner.inputs.selected_summary_admissions[self.session_id] = admission
 
             try:
-                selected_info = (
-                    await self.runner.prepare_selected_session(self.session_id, self.thread)
-                    if self.runner.adaptive_summary_strategy is None
-                    else self.runner.comms.agents.agent_info_of(self.thread_name)
-                )
+                prepared = await self.runner.prepare_selected_session(self.session_id, self.thread)
                 self.committed = await maybe_compact_owner_turn(
                     self.runner.comms.registry,
                     self.runner.agent_bin,
                     self.thread_name,
                     self.turn_id,
-                    selected_info,
+                    prepared,
                     pending_key,
                     self.runner.persistent_backends.setdefault(
                         self.session_id, backend.PersistentPiSession()

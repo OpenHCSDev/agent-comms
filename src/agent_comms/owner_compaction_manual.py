@@ -22,7 +22,7 @@ from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary
 from .owner_compaction_runtime import compact_owner_once
-from .pi_summary_payloads import SelectedModel
+from .pi_payloads import StateData
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
 from .selected_source import ManualSource, SelectedSource
@@ -46,7 +46,7 @@ class ManualSelectedSummary(NativeSummary):
 
 
 async def compact_manual_owner(
-    runner, session_id: str, thread_name: str, info, instructions: str | None
+    runner, session_id: str, thread_name: str, prepared: StateData, instructions: str | None
 ) -> CommittedCompactionResult:
     persistent: PersistentPiSession | None = runner.persistent_backends.get(session_id)
     if persistent is None or not persistent.available:
@@ -59,7 +59,7 @@ async def compact_manual_owner(
     turn = captured.require_active_turn()
     session_file = owner.require_saved_session()
     generation = snapshot.owner_generations[owner.name]
-    selected = SelectedModel.from_runtime(info, owner.model)
+    selected = prepared.model.for_compaction(owner.model)
     provider, model = selected.provider, selected.model_id
     package = runner.effects._private_nk_native_package
     if package is None:

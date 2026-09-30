@@ -703,6 +703,7 @@ async def test_selected_first_source_is_default_off_before_any_real_cli_spawn(
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("unreviewed selected CLI must never spawn")
 
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="builtins are unreviewed"):
         await TrackedTurnSession.execute(
@@ -816,7 +817,7 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(
-        "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        "agent_comms.native_pi._require_reviewed_selected_source_cli", lambda: None
     )
     monkeypatch.setattr(AttachedChild, "start", launch)
     monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)

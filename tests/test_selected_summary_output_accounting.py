@@ -12,14 +12,14 @@ import pytest
 
 from agent_comms.agent_events import CompactionSummaryProgress
 from agent_comms.child_process import AttachedChild, ProcessIdentity
+from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
+from agent_comms.selected_pi_route import read_selected_state
 from agent_comms.registration import Registration
-from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -58,10 +58,9 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
     )
     monkeypatch.setenv("AGENT_COMMS_SESSION_INDEX_DIR", str(tmp_path / "indexes"))
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path))
-    monkeypatch.setattr(
-        "agent_comms.private_nk_entrypoint.private_nk_from_environment",
-        lambda: PrivateNkLaunch(tmp_path, "f" * 32, package, None),
-    )
+    root_id = Comms(tmp_path).messaging.initialize_private_initial_protocol()
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
     with CodexLoopbackProvider(retained=20000 if overrun else 20) as provider:
         latency_receipt = os.environ.get("COMPACTION_LATENCY_RECEIPT")
         starts, finishes = {}, {}
@@ -147,13 +146,7 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
                     "pi",
                     "owner",
                     "acceptance",
-                    AgentRuntimeInfo(
-                        thread="owner",
-                        timestamp=1.0,
-                        model=ready["model"],
-                        context_used=399463,
-                        context_size=272000,
-                    ),
+                    await read_selected_state(persistent, session_file=str(file), expected_package=package),
                     "acp:acceptance",
                     persistent,
                     input_text=original,

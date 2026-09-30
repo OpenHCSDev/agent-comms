@@ -186,11 +186,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     sent_owner_admission_generation: int | None = field(
         default=None, metadata={"sql": Column(check="sent_owner_admission_generation>0")}
     )
-    session_id: str | None = None
-    session_file: str | None = None
-    session_entry_id: str | None = None
-    request_generation: int | None = None
-    llm_context_digest: str | None = None
+    session_id: str | None = field(default=None, metadata={"native_context": str})
+    session_file: str | None = field(default=None, metadata={"native_context": str})
+    session_entry_id: str | None = field(default=None, metadata={"native_context": str})
+    request_generation: int | None = field(default=None, metadata={"native_context": int})
+    llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
     verdict: Literal["ignore", "full"] | None = None
 
     without_rowid = True
@@ -294,12 +294,12 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
         metadata={"sql": Column(check="injected_seq>=0 AND injected_seq<=covered_seq")}
     )
     input_id: str | None = field(
-        metadata={"sql": Column(references=(NativeRuntimeInput, "input_id"))}
+        metadata={"sql": Column(references=(NativeRuntimeInput, "input_id")), "native_context": str}
     )
-    assignment_id: str | None
-    stage: Literal["triage", "full"] | None
-    session_id: str | None
-    request_generation: int | None
+    assignment_id: str | None = field(metadata={"native_context": str})
+    stage: Literal["triage", "full"] | None = field(metadata={"native_context": Literal["triage", "full"]})
+    session_id: str | None = field(metadata={"native_context": str})
+    request_generation: int | None = field(metadata={"native_context": int})
 
     without_rowid = True
     checks = (
