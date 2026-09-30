@@ -43,6 +43,7 @@ class TurnEventPublication(MroDispatch):
 
 
 
+
 class TurnProgress(events.AgentEventConsumer):
     def __init__(
         self,
@@ -73,7 +74,6 @@ class TurnProgress(events.AgentEventConsumer):
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
         self.result: events.Done | None = None
-        self.native_terminal: events.StreamSettled | None = None
         self.publication = TurnEventPublication(
             comms=comms,
             sessions=sessions,
@@ -220,10 +220,6 @@ class TurnProgress(events.AgentEventConsumer):
     def phase(self):
         return self.comms.registry.require(self.thread_name).turn_state.phase
 
-    @property
-    def outcome(self) -> bool | None:
-        return self.result.ok if self.result is not None else None
-
     async def transition(self, phase) -> None:
         if self.phase == phase:
             return
@@ -237,7 +233,6 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.StreamSettled)
     async def stream_settled(self, event: events.StreamSettled) -> None:
-        self.native_terminal = event
         await self.transition(PublishingPhase())
         self.finish_event.set()
 
@@ -249,15 +244,14 @@ class TurnProgress(events.AgentEventConsumer):
         await self.publication.dispatch(event)
 
     async def publish_result(self):
-        self.goals.settle(self.outcome, asdict(self.result) if self.result is not None else {})
-        if self.origins and self.native_terminal is not None and self.outcome is True:
-            await asyncio.to_thread(
-                self.comms.transcripts.record_turn_routing,
-                self.thread_name,
-                self.checkpoint,
-                self.routing,
-            )
-        if self.outcome is True:
+        if self.result is not None and self.result.ok:
+            if self.origins:
+                await asyncio.to_thread(
+                    self.comms.transcripts.record_turn_routing,
+                    self.thread_name,
+                    self.checkpoint,
+                    self.routing,
+                )
             if self.reply_parts:
                 for target in self.reply_targets:
                     self.comms.messaging.send(

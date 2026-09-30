@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field, fields
@@ -15,6 +16,8 @@ from .messages import Message
 from .messaging import Messaging
 from .native_entries import TranscriptProjection
 from .native_transcript import NativeTranscript
+from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .bus_publication import stable_thread_lookup
 from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
@@ -99,9 +102,14 @@ class TranscriptReadIdentity:
     session_file: str
     native_revision: tuple[int, int, int, int] | None
     route_revision: TranscriptRouteRevision
-    bus_revision: tuple[int, int, int, int] | None
-    coordination_revision: tuple[int, int, int, int] | None
-    coordination_journal_revision: tuple[int, int, int, int] | None
+    bus_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
+    coordination_revision: tuple[int, int, int, int] | None = field(
+        metadata={"content_exclude": True}
+    )
+    coordination_journal_revision: tuple[int, int, int, int] | None = field(
+        metadata={"content_exclude": True}
+    )
+    reply_revision: PublishedReplyRevision
     read_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
     receipt_frontier: AssignedSourceCursor
     before: TranscriptCursor | None
@@ -112,14 +120,27 @@ class TranscriptReadIdentity:
     def content_thread(self):
         return self.thread.incarnation, self.thread.parent, self.thread.task
 
+    @projected(view="content", name="bus")
+    def content_bus(self):
+        # The certified frozen membership frontier owns relevant appends.
+        # Keep inode custody: replacing the source is never an unrelated append.
+        return self.bus_revision[0] if self.bus_revision is not None else None
+
+    @property
+    def content_identity(self) -> bytes:
+        """Hashable source-owned inputs for existing preparation resources."""
+        return json.dumps(
+            FieldCodec.project(self, "content"), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+
     def same_content(self, other: TranscriptReadIdentity) -> bool:
         """Fence content, including the original native publication proof.
 
         Reader acknowledgements and thread activity do not change page content.
-        Coordinator revisions remain fenced: a published obligation can commit
+        The scoped published relation remains fenced: an obligation can commit
         just after its wire append and replace the native final reply projection.
         """
-        return FieldCodec.project(self, "content") == FieldCodec.project(other, "content")
+        return self.content_identity == other.content_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +224,15 @@ class Transcripts:
                 file_revision(self.bus.log.path),
                 file_revision(self.root / "coordination.sqlite3"),
                 file_revision(self.root / "coordination.sqlite3-wal"),
+                (
+                    NativeRuntimeInput.publication_revision(
+                        self.root,
+                        NativeTranscript(Path(session_file)),
+                        stable_thread_lookup(thread.created_at),
+                    )
+                    if session_file and Path(session_file).is_file()
+                    else PublishedReplyRevision(0, 0)
+                ),
                 file_revision(self.bus.reads.path),
                 receipt_frontier,
                 before,

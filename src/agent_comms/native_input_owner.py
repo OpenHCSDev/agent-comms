@@ -50,8 +50,12 @@ class RegistryOwner:
     ) -> None:
         if snapshot.owner_identity(self.thread.name) != OwnerIdentity(expected.incarnation, owner_generation):
             raise RelationViolationError("live owner generation changed")
-        if self.thread != expected:
-            raise RelationViolationError("live owner declaration changed")
+        try:
+            RegistryOwner(
+                thread=expected, admission_generation=self.admission_generation
+            ).require_snapshot(snapshot, "live owner source changed")
+        except StaleFence as error:
+            raise RelationViolationError(str(error)) from error
 
     def require_claim(self, expected: Thread, admission: int) -> None:
         try:
