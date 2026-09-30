@@ -1,0 +1,16 @@
+{
+  "state": "source-integrated-not-installed-or-accepted",
+  "pins": {
+    "integration": "adc4bc79d2ce05eeafb0c177e1b83c3d67cabb96",
+    "main": "3b03785f45df2ef5dc62ba6aed99294192ecbb01",
+    "430": "77b6c2c421e58575ce2fd70060f070c02995a9a4",
+    "434": "bd18e9c3af02291d10fcc6b116a9d95b83001c6e",
+    "436": "1db38fcd63ac313ceb5f7b481d7fd3824511c7a6",
+    "437": "accfd57233d0d46965edbf3aa35a0397c6fd61b0"
+  },
+  "conflict_resolution": "Retain newest437 original saved-history readiness before any input; no producer implementation conflict.",
+  "source_intersection_check": "10 affected custody/progress/provider cases passed in1.50s before receipt-only1db getter merge",
+  "native_manifest_sha256": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
+  "native_tree_sha256": "614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a",
+  "pending": "430 shared source transaction/public bind_page_read plus original436 result publication consumer; no API readiness inferred from ancestor alone"
+}

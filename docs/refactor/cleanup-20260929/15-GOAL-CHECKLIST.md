@@ -316,3 +316,40 @@ Exact staging receipts and dependency inputs are under
 `evidence/cleanup-live-integration/canonical-paint-admission-*`. The broader
 workspace resource, warm tab, focus/sidebar and adaptive-end goals remain open
 where acceptance is missing, even if a useful paint checkpoint can be shipped.
+
+## Actual paint result and coherent backend source integration
+
+The exact4103/Text650 staged original-history capture failed57.385s: after
+End and15-second idle, chat text is blank. No default activation or readiness
+claim follows. The original owner stayed unchanged/alive and all owned capture
+children retired. The1041-sample same-run profile has zero sampling errors.
+Recorder exit0 and ffmpeg255 after deliberate SIGINT are separate from physical
+st/UI adoption, whose exact numeric exit was not recorded.
+
+Important evidence correction: menu/tab/roster/details are visibly present in
+individual physical PNGs. Their static decoded pixel crops are identical in
+before/down/reverse/end/idle/after; this is also true in the older887 and parent
+original-history captures. Earlier combined image assessment misread unchanged
+regions as missing. Thus whole-screen chrome disappearance is withdrawn as a
+causal lead. The real chat blank/extent failure remains open under Heisenberg's
+viewport/reader owner, with Kepler supplying canonical compositor mechanics.
+Textual13's separate source damage-loss defect is real, but not proof of this
+blank chat's cause or closure.
+
+Parent source-integrated43077b6,434bd18,4361db38 and437accfd into Core432 by
+normal merges. Only the real437 driver conflicted: preserve newest saved-history
+readiness before any input. Ten targeted source intersection cases passed in
+1.50s; they are not installed/native acceptance. This exact source cohort
+removes stale-ancestor ambiguity for subsequent parallel runtime builds.
+Mendel's newer shared original read transaction/public witness binder and
+Arendt's ordinary original publication consumer remain required before the
+full messaging gate. There is no default install of this unaccepted cohort.
+
+Einstein's independent actual native43703 large-input compaction progresses
+through the original configured provider; original reserved input remains
+unbound until the successful canonical commit. This ongoing operation is not
+a speed or final-publication success claim. Unknown first attempts remain
+retained and are never replayed. Arendt's previous fixture120-second pre-tool
+wait cancelled a legitimate summarization, so its UNKNOWN journal is retained
+and a different below-window original-history fork is used for the separate
+whole lifecycle gate. No product whole-turn deadline was restored.
