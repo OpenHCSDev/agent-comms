@@ -13,7 +13,7 @@ from hashlib import sha256
 from typing import TYPE_CHECKING, ClassVar
 
 from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
-from .agent_events import CompactionEvent, CompactionProgress
+from .agent_events import CompactionEvent
 from .compaction_states import CompactionPublishedMetadata
 from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
@@ -421,7 +421,7 @@ class GoalChangedUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class CompactionChangedUpdate(AgentCommsUpdate):
-    event: CompactionEvent | CompactionProgress
+    event: CompactionEvent
 
 
 @dataclass(frozen=True)

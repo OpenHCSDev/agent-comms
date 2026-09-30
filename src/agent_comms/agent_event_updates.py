@@ -163,9 +163,9 @@ class AcpEventConsumer(MroDispatch):
                 ),
             )
 
-    @handles(events.CompactionProgress, events.CompactionEvent)
+    @handles(events.CompactionEvent)
     async def on_compaction(
-        self, event: events.CompactionEvent | events.CompactionProgress
+        self, event: events.CompactionEvent
     ) -> None:
         await self.agent.turns.observe_compaction(self.session_id, event)
         await self.client.session_update(
