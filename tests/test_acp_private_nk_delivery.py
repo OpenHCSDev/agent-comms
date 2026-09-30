@@ -312,7 +312,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
     before = cursor_envelope(agent.sessions.metadata("beta"))
     assert before.status == "none"
     assert before.revision >= 1
-    assert before.scope.owner.incarnation.name == "beta"
+    assert before.scope.admission.incarnation.name == "beta"
     assert before.scope.wire_root_id == root_id
     updates = []
 

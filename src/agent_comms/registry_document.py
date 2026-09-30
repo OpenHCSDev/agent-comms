@@ -13,7 +13,7 @@ from .field_codec import FieldCodec
 from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
 from .routing import TurnRouting
 from .restart_refusals import OwnerBusyRefusal, OwnerChangedBeforeFenceRefusal, OwnerGenerationChangedRefusal
-from .thread_identity import GenerationCounter, OwnerIdentity
+from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
 from .thread_presentation import ThreadOwnerBinding, LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
@@ -377,7 +377,11 @@ class RegistrySnapshot:
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.aliases.get(name, name)
-        return self.threads[canonical].owner_identity(self.owner_generations[canonical])
+        return OwnerIdentity(self.threads[canonical].incarnation, self.owner_generations[canonical])
+
+    def admission_identity(self, name: str) -> AdmissionIdentity:
+        canonical = self.aliases.get(name, name)
+        return AdmissionIdentity(self.threads[canonical].incarnation, self.admission_generations[canonical])
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         try:

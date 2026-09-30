@@ -49,14 +49,14 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
         decode_updates,
         encode_updates,
     )
-    from agent_comms.thread_identity import OwnerIdentity, ThreadIncarnation
+    from agent_comms.thread_identity import AdmissionIdentity, ThreadIncarnation
 
     fact = CursorAdvancedUpdate(
         CursorEnvelope(
             CursorScope(
                 "canonical",
                 "a" * 32,
-                OwnerIdentity(ThreadIncarnation("canonical", 1000.0), 3),
+                AdmissionIdentity(ThreadIncarnation("canonical", 1000.0), 3),
                 1234,
             ),
             7,
