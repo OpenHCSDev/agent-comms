@@ -1,0 +1,21 @@
+{
+  "core": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+  "required_ancestors": {
+    "17a43": "17a43e0271cb661ee893d0ce6b34d2ae6ac6e5d2",
+    "1f425": "1f42575cb6d50b8f934023827c982eaf07e30858"
+  },
+  "428_original_fixture_bytes": {
+    "tests/compaction_retention_fixture.py": {
+      "original_sha256": "4e9a23ffd79bbbdd8b4fd441ae9bba7fadcaa99eb9bd276431865d6ff68162f9",
+      "candidate_identical": true
+    },
+    "tests/test_compaction_retention_fixture.py": {
+      "original_sha256": "2b1df9d4138bbb4c0db97d02dbf2747146352489ae177842e93746aacded9a74",
+      "candidate_identical": true
+    }
+  },
+  "accepted_artifact_receipt": "c81cd08a:evidence/pr428-artifact-acceptance/receipt.json",
+  "scope": "original plans/fixture only; no S1-S4 production or repeated CLI matrix",
+  "461_runtime_info_reset": "Parent existing quiet custody before new target readers; not executed by staging",
+  "460_disposable_activity_display": "activity3/display2; private fixture/cutover only; no public mutation"
+}

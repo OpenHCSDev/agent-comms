@@ -1,0 +1,111 @@
+{
+  "owner": "Schrodinger250finalstage",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930",
+  "pins": {
+    "agent-comms": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+    "batrachian-toad": "c0750340f069c90be2c65bb8f8d7f8affd32d02a",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218",
+  "frozen_package_count": 68,
+  "only_changed_requirements": [
+    "agent-comms",
+    "batrachian-toad"
+  ],
+  "baseline": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+  "requirements_sha256": "230aa290782366d3a252fe8a1cfa0610558890d7aed1b356d255b01b9fbcba1f",
+  "component_source_proof": {
+    "agent-comms": {
+      "pin": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+      "python_files_equal": 294,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "c0750340f069c90be2c65bb8f8d7f8affd32d02a",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "component_provenance": {
+    "agent-comms": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+        "requested_revision": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26"
+      }
+    },
+    "batrachian-toad": {
+      "url": "https://github.com/OpenHCSDev/toad.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "c0750340f069c90be2c65bb8f8d7f8affd32d02a",
+        "requested_revision": "c0750340f069c90be2c65bb8f8d7f8affd32d02a"
+      }
+    },
+    "textual": {
+      "url": "https://github.com/OpenHCSDev/textual.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347",
+        "requested_revision": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+      }
+    }
+  },
+  "package_compatibility": "normal uv pip check passed68",
+  "affected_imports": [
+    "agent_comms.private_nk_entrypoint",
+    "agent_comms.active_route",
+    "agent_comms.cohort_foreground",
+    "agent_comms.response_conversation",
+    "agent_comms.coordination_response",
+    "toad.widgets.conversation",
+    "toad.widgets.viewport_body",
+    "toad.widgets.presentation_window",
+    "toad.screens.comms"
+  ],
+  "full_native_trust": true,
+  "build_count": 1,
+  "parent_activation_required": true,
+  "defaults_changed": false,
+  "owners_restarted": false,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_root_loaded": false,
+  "private_root_witness": {
+    "root": "/home/ts/wt/g458f/meta/wire",
+    "wire_root_id": "ca049ad77a7445378dd8fa66f9de3d1d",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "producer": "Einstein fresh candidate-installed Core RootProducer; root receipt /home/ts/wt/g458f/meta/root-receipt.json; zero owners/inputs/providers"
+  },
+  "actual_gate_owner": "Einstein231",
+  "accepted_scope": "Packaging/source provenance/full native trust admission ONLY. Includes428 exact merged fixture ancestry,461 observation owner,460 activity3/display2,251 input visibility and252 answer source. Einstein joint installed native/ACP/UI gate then Schrodinger bus/hotDM/IRC gate required before readiness/publication.",
+  "remaining_scope": "Not installed workflow Ready. Joint firstfork/queue/cancel then bus/DM/IRC original-once/handling/immediateSend/idle/reopen gate pending.461 runtime_info dated observation reset and460 disposable activity/display cutover must use existing quiet custody before target readers; public effects parent-owned. No current default or owner changes.",
+  "source_admission": {
+    "core": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+    "required_ancestors": {
+      "17a43": "17a43e0271cb661ee893d0ce6b34d2ae6ac6e5d2",
+      "1f425": "1f42575cb6d50b8f934023827c982eaf07e30858"
+    },
+    "428_original_fixture_bytes": {
+      "tests/compaction_retention_fixture.py": {
+        "original_sha256": "4e9a23ffd79bbbdd8b4fd441ae9bba7fadcaa99eb9bd276431865d6ff68162f9",
+        "candidate_identical": true
+      },
+      "tests/test_compaction_retention_fixture.py": {
+        "original_sha256": "2b1df9d4138bbb4c0db97d02dbf2747146352489ae177842e93746aacded9a74",
+        "candidate_identical": true
+      }
+    },
+    "accepted_artifact_receipt": "c81cd08a:evidence/pr428-artifact-acceptance/receipt.json",
+    "scope": "original plans/fixture only; no S1-S4 production or repeated CLI matrix",
+    "461_runtime_info_reset": "Parent existing quiet custody before new target readers; not executed by staging",
+    "460_disposable_activity_display": "activity3/display2; private fixture/cutover only; no public mutation"
+  }
+}

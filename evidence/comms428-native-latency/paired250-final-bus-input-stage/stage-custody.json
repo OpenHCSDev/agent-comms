@@ -1,0 +1,12 @@
+{
+  "owner": "Schrodinger",
+  "purpose": "one frozen250+251+252+458/460 normal paired stage; Einstein joint gate then Sch bus journey",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930",
+  "core": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+  "toad": "c0750340f069c90be2c65bb8f8d7f8affd32d02a",
+  "native": "593b",
+  "source_freeze_authorized": true,
+  "defaults_changed": false,
+  "providers": 0,
+  "retention": "preserve until actual gate and parent closure"
+}

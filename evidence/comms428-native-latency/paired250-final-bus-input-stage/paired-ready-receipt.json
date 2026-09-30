@@ -1,0 +1,50 @@
+{
+  "state": "PACKAGING-READY-AWAITING-JOINT-INSTALLED-GATES",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930",
+  "pins": {
+    "agent-comms": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+    "batrachian-toad": "c0750340f069c90be2c65bb8f8d7f8affd32d02a",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "frozen_packages": 68,
+  "source_proof": {
+    "agent-comms": {
+      "pin": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+      "python_files_equal": 294,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "c0750340f069c90be2c65bb8f8d7f8affd32d02a",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "native_full_trust": true,
+  "metadata_published_from_same_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3974483,
+        "start_ticks": 27707787,
+        "returncode": 0
+      }
+    ]
+  },
+  "builds": 1,
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "paid_calls": 0,
+  "native_inputs": 0,
+  "accepted_scope": "Packaging/source provenance/full native trust admission ONLY. Includes428 exact merged fixture ancestry,461 observation owner,460 activity3/display2,251 input visibility and252 answer source. Einstein joint installed native/ACP/UI gate then Schrodinger bus/hotDM/IRC gate required before readiness/publication.",
+  "remaining_scope": "Not installed workflow Ready. Joint firstfork/queue/cancel then bus/DM/IRC original-once/handling/immediateSend/idle/reopen gate pending.461 runtime_info dated observation reset and460 disposable activity/display cutover must use existing quiet custody before target readers; public effects parent-owned. No current default or owner changes."
+}
