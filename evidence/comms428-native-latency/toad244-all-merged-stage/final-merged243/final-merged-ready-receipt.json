@@ -1,0 +1,55 @@
+{
+  "state": "READY-FINAL-MERGED-PAIR-ACTUAL-UI-PENDING",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+  "pins": {
+    "agent-comms": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+    "batrachian-toad": "3625ce9e9379da553374e2e81e08e435e5321d1b",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "packages": 68,
+  "normal_toad_finalizations": 1,
+  "candidate_process_refs_before_finalization": [],
+  "source_equal_to_reviewed_243_head": true,
+  "source_files": {
+    "agent-comms": {
+      "pin": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+      "python_files_equal": 290,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "3625ce9e9379da553374e2e81e08e435e5321d1b",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "metadata_published_from_same_final_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3582269,
+        "start_ticks": 26228353,
+        "returncode": 0
+      }
+    ]
+  },
+  "actual_candidate_gate_owner": "Kepler221",
+  "earlier_receipt_scope_owner_name": "Einstein replaced by latest parent ownership transfer; does not alter package/probe/source results",
+  "activation_owner": "Parent",
+  "original_b932_receipts_preserved": "/home/ts/.cache/agent-scratch/toad-all-merged-stage-20260930/pre-finalize-b932",
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "backend_runtime_delta": "Corea80 to29b two docs/evidence files only; no backend restart required",
+  "remaining_scope": "Kepler actual savedstartup/A-B-A/scrollEndidle candidate acceptance BEFORE parent publication; budget453 and ongoing242/454 not claimed"
+}

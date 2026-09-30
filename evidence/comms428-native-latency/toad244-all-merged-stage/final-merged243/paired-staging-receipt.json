@@ -1,0 +1,84 @@
+{
+  "owner": "Schrodinger244stage",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+  "pins": {
+    "agent-comms": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+    "batrachian-toad": "3625ce9e9379da553374e2e81e08e435e5321d1b",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "ceca2c05cf0ae07bc7bfab3831387bbf7f54a122675f26264f240dc5476b6e47",
+  "frozen_package_count": 68,
+  "changed_requirements": [
+    "agent-comms",
+    "batrachian-toad"
+  ],
+  "baseline": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930",
+  "requirements_sha256": "7ba0f81308ef8040481aa364c4479c6e21345d68ccea94abd22088878b71f3a7",
+  "component_source_proof": {
+    "agent-comms": {
+      "pin": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+      "python_files_equal": 290,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "3625ce9e9379da553374e2e81e08e435e5321d1b",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "component_provenance": {
+    "agent-comms": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "29bbe95d3f57d961259f53ad7c08e38562eaf766",
+        "requested_revision": "29bbe95d3f57d961259f53ad7c08e38562eaf766"
+      }
+    },
+    "batrachian-toad": {
+      "url": "https://github.com/OpenHCSDev/toad.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "3625ce9e9379da553374e2e81e08e435e5321d1b",
+        "requested_revision": "3625ce9e9379da553374e2e81e08e435e5321d1b"
+      }
+    },
+    "textual": {
+      "url": "https://github.com/OpenHCSDev/textual.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347",
+        "requested_revision": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+      }
+    }
+  },
+  "package_compatibility": "normal uv pip check passed68",
+  "affected_imports": [
+    "agent_comms.private_nk_entrypoint",
+    "agent_comms.active_route",
+    "agent_comms.cohort_foreground",
+    "agent_comms.response_conversation",
+    "agent_comms.coordination_response",
+    "toad.widgets.conversation",
+    "toad.widgets.viewport_body",
+    "toad.widgets.presentation_window",
+    "toad.screens.comms"
+  ],
+  "native_trust": "Unchanged canonical stable ceca; prior matching Corea80 full trust proof reused, no repeat package/tool scan",
+  "native_trust_reference": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/paired-ready-receipt.json",
+  "build_count": 1,
+  "parent_activation_required": true,
+  "defaults_changed": false,
+  "owners_restarted": false,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_root_loaded": false,
+  "accepted_scope": "Merged-head244+243 normal package/source provenance; unchanged Core/native acceptance reused. Einstein actual normal candidate launcher/ACP/41MB saved history A/B/A must pass BEFORE parent UI-default publication; backend differs only in two documented checkpoint files, no owner restart.",
+  "remaining_scope": "Known provider output-budget decoder defect remains Mendel453-owned; no budget fix claim. Parent UI-default only after Einstein actual candidate CLI acceptance; no backend/route/native/globalTS/owner updates."
+}

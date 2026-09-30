@@ -1,0 +1,11 @@
+{
+  "state": "FINALIZED-MERGED243-ONCE-NO-UI-ACTIVE",
+  "original_stage": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+  "finalization_count": 1,
+  "original_b932_ready_preserved": "/home/ts/.cache/agent-scratch/toad-all-merged-stage-20260930/pre-finalize-b932",
+  "authorization": "Latest parent explicitly permits one normal Toad-only finalization before actual allmerged candidate UI freeze",
+  "no_new_stage_or_fleet": true,
+  "final_toad": "3625ce9e9379da553374e2e81e08e435e5321d1b",
+  "github_merge_verified": true,
+  "candidate_refs_before": []
+}

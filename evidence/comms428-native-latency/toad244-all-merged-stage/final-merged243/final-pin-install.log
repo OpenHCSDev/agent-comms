@@ -1,0 +1,14 @@
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-all-merged-20260930
+   Updating https://github.com/OpenHCSDev/toad.git (3625ce9e9379da553374e2e81e08e435e5321d1b)
+    Updated https://github.com/OpenHCSDev/toad.git (3625ce9e9379da553374e2e81e08e435e5321d1b)
+Resolved 68 packages in 1.60s
+   Building batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@3625ce9e9379da553374e2e81e08e435e5321d1b
+      Built batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@3625ce9e9379da553374e2e81e08e435e5321d1b
+Prepared 1 package in 481ms
+Uninstalled 1 package in 10ms
+Installed 1 package in 5ms
+ - batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@b932042fd5c250143f0a57a4ede92b4f3d7cf3e0)
+ + batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@3625ce9e9379da553374e2e81e08e435e5321d1b)
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-all-merged-20260930
+Checked 68 packages in 1ms
+All installed packages are compatible
