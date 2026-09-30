@@ -35,4 +35,6 @@ wrong recipient/incarnation and UNKNOWN no-replay. Use existing retained native 
 local-provider integration infrastructure for installed acceptance, no public
 inputs, provider calls, schema edits or frozen cohort modification.
 
-Status: draft, census and reproducer next. This claim is not Ready or installed.
+Status: source Ready with actual private installed native/ACP acceptance.
+See READY.md for exact checkpoint, whole consumer closure and acceptance limits.
+This has not been publicly installed or activated.
