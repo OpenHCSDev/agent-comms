@@ -1,0 +1,179 @@
+{
+  "manual_protect": [
+    "comms-cleanup-live-integration-20260929",
+    "comms-native-endpoint-budget-recovery-20260930",
+    "comms-shared-bus-admission-custody-20260930",
+    "comms428-native-wait-custody-20260930",
+    "toad-cleanup-tc2-sdk-20260929",
+    "toad-first-ui-end-keypad-20260930",
+    "toad-native-widget-action-availability-20260930",
+    "toad-private-launch-admission-caller-20260930",
+    "toad-workspace-foreground-resource-continuation-20260930",
+    "toad-workspace-growing-end-continuity-20260930",
+    "toad-workspace-warm-raster-followup-20260930"
+  ],
+  "references": {
+    "/home/ts/wt/comms-selected-tool-broker-20260926": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-pr48-production-20260926": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-pr94-incumbent-effect-bound-20260927": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-pr95-selected-pi-summary-20260926": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-maintenance-gate-20260926": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-selected-write-successor-20260926": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/toad-message-formatting": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-ci-mcp-stack-dependencies": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-pr17-injected-harness": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-native-retirement-proof": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms-pr94-private-checkpoint-20260926": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/toad-default-route-20260927": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/toad-queue-view-identity-20260926": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/toad-private-native-cursor-view-20260926": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/toad-textual-web-20260925": [
+      "registered thread including stopped: /home/ts/.agent-comms/registry.json",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/nra-refactor2-r1-20260928": [
+      "process cwd PID3487868",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/openhcs-memory-session-20260929": [
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/comms428": [
+      "process cwd PID3488092",
+      "registered thread including stopped: /var/tmp/agent-comms-live-20260927-wzjtqhza/registry.json"
+    ],
+    "/home/ts/wt/openhcs-installed-main-20260929": [
+      "process cwd PID3408008",
+      "process cwd PID3409482",
+      "process cwd PID3457713",
+      "process cwd PID3457735",
+      "process cwd PID3503436"
+    ],
+    "/home/ts/wt/nra-installed-main-20260928": [
+      "editable installedprefix /home/ts/.local/lib/python3.14/site-packages/nominal_refactor_advisor-0.1.0.dist-info/direct_url.json",
+      "complete installed/fixture scan: /home/ts/.local/lib/python3.14/site-packages/nominal_refactor_advisor-0.1.0.dist-info/direct_url.json"
+    ],
+    "/home/ts/wt/toad-cleanup-tc2-sdk-20260929": [
+      "installed .pth: /home/ts/wt/toad-viewport-demand-20260929/.venv/lib/python3.14/site-packages/owned-reviewed-dependencies.pth",
+      "complete installed/fixture scan: /home/ts/wt/toad-viewport-demand-20260929/.venv/lib/python3.14/site-packages/owned-reviewed-dependencies.pth"
+    ],
+    "/home/ts/wt/toad-canonical-wire-transcript-20260929": [
+      "complete installed/fixture scan: /home/ts/wt/comms-original-turn-custody-20260929/.routing-carry-runtime/lib/python3.14/site-packages/paired-dependencies.pth"
+    ],
+    "/home/ts/wt/comms-acp-saved-session-startup-20260928": [
+      "complete installed/fixture scan: /home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/runtime/lib/python3.14/site-packages/acceptance-dependencies.pth"
+    ]
+  },
+  "registry_worktrees": [
+    "/home/ts",
+    "/home/ts/.agent-comms",
+    "/home/ts/.agent-comms/.test-tmp/toad-worktree",
+    "/home/ts/code/projects/nominal-refactor-advisor",
+    "/home/ts/code/projects/openhcs",
+    "/home/ts/wt/comms-ci-mcp-stack-dependencies",
+    "/home/ts/wt/comms-maintenance-gate-20260926",
+    "/home/ts/wt/comms-native-retirement-proof",
+    "/home/ts/wt/comms-pr17-injected-harness",
+    "/home/ts/wt/comms-pr48-production-20260926",
+    "/home/ts/wt/comms-pr94-incumbent-effect-bound-20260927",
+    "/home/ts/wt/comms-pr94-private-checkpoint-20260926",
+    "/home/ts/wt/comms-pr95-selected-pi-summary-20260926",
+    "/home/ts/wt/comms-routed-progress",
+    "/home/ts/wt/comms-selected-tool-broker-20260926",
+    "/home/ts/wt/comms-selected-write-successor-20260926",
+    "/home/ts/wt/comms428",
+    "/home/ts/wt/nra-refactor2-r1-20260928",
+    "/home/ts/wt/openhcs-headless-bootstrap-20260929",
+    "/home/ts/wt/openhcs-memory-session-20260929",
+    "/home/ts/wt/toad-default-route-20260927",
+    "/home/ts/wt/toad-message-formatting",
+    "/home/ts/wt/toad-private-native-cursor-view-20260926",
+    "/home/ts/wt/toad-queue-view-identity-20260926",
+    "/home/ts/wt/toad-textual-web-20260925",
+    "/tmp"
+  ],
+  "pth_references": [
+    {
+      "path": "/home/ts/wt/toad-viewport-demand-20260929/.venv/lib/python3.14/site-packages/owned-reviewed-dependencies.pth",
+      "worktrees": [
+        "/home/ts/wt/toad-cleanup-tc2-sdk-20260929"
+      ]
+    }
+  ],
+  "editable_references": [
+    {
+      "path": "/home/ts/.agent-comms/.venv/lib/python3.11/site-packages/agent_comms-0.1.0.dist-info/direct_url.json",
+      "source": "/home/ts/.agent-comms"
+    },
+    {
+      "path": "/home/ts/.local/lib/python3.13/site-packages/arraybridge-0.2.0.dist-info/direct_url.json",
+      "source": "/home/ts/code/projects/openhcs-sequential/external/arraybridge"
+    },
+    {
+      "path": "/home/ts/.local/lib/python3.13/site-packages/metaclass_registry-0.1.0.dist-info/direct_url.json",
+      "source": "/home/ts/code/projects/openhcs-sequential/external/metaclass-registry"
+    },
+    {
+      "path": "/home/ts/.local/lib/python3.13/site-packages/pyqt_reactor-0.1.0.dist-info/direct_url.json",
+      "source": "/home/ts/code/projects/openhcs/external/pyqt-reactor"
+    },
+    {
+      "path": "/home/ts/.local/lib/python3.13/site-packages/pyqt_formgen-0.1.0.dist-info/direct_url.json",
+      "source": "/home/ts/code/projects/openhcs-sequential/external/pyqt-formgen"
+    },
+    {
+      "path": "/home/ts/.local/lib/python3.13/site-packages/python_introspect-0.1.0.dist-info/direct_url.json",
+      "source": "/home/ts/code/projects/openhcs-sequential/external/python-introspect"
+    },
+    {
+      "path": "/home/ts/.local/lib/python3.13/site-packages/objectstate-0.1.0.dist-info/direct_url.json",
+      "source": "/home/ts/code/projects/openhcs-sequential/external/ObjectState"
+    },
+    {
+      "path": "/home/ts/.local/lib/python3.14/site-packages/nominal_refactor_advisor-0.1.0.dist-info/direct_url.json",
+      "source": "/home/ts/wt/nra-installed-main-20260928"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "owner": "Schrodinger",
+  "completed_utc": "2026-09-30T16:39:15.924895+00:00",
+  "worktrees_removed": 11,
+  "worktree_allocated_bytes_before": 876609536,
+  "ignored_generated_bytecode_files_removed": 22673,
+  "bytecode_allocated_bytes_before": 585916416,
+  "owned_completed_dependency_prefixes_removed": 9,
+  "prefix_allocated_bytes_before": 747229184,
+  "total_allocated_bytes_before": 2209755136,
+  "home_available_initial_bytes": 21374332928,
+  "home_available_final_bytes": 22315827200,
+  "observed_home_net_available_delta_bytes": 941494272,
+  "accounting_limit": "Allocated sizes before deletion are not exclusive physical extents: uv/reflink shared content may remain in caches; concurrent stages and other filesystem writes also change available space. Do not equate removed allocated bytes with exclusive disk reclaimed.",
+  "worktree_method": "git worktree remove without force; all branches/commits kept",
+  "failed_removal_protected": "openhcs-centrosome-watershed-20260929: normal Git refused submodules; no force/deinit",
+  "parent240": "toad-comms450-paired-pin-20260930 kept due untracked .artifacts",
+  "protected": "current243/244/242/454 and active peer worktrees, all registry worktrees including stopped, proc/installed/pth/editable dependencies, dirty shared main, sources/Git stores/native packages/active private bus, original saved sessions/UNKNOWN/journals/proofs; borrowed npm cache kept",
+  "public_default_changes": 0,
+  "owners_restarted": 0,
+  "provider_calls": 0,
+  "records": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930"
+}

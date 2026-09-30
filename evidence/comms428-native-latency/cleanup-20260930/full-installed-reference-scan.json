@@ -1,0 +1,21 @@
+{
+  "files_checked": 273,
+  "references": [
+    {
+      "worktree": "/home/ts/wt/nra-installed-main-20260928",
+      "path": "/home/ts/.local/lib/python3.14/site-packages/nominal_refactor_advisor-0.1.0.dist-info/direct_url.json"
+    },
+    {
+      "worktree": "/home/ts/wt/toad-canonical-wire-transcript-20260929",
+      "path": "/home/ts/wt/comms-original-turn-custody-20260929/.routing-carry-runtime/lib/python3.14/site-packages/paired-dependencies.pth"
+    },
+    {
+      "worktree": "/home/ts/wt/comms-acp-saved-session-startup-20260928",
+      "path": "/home/ts/wt/comms-compaction-live-fix-20260928/.artifacts/runtime/lib/python3.14/site-packages/acceptance-dependencies.pth"
+    },
+    {
+      "worktree": "/home/ts/wt/toad-cleanup-tc2-sdk-20260929",
+      "path": "/home/ts/wt/toad-viewport-demand-20260929/.venv/lib/python3.14/site-packages/owned-reviewed-dependencies.pth"
+    }
+  ]
+}

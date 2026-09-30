@@ -1,0 +1,122 @@
+[
+  {
+    "path": "/home/ts/wt/toad-presentation-subscription-20260930",
+    "branch_kept": "refs/heads/perf/presentation-subscription-20260930",
+    "head_kept": "8dc20b152c2c2b122e27d4b02dd1b168510a9a8d",
+    "bytes_before": 65998848,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/comms-compaction-outcome-read-owner-20260930",
+    "branch_kept": "refs/heads/fix/compaction-outcome-read-owner-20260930",
+    "head_kept": "e309f2a3b90a03e4d283658631211b14916f6be8",
+    "bytes_before": 59895808,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/comms-maintenance-gate-20260926/.test-tmp/maintenance-legacy-generation-hotfix",
+    "branch_kept": "refs/heads/fix/maintenance-legacy-generation-type-20260926",
+    "head_kept": "a0a90d00ccc47a8add91cb27b4e5a24e63cb6ea1",
+    "bytes_before": 9199616,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/comms-presentation-source-revision-20260930",
+    "branch_kept": "refs/heads/perf/presentation-source-revision-20260930",
+    "head_kept": "306e3232b6e49f86caef6375235d1589da0264a2",
+    "bytes_before": 59555840,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/openhcs-centrosome-watershed-20260929",
+    "branch_kept": "refs/heads/fix/centrosome-watershed-registration-20260929",
+    "head_kept": "aebaa2686d9799f4383ea4e26e14992c85bcc612",
+    "bytes_before": 289587200,
+    "command": "git worktree remove, no force",
+    "exit": 128,
+    "removed": false,
+    "output": "fatal: working trees containing submodules cannot be moved or removed"
+  },
+  {
+    "path": "/home/ts/wt/openhcs-produced-output-address-20260930",
+    "branch_kept": "refs/heads/fix/produced-output-address-257-20260930",
+    "head_kept": "16bd289bf93ea71e1089cb303ec49c4c15241f9f",
+    "bytes_before": 276733952,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/openhcs-volume-projection-acceptance-257-20260930",
+    "branch_kept": "refs/heads/test/volume-projection-acceptance-257-20260930",
+    "head_kept": "dffefb2039a91b321aaf9f07808ceda821c087ef",
+    "bytes_before": 278171648,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/zmqruntime-viewer-admission-20260930",
+    "branch_kept": "refs/heads/integration/viewer-admission-20260930",
+    "head_kept": "2c68a114bc7121e6e72124edbaaf321cccc1a2b7",
+    "bytes_before": 929792,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/textual-batch-paint-admission-20260929",
+    "branch_kept": "refs/heads/fix/batch-paint-admission-20260929",
+    "head_kept": "5b696580952dfb5832b2429f82955101b9badaed",
+    "bytes_before": 62365696,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/textual-computed-read-notifications-20260929",
+    "branch_kept": "refs/heads/fix/computed-read-notifications-20260929",
+    "head_kept": "3936b5fe80bc6872604152846eafb5b2455747f3",
+    "bytes_before": 61874176,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/zmqruntime-ack-delivery-owner-20260930",
+    "branch_kept": "refs/heads/fix/ack-delivery-owner-20260930",
+    "head_kept": "e7dd84bf1a9c634fe8923d6dab6f94c14174e585",
+    "bytes_before": 954368,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  },
+  {
+    "path": "/home/ts/wt/zmqruntime-progress-annotation-20260929",
+    "branch_kept": "refs/heads/fix/progress-annotation-20260929",
+    "head_kept": "9a1ca783c7361969158dcf3e213a57338c33f51b",
+    "bytes_before": 929792,
+    "command": "git worktree remove, no force",
+    "exit": 0,
+    "removed": true,
+    "output": ""
+  }
+]

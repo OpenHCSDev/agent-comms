@@ -1,0 +1,102 @@
+{
+  "time": "2026-09-30T16:38:13.118238+00:00",
+  "removed": [
+    {
+      "path": "/home/ts/wt/toad-fork-task-editor-20260930/.artifacts/installed-fork-candidate",
+      "allocated_bytes": 81592320,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-fork-task-editor-20260930/installed-fork-candidate",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    },
+    {
+      "path": "/home/ts/wt/toad-fork-task-editor-20260930/.artifacts/installed-core440-fork",
+      "allocated_bytes": 82477056,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-fork-task-editor-20260930/installed-core440-fork",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    },
+    {
+      "path": "/home/ts/wt/toad-reconnect-source-publication-20260930/.artifacts/installed-reconnect-candidate",
+      "allocated_bytes": 82481152,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-reconnect-source-publication-20260930/installed-reconnect-candidate",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    },
+    {
+      "path": "/home/ts/wt/toad-original-stream-message-headers-20260930/.artifacts/installed-accepted-retirement",
+      "allocated_bytes": 80973824,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-original-stream-message-headers-20260930/installed-accepted-retirement",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    },
+    {
+      "path": "/home/ts/wt/toad-compaction-switch-admission-20260930/.artifacts/installed-goal-admission",
+      "allocated_bytes": 90030080,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-compaction-switch-admission-20260930/installed-goal-admission",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    },
+    {
+      "path": "/home/ts/wt/toad-compaction-display-continuity-20260930/.artifacts/installed-compaction-candidate",
+      "allocated_bytes": 82530304,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-compaction-display-continuity-20260930/installed-compaction-candidate",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    },
+    {
+      "path": "/home/ts/wt/toad-compaction-outcome-coverage-20260930/.artifacts/installed-outcome-candidate02",
+      "allocated_bytes": 82255872,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-compaction-outcome-coverage-20260930/installed-outcome-candidate02",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    },
+    {
+      "path": "/home/ts/wt/toad-compaction-outcome-coverage-20260930/.artifacts/installed-outcome-candidate01",
+      "allocated_bytes": 82542592,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-compaction-outcome-coverage-20260930/installed-outcome-candidate01",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    },
+    {
+      "path": "/home/ts/wt/toad-original-stream-message-headers-20260930/.artifacts/installed-core421-candidate",
+      "allocated_bytes": 82345984,
+      "owner": "Schrodinger completed native/UI installed gates",
+      "provenance_archive": "/home/ts/.cache/agent-scratch/worktree-cleanup-sch-20260930/completed-prefix-provenance/toad-original-stream-message-headers-20260930/installed-core421-candidate",
+      "evidence_siblings": "preserved",
+      "source": "preserved",
+      "normal_venv_contents": true,
+      "live_and_installed_external_refs": []
+    }
+  ],
+  "removed_count": 9,
+  "allocated_bytes": 747229184,
+  "skipped": [],
+  "home_available_before": 22058471424,
+  "home_available_after": 22317711360,
+  "concurrent_other_writes_possible": true,
+  "scope": "OWN completed obsolete dependency-only prefixes; original saved/private/UNKNOWN fixtures and evidence siblings untouched; no native package/runtime/source ancestor removed"
+}

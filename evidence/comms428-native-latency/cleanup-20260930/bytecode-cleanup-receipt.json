@@ -1,0 +1,36 @@
+{
+  "time": "2026-09-30T16:35:59.604188+00:00",
+  "removed_files": 22673,
+  "bytes": 538805397,
+  "blocks_bytes": 585916416,
+  "home_available_before": 21564538880,
+  "home_available_after": 22140293120,
+  "skipped": [
+    {
+      "worktree": "/home/ts/wt/toad-canonical-wire-transcript-20260929",
+      "reason": "active/open PR/registered/installed reference"
+    },
+    {
+      "worktree": "/home/ts/wt/comms-acp-saved-session-startup-20260928",
+      "reason": "active/open PR/registered/installed reference"
+    },
+    {
+      "worktree": "/home/ts/wt/comms-retained-task-memory-plan-20260929",
+      "reason": "active/open PR/registered/installed reference"
+    },
+    {
+      "worktree": "/home/ts/wt/openhcs-context-bounding-20260929",
+      "reason": "active/open PR/registered/installed reference"
+    },
+    {
+      "worktree": "/home/ts/wt/openhcs-input-preparation-20260929",
+      "reason": "active/open PR/registered/installed reference"
+    },
+    {
+      "worktree": "/home/ts/wt/zmqruntime-issue140-waiter-20260929",
+      "reason": "active/open PR/registered/installed reference"
+    }
+  ],
+  "scope": "Only original Git-ignored regular nlink1 generated __pycache__ .pyc in inactive/unreferenced WT source/test trees; source/evidence/native/runtime untouched",
+  "concurrent_other_writes_possible": true
+}
