@@ -22,7 +22,7 @@ from .native_admission_rules import (
     NativeReservationCheck,
 )
 from .native_input_owner import ParticipantOwner
-from .native_input_record import NativeInputRecord
+from .native_input_record import NativeInputIdentity
 from .native_pi import NativeContextProof
 from .native_prompt_binding import (
     PromptBinding,
@@ -56,9 +56,6 @@ class NativeSendStage(ABC):
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None: ...
 
     @abstractmethod
-    def matches_attempt(self, row: NativeInputRecord) -> bool: ...
-
-    @abstractmethod
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         """Fence this stage and reject any previous dispatch before inserting an ID."""
 
@@ -87,6 +84,12 @@ class NativeSendStage(ABC):
                 owner_token_digest=token_digest,
             ).insert(db)
         return input_id
+
+    def identity(self, input_id: str, owner) -> NativeInputIdentity:
+        return NativeInputIdentity(
+            input_id, self.assignment.assignment_id, self.stage, owner,
+            self.execution_id, self.attempt_ordinal,
+        )
 
     def pending_input(
         self, store: Coordination, input_id: str, owner: ParticipantOwner, token_digest: str
@@ -242,9 +245,6 @@ class TriageNativeSend(NativeSendStage):
             row.commit_context(db, context, verdict=decision.declared_name.lower())
             decision.settle(store, db, current)
 
-    def matches_attempt(self, row: NativeInputRecord) -> bool:
-        return row.execution_id is None and row.attempt_ordinal is None
-
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         if (
             current.lifecycle
@@ -311,12 +311,6 @@ class FullNativeSend(NativeSendStage):
             if snapshot.execution.exact_target != engagement.exact_target:
                 raise StaleFence("full-turn proof lost its exact reply target")
             row.commit_context(db, context)
-
-    def matches_attempt(self, row: NativeInputRecord) -> bool:
-        return (
-            row.execution_id == self.fence.execution_id
-            and row.attempt_ordinal == self.fence.attempt_ordinal
-        )
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         snapshot, attempt = store.attempts.require_fence(self.fence)
