@@ -134,21 +134,13 @@ class AssignedTranscriptSource:
         return cls(root, thread.incarnation, log)
 
     def rows(self, predicate="1", parameters=(), *, limit=1, ascending=False):
-        from .private_bus_checkpoint import conversation_sources_unlocked
-
-        with self.log.locked():
-            if not self.log.path.exists():
-                return ()
-            marker = self.log._private_marker_unlocked()
-            return conversation_sources_unlocked(
-                self.log,
-                marker,
-                stable_thread_lookup(self.recipient.created_at),
-                predicate,
-                parameters,
-                limit=limit,
-                ascending=ascending,
-            )
+        return self.log.conversation_sources(
+            stable_thread_lookup(self.recipient.created_at),
+            predicate,
+            parameters,
+            limit=limit,
+            ascending=ascending,
+        )
 
     @property
     def frontier(self):

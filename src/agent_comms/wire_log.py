@@ -7,7 +7,7 @@ import json
 import os
 import stat
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -51,8 +51,34 @@ class WireLog:
     @contextmanager
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None):
         """The existing canonical bus lock and durability read barrier."""
-        with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as descriptor:
-            yield descriptor
+        with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as lock:
+            yield lock.descriptor
+
+    @contextmanager
+    def certified_read(self):
+        """Borrow the original source verified by this canonical lock barrier."""
+        with _store_lock(self.path) as lock:
+            marker = self._private_marker_unlocked()
+            source = lock.certified_read()
+            source.require_marker(marker)
+            yield source
+            source.require_current()
+
+    def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
+        """Read an original window through its existing canonical barrier."""
+        from .private_bus_checkpoint import conversation_sources_unlocked
+
+        with _store_lock(self.path) as lock:
+            if not self.path.exists():
+                return ()
+            marker = self._private_marker_unlocked()
+            source = lock.certified_read()
+            source.require_marker(marker)
+            originals = conversation_sources_unlocked(
+                source, lookup, predicate, parameters, limit=limit, ascending=ascending
+            )
+            source.require_current()
+            return originals
 
     def full_history(self) -> list[Message]:
         with self.locked():
@@ -356,8 +382,8 @@ class WireLog:
 
         if not references:
             return ()
-        with self.locked():
-            return source_references_unlocked(self, self._private_marker_unlocked(), references)
+        with self.certified_read() as source:
+            return source_references_unlocked(source, references)
 
     def total_messages(self) -> int:
         with _store_lock(self.path):
@@ -428,7 +454,8 @@ class WireLog:
             raise RelationViolationError("Private checkpoint lacks its claim read barrier.")
         return metadata.claims
 
-    def verify_before_read_unlocked(self) -> None:
+    @contextmanager
+    def verify_before_read_unlocked(self):
         """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
 
         The marker is fsynced before the first claim send. A failed bus append may
@@ -438,6 +465,7 @@ class WireLog:
         entered by the shared bus lock, including ordinary inbox/history readers.
         """
         if not self.claim_gate_enabled():
+            yield None
             return
         private_marker = self.read_metadata_unlocked()
         marker = self.metadata_path
@@ -449,31 +477,30 @@ class WireLog:
             or stat.S_IMODE(marker_info.st_mode) != 0o600
         ):
             raise RelationViolationError("Claim bus read barrier is not durable and private.")
-        try:
-            # The private marker's source of truth is its single fsynced JSON file.
-            # The root identity/sequence/claim flag are validated again by private
-            # writers; this preflight protects all ordinary readers on marked roots.
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        with ExitStack() as resources:
             try:
-                descriptor = os.open(self.path, flags)
-            except FileNotFoundError:
-                descriptor = None
-            from .private_bus_checkpoint import certificate_enabled
+                # This original fsynced marker and opened source remain under the
+                # canonical flock. Its resource is never valid across releases.
+                flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                try:
+                    descriptor = os.open(self.path, flags)
+                except FileNotFoundError:
+                    descriptor = None
+                from .private_bus_checkpoint import (
+                    certificate_enabled,
+                    opened_private_checkpoint_unlocked,
+                )
 
-            if descriptor is None and (
-                certificate_enabled(self.path) or private_marker.checkpoint_seal is not None
-            ):
-                raise RelationViolationError("Private checkpoint bus inode is missing.")
-            if descriptor is not None:
-                with os.fdopen(descriptor, "rb") as stream:
+                if descriptor is None and (
+                    certificate_enabled(self.path) or private_marker.checkpoint_seal is not None
+                ):
+                    raise RelationViolationError("Private checkpoint bus inode is missing.")
+                source = None
+                if descriptor is not None:
+                    stream = resources.enter_context(os.fdopen(descriptor, "rb"))
                     if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                         raise RelationViolationError("Claim bus is not a regular file.")
                     os.fsync(stream.fileno())
-                    from .private_bus_checkpoint import (
-                        certificate_enabled,
-                        verify_private_bus_checkpoint_unlocked,
-                    )
-
                     if certificate_enabled(self.path) or private_marker.checkpoint_seal is not None:
                         private_marker = self._private_marker_unlocked()
                         if private_marker.checkpoint_seal is None:
@@ -487,18 +514,26 @@ class WireLog:
                             os.fsync(directory_fd)
                         finally:
                             os.close(directory_fd)
-                        verify_private_bus_checkpoint_unlocked(self, private_marker)
-                        return
-                    scan = WireScan(private_marker)
-                    while line := stream.readline(scan.max_row_bytes + 1):
-                        scan.read(line)
-            directory_fd = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        except OSError as error:
-            raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
+                        source = resources.enter_context(
+                            opened_private_checkpoint_unlocked(self, private_marker)
+                        )
+                    else:
+                        scan = WireScan(private_marker)
+                        while line := stream.readline(scan.max_row_bytes + 1):
+                            scan.read(line)
+                if source is None:
+                    directory_fd = os.open(
+                        self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                    )
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+            except OSError as error:
+                raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
+            # Caller exceptions keep their own cause and disposition. Closing
+            # borrowed resources does not run another admission or proof check.
+            yield source
 
     @property
     def metadata_path(self) -> Path:

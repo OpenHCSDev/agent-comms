@@ -221,3 +221,51 @@ def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monk
     monkeypatch.setattr(comms.transcripts, "thread_transcript_page", append_after_page)
     with pytest.raises(StaleRevision, match="during preparation"):
         read.read()
+
+
+def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatch):  # noqa: F811
+    import agent_comms.private_bus_checkpoint as checkpoint
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    saved = checkpoint._saved
+    reads = []
+
+    def observed(connection):
+        reads.append(True)
+        return saved(connection)
+
+    monkeypatch.setattr(checkpoint, "_saved", observed)
+    view = comms.views.thread_presentation("beta")
+    assert len(reads) == 1
+    assert view.notifications[0].message.reference == initial.message.reference
+
+
+def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noqa: F811
+    import sqlite3
+    from agent_comms.private_bus_checkpoint import source_references_unlocked
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    with comms.bus.log.certified_read() as source:
+        assert source.connection.execute("PRAGMA query_only").fetchone()[0] == 1
+        assert source_references_unlocked(source, (initial.message.reference,)) == (initial.message,)
+    assert source.stream.closed
+    with pytest.raises(sqlite3.ProgrammingError):
+        source.connection.execute("SELECT 1")
+    with pytest.raises(RelationViolationError, match="lock lifetime"):
+        source_references_unlocked(source, (initial.message.reference,))
+
+
+def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    comms.bus.log.path.unlink()
+    with pytest.raises(RelationViolationError, match="inode is missing"):
+        comms.views.thread_presentation("beta")
+
+
+def test_bus_guard_preserves_the_callers_original_failure(tmp_path):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    failure = OSError("Caller-owned failure after actual durability admission")
+    with pytest.raises(OSError) as raised:
+        with comms.bus.log.locked():
+            raise failure
+    assert raised.value is failure
