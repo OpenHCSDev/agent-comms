@@ -1,16 +1,23 @@
 {
-  "state": "source-integrated-not-installed-or-accepted",
+  "state": "source-integrated-checkpoints-merged-next-bus-resource-source-not-native-accepted",
   "pins": {
-    "integration": "adc4bc79d2ce05eeafb0c177e1b83c3d67cabb96",
-    "main": "3b03785f45df2ef5dc62ba6aed99294192ecbb01",
-    "430": "77b6c2c421e58575ce2fd70060f070c02995a9a4",
+    "integration": "f510f0daaaeb58daac37e95e7659f22f6ed226c8",
+    "main": "b71b0ef7ed088b32bc8d19462d2f89c593d86c3d",
+    "430": "9149d5ad38940a3537e1efcf08c422e490d43f17",
     "434": "bd18e9c3af02291d10fcc6b116a9d95b83001c6e",
     "436": "1db38fcd63ac313ceb5f7b481d7fd3824511c7a6",
-    "437": "accfd57233d0d46965edbf3aa35a0397c6fd61b0"
+    "437": "accfd57233d0d46965edbf3aa35a0397c6fd61b0",
+    "438": "97b1a03943b6d7b29bc856fc0cdab087b3b98a56"
   },
   "conflict_resolution": "Retain newest437 original saved-history readiness before any input; no producer implementation conflict.",
   "source_intersection_check": "10 affected custody/progress/provider cases passed in1.50s before receipt-only1db getter merge",
   "native_manifest_sha256": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
   "native_tree_sha256": "614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a",
-  "pending": "430 shared source transaction/public bind_page_read plus original436 result publication consumer; no API readiness inferred from ancestor alone"
+  "pending": "Latest430 opened certificate resource still needs CompactionBoundary inherited descriptor consumer migration, original SendReceipt consumer closure and whole installed messaging acceptance. Default remains222; no uncertain input replay.",
+  "accepted_fixture_cohort": "94152909d34a099afc70232f922ba78e0d9af7cd",
+  "accepted_scope": {
+    "compaction": "actual automatic400.918s/manual382.512s, real native and installed ACP/Toad widgets, no original replay",
+    "lifecycle": "continuous actual installed UI/native cancel-next input-goal edit-cancel-next input, exit0/89.168s",
+    "messaging": "FAILED real04 original response boundary bus lock before native bytes; UNKNOWN preserved"
+  }
 }

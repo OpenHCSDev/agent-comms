@@ -103,8 +103,8 @@ superseding the earlier serial fixture policy. Current lanes are Schrodinger's
 messaging/three-view gate, Einstein's437 compaction, and Arendt's436 actual
 cancel/goal/next-input lifecycle. Each uses its own fixture root, native forks,
 installation and original inputs. Read-only UI diagnosis continues separately.
-Latest resource check reports13.8GiB available RAM,20.0GiB free home storage
-and13.3GiB swap used; headroom remains a warning. Preserve uncertain attempts
+September30 resource check reports16.1GiB available RAM,30.3GiB free home storage
+and15.9GiB swap used; headroom remains a warning. Preserve uncertain attempts
 and clean only owned disposable artifacts. Shared live cutovers remain atomic
 operations under one owner, with no competing package mutation.
 
@@ -353,3 +353,53 @@ retained and are never replayed. Arendt's previous fixture120-second pre-tool
 wait cancelled a legitimate summarization, so its UNKNOWN journal is retained
 and a different below-window original-history fork is used for the separate
 whole lifecycle gate. No product whole-turn deadline was restored.
+
+## September30 merged checkpoints and next causal correction
+
+Core437 is merged b71b0ef7 after reviewing current main438/434 ancestry and the
+whole shared941 source. This is a useful shared compaction/resource checkpoint,
+not an independent compaction-only patch. Toad223 fixture is merged90123b5d.
+Original automatic and manual compaction both completed with configured Sol/high
+on43,194,077-byte native SDK forks:400.918s and382.512s. Original operation and
+source/elapsed progress, precommit drafts, canonical commit and original input
+disposition were checked through actual native/ACP and installed Toad widgets.
+These headless installed-app observations are not a physical default-terminal
+acceptance or a speed improvement; compaction still takes roughly six minutes.
+
+Arendt's same941 cohort actual installed continuous journey passed exit0 in
+89.168s: saved history, physical tool cancel, distinct next input/reply, native
+goal set/edit plus tool cancel, preserved public OwnerPaused and private failed
+attempt Blocked, then a distinct ordinary reply. Four fresh inputs started,
+zero originals replayed, all owned children retired. Sanitized original receipt
+is canonical-lifecycle-real05.json. Core436 keeps remaining ordinary SendReceipt
+producer/consumer closure; no broader S14 closure follows from this gate.
+
+Sch215 real04 failed again under the same941 original cohort. Original source
+publication and Responding-to-Failed handling were hot in sender/recipient/IRC,
+but original native prompt admission failed at the response boundary BUS lock
+before any bytes. The31-second idle, one-header/reply and A/B/A parts were not
+reached. Original UNKNOWN, journal, kernel samples and diagnostic remain
+protected. Mendel430 now publishes9149d5ad: opened verified source/index resource
+belongs to one actual canonical flock, so query readers do not open/decode the
+same certificate again. No proof cache, wider cap or lock bypass. Parent has
+normal-integrated this source; review found CompactionBoundary's direct lock-FD
+consumers still need migration before installed native acceptance. Mendel owns
+that correction. Sch owns the actual three-view read-only custody/profile
+comparison before another fresh configured-provider journey.
+
+Native614 was copied to the persistent standalone native-current-b68d artifact
+and the full package tree was verified through the941 installed trust owner.
+The nondefault backend stage points there, preserving the active source worktree.
+The default launcher cohort is unchanged. Old-schema writer, originals and
+uncertain attempts remain protected for the exact quiet cutover.
+
+Heisenberg217 has a concrete saved-native-history select/shrink/End reproducer:
+a hidden Cursor follower authored97 rows after history shrank, leaving no
+visible history. The new source deletes77 production lines including Cursor,
+follow_widget and all callers; selection remains with ContentNavigation and
+the gutter paints from committed geometry. Source reproducer now has14 rows,
+max scroll0 and visible history, including resize/idle. Parent reviewed the
+whole consumer deletion and stages f8bad541 with reviewedText650/Core720/native4ab
+for the sole original-history physical profile/video comparison. Earlier4103
+physical failure remains preserved. No scrolling readiness follows until the
+new installed journey is assessed.
