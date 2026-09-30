@@ -87,19 +87,10 @@ class HistoryViews:
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         """Read mounted references in the notification owner's bounded windows."""
-        from .errors import RelationViolationError
-
         result = {}
         limit = MessageNotification.window_limit
         for start in range(0, len(references), limit):
-            messages = []
-            for reference in references[start : start + limit]:
-                message = self.bus.log.message_by_id(reference.message_id)
-                if message is None or message.reference != reference:
-                    raise RelationViolationError(
-                        "Notification reference is not its original source"
-                    )
-                messages.append(message)
+            messages = self.bus.log.messages_for_references(references[start : start + limit])
             result.update(self.message_notifications(messages))
         return result
 

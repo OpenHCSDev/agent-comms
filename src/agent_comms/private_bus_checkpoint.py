@@ -17,7 +17,7 @@ import os
 import sqlite3
 import stat
 import tempfile
-from contextlib import closing, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -589,6 +589,44 @@ def certified_delivery_page_unlocked(
         raise RelationViolationError("Certified initial page is unavailable.") from error
 
 
+@contextmanager
+def conversation_read_unlocked(bus: WireLog, marker: WireMetadata):
+    """One opened source/index lifetime under the caller's canonical wire lock."""
+    path = _path(bus.path)
+    with closing(_connect(path, readonly=True)) as db, bus.path.open("rb") as stream:
+        saved = _saved(db)
+        marker.seal.check_final(saved, path)
+        if (
+            saved.root_id != marker.root_id
+            or saved.through_seq != marker.last_seq
+            or file_revision(bus.path.stat()) != saved.revision
+        ):
+            raise RelationViolationError("Conversation source needs a current certificate.")
+        yield db, stream, saved
+        marker.seal.check_final(saved, path)
+        if file_revision(bus.path.stat()) != saved.revision:
+            raise RelationViolationError("Conversation source changed during read.")
+
+
+def source_references_unlocked(bus: WireLog, marker: WireMetadata, references):
+    """Resolve a bounded window's original seq/id pairs in one certified read."""
+    with conversation_read_unlocked(bus, marker) as (db, stream, saved):
+        marks = ",".join("?" for _ in references)
+        rows = DeliverySources.select(
+            db, where=f"seq IN ({marks})", parameters=tuple(ref.seq for ref in references)
+        )
+        originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
+        messages = []
+        for reference in references:
+            original = next(
+                (item for item in originals if item.message.reference == reference), None
+            )
+            if original is None:
+                raise RelationViolationError("Notification reference is not its original source")
+            messages.append(original.message)
+        return tuple(messages)
+
+
 def conversation_sources_unlocked(
     bus: WireLog,
     marker: WireMetadata,
@@ -605,16 +643,7 @@ def conversation_sources_unlocked(
     name binding. Caller holds the bus lock. This read cannot install or repair
     a checkpoint, grant delivery, or advance any native-input cursor.
     """
-    path = _path(bus.path)
-    with closing(_connect(path, readonly=True)) as db, bus.path.open("rb") as stream:
-        saved = _saved(db)
-        marker.seal.check_final(saved, path)
-        if (
-            saved.root_id != marker.root_id
-            or saved.through_seq != marker.last_seq
-            or file_revision(bus.path.stat()) != saved.revision
-        ):
-            raise RelationViolationError("Conversation source needs a current certificate.")
+    with conversation_read_unlocked(bus, marker) as (db, stream, saved):
         rows = DeliverySources.read(
             db.execute(
                 f"SELECT w.* FROM {DeliverySources.declared_name} w JOIN ("
@@ -636,9 +665,6 @@ def conversation_sources_unlocked(
                 recipient.recipient_lookup == lookup for recipient in original.audience.recipients
             ):
                 raise RelationViolationError("Conversation index differs from frozen membership.")
-        marker.seal.check_final(saved, path)
-        if file_revision(bus.path.stat()) != saved.revision:
-            raise RelationViolationError("Conversation source changed during read.")
         return originals
 
 
