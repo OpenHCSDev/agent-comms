@@ -1,6 +1,6 @@
 {
   "scope": "exact AST direct BoolOp term screening; no semantic completeness or installed usability claim",
-  "baseline_recorded": "Core6feb 36 and earlier To ad8a924 3 direct six-plus sites in original16-CURRENT-S14-OWNERS",
+  "baseline_recorded": "Core6feb 36 and earlier Toad8a924 3 direct six-plus sites in original16-CURRENT-S14-OWNERS",
   "current": [
     {
       "revision": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",

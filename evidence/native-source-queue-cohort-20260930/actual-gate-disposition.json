@@ -16,5 +16,11 @@
   "original_failure": "/home/ts/wt/g458g/u01/proof/acceptance-failure.txt",
   "input_observation": "last original emitted frames show no submission, queue or native start",
   "owner": "Kepler: original test control boundary; Einstein: original process/disposition/raw capture and cleanup",
-  "next_action": "trace frozen worker versus editor-ready widget barrier; meaningful correction before another fresh input; no replay/timeout waiver"
+  "next_action": "trace frozen worker versus editor-ready widget barrier; meaningful correction before another fresh input; no replay/timeout waiver",
+  "control_correction": "e1d9ba540ef1cc6eb4c331e0d65fbcf90d9945ff",
+  "control_review": "original reveal/click/draft/widget-ready before fixture worker suspension; physical Enter to original emitted pending ANSI remains strict",
+  "production_changed": false,
+  "timeout_changed": false,
+  "oracle_weakened": false,
+  "runner": "Einstein fresh fixture, original product immutable; independent Schrodinger bus fixture"
 }
