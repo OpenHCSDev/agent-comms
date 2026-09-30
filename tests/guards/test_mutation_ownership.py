@@ -16,10 +16,28 @@ SOURCE = Path(__file__).resolve().parents[2] / "src" / "agent_comms"
 
 def test_no_mutation_aggregate_or_compatibility_dispatch():
     assert not (SOURCE / "coordination_store.py").exists()
+    assert not (SOURCE / "goal_pauses.py").exists()
     failures = []
     for path in SOURCE.rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Name)
+                and node.id == "last_goal_report_turn"
+                or isinstance(node, ast.Attribute)
+                and node.attr in {"last_goal_report_turn", "allows_control"}
+                or isinstance(node, ast.Constant)
+                and node.value == "last_goal_report_turn"
+            ):
+                failures.append((path, node.lineno))
             if isinstance(node, ast.Name) and node.id == "MutationStore":
+                failures.append((path, node.lineno))
+            if (
+                isinstance(node, (ast.Name, ast.ClassDef))
+                and (node.id if isinstance(node, ast.Name) else node.name)
+                in {"GoalPauseEvent", "GoalPauseEvents"}
+                or isinstance(node, ast.Attribute) and node.attr == "goal_pause"
+                or isinstance(node, ast.Constant) and node.value == "goal_pause_events.json"
+            ):
                 failures.append((path, node.lineno))
             if isinstance(node, ast.ClassDef) and node.name == "MutationStore":
                 failures.append((path, node.lineno))

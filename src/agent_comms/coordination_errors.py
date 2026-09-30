@@ -29,6 +29,13 @@ class RecoveryBlocked(CoordinationError):  # noqa: N818 - nominal outcome name
     """A dead attempt lacks authoritative backend-final evidence."""
 
 
+class ResponseAdmissionBlocked(RecoveryBlocked):
+    """Response publication lacks final evidence or its exact retained route."""
+
+    def __init__(self):
+        super().__init__("response requires final model/death evidence and exact wire route")
+
+
 class PublicationUncertain(CoordinationError):  # noqa: N818 - nominal outcome name
     """A frozen publishing intent has no authoritative bus-keyed receipt."""
 

@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Literal
 from .diagnostics import FailureReason
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
-from .goal_pauses import GoalPauseEvent
 from .goals import Goal
 from .recovery_projection import _preflight
 from .thread_identity import AdmissionIdentity, ThreadIncarnation, TurnIdentity
@@ -178,11 +177,10 @@ def read_failed_turn_projection(
     owner: Thread,
     owner_status: ThreadStatus,
     admission: int,
-    pause: GoalPauseEvent | None,
 ) -> FailedTurnProjection:
     """Read the existing private goal ledger, never initialize/migrate/repair it.
 
-    Caller supplies trusted canonical registry/pause snapshots, not a viewer's
+    Caller supplies trusted canonical registry snapshots, not a viewer's
     claimed identity. Samples are not an atomic cross-store revision and must
     never be used for dispatch or as evidence of absence of an owner pause.
     """

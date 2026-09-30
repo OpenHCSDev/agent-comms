@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.relationships import RelationshipEdit
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -174,7 +175,9 @@ def test_owner_rename_keeps_only_the_bound_owner_incarnation(tmp_path: Path) -> 
 
 def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
-    manual = comms.relationships.edit("owner", "add", "peer", "Accepted review separately")
+    manual = comms.relationships.edit(
+        "owner", RelationshipEdit.decode("add"), "peer", "Accepted review separately"
+    )
     original = (comms.relationships.store.path).read_bytes()
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Please consider @peer"))
     assert goal is not None
@@ -195,9 +198,11 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
         "owner", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
     assert _rows(comms, "owner")[0][0].sources == ("explicit", "goal_mention")
-    comms.relationships.edit("owner", "remove", "peer")
+    comms.relationships.edit("owner", RelationshipEdit.decode("remove"), "peer")
     assert _rows(comms, "owner")[0][0].sources == ("goal_mention",)
-    comms.relationships.edit("owner", "add", "peer", "Explicit retained note")
+    comms.relationships.edit(
+        "owner", RelationshipEdit.decode("add"), "peer", "Explicit retained note"
+    )
     comms.goals.update_goal(
         "owner", EditGoalAction(expect=GoalPrecondition(goal_id=goal.id), text="No peer mention")
     )
@@ -222,7 +227,9 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, goal_mention: bool
 ) -> None:
     comms = _wire(tmp_path)
-    manual = comms.relationships.edit("owner", "add", "peer", "Explicit note survives")
+    manual = comms.relationships.edit(
+        "owner", RelationshipEdit.decode("add"), "peer", "Explicit note survives"
+    )
     assert manual is not None
     if goal_mention:
         comms.goals.update_goal("owner", SetGoalAction(text="Review with @peer"))
@@ -269,7 +276,9 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     assert goal is not None
     comms.owners.stop("owner")
     comms.registry.remove("owner")
-    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), goal=goal, created_at=18001.0))
+    comms.registry.declare(
+        Thread("owner", frozenset(), str(tmp_path), goal=goal, created_at=18001.0)
+    )
     assert _rows(comms, "peer")[0] == ()
     assert _rows(comms, "owner")[0] == ()
     assert not comms.relationships.store.path.exists()

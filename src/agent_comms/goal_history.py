@@ -40,6 +40,10 @@ class GoalHistoryEntry(TypedTable):
     )
     indexes = (Index(("owner_created_at", "sequence")),)
 
+    def reports_turn(self, turn_id: str) -> bool:
+        """A committed goal revision records its original model reporting turn."""
+        return self.after is not None and self.after.reported_turn == turn_id
+
     def to_wire(self) -> dict[str, object]:
         # Preserve nested Goal family tags while projecting only public entry fields.
         return {
