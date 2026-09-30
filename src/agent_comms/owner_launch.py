@@ -88,7 +88,7 @@ class RetainedOwnerLaunch:
 
     process: ProcessIdentity
     interpreter: str
-    environment: Mapping[str, str] = field(repr=False)
+    environment: dict[str, str] = field(repr=False)
 
     @classmethod
     def capture(
