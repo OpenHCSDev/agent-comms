@@ -53,7 +53,9 @@ class NativeStartupAdmission:
         self.fd: int | None = None
 
     @classmethod
-    def for_launch(cls, launch):
+    def for_launch(cls, launch, *, root: Path | None = None):
+        if root is not None:
+            return cls(root)
         return cls(
             Path(
                 launch.env.get("AGENT_COMMS_ROOT")
