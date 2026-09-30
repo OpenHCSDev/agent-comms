@@ -15,6 +15,8 @@ from agent_comms.acp_extension import (
     InputStartedUpdate,
     QueueChangedUpdate,
     QueueItem,
+    CursorScope,
+    QueueScope,
     QueuePromptRequest,
     UnavailableQueueProjection,
     decode_updates,
@@ -98,8 +100,8 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
 
 
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
-    _, agent, _, _ = _owner(tmp_path)
-    agent.turns.active_turns["beta"] = "active"
+    comms, agent, _, _ = _owner(tmp_path)
+    comms.agents.begin_turn("beta", "active", "Held native fixture")
     inbox = agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
     response = await agent.prompt(
         "beta",
@@ -124,8 +126,8 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
 
 @pytest.mark.parametrize("user_text", [["list"], [], {"text": "dict"}, 7, False])
 async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tmp_path, user_text):
-    _, agent, _, _ = _owner(tmp_path)
-    agent.turns.active_turns["beta"] = "active"
+    comms, agent, _, _ = _owner(tmp_path)
+    comms.agents.begin_turn("beta", "active", "Held native fixture")
     inbox = agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
     metadata = encode_request(QueuePromptRequest("valid", True))
     metadata["agentComms"]["request"]["user_text"] = user_text
@@ -164,10 +166,27 @@ async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path
 
 
 def test_alias_maps_only_attachment_session_id(tmp_path):
-    _, agent, _, _ = _owner(tmp_path)
+    comms, agent, _, _ = _owner(tmp_path)
     state = agent.inputs.queue_state("beta")
     (rebased,) = decode_updates(present_session(encode_updates(state), "alias"))
     assert rebased.scope.session_id == "alias"
     assert rebased.scope.owner == state.scope.owner
     assert rebased.projection is not None and rebased.projection == state.projection
     assert state.scope.session_id == "beta"
+
+
+def test_attachment_routing_rename_preserves_exact_executor_fences():
+    from dataclasses import replace
+    original = OwnerIdentity(ThreadIncarnation("old-route", 1000.0), 7)
+    renamed = replace(original, incarnation=replace(original.incarnation, name="new-route"))
+    scopes = (QueueScope("official-acp-id", original, 123),
+              CursorScope("official-acp-id", "a" * 32, original, 123))
+    for scope in scopes:
+        assert scope.relation(replace(scope, owner=renamed)).current
+        assert scope.relation(replace(scope, session_id="new-route")).foreign
+        assert scope.relation(replace(scope, owner_pid=124)).ambiguous
+        assert scope.relation(replace(scope, owner=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
+        assert scope.relation(replace(scope, owner=replace(original, generation=8))).newer
+        assert scope.relation(replace(scope, owner=replace(original, generation=6))).older
+    assert scopes[1].relation(replace(scopes[1], wire_root_id="b" * 32)).foreign
+    assert original != renamed  # Routing identity equality is deliberately unchanged.

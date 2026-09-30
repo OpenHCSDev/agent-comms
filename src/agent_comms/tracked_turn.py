@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import pi_commands as commands
 from . import pi_events as pi
+from .agent_events import AgentEvent
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
 from .child_process import AttachedChild
 from .errors import RelationViolationError
@@ -100,7 +101,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         maintenance_root: Path | None = None,
         fresh_selected: FreshPrivateSession | None = None,
         selected_tool_mode: NativeToolMode | None = None,
-        observe_event: Callable[[pi.PiEvent], Awaitable[None]] | None = None,
+        observe_event: Callable[[pi.PiEvent | AgentEvent], Awaitable[None]] | None = None,
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -172,8 +173,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 await self.admit_prompt()
                 while not self.finished:
                     event = await self.next_event()
-                    async for _ in self.consume_native_event(event):
-                        pass
+                    async for update in self.consume_native_event(event):
+                        if self.observe_event is not None:
+                            await self.observe_event(update)
                     if not self.finished and self.observe_event is not None:
                         await self.observe_event(event)
                 return self.result()

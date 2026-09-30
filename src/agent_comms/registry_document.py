@@ -328,6 +328,15 @@ class RegistryDocument:
             admission_generation=lease.admission_generation,
         )
 
+    def transition_turn(self, lease: TurnLeaseFence, phase) -> bool:
+        """Only the existing exact lease can publish its observed phase."""
+        name = self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)
+        current = self.threads.get(name)
+        if current is None or current.turn_lease != lease.renamed(name):
+            return False
+        self.threads[name] = replace(current, active_turn=replace(current.active_turn, phase=phase))
+        return True
+
 
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot:

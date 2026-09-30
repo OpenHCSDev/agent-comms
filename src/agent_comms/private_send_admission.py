@@ -33,6 +33,7 @@ from .text_digest import TextDigest
 from .tracked_turn import TrackedTurnSession
 
 if TYPE_CHECKING:
+    from .agent_events import AgentEvent
     from .pi_events import PiEvent
     from .selected_tool_broker import NativeToolMode
 from .private_registry_guard import _require_no_private_owner_rename
@@ -132,7 +133,7 @@ class PrivateSendAdmission:
         provider: str,
         model: str,
         selected_tool_mode: NativeToolMode | None = None,
-        observe_event: Callable[[PiEvent], Awaitable[None]] | None = None,
+        observe_event: Callable[[PiEvent | AgentEvent], Awaitable[None]] | None = None,
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
 

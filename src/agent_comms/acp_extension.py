@@ -25,6 +25,7 @@ from .native_runtime_input import CurrentNativeCursor
 from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
 from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .turn_lease import TurnState
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 
 if TYPE_CHECKING:
@@ -43,20 +44,8 @@ class AgentCommsUpdate(DeclaredFamily, affix="Update"):
 
 
 @dataclass(frozen=True)
-class TurnStartedUpdate(AgentCommsUpdate):
-    turn_id: str
-    started_at: float | None
-    activity: str | None
-    activity_detail: str | None
-
-    def __post_init__(self) -> None:
-        if not self.turn_id or self.started_at is not None and self.started_at <= 0:
-            raise ValueError("A started turn needs its actual ID and optional observed time")
-
-
-@dataclass(frozen=True)
-class TurnSettledUpdate(AgentCommsUpdate):
-    turn_id: str | None
+class TurnChangedUpdate(AgentCommsUpdate):
+    state: TurnState
 
 
 @dataclass(frozen=True)
@@ -113,8 +102,63 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     return FieldCodec.decode(UpdateBatch, extension).updates
 
 
+class AttachmentScope:
+    """Logical ACP attachment and executor evidence have separate identities."""
+    session_id: str
+    owner: OwnerIdentity
+    owner_pid: int
+
+    @property
+    @abstractmethod
+    def logical_key(self) -> tuple[str, ...]: ...
+
+    @property
+    def owner_created_at(self):
+        return self.owner.incarnation.created_at
+
+    @property
+    def admission_generation(self):
+        return self.owner.generation
+
+    def relation(self, other: AttachmentScope) -> AttachmentRelation:
+        return AttachmentRelation(self, other)
+
+
 @dataclass(frozen=True)
-class CursorScope:
+class AttachmentRelation:
+    """Compare original scope witnesses once; no state or alias registry."""
+    original: AttachmentScope
+    received: AttachmentScope
+
+    @property
+    def foreign(self):
+        return self.original.logical_key != self.received.logical_key
+
+    @property
+    def same_incarnation(self):
+        return (not self.foreign and self.original.owner_created_at == self.received.owner_created_at)
+
+    @property
+    def ambiguous(self):
+        return (not self.same_incarnation or
+                (self.original.admission_generation == self.received.admission_generation
+                 and self.original.owner_pid != self.received.owner_pid))
+
+    @property
+    def newer(self):
+        return self.same_incarnation and self.received.admission_generation > self.original.admission_generation
+
+    @property
+    def older(self):
+        return self.same_incarnation and self.received.admission_generation < self.original.admission_generation
+
+    @property
+    def current(self):
+        return not (self.foreign or self.ambiguous or self.newer or self.older)
+
+
+@dataclass(frozen=True)
+class CursorScope(AttachmentScope):
     session_id: str
     wire_root_id: str
     owner: OwnerIdentity
@@ -133,15 +177,8 @@ class CursorScope:
 
     @property
     def logical_key(self):
-        return self.session_id, self.wire_root_id, self.owner.incarnation.name
+        return self.session_id, self.wire_root_id
 
-    @property
-    def owner_created_at(self):
-        return self.owner.incarnation.created_at
-
-    @property
-    def admission_generation(self):
-        return self.owner.generation
 
 
 class CursorObservation(DeclaredFamily, affix="CursorObservation"):
@@ -240,22 +277,15 @@ class CursorAdvancedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
-class QueueScope:
+class QueueScope(AttachmentScope):
     session_id: str
     owner: OwnerIdentity
     owner_pid: int
 
     @property
     def logical_key(self):
-        return self.session_id, self.owner.incarnation.name
+        return (self.session_id,)
 
-    @property
-    def owner_created_at(self):
-        return self.owner.incarnation.created_at
-
-    @property
-    def admission_generation(self):
-        return self.owner.generation
 
 
 @dataclass(frozen=True)
