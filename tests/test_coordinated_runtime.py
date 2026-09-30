@@ -825,8 +825,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
         cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
         assert cursor is not None and cursor.input_id == outcome.input_id
         response = next(
-            message
-            for message in comms.bus.log.full_history()
+            message for message in comms.bus.log.full_history()
             if message.message_id == outcome.response_message_id
         )
         # The published own reply is nonbinding for beta, but belongs to the

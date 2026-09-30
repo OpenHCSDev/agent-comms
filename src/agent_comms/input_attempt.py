@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
+from .native_input_record import NativeInputIdText
 from .thread_identity import GenerationCounter, ThreadIncarnation
 from .threads import Thread
 
@@ -17,9 +17,6 @@ if TYPE_CHECKING:
     from .text_digest import TextDigest
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
-
-_NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
-
 
 @dataclass(frozen=True, slots=True)
 class GoalInputDecision:
@@ -228,8 +225,15 @@ class SentInput(StoredInput):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if not self.turn_id or _NATIVE_ID.fullmatch(self.native_id) is None or not self.sent_text:
-            raise ValueError("Invalid native input attempt")
+        try:
+            from .thread_identity import TurnId
+
+            TurnId.for_registration(self.turn_id)
+            NativeInputIdText.decode(self.native_id)
+            if not FieldCodec.decode(str, self.sent_text):
+                raise ValueError("Native input text cannot be empty")
+        except ValueError as error:
+            raise ValueError("Invalid native input attempt") from error
 
     @property
     def sent_digest(self) -> TextDigest:
