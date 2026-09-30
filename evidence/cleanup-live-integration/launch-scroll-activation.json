@@ -1,0 +1,13 @@
+{
+  "launcher_names": [
+    "agent-comms",
+    "agent-comms-acp",
+    "agent-comms-agent",
+    "agent-comms-nk-foreground",
+    "toad"
+  ],
+  "core": "72062939239b0f07707406309305a056a23f925f",
+  "toad": "540bc85c29f25bfb434346950cafff7688d9ef8e",
+  "textual": "412b5a2b5da8875dc2f3dc5be2365abddce0537b",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+}

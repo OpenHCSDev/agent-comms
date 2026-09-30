@@ -1,0 +1,478 @@
+{
+  "result": "PASS default-entrypoint physical two-existing-tab close/reopen and application shutdown",
+  "merge": "e21363c874dfdbbebd61bbdb060f709bcaef8179",
+  "installed_toad": "6660cb6854bda7af056865326e1bb494f4690faf",
+  "ready_source": "aebb8aa160d342d01434732af1b571868c5765d8",
+  "duration_seconds": 31.802746496978216,
+  "default_launch": {
+    "python": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/python",
+    "command": [
+      "toad-comms",
+      "nra-architecture"
+    ],
+    "runtime_override_present": false,
+    "acp_override_present": false,
+    "default_acp": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-acp",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza"
+  },
+  "recorder_argv": [
+    "/home/ts/wt/toad-viewport-demand-20260929/tests/tools/record_installed_tui.py",
+    "--output",
+    "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture",
+    "--owner",
+    "Heisenberg-PR222-default",
+    "--capture-target",
+    "existing_thread",
+    "--journey",
+    "saved_tab_close",
+    "--capture-state",
+    "--actions",
+    "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/close-open.xdo",
+    "--review-timing",
+    "deferred",
+    "--width",
+    "1280",
+    "--height",
+    "900",
+    "--fit-window",
+    "--startup-wait",
+    "12",
+    "--max-duration",
+    "80",
+    "--tail-seconds",
+    "3",
+    "--",
+    "toad-comms",
+    "nra-architecture"
+  ],
+  "runtime_before": {
+    "selection": "PATH agent-comms-acp",
+    "bin_directory": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin",
+    "launcher": "/home/ts/.agent-comms/stack/bin/toad-comms",
+    "launcher_sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/bin/toad-comms",
+        "resolved_path": "/home/ts/.agent-comms/stack/bin/toad-comms",
+        "sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.local/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-acp",
+        "sha256": "e73c1e2e7e154e8cc14f1909b1da2160fba6794aee1671bd2b2cbfac0857d040"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/toad",
+        "sha256": "c8587dffac01abb24cca022524fae88c3089a879ca44ae6feba97025e269eddb"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-acp",
+        "sha256": "e73c1e2e7e154e8cc14f1909b1da2160fba6794aee1671bd2b2cbfac0857d040"
+      }
+    },
+    "activation_path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/activation.json",
+    "activation_sha256": "0162967319ffc7db1fc5103c70980733fca9b0d86e8605b0e2abd2625e183ece",
+    "activation": {
+      "launcher_names": [
+        "agent-comms",
+        "agent-comms-acp",
+        "agent-comms-agent",
+        "agent-comms-nk-foreground",
+        "toad"
+      ],
+      "core": "72062939239b0f07707406309305a056a23f925f",
+      "toad": "6660cb6854bda7af056865326e1bb494f4690faf",
+      "textual": "412b5a2b5da8875dc2f3dc5be2365abddce0537b",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+    },
+    "observed": {
+      "python": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/python",
+      "prefix": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "4487a16d1e68b97fc2662b49442969e9f2e4c6446235cf3a906f061d33f1b1af",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "6660cb6854bda7af056865326e1bb494f4690faf",
+              "requested_revision": "6660cb6854bda7af056865326e1bb494f4690faf"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "9df0e84ad2c01198fc86014a1f7c3e3868b49259efe6e28c21606cba42f3b0f6",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "412b5a2b5da8875dc2f3dc5be2365abddce0537b",
+              "requested_revision": "412b5a2b5da8875dc2f3dc5be2365abddce0537b"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "c00941441d844501e227f87db83b8e63e83cf76d0699c4a8bab547f7d666a569",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "72062939239b0f07707406309305a056a23f925f",
+              "requested_revision": "72062939239b0f07707406309305a056a23f925f"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "runtime_after": {
+    "selection": "PATH agent-comms-acp",
+    "bin_directory": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin",
+    "launcher": "/home/ts/.agent-comms/stack/bin/toad-comms",
+    "launcher_sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/bin/toad-comms",
+        "resolved_path": "/home/ts/.agent-comms/stack/bin/toad-comms",
+        "sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.local/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-acp",
+        "sha256": "e73c1e2e7e154e8cc14f1909b1da2160fba6794aee1671bd2b2cbfac0857d040"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/toad",
+        "sha256": "c8587dffac01abb24cca022524fae88c3089a879ca44ae6feba97025e269eddb"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-acp",
+        "sha256": "e73c1e2e7e154e8cc14f1909b1da2160fba6794aee1671bd2b2cbfac0857d040"
+      }
+    },
+    "activation_path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/activation.json",
+    "activation_sha256": "0162967319ffc7db1fc5103c70980733fca9b0d86e8605b0e2abd2625e183ece",
+    "activation": {
+      "launcher_names": [
+        "agent-comms",
+        "agent-comms-acp",
+        "agent-comms-agent",
+        "agent-comms-nk-foreground",
+        "toad"
+      ],
+      "core": "72062939239b0f07707406309305a056a23f925f",
+      "toad": "6660cb6854bda7af056865326e1bb494f4690faf",
+      "textual": "412b5a2b5da8875dc2f3dc5be2365abddce0537b",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+    },
+    "observed": {
+      "python": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/python",
+      "prefix": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "4487a16d1e68b97fc2662b49442969e9f2e4c6446235cf3a906f061d33f1b1af",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "6660cb6854bda7af056865326e1bb494f4690faf",
+              "requested_revision": "6660cb6854bda7af056865326e1bb494f4690faf"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "9df0e84ad2c01198fc86014a1f7c3e3868b49259efe6e28c21606cba42f3b0f6",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "412b5a2b5da8875dc2f3dc5be2365abddce0537b",
+              "requested_revision": "412b5a2b5da8875dc2f3dc5be2365abddce0537b"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "c00941441d844501e227f87db83b8e63e83cf76d0699c4a8bab547f7d666a569",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "72062939239b0f07707406309305a056a23f925f",
+              "requested_revision": "72062939239b0f07707406309305a056a23f925f"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "owners_before": {
+    "nra-architecture": {
+      "pid": 2126072,
+      "start_time": 20963438,
+      "created_at": 1790049182.3907015,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl"
+    },
+    "agent-comms-ux": {
+      "pid": 2060356,
+      "start_time": 20748602,
+      "created_at": 1790049004.0955005,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl"
+    }
+  },
+  "owners_after": {
+    "nra-architecture": {
+      "pid": 2126072,
+      "start_time": 20963438,
+      "created_at": 1790049182.3907015,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+      "alive": true
+    },
+    "agent-comms-ux": {
+      "pid": 2060356,
+      "start_time": 20748602,
+      "created_at": 1790049004.0955005,
+      "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl",
+      "alive": true
+    }
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": []
+  },
+  "terminal_log": "erresc: unknown csi ESC[>25u\nerresc: unknown csi ESC[?2026$p\nerresc: unknown csi ESC[?2048$p\nerresc: unknown str ESC]22\nerresc: unknown str ESC]22\nerresc: unknown str ESC]22\nerresc: unknown str ESC]22\nerresc: unknown str ESC]22\nerresc: unknown str ESC]22\nerresc: unknown str ESC]22\nerresc: unknown str ESC]22\nerresc: unknown str ESC]22\nerresc: unknown csi ESC[<u\n",
+  "phases": {
+    "before": {
+      "selected": "session-1",
+      "tabs": [
+        "session-1"
+      ],
+      "views": [
+        {
+          "mode": "session-1",
+          "thread": "nra-architecture",
+          "loaded_pages": 1,
+          "contents": {
+            "TranscriptHistory": 1
+          }
+        }
+      ]
+    },
+    "phase-existing-opened": {
+      "selected": "session-2",
+      "tabs": [
+        "session-1",
+        "session-2"
+      ],
+      "views": [
+        {
+          "mode": "session-1",
+          "thread": "nra-architecture",
+          "loaded_pages": 1,
+          "contents": {
+            "TranscriptHistory": 1
+          }
+        },
+        {
+          "mode": "session-2",
+          "thread": "agent-comms-ux",
+          "loaded_pages": 0,
+          "contents": {
+            "ThreadLoading": 1
+          }
+        }
+      ]
+    },
+    "phase-close": {
+      "selected": "session-1",
+      "tabs": [
+        "session-1",
+        "session-2"
+      ],
+      "views": [
+        {
+          "mode": "session-1",
+          "thread": "nra-architecture",
+          "loaded_pages": 1,
+          "contents": {
+            "TranscriptHistory": 1
+          }
+        },
+        {
+          "mode": "session-2",
+          "thread": "agent-comms-ux",
+          "loaded_pages": 1,
+          "contents": {
+            "TranscriptHistory": 1,
+            "AssignedIncomingMessage": 1
+          }
+        }
+      ]
+    },
+    "phase-close-done": {
+      "selected": "session-2",
+      "tabs": [
+        "session-2"
+      ],
+      "views": [
+        {
+          "mode": "session-2",
+          "thread": "agent-comms-ux",
+          "loaded_pages": 1,
+          "contents": {
+            "TranscriptHistory": 1
+          }
+        }
+      ]
+    },
+    "phase-reopened": {
+      "selected": "session-3",
+      "tabs": [
+        "session-2",
+        "session-3"
+      ],
+      "views": [
+        {
+          "mode": "session-2",
+          "thread": "agent-comms-ux",
+          "loaded_pages": 1,
+          "contents": {
+            "TranscriptHistory": 1
+          }
+        },
+        {
+          "mode": "session-3",
+          "thread": "nra-architecture",
+          "loaded_pages": 0,
+          "contents": {
+            "ThreadLoading": 1
+          }
+        }
+      ]
+    },
+    "after": {
+      "selected": "session-3",
+      "tabs": [
+        "session-2",
+        "session-3"
+      ],
+      "views": [
+        {
+          "mode": "session-2",
+          "thread": "agent-comms-ux",
+          "loaded_pages": 1,
+          "contents": {
+            "TranscriptHistory": 1
+          }
+        },
+        {
+          "mode": "session-3",
+          "thread": "nra-architecture",
+          "loaded_pages": 1,
+          "contents": {
+            "TranscriptHistory": 1
+          }
+        }
+      ]
+    }
+  },
+  "diagnostic_archive_error": {
+    "error": "Traceback (most recent call last):\n  File \"/home/ts/wt/toad-viewport-demand-20260929/tools/performance/capture_state.py\", line 225, in persist\n    pickle.dump(payload, output, protocol=5)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: cannot pickle 'builtins.Region' object\nwhen serializing dict item 'region'\nwhen serializing dict item 'geometry'\nwhen serializing list item 0\nwhen serializing dict item 'nodes'\nwhen serializing dict item 'full'\nwhen serializing dict item 'maps'\nwhen serializing dict item 'compositor'\nwhen serializing dict item 'metadata'\n"
+  },
+  "scope_limit": "Diagnostic pickle failed for builtins.Region after metadata JSON persisted. Phase metadata and actual PNG/video certify journey. Full scrolling217/221 remains failed, not certified.",
+  "artifacts": {
+    "before.png": {
+      "path": "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture/before.png",
+      "sha256": "321f091b6e9b4a563e2c5858d2f319b283886125048c31f00350178d3a48e18b",
+      "bytes": 129812
+    },
+    "phase-close-done.png": {
+      "path": "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture/phase-close-done.png",
+      "sha256": "169a57f55670b6d8f30df15ee2b6c4c9215b279a3e51aa30c6686f012eb44fc4",
+      "bytes": 103396
+    },
+    "after.png": {
+      "path": "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture/after.png",
+      "sha256": "ef6a37f42c79d3ef06b0f4c4672a5ed8af15555b01bb4ad03cdc9e46eecbe310",
+      "bytes": 130999
+    },
+    "receipt.json": {
+      "path": "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture/receipt.json",
+      "sha256": "7931f185993a9028e6e90e8b1b3a07e25a3995548cf6ef4a33e1318b7c42374d",
+      "bytes": 48615
+    },
+    "events.jsonl": {
+      "path": "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture/events.jsonl",
+      "sha256": "c5c31275c4b0334e9f64dc705201b2683b533f8d77d51e458f6a5cc5f41a0818",
+      "bytes": 16079
+    },
+    "terminal.mp4": {
+      "path": "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture/terminal.mp4",
+      "sha256": "77bef796f2671dda1af5517c1a57c3a8c3374ca9624a5c2c798ac41a9ca8868d",
+      "bytes": 1678792
+    },
+    "before-state-metadata.json": {
+      "path": "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture/before-state-metadata.json",
+      "sha256": "f3558facf2364a53fe781de0307b0fe2c0cd20805e169ce239acaef827f97dc2",
+      "bytes": 878977
+    },
+    "after-state-metadata.json": {
+      "path": "/home/ts/.cache/agent-scratch/toad-reader-217-default-disposal-20260929/capture/after-state-metadata.json",
+      "sha256": "b800aadbde8206045cccfbc66861337639fdfb2d0a6b4be26282592fb1ac7006",
+      "bytes": 756491
+    }
+  },
+  "physical_frame_review": {
+    "before": "Visible nra-architecture saved history, sidebar, top navigation and prompt",
+    "after_close": "Only agent-comms-ux tab remains; its actual saved history and sidebar visible",
+    "after_reopen": "agent-comms-ux and nra-architecture tabs present; nra selected, saved history glyphs visible"
+  },
+  "video_capture_exit": {
+    "process": "ffmpeg",
+    "returncode": 255,
+    "reason": "Recorder explicitly capture.stop(signal.SIGINT) after final screenshot; accepted0/255. Not Toad exit code."
+  },
+  "terminal_exit": {
+    "pid": 2257766,
+    "returncode": 0,
+    "proof": "Installed recorder cleanup child-process receipt for actual st terminal"
+  }
+}

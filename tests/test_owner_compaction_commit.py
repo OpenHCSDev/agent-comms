@@ -32,7 +32,8 @@ from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_summary_payloads import SummaryFiles, SummaryUsage
 from agent_comms.registration import Registration
-from agent_comms.session_fence import SessionWriterBusyError, session_writer_fence
+from agent_comms.session_fence import SessionWriterBusyError, idle_session_writer_fence, session_writer_fence
+from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
@@ -543,6 +544,59 @@ def test_positive_owner_validated_native_commit(native):
     assert len(pending) == 1 and pending[0].commit_id == operation.commit_id
     assert json.loads(pending[0].metadata_json)["entryId"] == entry["id"]
     assert "retained summary" not in pending[0].metadata_json
+
+
+def test_actual_compaction_child_retains_all_scoped_descriptors(native):
+    """The real held boundary lends its descriptors through scope unwind."""
+    bridge, owner, owner_generation, witness = native
+    read_fd, write_fd = os.pipe()
+    child = None
+    try:
+        with pytest.raises(RuntimeError, match="scope ended"):
+            with bridge.boundary.hold(owner, owner_generation, witness) as held:
+                descriptors = (held.authority_fd, *held.retained_fds)
+                child = subprocess.Popen(
+                    [sys.executable, "-c",
+                     "import os,sys; [os.fstat(int(fd)) for fd in sys.argv[2:]]; "
+                     "print('ready',flush=True); os.read(int(sys.argv[1]),1)",
+                     str(read_fd), *(str(fd) for fd in descriptors)],
+                    pass_fds=(*descriptors, read_fd),
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0,
+                )
+                with selectors.DefaultSelector() as selector:
+                    selector.register(child.stdout, selectors.EVENT_READ)
+                    assert selector.select(5), "actual inherited child did not start"
+                assert child.stdout.readline() == b"ready\n"
+                raise RuntimeError("scope ended")
+        for path in (
+            bridge.boundary.root / "wire", bridge.boundary.root / "bus.jsonl",
+            bridge.registry.store.path, bridge.inputs.path,
+        ):
+            with pytest.raises(BlockingIOError), _store_lock(path, blocking=False):
+                pass
+        with pytest.raises(SessionWriterBusyError), idle_session_writer_fence(witness.session_file):
+            pass
+        os.write(write_fd, b"x")
+        output, error = child.communicate(timeout=5)
+        assert child.returncode == 0, error
+        assert output == b""
+        for path in (
+            bridge.boundary.root / "wire", bridge.boundary.root / "bus.jsonl",
+            bridge.registry.store.path, bridge.inputs.path,
+        ):
+            with _store_lock(path, blocking=False):
+                pass
+        with idle_session_writer_fence(witness.session_file):
+            pass
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)
+        if child is not None:
+            if child.poll() is None:
+                child.kill()
+            child.wait()
+            child.stdout.close()
+            child.stderr.close()
 
 
 @pytest.mark.parametrize("mutation", ["stop", "heartbeat", "goal", "bus", "input", "send"])

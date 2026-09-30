@@ -1,0 +1,294 @@
+[
+  {
+    "label": "isolated-display",
+    "seconds": 0.0814608600048814,
+    "display": ":1"
+  },
+  {
+    "label": "actual-default-ui",
+    "seconds": 0.8740692370047327,
+    "pid": 2156499,
+    "start_ticks": 21054016,
+    "kernel_cpu": {
+      "2156497": {
+        "start_ticks": 21054010,
+        "cpu_seconds": 0.04,
+        "command": "/usr/local/bin/st -g 140x45 -t comms-live-repro -e /home/ts/.agent-comms/stack/bin/toad-comms nra-architecture "
+      },
+      "2156499": {
+        "start_ticks": 21054016,
+        "cpu_seconds": 0.23,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python /home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/toad acp /home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -m agent_comms.acp /home/ts/code/projects/nominal-refactor-advisor --title Agent Comms --session nra-architecture "
+      }
+    }
+  },
+  {
+    "label": "recording-started",
+    "seconds": 0.9169232269923668,
+    "kernel_cpu": {
+      "2156497": {
+        "start_ticks": 21054010,
+        "cpu_seconds": 0.04,
+        "command": "/usr/local/bin/st -g 140x45 -t comms-live-repro -e /home/ts/.agent-comms/stack/bin/toad-comms nra-architecture "
+      },
+      "2156499": {
+        "start_ticks": 21054016,
+        "cpu_seconds": 0.27,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python /home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/toad acp /home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -m agent_comms.acp /home/ts/code/projects/nominal-refactor-advisor --title Agent Comms --session nra-architecture "
+      }
+    }
+  },
+  {
+    "label": "page-up",
+    "seconds": 21.388433954009088,
+    "kernel_cpu": {
+      "2156803": {
+        "start_ticks": 21054628,
+        "cpu_seconds": 0.75,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=28) --multiprocessing-fork "
+      },
+      "2156684": {
+        "start_ticks": 21054504,
+        "cpu_seconds": 1.08,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+      },
+      "2156655": {
+        "start_ticks": 21054122,
+        "cpu_seconds": 0.02,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+      },
+      "2156497": {
+        "start_ticks": 21054010,
+        "cpu_seconds": 0.12,
+        "command": "/usr/local/bin/st -g 140x45 -t comms-live-repro -e /home/ts/.agent-comms/stack/bin/toad-comms nra-architecture "
+      },
+      "2156499": {
+        "start_ticks": 21054016,
+        "cpu_seconds": 12.16,
+        "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+      },
+      "2156662": {
+        "start_ticks": 21054252,
+        "cpu_seconds": 0.57,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=15) --multiprocessing-fork "
+      },
+      "2156666": {
+        "start_ticks": 21054271,
+        "cpu_seconds": 2.3,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -m agent_comms.acp "
+      }
+    }
+  },
+  {
+    "label": "page-down",
+    "seconds": 25.62633093900513,
+    "kernel_cpu": {
+      "2156803": {
+        "start_ticks": 21054628,
+        "cpu_seconds": 0.82,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=28) --multiprocessing-fork "
+      },
+      "2156684": {
+        "start_ticks": 21054504,
+        "cpu_seconds": 1.19,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+      },
+      "2156655": {
+        "start_ticks": 21054122,
+        "cpu_seconds": 0.02,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+      },
+      "2156497": {
+        "start_ticks": 21054010,
+        "cpu_seconds": 0.2,
+        "command": "/usr/local/bin/st -g 140x45 -t comms-live-repro -e /home/ts/.agent-comms/stack/bin/toad-comms nra-architecture "
+      },
+      "2156499": {
+        "start_ticks": 21054016,
+        "cpu_seconds": 16.43,
+        "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+      },
+      "2156662": {
+        "start_ticks": 21054252,
+        "cpu_seconds": 0.57,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=15) --multiprocessing-fork "
+      },
+      "2156666": {
+        "start_ticks": 21054271,
+        "cpu_seconds": 2.3,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -m agent_comms.acp "
+      }
+    }
+  },
+  {
+    "label": "reverse-page-up",
+    "seconds": 29.853476699994644,
+    "kernel_cpu": {
+      "2156803": {
+        "start_ticks": 21054628,
+        "cpu_seconds": 0.85,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=28) --multiprocessing-fork "
+      },
+      "2156684": {
+        "start_ticks": 21054504,
+        "cpu_seconds": 1.23,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+      },
+      "2156655": {
+        "start_ticks": 21054122,
+        "cpu_seconds": 0.02,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+      },
+      "2156497": {
+        "start_ticks": 21054010,
+        "cpu_seconds": 0.25,
+        "command": "/usr/local/bin/st -g 140x45 -t comms-live-repro -e /home/ts/.agent-comms/stack/bin/toad-comms nra-architecture "
+      },
+      "2156499": {
+        "start_ticks": 21054016,
+        "cpu_seconds": 19.88,
+        "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+      },
+      "2156662": {
+        "start_ticks": 21054252,
+        "cpu_seconds": 0.57,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=15) --multiprocessing-fork "
+      },
+      "2156666": {
+        "start_ticks": 21054271,
+        "cpu_seconds": 2.3,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -m agent_comms.acp "
+      }
+    }
+  },
+  {
+    "label": "end-destination",
+    "seconds": 34.08578702801606,
+    "kernel_cpu": {
+      "2156803": {
+        "start_ticks": 21054628,
+        "cpu_seconds": 0.86,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=28) --multiprocessing-fork "
+      },
+      "2156684": {
+        "start_ticks": 21054504,
+        "cpu_seconds": 1.23,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+      },
+      "2156655": {
+        "start_ticks": 21054122,
+        "cpu_seconds": 0.02,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+      },
+      "2156497": {
+        "start_ticks": 21054010,
+        "cpu_seconds": 0.37,
+        "command": "/usr/local/bin/st -g 140x45 -t comms-live-repro -e /home/ts/.agent-comms/stack/bin/toad-comms nra-architecture "
+      },
+      "2156499": {
+        "start_ticks": 21054016,
+        "cpu_seconds": 24.14,
+        "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+      },
+      "2156662": {
+        "start_ticks": 21054252,
+        "cpu_seconds": 0.57,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=15) --multiprocessing-fork "
+      },
+      "2156666": {
+        "start_ticks": 21054271,
+        "cpu_seconds": 2.3,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -m agent_comms.acp "
+      }
+    }
+  },
+  {
+    "label": "stationary",
+    "seconds": 34.20431312700384,
+    "kernel_cpu": {
+      "2156803": {
+        "start_ticks": 21054628,
+        "cpu_seconds": 0.86,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=28) --multiprocessing-fork "
+      },
+      "2156684": {
+        "start_ticks": 21054504,
+        "cpu_seconds": 1.23,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+      },
+      "2156655": {
+        "start_ticks": 21054122,
+        "cpu_seconds": 0.02,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+      },
+      "2156497": {
+        "start_ticks": 21054010,
+        "cpu_seconds": 0.37,
+        "command": "/usr/local/bin/st -g 140x45 -t comms-live-repro -e /home/ts/.agent-comms/stack/bin/toad-comms nra-architecture "
+      },
+      "2156499": {
+        "start_ticks": 21054016,
+        "cpu_seconds": 24.27,
+        "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+      },
+      "2156662": {
+        "start_ticks": 21054252,
+        "cpu_seconds": 0.57,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=15) --multiprocessing-fork "
+      },
+      "2156666": {
+        "start_ticks": 21054271,
+        "cpu_seconds": 2.3,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -m agent_comms.acp "
+      }
+    }
+  },
+  {
+    "label": "capture-complete",
+    "seconds": 49.513801658991724,
+    "kernel_cpu": {
+      "2156803": {
+        "start_ticks": 21054628,
+        "cpu_seconds": 0.86,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=28) --multiprocessing-fork "
+      },
+      "2156684": {
+        "start_ticks": 21054504,
+        "cpu_seconds": 1.23,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+      },
+      "2156655": {
+        "start_ticks": 21054122,
+        "cpu_seconds": 0.02,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+      },
+      "2156497": {
+        "start_ticks": 21054010,
+        "cpu_seconds": 0.38,
+        "command": "/usr/local/bin/st -g 140x45 -t comms-live-repro -e /home/ts/.agent-comms/stack/bin/toad-comms nra-architecture "
+      },
+      "2156499": {
+        "start_ticks": 21054016,
+        "cpu_seconds": 33.39,
+        "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+      },
+      "2156662": {
+        "start_ticks": 21054252,
+        "cpu_seconds": 0.57,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=15) --multiprocessing-fork "
+      },
+      "2156666": {
+        "start_ticks": 21054271,
+        "cpu_seconds": 2.3,
+        "command": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python -m agent_comms.acp "
+      }
+    }
+  },
+  {
+    "label": "own-ui-cleanup",
+    "seconds": 51.89008336799452,
+    "remaining_owned_pids": [],
+    "errors": [],
+    "kernel_cpu": {}
+  }
+]

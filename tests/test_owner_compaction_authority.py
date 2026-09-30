@@ -148,7 +148,8 @@ import os, signal, subprocess, sys
 from pathlib import Path
 from agent_comms.store_files import _store_lock
 root = Path(sys.argv[1])
-with _store_lock(root / 'registry.json') as fd:
+with _store_lock(root / 'registry.json') as custody:
+    fd = custody.descriptor
     child = subprocess.Popen(
         [sys.executable, '-c',
          'import os,sys; print("ready",flush=True); os.read(int(sys.argv[1]),1); '

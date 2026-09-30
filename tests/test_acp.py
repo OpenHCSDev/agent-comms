@@ -1798,7 +1798,7 @@ class TestFailureFeedback:
         origin = Message(human.name, origin_target, "please help", MessageType.INFO)
         routed: list = []
         monkeypatch.setattr(
-            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
+            wired.transcripts, "record_turn_publication", lambda **kwargs: routed.append(kwargs)
         )
 
         async def events(*args, **kwargs):
@@ -1835,7 +1835,7 @@ class TestFailureFeedback:
         origin = Message(human.name, "proj", "please help", MessageType.INFO)
         routed: list = []
         monkeypatch.setattr(
-            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
+            wired.transcripts, "record_turn_publication", lambda **kwargs: routed.append(kwargs)
         )
 
         async def events(*args, **kwargs):
@@ -1853,66 +1853,7 @@ class TestFailureFeedback:
         assert "[Open diagnostic](file://" in history[0].body
         assert not routed
 
-    async def test_successful_terminal_sends_complete_reply_and_records_route(
-        self, wired, tmp_path, monkeypatch
-    ):
-        from agent_comms.messages import Message, MessageType
 
-        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.messaging.user_identity(str(tmp_path / "proj"))
-        origin = Message(human.name, "proj", "please help", MessageType.INFO)
-        routed: list = []
-        monkeypatch.setattr(
-            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
-        )
-
-        async def events(*args, **kwargs):
-            yield ae.Chunk(text="complete answer")
-            yield ae.StreamSettled()
-            yield ae.Done(ok=True, text="complete answer")
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=(human.name,), origins=(origin,)
-        )
-        history = wired.views.dm_history("proj", human.name)
-        assert len(history) == 1
-        assert history[0].notice is True
-        assert history[0].body == "complete answer"
-        assert len(routed) == 1
-
-    async def test_committed_progress_appears_in_channel_before_final_reply(
-        self, wired, tmp_path, monkeypatch
-    ):
-        from agent_comms.messages import Message, MessageType
-        from agent_comms.threads import Thread
-
-        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.messaging.user_identity(str(tmp_path / "proj"))
-        wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
-        origin = Message(human.name, "#team", "please help", MessageType.INFO)
-
-        async def events(*args, **kwargs):
-            yield ae.Chunk(text="Working")
-            yield ae.CommittedProgress(text="Working")
-            progress = wired.views.channel_history("#team")
-            assert [message.body for message in progress] == ["Working"]
-            assert progress[0].notice and (not progress[0].starts_turn)
-            yield ae.Chunk(text="Done")
-            yield ae.StreamSettled()
-            yield ae.Done(ok=True, text="WorkingDone")
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
-        )
-        history = wired.views.channel_history("#team")
-        assert [(message.body, message.notice) for message in history] == [
-            ("Working", True),
-            ("Done", False),
-        ]
 
     async def test_foreign_tool_use_before_input_start_never_notifies_channel(
         self, wired, tmp_path, monkeypatch

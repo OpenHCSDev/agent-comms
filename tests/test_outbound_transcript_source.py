@@ -10,9 +10,41 @@ from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
+from agent_comms.wire_log import WireLog
+from agent_comms.threads import Thread
+from agent_comms.transcripts import TranscriptCursor
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 import pytest
+
+
+def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
+    from dataclasses import replace
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.routing import MessageRoute, TurnRouting
+    from agent_comms.transcript_receipts import AssignedTranscriptSource
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    reply = comms.messaging.send_message("beta", "sender", "First original reply")
+    source = AssignedTranscriptSource.for_thread(
+        comms.root, comms.registry.require("beta"), comms.bus.log
+    )
+    original = source.rows("w.seq=?", (reply.seq,))
+    lookup = stable_thread_lookup(source.recipient.created_at)
+    intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
+    # A later send can fail; this first committed subset stays a valid relation.
+    intent.require_publications(original, lookup)
+    reference_only = FieldCodec.encode(intent)["requests"]
+    assert reference_only == [FieldCodec.encode(initial.message.reference)]
+    assert TurnRouting.from_wire(intent.to_wire()) == intent
+    with pytest.raises((TypeError, ValueError)):
+        TurnRouting.from_wire({"requests": [initial.message.to_wire()], "reply": None})
+    with pytest.raises(RelationViolationError):
+        intent.require_publications(original, "foreign-incarnation")
+    with pytest.raises(RelationViolationError):
+        replace(intent, reply=MessageRoute("beta", ("alpha",))).require_publications(original, lookup)
+    with pytest.raises(RelationViolationError):
+        replace(intent, publications=(reply.reference,)).require_publications(original, lookup)
 
 
 def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # noqa: F811
@@ -141,3 +173,128 @@ def test_open_source_rejects_replaced_wire_inode(tmp_path):  # noqa: F811
     replacement.replace(comms.bus.log.path)
     with pytest.raises(RelationViolationError):
         before.content_current()
+
+
+def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, monkeypatch):  # noqa: F811
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    verify = WireLog.verify_before_read_unlocked
+    barriers = []
+
+    def observed(log):
+        if log.path == comms.bus.log.path:
+            barriers.append(True)
+        return verify(log)
+
+    monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
+    view = comms.views.thread_presentation("beta")
+    assert len(barriers) == 1
+    assert view.read_identity.receipt_frontier.sequence == initial.message.seq
+    assert view.notifications[0].message.reference == initial.message.reference
+    assert view.notifications[0].recipient_identity.recipient_lookup == stable_thread_lookup(
+        view.read_identity.thread.created_at
+    )
+
+
+def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    identity = comms.views.thread_presentation("beta").read_identity
+    assert comms.transcripts.bind_page_read("beta", identity).identity is identity
+    with pytest.raises(StaleRevision, match="original thread"):
+        comms.transcripts.bind_page_read("alpha", identity)
+    with pytest.raises(StaleRevision, match="another root"):
+        wire(tmp_path / "other").transcripts.bind_page_read("beta", identity)
+    with pytest.raises(StaleRevision, match="page window"):
+        comms.transcripts.bind_page_read(
+            "beta", identity,
+            before=TranscriptCursor(identity.session_file, 0, identity.receipt_frontier),
+        )
+    comms.registry.rename("beta", "renamed")
+    assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
+    comms.registry.unregister("renamed")
+    comms.registry.remove("renamed")
+    comms.registry.declare(Thread("renamed", frozenset(), str(tmp_path)))
+    with pytest.raises(StaleRevision, match="original thread"):
+        comms.transcripts.bind_page_read("renamed", identity)
+
+
+def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_path, monkeypatch):  # noqa: F811
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    read = comms.transcripts.capture_page_read("beta")
+    verify = WireLog.verify_before_read_unlocked
+    barriers = []
+
+    def observed(log):
+        if log.path == comms.bus.log.path:
+            barriers.append(True)
+        return verify(log)
+
+    monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
+    page = read.read()
+    # Before admission, one bounded page query, and after admission. The original
+    # frontier is already certified: page preparation does not certify it again.
+    assert len(barriers) == 3
+    assert page.after.receipts == read.identity.receipt_frontier
+    assert tuple(event.source for event in page.events) == (initial.message.reference,)
+
+
+def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monkeypatch):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    read = comms.transcripts.capture_page_read("beta")
+    prepare = comms.transcripts.thread_transcript_page
+
+    def append_after_page(*args, **kwargs):
+        page = prepare(*args, **kwargs)
+        comms.messaging.send_message("sender", "beta", "Original concurrent append")
+        return page
+
+    monkeypatch.setattr(comms.transcripts, "thread_transcript_page", append_after_page)
+    with pytest.raises(StaleRevision, match="during preparation"):
+        read.read()
+
+
+def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatch):  # noqa: F811
+    import agent_comms.private_bus_checkpoint as checkpoint
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    saved = checkpoint._saved
+    reads = []
+
+    def observed(connection):
+        reads.append(True)
+        return saved(connection)
+
+    monkeypatch.setattr(checkpoint, "_saved", observed)
+    view = comms.views.thread_presentation("beta")
+    assert len(reads) == 1
+    assert view.notifications[0].message.reference == initial.message.reference
+
+
+def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noqa: F811
+    import sqlite3
+    from agent_comms.private_bus_checkpoint import source_references_unlocked
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    with comms.bus.log.certified_read() as source:
+        assert source.connection.execute("PRAGMA query_only").fetchone()[0] == 1
+        assert source_references_unlocked(source, (initial.message.reference,)) == (initial.message,)
+    assert source.stream.closed
+    with pytest.raises(sqlite3.ProgrammingError):
+        source.connection.execute("SELECT 1")
+    with pytest.raises(RelationViolationError, match="lock lifetime"):
+        source_references_unlocked(source, (initial.message.reference,))
+
+
+def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    comms.bus.log.path.unlink()
+    with pytest.raises(RelationViolationError, match="inode is missing"):
+        comms.views.thread_presentation("beta")
+
+
+def test_bus_guard_preserves_the_callers_original_failure(tmp_path):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    failure = OSError("Caller-owned failure after actual durability admission")
+    with pytest.raises(OSError) as raised:
+        with comms.bus.log.locked():
+            raise failure
+    assert raised.value is failure
