@@ -40,3 +40,22 @@ Bounded source checks: 11 PASS (registry transition/fence closure, queued mechan
 Actual provider-free installed worker gate passed in21.13s before strengthening the explicit new-entrypoint assertion: two original settings, rename, one busy refusal with identical whole registry and no stopped process, both idle replacements attached, retained birth/tags/task/model/thinking/blocked goals, zero native children/input submissions. Final explicit target-entrypoint receipt follows. No Mendel422 or Einstein434 native-provider slot use. The failed build without isolated hatchling did not modify any environment; normal uv wheel build succeeded.
 
 Remaining S14 goal settlement/startup-command custody work stays assigned to Arendt and is not claimed complete by this batch checkpoint.
+
+## Ready batch receipt
+
+Production9f04dd95 is Ready independently of remaining full S14 work. Final installed gate EXIT0,1PASS19.30s includes the explicit new actual native entrypoint, both per-owner launch settings and all previously listed checks. Every installed Python source file was byte-compared to the tested source. [Receipt](../../evidence/owner-restart-batch/receipt.json) records source/wheel and exact replacement retirement; both replacement processes are stopped after acceptance. Native/provider fixture slot untouched,0prompts/0provider calls/0live-root mutation. Changed-source required ratchet has zero positive measures and zero parse failures. The three exploratory command-family failures also fail on pre-change433 source; no full-suite claim.
+
+Reproduce only when needed, after rebuilding the disposable installed overlay from the tested wheel:
+
+```sh
+PYTHONPATH=/home/ts/.cache/agent-scratch/turn-resource-custody-20260929/installed-final:/home/ts/.cache/agent-scratch/compaction-output-accounting-20260929/test-deps \
+PI_COMPACTION_TEST_PACKAGE=/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent \
+PYTHONDONTWRITEBYTECODE=1 timeout 40 \
+/home/ts/.local/share/agent-comms/runtime-canonical-native-checkpoint-20260929/bin/python -m pytest -o addopts= -q \
+--basetemp=/home/ts/.cache/agent-scratch/turn-resource-custody-20260929/batch-final \
+tests/test_owner_process.py::test_real_batch_retains_each_launch_and_busy_refuses_every_stop
+```
+
+The retained launch read uses Linux /proc; this does not certify other OS process-environment capture. Operator runtime must be the intended new matched Python. This API cannot roll back process death or partial launch failure; uncertain retirement/launch requires review without automatic reattempt. No durable schema transition from this checkpoint. Existing425phaseABI still requires quiet matched owner cutover and fresh connections per its earlier receipt.
+
+Latest read-only incident: comms428 owner2073568 alive, native2078041 gone, registry idle with last finished d0bac3e519a64352ae5a5a71c8ec74bb. Native journal02:08:51.732Z records error WebSocketclosed1012,36.904s after Bash result02:08:14.828Z. ACP22_00_12 line97 reports generic invalid Pi event thenline101idle; diagnostic omits source_error. Latest window has no cancel request. Earlier21_36_08 lines18..22 prove old owner2061578 cancellation reached Cancelling→PromptCancelled(started)→idle. No causal link to latest failure is established. Einstein owns native failure-cause producer closure; Mendel430/Sch215 own old inbound/read-frontier investigation. Protected blocked goal and uncertain originals remain untouched.
