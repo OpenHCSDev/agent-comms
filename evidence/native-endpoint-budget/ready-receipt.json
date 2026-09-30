@@ -1,0 +1,31 @@
+{
+  "state": "READY for scoped review/merge; not installed globally",
+  "native_selector": "7616293d01862aba",
+  "native_package": "/home/ts/wt/comms-native-endpoint-budget-recovery-20260930/stack/.pi-native-7616293d01862aba/node_modules/@earendil-works/pi-coding-agent",
+  "installed_stage": "/home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930/installed",
+  "stage_requirements": "/home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930/requirements.txt",
+  "original_source_unchanged": true,
+  "actual_native_stdio_acp": "retained-native-stdio-acp-journey.json",
+  "actual_image_and_mandatory_contract": "image-and-provider-contract.json",
+  "actual_canonical_cancel": "accepted-canonical-cancel.json",
+  "actual_installed_tui": "installed-tui-review.json",
+  "production_deleted_lines": 33,
+  "production_added_lines": 358,
+  "owner": "Mendel453",
+  "preserved_private_roots": [
+    "/home/ts/wt/ac453-f347f717/wire",
+    "/home/ts/wt/ac453-61194b88/wire",
+    "/home/ts/wt/ac453-afd62c6e/wire"
+  ],
+  "scratch": "/home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930",
+  "global_public_native_default_mutations": 0,
+  "paid_calls": 0,
+  "original_replays": 0,
+  "limits": [
+    "Actual OpenAI and Anthropic provider controls; five schema image projections, not eleven APIs installed acceptance",
+    "Provider tokens estimated by existing text/image owner, not exact server tokenizer",
+    "Public catalog current provenance does not prove historical selected endpoint",
+    "Original failed public input and all private cancelled/failed attempts preserved; no retry",
+    "129s wait owned by Arendt454, not established resolved"
+  ]
+}
