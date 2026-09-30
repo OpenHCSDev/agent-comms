@@ -1,0 +1,184 @@
+# Original S14 native input and turn custody continuation
+
+Owner: Arendt. Assigned after live453/454/Toad242 acceptance. Source base
+`3b216396` includes production `6feb634b`; parent current-six-term-sites.json
+analyzed291 Core files at6feb and found36 screening leads. This continuation is
+not another native lifecycle store, proof cache or recovery authority.
+
+## Claim and deletion trajectory
+
+Own `attempt_recovery.py`, `historical_native_inputs.py`, `native_pi.py`,
+`native_prompt_binding.py`, `native_source_cursor.py`,
+`owner_compaction_adaptive.py`, plus complete selected-summary/native custody
+caller closure. Mendel owns C0/C3 goals and assignment/coordination state; Sch
+owns C4 review and the bus/index group. Shared boundary extensions are requested
+from their declaration owner, never implemented as a competing type or guard.
+
+1. Trace original reserved/dispatched input through existing NativeInputRecord,
+   NativeInputOwner, prompt binding and live/durable context evidence. Compare
+   the owning identity once; delete all piecewise joins for the same relation.
+2. Keep cursor publication and historical reads derived from original durable
+   input/context proof. Delete consumer shape revalidation and state mirrors;
+   retain source/process/generation/admission fences as original witnesses.
+3. Give existing release/native custody and compaction owners their complete
+   capability. Delete nullable reconstruction, anonymous invariant chains and
+   replaced rule definitions/all consumers in place. A moved boolean is not a
+   completed ownership change.
+4. Verify stale/replaced/mismatched/corrupt evidence refusal and UNKNOWN noReplay
+   through bounded existing controls, then the installed real fork, cancel,
+   next-input and recovery journey. No public effects or original replay.
+
+Patterns: IDEN-1/IDEN-3, BOUND-1/BOUND-2, IMPL-10/IMPL-14, AGENT-6.
+Exact producer/consumer census, added/deleted production lines and store
+classification will be recorded from the working source before Ready. Durable
+wire/native history/reservations/UNKNOWN remain protected. Any necessary runtime
+format change requires classified state and a quiet matched pair, not a legacy
+reader. Parent owns merge/installation/public activation.
+
+Status: draft opened before substantive implementation; installed acceptance
+pending. Original S14 and binding00-RULES read; newest owner instructions override
+older broad-suite, CI and generic runtime-reset wording.
+
+## First working original identity checkpoint
+
+NativeInputRecord now owns NativeInputIdentity and NativeInputIdText. Reservations,
+prelaunch bindings, historical evidence, current cursor references and selected
+tools consume original projections. Four native identity component rules become
+one identity rule; two committed source-part rules become one MessageReference
+rule. NativeContextRecord strictly joins the emitted receipt then corroborates
+the complete located durable proof; its journal shares the original declaration.
+No schema/wire/store changes in this checkpoint.
+
+Five bounded source controls pass (production-created admission fences, retained
+multi-round context, native journal generation/digest refusal, replaced-file
+refusal). They are source controls, not installed acceptance. A pre-existing
+rule-fixture roster omitted model/thinking/session refusals; their cases are now
+included while deleting the replaced per-component rule cases. Test dependencies
+are owned under `.observations/test-deps`; installed runtimes remain untouched.
+
+Additional assigned scope: selected_pi_route, selected_tool_broker,
+selected_write_plan, recovery_gateway_client and recovery_projection. Parent
+owns fresh_private_session/private_nk_entrypoint/acp_extension validation;
+Einstein owns tracked_turn/turn_output; Mendel owns shared input_attempt and
+canonical retry/state capabilities. SelectedParticipant/selected_turn frame
+calls and SourceCoverage wire read capability belong to Mendel/Sch respectively.
+Remaining release acquisition, compaction source, selected-write and redacted
+retry consumer closure stay in this same draft; no Ready claim yet.
+
+## Acquired released-owner checkpoint
+
+The released-owner observer now retains the original `AttemptRecord` and delegates
+registry/process/admission loss to `OwnerReleaseReceipt.require_native_loss`.
+`AdmissionIdentity.includes` orders only the same registry admission allocation
+domain. Four copied attempt fields and `_owner_loss_verified` are deleted. Proof
+validity ends with the acquired exclusion scope; neither journal absence nor a
+replaced process grants an unwritten-input disposition.
+
+The obsolete test fixture which minted an unacquired owner-loss grant is deleted
+with its two fake-grant transition tests. Frozen publication still refuses both
+ordinary nonpublication transitions. The existing process-backed recovery fixture
+now revokes its real registry owner before failure settlement instead of patching
+the deleted `SelectedRequest._uncertain_failure` method. Fourteen affected recovery,
+forgery, released/live/process, ambiguity and frozen-publication controls passed
+in 6.12 seconds. These are source controls with synthetic native content, not
+installed/native acceptance.
+
+The selected-write file now declares accepted/applied members and one binding
+projection from its original source/admission fields. Seven ACP selected-write
+controls passed, including accepted/uncertain/no-replay paths. Original file keys,
+mode, atomic replacement and directory fsync ordering are retained.
+
+Recovery projection consumes Mendel's public execution retry capability; that
+shared dependency is required before its reader controls. Parent459 owns common
+POSIX observations; Arendt will consume that original FileRevision and path-role
+contract rather than retain tuple revision or socket validators. Selected
+compaction acquisition and the actual installed whole journey remain in progress.
+
+## Functional source candidate ab5ba4ae
+
+The candidate normally integrates parent459 `9890c75e`, Einstein458 `6fabde90`,
+Mendel457 `51631c9b` and Schrodinger460 `4b54a8d2`. Fresh enrollment stores its
+original `FileIdentity`; the prewrite/startup helper and tracked consumer use
+`FileRevision`. Native files, package/session ancestors, selected-write/tool
+resources and the recovery socket consume the one declared POSIX role family.
+These observations cannot mint enrollment, input admission or a terminal receipt.
+
+Adaptive and manual compaction acquire the existing `RegistryOwner` from one
+original registry snapshot, require its active turn and saved session, and
+consume `SelectedModel` projected from the original runtime observation. The
+settings probe takes that value instead of three independently compared scalars;
+all production and native-fixture callers were changed. Response envelope
+correlation belongs to `Response.require_request`; its declared data member owns
+settings-source or summary-operation matching. Unknown/nonresponse cases refuse
+through their inherited declaration, without a switch or a response mirror.
+
+Historical lookup/root spelling belongs to Schrodinger's original
+`StableLookupText` and the existing `WireRootIdText`; the reader no longer repeats
+the grammar or checks a trusted store's concrete class. Cursor and reservation
+joins still require original proof and committed rows, not spelling validation.
+
+Source controls completed on this closure: 33 history/cursor/recovery-reader
+controls (9.58s), 17 selected-tool/write controls (10.15s), 27 selected-summary
+custody controls (1.39s), and 34 response/envelope/source controls (0.66s).
+Optional native cases skipped when no native package was configured are not
+counted as passes. Installed whole-workflow acceptance remains pending the
+parent's correctly pinned shared candidate; the immutable prior `6fabde90`
+candidate does not cover the additional selected-compaction APIs here.
+
+### State and format classification
+
+- Native journals, SQLite native-input/context proofs, reservation and UNKNOWN
+  receipts, wire identity/certificates, registry and selected-write file keys are
+  durable originals. This checkpoint does not reset, convert or replay them.
+- Original SQL identities, emitted context values and registry captures are
+  immutable observations of those originals, not additional admission stores.
+- The acquired released-owner grant is valid only inside its original exclusion
+  scope. Its active flag is resource custody, not copied turn status.
+- `FileRevision` is a POSIX resource observation. The fresh-startup type changes
+  only internal Python producer/consumer calls; native event fields and wire
+  ABI remain unchanged. No current checkpoint runtime reset is required.
+- The existing compound `SelectedSource.SessionRevision` / backend resource
+  tuple representation remains an explicitly tracked S14 ownership gap. Its
+  serialized compaction reservation consumers require one separately classified
+  closure; this checkpoint does not disguise that representation with an alias.
+
+### Actual timing evidence and limits
+
+Sanitized receipts in `evidence/native-input-custody/live-request-timing-20260930.json`
+and `live-tool-timing-20260930.json` come from bounded read-only current comms428
+ACP/native evidence. One original request took 42.319s, with 74.046ms of the
+native request observer's declared callbacks and a 5.066ms maximum callback.
+Its original dispatch-to-first-event interval was 255.299ms and
+ dispatch-to-first-delta interval 3663.753ms, all measured by the same native
+request producer. These counters do not measure arbitrary extension or UI work.
+
+A native assistant message's timestamp is established at model-request creation,
+not tool execution start. Subtracting it from a saved tool result would combine
+provider generation with tool dispatch/execution/publication. Original native
+tool-start/end payloads lack producer timestamps, so these public records cannot
+allocate that combined interval further. The controlled installed journey will
+record tool consumer/callback timing in one Python process separately from the
+original native request clock. The historical 129.898s interval remains
+unattributed; no provider queue, deadlock or CPU diagnosis is claimed.
+
+## Critical basic-tool latency followthrough
+
+Arendt owns the measured `tool_started → context_proof → _verify_context → NativeContextProof.read_evidence` delay. The original 44,661,933-byte source copy contains 10,147 entries. Full historical entry decoding cost 2.051/1.966 seconds on every proof check. Acquired source checks cost 0.0415/0.0411/0.0397 seconds after one initial 2.100-second decode. These are same-process measurements, not subtraction of producer and ACP clocks.
+
+`NativeEntry.open_evidence` owns an acquired reader inside the existing tracked-turn ExitStack. The original input commitment acquires it; each later tool/terminal context check verifies the complete original byte prefix, strict append decoding, opened/named revision and private permissions, and reads the current SQLite proof. No context proof or disposition is cached, no seen-input list or parallel index is introduced. Replaced, truncated, altered, ambiguous and damaged sources still refuse. The decoded source resource ends with its turn.
+
+Fifteen focused controls pass. Actual installed/native retained-history tool acceptance remains pending. The separate 120.935-second model request had a high prompt cache hit rate; the 36.423-second first delta and remaining stream duration are native request phases, with no provider-capacity attribution. This source fix does not claim to explain them.
+
+Sanitized measurement: `evidence/native-input-custody/context-proof-latency-20260930.json`. No durable format or native ABI change, no public writes/restarts/provider calls, no UNKNOWN replay.
+
+### Actual retained native latency checkpoint
+
+The initial implementation refused a legitimate native append during initial decoding. The acquired original file owner now captures a byte snapshot under the exact descriptor/named revision, decodes it, then revalidates the captured original prefix against the current source under a stable short read. Native appends during decoding are admitted as later snapshot bytes; altered captured bytes, replaced/truncated files and changed private permissions still refuse. Cold evidence readers use this same owner. Every refusal closes the acquired reader and decoded source resource. No proof is cached and no second historical-input list/index/store exists. This addresses IDEN-7 (whole revision spanning unrelated appends) and BOUND-1 (decoding historical payload repeatedly at each use), without splitting the original proof authority (IDEN-5).
+
+Installed noneditable Core wheel, actual native593b, retained44.7MB source and fast localhost provider: two cases passed in45.87s. Ordinary completion exercised three real read tools followed by one canonical published response. Initial source snapshot44,664,180 bytes grew to44,664,949 while its2.187s decode ran, proving the native append race was exercised without provider delay. Tool context checks38–43ms; same-Python native-event consumption start→end115–231ms. These intervals include tool admission/policy and transport/journal work, not pure filesystem reads.
+
+Accepted cancellation after the same three real reads preserved unresolved original input and issued no provider replay. Both outcomes prove original source revision/hash unchanged, native children retired and all acquired readers closed. Protected native fixture journals/proofs are retained privately under `.observations/context-latency/native-artifacts`; no private source content or credentials are published. Seventeen focused controls passed, including append versus prefix alteration during decoding and refusal/closed-reader invalidation.
+
+Sanitized receipts: `evidence/native-input-custody/retained-native-tool-complete-20260930.json` and `retained-native-tool-cancel-20260930.json`. Broader correctly paired UI fork/compaction acceptance remains a separate tracked scope; this gate covers installed Core/native tool custody and cancellation. The separate cached121s model request remains provider/model phase evidence, not diagnosed capacity or file I/O. No public action, paid call, native event/durable format change or reset/replay requirement.
+
+A final trust review retains the original ancestor validation on every acquired observation, before and after decoding, rather than only on first acquisition. A changed ancestor permission refuses and closes the resource. Eighteen focused source controls pass on that guard closure. The actual native receipts identify tested production2ae88cdb; this subsequent guard restores the original private-directory boundary and introduces no policy/native/durable ABI. Production delta from5704c4ef to2ae88cdb:49 lines deleted and178 added across3sourcefiles; fixture/docs counts are separate.

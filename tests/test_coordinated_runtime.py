@@ -407,12 +407,10 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
     with pytest.raises(IdentityConflict, match="response obligation"):
-        render_selected_wake_frame(initial, selected, people[2], phase="full")
-    with pytest.raises(IdentityConflict, match="bounded triage"):
-        render_selected_wake_frame(initial, selected, people[2], phase="triage")
+        render_selected_wake_frame(initial, selected, people[2])
     forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
     with pytest.raises(IdentityConflict, match="selected N/K"):
-        render_selected_wake_frame(initial, forged, people[1], phase="full")
+        render_selected_wake_frame(initial, forged, people[1])
     assert len(comms.views.channel_history("#team")) == 1  # Framing never publishes a row.
 
 
@@ -421,7 +419,7 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
         assignment = sealed_cohort_assignments(store, lookup)[0]
-    frame = render_selected_wake_frame(initial, assignment, people[1], phase="triage")
+    frame = render_selected_wake_frame(initial, assignment, people[1])
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
     assert initial.message.body not in frame
@@ -487,8 +485,8 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
         ).fetchone()
         assert coverage is not None and coverage[:3] == (
             fresh.session_id,
-            fresh.device,
-            fresh.inode,
+            fresh.file_identity.device,
+            fresh.file_identity.inode,
         )
         assert db.execute(
             "SELECT input_id,status FROM private_raw_inputs WHERE session_file=?",
@@ -534,7 +532,7 @@ async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 1 and len(witnessed) == 1
-    assert witnessed[0][:2] == (result.fresh_session.device, result.fresh_session.inode)
+    assert witnessed[0].identity == result.fresh_session.file_identity
     assert result.fresh_session.selected_thinking_level == "high"
     result.fresh_session.verify_saved_identity()
     rows = [json.loads(row) for row in result.fresh_session.path.read_text().splitlines()]
@@ -827,7 +825,8 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
         cursor = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="beta")
         assert cursor is not None and cursor.input_id == outcome.input_id
         response = next(
-            message for message in comms.bus.log.full_history()
+            message
+            for message in comms.bus.log.full_history()
             if message.message_id == outcome.response_message_id
         )
         # The published own reply is nonbinding for beta, but belongs to the

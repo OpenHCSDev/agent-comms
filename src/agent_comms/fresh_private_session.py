@@ -14,14 +14,16 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import stat
+from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NoReturn
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 from uuid import uuid4
 
 from .pi_vocabulary import ThinkingLevel
+from .private_path import FileIdentity, FileRevision, PrivateFileRole
+from .declared_family import DeclaredFamily
 from .native_entries import (
     ModelChangeEntry,
     NativeEntry,
@@ -36,16 +38,210 @@ from .native_pi import (
     _read_private_file,
 )
 
+if TYPE_CHECKING:
+    from .pi_payloads import StateData
+
+
 _MINT = object()
 _MAX_STARTUP_APPEND = 2048
 
 
+@dataclass(frozen=True, slots=True)
+class FreshFileCheck:
+    source: FreshPrivateSession
+    observed: os.stat_result
+    minimum_size: int
+    revision: FileRevision | None = None
+    exact_size: int | None = None
+
+    @property
+    def identity(self) -> FileIdentity:
+        return FileIdentity.from_stat(self.observed)
+
+    @property
+    def observed_revision(self) -> FileRevision:
+        return FileRevision.from_stat(self.observed)
+
+    def require_valid(self, context: str) -> None:
+        try:
+            PrivateFileRole.require(self.observed)
+        except ValueError as error:
+            raise NativePiUnavailable(f"{context}: {error}") from error
+        for member in FreshFileRule.members_with(FreshFileRule):
+            if member.violated(self):
+                raise NativePiUnavailable(
+                    f"{context}: {member.declared_name} {member.explanation}"
+                )
+
+
+class FreshFileRule(DeclaredFamily, affix="Rule"):
+    explanation: ClassVar[str] = ""
+
+    @classmethod
+    @abstractmethod
+    def violated(cls, check: FreshFileCheck) -> bool: ...
+
+
+class LinkedFreshFileRule(FreshFileRule):
+    @classmethod
+    def violated(cls, check):
+        return check.observed.st_nlink != 1
+
+
+class ReboundFreshFileRule(FreshFileRule):
+    @classmethod
+    def violated(cls, check):
+        return check.identity != check.source.file_identity
+
+
+class TruncatedFreshFileRule(FreshFileRule):
+    @classmethod
+    def violated(cls, check):
+        return check.observed.st_size < check.minimum_size
+
+
+class ChangedFreshFileRule(FreshFileRule):
+    @classmethod
+    def violated(cls, check):
+        return check.revision is not None and check.observed_revision != check.revision
+
+
+class PrewrittenFreshFileRule(FreshFileRule):
+    explanation = "Fresh-session has earlier input before enrollment"
+
+    @classmethod
+    def violated(cls, check):
+        return check.exact_size is not None and check.observed.st_size != check.exact_size
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedStartupCheck:
+    source: FreshPrivateSession
+    model: ModelChangeEntry
+    thinking: ThinkingLevelChangeEntry
+
+    def require_valid(self) -> None:
+        for rule in SelectedStartupRule.members_with(SelectedStartupRule):
+            if rule.violated(self):
+                raise NativePiUnavailable(
+                    f"Selected startup metadata does not match runtime: {rule.declared_name}"
+                )
+
+
+class SelectedStartupRule(DeclaredFamily, affix="Rule"):
+    @classmethod
+    @abstractmethod
+    def violated(cls, check: SelectedStartupCheck) -> bool: ...
+
+
+class DifferentSelectedModelRule(SelectedStartupRule):
+    @classmethod
+    def violated(cls, check):
+        return not check.model.matches_startup(
+            check.source.selected_model, check.source.selected_thinking_level
+        )
+
+
+class DifferentSelectedThinkingRule(SelectedStartupRule):
+    @classmethod
+    def violated(cls, check):
+        return not check.thinking.matches_startup(
+            check.source.selected_model, check.source.selected_thinking_level
+        )
+
+
+class DetachedModelEntryRule(SelectedStartupRule):
+    @classmethod
+    def violated(cls, check):
+        return check.model.parent_id != check.source.bootstrap_leaf_id
+
+
+class DetachedThinkingEntryRule(SelectedStartupRule):
+    @classmethod
+    def violated(cls, check):
+        return check.thinking.parent_id != check.model.id
+
+
+class ReusedStartupEntryRule(SelectedStartupRule):
+    @classmethod
+    def violated(cls, check):
+        ids = (check.source.bootstrap_leaf_id, check.model.id, check.thinking.id)
+        return len(set(ids)) != len(ids)
+
+
+class FreshRuntimeRule(DeclaredFamily, affix="FreshRuntimeRule"):
+    """Named observed-runtime constraints of the original fresh enrollment."""
+
+    explanation: ClassVar[str]
+
+    @classmethod
+    @abstractmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        raise NotImplementedError
+
+
+class SessionChangedFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source session identity differs"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.session_id != enrolled.session_id
+
+
+class ModelChangedFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source model differs"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return not state.matches_model(enrolled.selected_model)
+
+
+class ThinkingChangedFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source thinking level differs"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return ThinkingLevel.optional_name(state.thinking_level) != enrolled.selected_thinking_level
+
+
+class MessagesPresentFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source is not empty"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.message_count != 0
+
+
+class PendingMessagesFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source pending messages differ"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.pending_message_count != 0
+
+
+class StreamingFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source is not attested idle"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.is_streaming is not False
+
+
+class CompactingFreshRuntimeRule(FreshRuntimeRule):
+    explanation = "Selected first source compaction state is not idle"
+
+    @classmethod
+    def violated(cls, enrolled: FreshPrivateSession, state: StateData) -> bool:
+        return state.is_compacting is not False
+
+
 @dataclass(frozen=True, init=False, slots=True, weakref_slot=True)
 class FreshPrivateSession:
+    selected_model: ClassVar[tuple[str, str]] = ("openrouter", "z-ai/glm-5.3-flash")
     path: Path
     session_id: str
-    device: int
-    inode: int
+    file_identity: FileIdentity
     header_sha256: str
     bootstrap_sha256: str
     bootstrap_size: int
@@ -58,8 +254,7 @@ class FreshPrivateSession:
         key: object,
         path: Path,
         session_id: str,
-        device: int,
-        inode: int,
+        file_identity: FileIdentity,
         header_sha256: str,
         bootstrap_sha256: str,
         bootstrap_size: int,
@@ -70,8 +265,7 @@ class FreshPrivateSession:
             raise TypeError("Fresh-session enrollment cannot be reconstructed from a file")
         object.__setattr__(self, "path", path)
         object.__setattr__(self, "session_id", session_id)
-        object.__setattr__(self, "device", device)
-        object.__setattr__(self, "inode", inode)
+        object.__setattr__(self, "file_identity", file_identity)
         object.__setattr__(self, "header_sha256", header_sha256)
         object.__setattr__(self, "bootstrap_sha256", bootstrap_sha256)
         object.__setattr__(self, "bootstrap_size", bootstrap_size)
@@ -81,6 +275,11 @@ class FreshPrivateSession:
 
     def __reduce__(self) -> NoReturn:
         raise TypeError("Fresh-session enrollment cannot cross a process boundary")
+
+    def require_runtime(self, state: StateData) -> None:
+        for rule in FreshRuntimeRule.members_with(FreshRuntimeRule):
+            if rule.violated(self, state):
+                raise NativePiUnavailable(f"{rule.declared_name}: {rule.explanation}")
 
     @staticmethod
     def require_launch_header(path: Path, selected_thinking_level: str | None) -> None:
@@ -111,28 +310,15 @@ class FreshPrivateSession:
             raise NativePiUnavailable("Fresh-session creator process changed")
         try:
             info = self.path.lstat()
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_uid != os.geteuid()
-                or stat.S_IMODE(info.st_mode) != 0o600
-                or info.st_nlink != 1
-                or (info.st_dev, info.st_ino) != (self.device, self.inode)
-                or info.st_size <= 0
-            ):
-                raise NativePiUnavailable("Fresh-session saved inode changed")
+            FreshFileCheck(self, info, 1, exact_size=self.bootstrap_size if prewrite else None).require_valid(
+                "Fresh-session saved inode changed"
+            )
             descriptor = os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
             try:
                 opened = os.fstat(descriptor)
-                if (opened.st_dev, opened.st_ino) != (self.device, self.inode):
-                    raise NativePiUnavailable("Fresh-session path rebound while opening")
-                if (
-                    not stat.S_ISREG(opened.st_mode)
-                    or opened.st_uid != os.geteuid()
-                    or stat.S_IMODE(opened.st_mode) != 0o600
-                    or opened.st_nlink != 1
-                    or opened.st_size < self.bootstrap_size
-                ):
-                    raise NativePiUnavailable("Fresh-session opened identity changed")
+                FreshFileCheck(self, opened, self.bootstrap_size).require_valid(
+                    "Fresh-session opened identity changed"
+                )
                 bootstrap = bytearray()
                 while len(bootstrap) < self.bootstrap_size:
                     chunk = os.read(descriptor, self.bootstrap_size - len(bootstrap))
@@ -148,14 +334,12 @@ class FreshPrivateSession:
                 or hashlib.sha256(bootstrap).hexdigest() != self.bootstrap_sha256
             ):
                 raise NativePiUnavailable("Fresh-session bootstrap changed")
-            if prewrite and info.st_size != self.bootstrap_size:
-                raise NativePiUnavailable("Fresh-session has earlier input before enrollment")
             row = NativeEntry.from_evidence(json.loads(header))
             after = self.path.lstat()
-            if (after.st_dev, after.st_ino, after.st_nlink) != (self.device, self.inode, 1) or (
-                prewrite and after.st_size != self.bootstrap_size
-            ):
-                raise NativePiUnavailable("Fresh-session path changed after bootstrap read")
+            FreshFileCheck(
+                self, after, self.bootstrap_size,
+                exact_size=self.bootstrap_size if prewrite else None,
+            ).require_valid("Fresh-session path changed after bootstrap read")
             if (
                 not isinstance(row, SessionEntry)
                 or row.id != self.session_id
@@ -175,7 +359,7 @@ class FreshPrivateSession:
     def verify_prewrite(self) -> None:
         self.verify_saved_identity(prewrite=True)
 
-    def verify_selected_startup(self) -> tuple[int, int, int, int, int]:
+    def verify_selected_startup(self) -> FileRevision:
         """Attest exactly Pi's two expected metadata appends, no raw messages.
 
         Pinned createAgentSession appends its initial model and thinking entries
@@ -193,22 +377,10 @@ class FreshPrivateSession:
             descriptor = os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
             try:
                 opened = os.fstat(descriptor)
-                if (
-                    not stat.S_ISREG(opened.st_mode)
-                    or opened.st_uid != os.geteuid()
-                    or stat.S_IMODE(opened.st_mode) != 0o600
-                    or opened.st_nlink != 1
-                    or (
-                        opened.st_dev,
-                        opened.st_ino,
-                        opened.st_size,
-                        opened.st_mtime_ns,
-                        opened.st_ctime_ns,
-                    )
-                    != (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
-                    or (opened.st_dev, opened.st_ino) != (self.device, self.inode)
-                ):
-                    raise NativePiUnavailable("Selected startup inode/revision changed")
+                observed = FreshFileCheck(self, info, self.bootstrap_size)
+                FreshFileCheck(self, opened, self.bootstrap_size, observed.observed_revision).require_valid(
+                    "Selected startup inode/revision changed"
+                )
                 chunks = bytearray()
                 while len(chunks) < info.st_size:
                     chunk = os.read(descriptor, info.st_size - len(chunks))
@@ -219,20 +391,9 @@ class FreshPrivateSession:
                 # Fail closed on uncertain fsync before the raw prompt writer.
                 os.fsync(descriptor)
                 synced = os.fstat(descriptor)
-                if (
-                    synced.st_dev,
-                    synced.st_ino,
-                    synced.st_size,
-                    synced.st_mtime_ns,
-                    synced.st_ctime_ns,
-                ) != (
-                    opened.st_dev,
-                    opened.st_ino,
-                    opened.st_size,
-                    opened.st_mtime_ns,
-                    opened.st_ctime_ns,
-                ):
-                    raise NativePiUnavailable("Selected startup changed across fsync")
+                FreshFileCheck(
+                    self, synced, self.bootstrap_size, FileRevision.from_stat(opened),
+                ).require_valid("Selected startup changed across fsync")
             finally:
                 os.close(descriptor)
             data = bytes(chunks)
@@ -245,30 +406,15 @@ class FreshPrivateSession:
                 raise NativePiUnavailable("Selected startup has extra or partial entries")
             model = ModelChangeEntry.read_startup(lines[0])
             thinking = ThinkingLevelChangeEntry.read_startup(lines[1])
-            selected_model = ("openrouter", "z-ai/glm-5.3-flash")
-            if (
-                not model.matches_startup(selected_model, self.selected_thinking_level)
-                or not thinking.matches_startup(selected_model, self.selected_thinking_level)
-                or model.parent_id != self.bootstrap_leaf_id
-                or thinking.parent_id != model.id
-                or model.id == thinking.id
-                or model.id == self.bootstrap_leaf_id
-                or thinking.id == self.bootstrap_leaf_id
-            ):
-                raise NativePiUnavailable("Selected startup metadata does not match runtime")
+            SelectedStartupCheck(self, model, thinking).require_valid()
             after = self.path.lstat()
-            revision = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
-            if (
-                after.st_dev,
-                after.st_ino,
-                after.st_size,
-                after.st_mtime_ns,
-                after.st_ctime_ns,
-            ) != revision:
-                raise NativePiUnavailable("Selected startup revision changed after read")
+            revision = FileRevision.from_stat(info)
+            FreshFileCheck(self, after, self.bootstrap_size, revision).require_valid(
+                "Selected startup revision changed after read"
+            )
             return revision
         except (OSError, ValueError, TypeError, KeyError, NativePiUnavailable) as error:
-            raise NativePiUnavailable("Selected startup metadata cannot be attested") from error
+            raise NativePiUnavailable(f"Selected startup metadata cannot be attested: {error}") from error
 
 
 def create_fresh_private_session(
@@ -322,8 +468,8 @@ def create_fresh_private_session(
                 "id": model_entry_id,
                 "parentId": None,
                 "timestamp": timestamp,
-                "provider": "openrouter",
-                "modelId": "z-ai/glm-5.3-flash",
+                "provider": FreshPrivateSession.selected_model[0],
+                "modelId": FreshPrivateSession.selected_model[1],
             },
             {
                 "type": "thinking_level_change",
@@ -342,7 +488,8 @@ def create_fresh_private_session(
         )
         try:
             info = os.fstat(descriptor)
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            PrivateFileRole.require(info)
+            if info.st_nlink != 1:
                 raise NativePiUnavailable("Fresh-session file identity is not exclusive")
             pending = memoryview(bootstrap)
             while pending:
@@ -358,8 +505,7 @@ def create_fresh_private_session(
             _MINT,
             path,
             session_id,
-            info.st_dev,
-            info.st_ino,
+            FileIdentity.from_stat(info),
             hashlib.sha256(header).hexdigest(),
             hashlib.sha256(bootstrap).hexdigest(),
             len(bootstrap),

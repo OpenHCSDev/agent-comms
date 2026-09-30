@@ -80,6 +80,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def observed_phase(self, phase):
         return phase
 
+    def require_request(self, request: PiCommand) -> PiResponseData:
+        raise ValueError("Native event is not a request response")
+
 
 @dataclass(frozen=True)
 class UnknownPiEvent(PiEvent):
@@ -597,6 +600,16 @@ class Response(PiEvent):
     id: str | None = field(default=None, metadata={"wire_name": "id"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
+    def require_request(self, request: PiCommand) -> PiResponseData:
+        """Correlate this original response; correlation grants no input authority."""
+        if self.id != request.id or self.command is not type(request):
+            raise ValueError("Native response does not match the original request")
+        if self.success is not True:
+            raise ValueError("Native request did not succeed")
+        if self.data is None:
+            raise ValueError("Native response has no data")
+        return self.data
+
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.command.invalidates_identity(self, session):
             async for event in session.invalidate_identity():
@@ -720,7 +733,7 @@ class ToolExecutionEnd(PiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .tool_results import ToolDiff
+        from .native_tools import NativeTool
 
         name = self.tool_name or "tool"
         is_ok = self.is_error is not True
@@ -733,7 +746,7 @@ class ToolExecutionEnd(PiEvent):
             name=name,
             ok=is_ok,
             output=self.result.text() if self.result is not None else "",
-            diff=ToolDiff.from_result(name, self.result, is_ok),
+            diff=NativeTool.for_name(name).result_diff(self.result, is_ok),
         )
 
 

@@ -5,11 +5,15 @@ from __future__ import annotations
 import struct
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
+from .field_codec import FieldCodec
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import PiCost, PiPayload, PiResponseData, PiUsage
+
+if TYPE_CHECKING:
+    from .runtime_info import AgentRuntimeInfo
 
 
 @dataclass(frozen=True)
@@ -20,8 +24,26 @@ class SelectedModel(PiPayload):
     context_window: int = field(metadata={"wire_name": "contextWindow"})
 
     def __post_init__(self):
-        if not self.provider or not self.model_id or not 0 < self.context_window <= 2**53 - 1:
+        FieldCodec.decode(str, self.provider)
+        FieldCodec.decode(str, self.model_id)
+        FieldCodec.decode(int, self.context_window)
+        if not self.provider or not self.model_id:
+            raise ValueError("Exact selected model identity required")
+        if not 0 < self.context_window <= 2**53 - 1:
             raise ValueError("Exact bounded selected model required")
+
+    @classmethod
+    def from_runtime(cls, observation: AgentRuntimeInfo | None, configured_model: str | None) -> SelectedModel:
+        """Project observed model metadata, never grant current input authority."""
+        if observation is None:
+            raise ValueError("Selected native runtime observation is unavailable")
+        model = FieldCodec.decode(str, configured_model)
+        if observation.model != model:
+            raise ValueError("Selected native model observation differs from configuration")
+        provider, delimiter, model_id = model.partition("/")
+        if not delimiter:
+            raise ValueError("Configured model requires its provider identity")
+        return cls(provider, model_id, observation.context_size)
 
 
 @dataclass(frozen=True)
@@ -124,6 +146,11 @@ class SelectedSummaryData(PiResponseData):
     strict_fields = True
     version: Literal[1]
     operation_id: str = field(metadata={"wire_name": "operationId"})
+
+    def require_request(self, request):
+        if self.operation_id != request.operation_id:
+            raise ValueError("Selected summary belongs to another operation")
+        return self
 
     @abstractmethod
     def response(self, request, tokens_before):
@@ -293,3 +320,12 @@ class CompactionSettingsData(PiResponseData):
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
     decision: PiCompactionDecision
+
+    def require_request(self, request):
+        from .native_session_reopen import NativeSessionIdentity
+
+        original = NativeSessionIdentity(request.session_id, request.session_file)
+        observed = NativeSessionIdentity(self.session_id, self.session_file)
+        if observed != original or self.selected != request.selected:
+            raise ValueError("Selected settings source changed")
+        return self.decision

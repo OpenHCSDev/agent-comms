@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
@@ -36,6 +37,9 @@ class PendingDecision:
 
 @dataclass(frozen=True)
 class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
+    def wake_frame(self, source, obligation) -> tuple[str, str]:
+        raise IdentityConflict("full wake frame requires the current response obligation")
+
     def requires_selected_triage(self) -> bool:
         if self.triage_pending:
             return True
@@ -77,10 +81,12 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
             return MessageNotification(
                 recipient,
                 "Queued behind current turn" if prior_turn_active else "Blocked by earlier turn",
-                "The agent is finishing an earlier turn; this message has not started."
-                if prior_turn_active
-                else "An earlier turn has an unresolved outcome. This message is saved "
-                "and has not started; the earlier turn needs recovery, not a resend.",
+                (
+                    "The agent is finishing an earlier turn; this message has not started."
+                    if prior_turn_active
+                    else "An earlier turn has an unresolved outcome. This message is saved "
+                    "and has not started; the earlier turn needs recovery, not a resend."
+                ),
             )
         return MessageNotification(
             recipient,
@@ -154,6 +160,16 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def permits_preengagement(self, after):
         return self.execution_id is None and after.preengagement_target and self.may_become(after)
 
+    def preengagement(self, disposition: type[AssignmentState]) -> AssignmentState:
+        if not disposition.preengagement_target or disposition not in self.successors():
+            raise IdentityConflict("preengagement transition is not declared")
+        after = disposition.build(self.mode, self.execution_id, self.exact_target)
+        if not self.permits_preengagement(after):
+            raise IdentityConflict("preengagement transition is not declared")
+        if after.mode != self.mode:
+            raise IdentityConflict("preengagement cannot change frozen wake policy")
+        return after
+
 
 class PassiveAssignment(AssignmentState):
     notification_state = "Passive"
@@ -171,6 +187,11 @@ class PassiveAssignment(AssignmentState):
 
 
 class TriagePendingAssignment(AssignmentState):
+    def wake_frame(self, source, obligation) -> tuple[str, str]:
+        if obligation is not None:
+            raise IdentityConflict("bounded triage cannot inherit a response obligation")
+        return self.mode.triage_expectation(), "No response obligation exists until triage engages."
+
     notification_state = "Pending"
     notification_detail = "Queued for a bounded relevance check; not yet checked."
 
@@ -284,6 +305,27 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(BoundAssignment):
+    def wake_frame(self, source, obligation) -> tuple[str, str]:
+        from .wake import derive_exact_reply_target
+
+        if obligation is None:
+            raise IdentityConflict("full wake frame requires the current response obligation")
+        obligation.lifecycle.require_preparation()
+        if (obligation.execution_id, obligation.exact_target) != (
+            self.decision.execution_id,
+            derive_exact_reply_target(source),
+        ):
+            raise IdentityConflict("full wake frame requires the current response obligation")
+        return self.mode.full_expectation(), "you owe a response: " + json.dumps(
+            {
+                "target": obligation.exact_target,
+                "source_seq": source.seq,
+                "execution_id": obligation.execution_id,
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+
     def require_engagement(self) -> Engagement:
         return self.decision
 

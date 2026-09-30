@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.selected_pi_route import (
     SelectedPiProbeUnknownError,
@@ -33,9 +34,7 @@ async def test_actual_selected_observation_retirement_without_input_replay(
             native.persistent,
             session_file=str(native.session),
             expected_package=expected_package,
-            provider=model.provider,
-            model_id=model.id,
-            context_window=model.context_window,
+            selected=SelectedModel(model.provider, model.id, model.context_window),
         )
 
     decision = await observe()
@@ -152,9 +151,7 @@ async def test_actual_selected_observation_untrusted_receipt_retires_without_rep
             native.persistent,
             session_file=str(native.session),
             expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
-            provider=model.provider,
-            model_id=model.id,
-            context_window=model.context_window,
+            selected=SelectedModel(model.provider, model.id, model.context_window),
             timeout=1,
         )
     assert len(receipts) == 1  # A real pinned-native response, not a fake host.

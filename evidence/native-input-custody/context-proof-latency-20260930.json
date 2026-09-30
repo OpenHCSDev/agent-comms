@@ -1,0 +1,14 @@
+{
+  "scope": "Read-only measurement on an isolated native journal/proof copy; no public input, provider call or replay",
+  "source_bytes": 44661933,
+  "source_sha256": "c344245441ddbccefd56f679a7d7c8d472abed1cdf4c79e007f7df2514f078b3",
+  "source_entries": 10147,
+  "baseline_proof_read_seconds": [2.0514233019785024, 1.9661919419886544],
+  "acquired_initial_decode_seconds": 2.099837274989113,
+  "acquired_proof_read_seconds": [0.041488716029562056, 0.041135197039693594, 0.03966048400616273],
+  "clock": "time.perf_counter in the same Python process for each measured operation",
+  "profile": "20,078,692 calls; recursive FieldCodec decoding of 10,147 historical entries dominates repeated evidence reads",
+  "verification": "Each acquired observation hashes the entire original prefix, decodes appended rows, checks original descriptor/named revision/private role, and rereads the current indexed proof",
+  "controls": "15 focused controls passed, including prefix alteration with restored mtime, truncation, inode replacement, symlink, permissions, duplicate/non-user tracked input, malformed append, corrupted proof, new proof generation and closed/wrong-source readers",
+  "limits": "This measures context verification, not pure managed file I/O, total tool latency or provider queue/capacity. Actual native retained-history tool acceptance is pending. Initial decoding remains once per acquired turn."
+}

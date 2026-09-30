@@ -221,3 +221,27 @@ def test_native_startup_metadata_uses_existing_entry_family():
         duplicate = json.dumps(row)[:-1] + ', "id": "1234abcd"}'
         with pytest.raises(ValueError):
             StartupMetadataEntry.read_startup(duplicate.encode())
+
+
+@pytest.mark.parametrize(
+    "content, expected",
+    [
+        ([{"type": "thinking", "thinking": "private reasoning"},
+          {"type": "text", "text": "first"}, {"type": "text", "text": " second"}],
+         "first second"),
+        ([{"type": "toolCall", "id": "c", "name": "read", "arguments": {"path": "a"}}],
+         None),
+        ([{"type": "extension_final", "text": "unattested"}], None),
+    ],
+)
+def test_final_content_owns_native_text_admission(content, expected):
+    from agent_comms.native_pi import NativePiUnavailable
+
+    event = decode({"type": "message_end", "message": {
+        "role": "assistant", "stopReason": "stop", "content": content,
+    }})
+    if expected is None:
+        with pytest.raises(NativePiUnavailable, match="non-text content"):
+            _ = event.message.authoritative_text
+    else:
+        assert event.message.authoritative_text == expected

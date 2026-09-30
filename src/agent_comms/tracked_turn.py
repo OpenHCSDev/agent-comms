@@ -32,11 +32,13 @@ from .native_pi import (
     _verify_context,
 )
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
+from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission
 from .native_tool_call import SelectedToolDenied
-from .pi_payloads import AssistantMessage, TextDelta
+from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import ThinkingLevel
+from .private_path import FileRevision
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .store_files import _store_lock
 
@@ -55,7 +57,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         prompt_send_boundary,
         maintenance_root,
         fresh_selected,
-        selected_revision,
+        selected_revision: FileRevision | None,
         selected_tool_mode,
         observe_event,
     ):
@@ -70,7 +72,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.provider, self.model = provider, model
         self.prompt_send_boundary = prompt_send_boundary
         self.maintenance_root = maintenance_root
-        self.fresh_selected, self.selected_revision = fresh_selected, selected_revision
+        self.fresh_selected = fresh_selected
+        self.selected_revision: FileRevision | None = selected_revision
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
         self.tool_socket: OwnerToolSocket | None = None
         self.input_event: pi.InputCommitted | None = None
@@ -150,6 +153,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def complete(self) -> NativeTurnResult:
         async with AsyncExitStack() as custody:
+            self.custody = custody
             custody.callback(self.startup.release)
             await self.open_tools(custody)
             self.native = await self.native_session.open(
@@ -268,20 +272,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     def attest_selected(self, state) -> None:
         selected = self.fresh_selected
-        if (
-            state.session_id != selected.session_id
-            or state.model is None
-            or state.model.provider != "openrouter"
-            or state.model.id != "z-ai/glm-5.3-flash"
-            or ThinkingLevel.optional_name(state.thinking_level) != selected.selected_thinking_level
-            or state.message_count != 0
-            or state.pending_message_count != 0
-            or state.is_streaming is not False
-            or state.is_compacting is not False
-        ):
-            raise NativePiUnavailable("Selected first source runtime or inode differs")
+        selected.require_runtime(state)
         revision = _fresh_selected_revision(selected, started=True)
-        if revision[:2] != self.selected_revision[:2]:
+        if revision.identity != self.selected_revision.identity:
             raise NativePiUnavailable("Selected startup changed enrolled inode")
         self.selected_revision = revision
 
@@ -321,6 +314,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             if self.input_event is not None:
                 raise NativePiUnavailable("Native Pi repeated the input commitment")
             self.input_event = event
+            self.evidence = self.custody.enter_context(
+                NativeEntry.open_evidence(self.active_session_file)
+            )
+            await asyncio.to_thread(self.evidence.observe)
 
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:
@@ -338,17 +335,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.MessageEnd)
     async def message_end(self, event: pi.MessageEnd) -> None:
-        await self.dispatch(event.message)
-
-    @handles(AssistantMessage)
-    async def assistant_end(self, message: AssistantMessage) -> None:
-        if message.error_message:
-            self.terminal_error = str(message.error_message)
-            return
-        content = message.content
-        if content is None or isinstance(content, str):
-            raise NativePiUnavailable("Native Pi assistant content is malformed")
-        message.stop_reason.tracked(self, message)
+        event.message.tracked_end(self)
 
     def accept_tool_round(self, message):
         if self.tool_socket is None:
@@ -361,9 +348,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     def accept_final_message(self, message):
         if self.tool_socket is not None:
             self.tool_socket.assert_complete()
-        if any(not item.final_text_allowed for item in message.content):
-            raise NativePiUnavailable("Native Pi assistant returned non-text content")
-        self.final_messages.append("".join(item.text for item in message.content))
+        self.final_messages.append(message.authoritative_text)
 
     def context_proof(self) -> NativeContextProof:
         if (
@@ -378,6 +363,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.native.attestation.identity.session_id,
             self.input_event,
             self.context_event,
+            evidence=self.evidence,
         )
 
     @handles(pi.ToolExecutionStart)
