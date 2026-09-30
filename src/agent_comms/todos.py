@@ -7,17 +7,19 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
-import math
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Literal, get_type_hints
+from abc import abstractmethod
 
 from .field_codec import FieldCodec
+from .command import Command
+from .declared_family import DeclaredFamily
+from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, TypedRow, TypedTable, sql_literal
 
 
 class TodoError(ValueError):
@@ -40,8 +42,16 @@ class GoalRef:
     goal_id: str
 
     def __post_init__(self) -> None:
-        _identity(self.owner, self.owner_created)
+        _text(self.owner, "Thread name", 128)
+        try:
+            self.incarnation.require_recorded()
+        except ValueError as error:
+            raise TodoError("Goal reference requires its recorded owner incarnation") from error
         _text(self.goal_id, "Goal ID", 128)
+
+    @property
+    def incarnation(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.owner, self.owner_created)
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,9 +63,204 @@ class Assignment:
     generation: str
 
     def __post_init__(self) -> None:
-        _identity(self.owner, self.owner_created)
-        _identity(self.parent, self.parent_created)
+        _text(self.owner, "Thread name", 128)
+        _text(self.parent, "Thread name", 128)
+        try:
+            self.owner_identity.require_recorded()
+            self.parent_identity.require_recorded()
+        except ValueError as error:
+            raise TodoError("Assignment requires recorded owner and parent incarnations") from error
         _text(self.generation, "Assignment generation", 128)
+
+    @property
+    def owner_identity(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.owner, self.owner_created)
+
+    @property
+    def parent_identity(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.parent, self.parent_created)
+
+    def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
+        return (self.owner_identity, self.generation) == (actor, generation)
+
+    def require_successor(self, proposed: Assignment, current: Todo) -> None:
+        if self.generation == proposed.generation:
+            raise TodoConflict(current)
+
+
+class TodoState(DeclaredFamily, affix="TodoState"):
+    @classmethod
+    def assign(cls, current: Todo, proposed: Assignment) -> Todo:
+        raise TodoConflict(current)
+
+    @classmethod
+    def transfer(cls, current: Todo, command: TransferTodoChange) -> Todo:
+        raise TodoConflict(current)
+
+    @classmethod
+    def transferred(cls, current: Todo, command: TransferTodoChange) -> Todo:
+        raise TodoConflict(current)
+
+    @classmethod
+    def release(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
+        return replace(
+            current,
+            assignment=None,
+            revision=current.revision + 1,
+            last_transition=type(command),
+            last_previous=command.previous,
+        )
+
+    @classmethod
+    def released(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
+        current.require_result(
+            replace(
+                current,
+                assignment=None,
+                last_transition=type(command),
+                last_previous=command.previous,
+            )
+        )
+        return current
+
+    @classmethod
+    def change(cls, current: Todo, command: ChangeTodoState) -> Todo:
+        return command.state.decide(current, command)
+
+    @classmethod
+    def decide(cls, current: Todo, command: ChangeTodoState) -> Todo:
+        current.require_actor(command.actor, command.generation)
+        return (
+            current
+            if cls is current.state
+            else replace(current, state=cls, revision=current.revision + 1)
+        )
+
+
+class OpenTodoState(TodoState):
+    @classmethod
+    def assign(cls, current, proposed):
+        current.require_assignment(None)
+        return replace(current, assignment=proposed, revision=current.revision + 1)
+
+    @classmethod
+    def transfer(cls, current, command):
+        current.require_assignment(command.previous)
+        return replace(
+            current,
+            assignment=command.proposed,
+            revision=current.revision + 1,
+            last_transition=type(command),
+            last_previous=command.previous,
+        )
+
+    @classmethod
+    def transferred(cls, current, command):
+        current.require_result(
+            replace(
+                current,
+                assignment=command.proposed,
+                last_transition=type(command),
+                last_previous=command.previous,
+            )
+        )
+        return current
+
+
+class BlockedTodoState(TodoState):
+    pass
+
+
+class DoneTodoState(TodoState):
+    @classmethod
+    def release(cls, current, command):
+        raise TodoConflict(current)
+
+    @classmethod
+    def released(cls, current, command):
+        raise TodoConflict(current)
+
+    @classmethod
+    def change(cls, current, command):
+        raise TodoConflict(current)
+
+    @classmethod
+    def decide(cls, current, command):
+        if current.assignment is None:
+            current.require_actor(command.actor, command.generation)
+        else:
+            current.require_assignee(command.actor, command.generation)
+        return replace(current, state=cls, assignment=None, revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class TodoOperation(Command):
+    expected_revision: int
+
+    def __post_init__(self) -> None:
+        if FieldCodec.decode(int, self.expected_revision) <= 0:
+            raise TodoError("Todo operation requires a positive exact revision")
+
+    @abstractmethod
+    def apply(self, current: Todo) -> Todo: ...
+
+
+@dataclass(frozen=True)
+class AssignTodo(TodoOperation):
+    proposed: Assignment
+
+    def apply(self, current):
+        if current.assignment == self.proposed:
+            return current  # The original assignment generation is already reserved.
+        current.require_revision(self.expected_revision)
+        return current.state.assign(current, self.proposed)
+
+
+class AssignmentChange(TodoOperation, DeclaredFamily, affix="TodoChange"):
+    """The durable row retains the operation kind and exact previous assignment."""
+
+    previous: Assignment
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if type(self.previous) is not Assignment:
+            raise TodoError("Assignment change requires the exact previous assignment")
+
+
+@dataclass(frozen=True)
+class TransferTodoChange(AssignmentChange):
+    previous: Assignment
+    proposed: Assignment
+
+    def apply(self, current):
+        self.previous.require_successor(self.proposed, current)
+        if current.revision == self.expected_revision + 1:
+            return current.state.transferred(current, self)
+        current.require_revision(self.expected_revision)
+        return current.state.transfer(current, self)
+
+
+@dataclass(frozen=True)
+class ReleaseTodoChange(AssignmentChange):
+    previous: Assignment
+
+    def apply(self, current):
+        if current.revision == self.expected_revision + 1:
+            return current.state.released(current, self)
+        current.require_revision(self.expected_revision)
+        current.require_assignment(self.previous)
+        return current.state.release(current, self)
+
+
+@dataclass(frozen=True)
+class ChangeTodoState(TodoOperation):
+    state: type[TodoState]
+    actor: ThreadIncarnation
+    generation: str | None
+
+    def apply(self, current):
+        current.require_revision(self.expected_revision)
+        return current.state.change(current, self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,12 +270,75 @@ class Todo(TypedTable):
     text: str
     creator: str
     creator_created: float
-    state: Literal["open", "blocked", "done"]
+    state: type[TodoState] = field(
+        metadata={
+            "sql": Column(
+                check=(
+                    '"state" IN ('
+                    + ", ".join(
+                        sql_literal(member.declared_name)
+                        for member in TodoState.members_with(TodoState)
+                    )
+                    + ")"
+                )
+            )
+        }
+    )
     revision: int = field(metadata={"sql": Column(check="revision>0")})
     goal: GoalRef | None
     assignment: Assignment | None
-    last_transition: Literal["transfer", "release"] | None = None
+    last_transition: type[AssignmentChange] | None = field(
+        default=None,
+        metadata={
+            "sql": Column(
+                check=(
+                    '"last_transition" IN ('
+                    + ", ".join(
+                        sql_literal(member.declared_name)
+                        for member in AssignmentChange.members_with(AssignmentChange)
+                    )
+                    + ")"
+                )
+            )
+        },
+    )
     last_previous: Assignment | None = None
+
+    @property
+    def creator_identity(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.creator, self.creator_created)
+
+    def require_result(self, result: Todo) -> None:
+        if self != result:
+            raise TodoConflict(self)
+
+    def require_revision(self, expected: int) -> None:
+        if self.revision != expected:
+            raise TodoConflict(self)
+
+    def require_assignment(self, expected: Assignment | None) -> None:
+        if self.assignment != expected:
+            raise TodoConflict(self)
+
+    def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:
+        if self.assignment is None or not self.assignment.owned_by(actor, generation):
+            raise TodoConflict(self)
+
+    def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:
+        if self.creator_identity != actor:
+            self.require_assignee(actor, generation)
+
+    def require_same_creation(self, proposed: Todo) -> None:
+        self.require_result(
+            replace(
+                proposed,
+                state=self.state,
+                revision=self.revision,
+                assignment=self.assignment,
+                last_transition=self.last_transition,
+                last_previous=self.last_previous,
+            )
+        )
 
 
 @dataclass(frozen=True)
@@ -84,24 +352,21 @@ def _text(value: str, label: str, limit: int) -> str:
     return value
 
 
-def _identity(name: str, created: float) -> None:
-    _text(name, "Thread name", 128)
-    if type(created) not in (int, float) or not math.isfinite(created) or created <= 0:
-        raise TodoError("Thread incarnation timestamp must be finite and positive.")
-
-
-def _thread(thread: Thread) -> tuple[str, float]:
+def _thread(thread: Thread) -> ThreadIncarnation:
     if type(thread) is not Thread or not thread.role.executable:
         raise TodoError("Assignments require an executable registered thread snapshot.")
-    _identity(thread.name, thread.created_at)
-    return thread.name, thread.created_at
+    return _participant(thread)
 
 
-def _participant(thread: Thread) -> tuple[str, float]:
+def _participant(thread: Thread) -> ThreadIncarnation:
     if type(thread) is not Thread:
         raise TodoError("Creator must be a registered thread snapshot.")
-    _identity(thread.name, thread.created_at)
-    return thread.name, thread.created_at
+    _text(thread.name, "Thread name", 128)
+    try:
+        thread.incarnation.require_recorded()
+    except ValueError as error:
+        raise TodoError("Creator requires a recorded incarnation") from error
+    return thread.incarnation
 
 
 def _repo(value: str) -> str:
@@ -197,32 +462,42 @@ class TodoStore:
         _text(todo_id, "Todo ID", 128)
         _text(text, "Todo text", 2000)
         repo_id = _repo(repo)
-        name, created = _participant(creator)
+        identity = _participant(creator)
         if goal is not None and type(goal) is not GoalRef:
             raise TodoError("Goal reference must be a typed GoalRef.")
+        proposed = Todo(
+            id=todo_id,
+            repo=repo_id,
+            text=text,
+            creator=identity.name,
+            creator_created=identity.created_at,
+            state=OpenTodoState,
+            revision=1,
+            goal=goal,
+            assignment=None,
+        )
         with self._write() as db:
             current = Todo.one(db, id=todo_id)
             if current is not None:
-                if (
-                    current.repo,
-                    current.text,
-                    current.creator,
-                    current.creator_created,
-                    current.goal,
-                ) == (repo_id, text, name, created, goal):
-                    return current  # Same request ID never creates a second todo.
-                raise TodoConflict(current)
-            Todo(
-                id=todo_id,
-                repo=repo_id,
-                text=text,
-                creator=name,
-                creator_created=created,
-                state="open",
-                revision=1,
-                goal=goal,
-                assignment=None,
-            ).insert(db)
+                current.require_same_creation(proposed)
+                return current
+            proposed.insert(db)
+            return self._current(db, todo_id)
+
+    def _apply(self, todo_id: str, command: TodoOperation) -> Todo:
+        with self._write() as db:
+            current = self._current(db, todo_id)
+            result = command.apply(current)
+            if result == current:
+                return current
+            changes = {
+                item.name: getattr(result, item.name)
+                for item in fields(Todo)
+                if getattr(result, item.name) != getattr(current, item.name)
+            }
+            Todo.update(
+                db, where="id=? AND revision=?", parameters=(todo_id, current.revision), **changes
+            )
             return self._current(db, todo_id)
 
     def assign(
@@ -234,28 +509,15 @@ class TodoStore:
         parent: Thread,
         generation: str,
     ) -> Todo:
-        _text(generation, "Assignment generation", 128)
-        name, created = _thread(owner)
-        parent_name, parent_created = _thread(parent)
-        proposed = Assignment(name, created, parent_name, parent_created, generation)
-        with self._write() as db:
-            current = self._current(db, todo_id)
-            if current.assignment == proposed:
-                return current  # Retry after a committed but uncertain response.
-            if (
-                current.revision != expected_revision
-                or current.state != "open"
-                or current.assignment is not None
-            ):
-                raise TodoConflict(current)
-            Todo.update(
-                db,
-                where="id=?",
-                parameters=(todo_id,),
-                assignment=proposed,
-                revision=current.revision + 1,
-            )
-            return self._current(db, todo_id)
+        identity, parent_identity = _thread(owner), _thread(parent)
+        proposed = Assignment(
+            identity.name,
+            identity.created_at,
+            parent_identity.name,
+            parent_identity.created_at,
+            generation,
+        )
+        return self._apply(todo_id, AssignTodo(expected_revision, proposed))
 
     def transfer(
         self,
@@ -268,70 +530,18 @@ class TodoStore:
         generation: str,
     ) -> Todo:
         """Move one current assignment without an unclaimed race window."""
-        _text(generation, "Assignment generation", 128)
-        name, created = _thread(owner)
-        parent_name, parent_created = _thread(parent)
-        proposed = Assignment(name, created, parent_name, parent_created, generation)
-        if type(previous) is not Assignment:
-            raise TodoError("Transfer requires the exact previous assignment.")
-        with self._write() as db:
-            current = self._current(db, todo_id)
-            if (
-                current.revision == expected_revision + 1
-                and current.assignment == proposed
-                and current.state == "open"
-                and generation != previous.generation
-                and current.last_transition == "transfer"
-                and current.last_previous == previous
-            ):
-                return current  # Exact retry after a committed, uncertain response.
-            if (
-                current.revision != expected_revision
-                or current.assignment != previous
-                or current.state != "open"
-                or generation == previous.generation
-            ):
-                raise TodoConflict(current)
-            Todo.update(
-                db,
-                where="id=?",
-                parameters=(todo_id,),
-                assignment=proposed,
-                revision=current.revision + 1,
-                last_transition="transfer",
-                last_previous=previous,
-            )
-            return self._current(db, todo_id)
+        identity, parent_identity = _thread(owner), _thread(parent)
+        proposed = Assignment(
+            identity.name,
+            identity.created_at,
+            parent_identity.name,
+            parent_identity.created_at,
+            generation,
+        )
+        return self._apply(todo_id, TransferTodoChange(expected_revision, previous, proposed))
 
     def release(self, todo_id: str, *, expected_revision: int, previous: Assignment) -> Todo:
-        if type(previous) is not Assignment:
-            raise TodoError("Release requires the exact previous assignment.")
-        with self._write() as db:
-            current = self._current(db, todo_id)
-            if (
-                current.revision == expected_revision + 1
-                and current.assignment is None
-                and current.state != "done"
-                and current.last_transition == "release"
-                and current.last_previous == previous
-            ):
-                return current  # Exact retry after a committed, uncertain response.
-            if (
-                current.revision != expected_revision
-                or current.assignment != previous
-                or current.state == "done"
-            ):
-                raise TodoConflict(current)
-            Todo.update(
-                db,
-                where="id=?",
-                parameters=(todo_id,),
-                assignment=None,
-                revision=current.revision + 1,
-                last_transition="release",
-                last_previous=previous,
-            )
-            return self._current(db, todo_id)
+        return self._apply(todo_id, ReleaseTodoChange(expected_revision, previous))
 
     def set_state(
         self,
@@ -344,37 +554,9 @@ class TodoStore:
     ) -> Todo:
         """An explicit, revision-checked decision; never infer it from Pi output."""
         try:
-            state = FieldCodec.decode(get_type_hints(Todo)["state"], state)
+            state = FieldCodec.decode(type[TodoState], state)
         except ValueError as error:
             raise TodoError("Unknown todo state.") from error
-        actor_name, actor_created = _participant(actor)
-        with self._write() as db:
-            current = self._current(db, todo_id)
-            if current.revision != expected_revision or current.state == "done":
-                raise TodoConflict(current)
-            is_creator = (actor_name, actor_created) == (current.creator, current.creator_created)
-            is_assignee = (
-                current.assignment is not None
-                and generation is not None
-                and (actor_name, actor_created, generation)
-                == (
-                    current.assignment.owner,
-                    current.assignment.owner_created,
-                    current.assignment.generation,
-                )
-            )
-            if not (is_creator or is_assignee):
-                raise TodoConflict(current)
-            if state == "done" and current.assignment is not None and not is_assignee:
-                raise TodoConflict(current)
-            if state == current.state:
-                return current
-            Todo.update(
-                db,
-                where="id=?",
-                parameters=(todo_id,),
-                state=state,
-                revision=current.revision + 1,
-                assignment=None if state == "done" else current.assignment,
-            )
-            return self._current(db, todo_id)
+        return self._apply(
+            todo_id, ChangeTodoState(expected_revision, state, _participant(actor), generation)
+        )

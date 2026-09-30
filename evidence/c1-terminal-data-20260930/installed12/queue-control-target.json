@@ -1,0 +1,19 @@
+{
+  "selected_session": "immediate-fork",
+  "actual_target_owner": "immediate-fork",
+  "actual_target_region": [
+    80,
+    38,
+    30,
+    1
+  ],
+  "global_selector_owner": "beta",
+  "global_selector_region": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "original_input_id": "0210ff120dd640a78ccb1b01d5106de7",
+  "original_admission_unresolved": true
+}

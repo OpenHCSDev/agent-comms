@@ -49,7 +49,7 @@ def result(patch=PATCH):
 def test_native_edit_evidence(name, native, ok, expected):
     assert (
         NativeTool.for_name(name).result_diff(
-            PiToolResult.from_wire(native) if native is not None else None, ok)
+            PiToolResult.from_wire(native), ok)
         == expected
     )
 
@@ -73,8 +73,8 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
             "result": native,
             "isError": False,
         },
-        {"type": "message_start", "message": {"role": "assistant"}},
-        {"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}},
+        {"type": "message_start", "message": {"role": "assistant", "content": []}},
+        {"type": "message_end", "message": {"role": "assistant", "content": [], "stopReason": "stop"}},
         {"type": "agent_settled"},
     ]
     stub = tmp_path / "pi-stub"

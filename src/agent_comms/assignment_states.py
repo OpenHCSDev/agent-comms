@@ -157,15 +157,16 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
             raise IntegrityViolationError("claim decision target is inconsistent")
         return state
 
-    def permits_preengagement(self, after):
-        return self.execution_id is None and after.preengagement_target and self.may_become(after)
+    @classmethod
+    def build_preengagement(cls, mode: WakePolicy) -> AssignmentState:
+        if cls.preengagement_target:
+            return cls.build(mode, None, None)
+        raise IdentityConflict("preengagement transition is not declared")
 
     def preengagement(self, disposition: type[AssignmentState]) -> AssignmentState:
-        if not disposition.preengagement_target or disposition not in self.successors():
+        if self.execution_id is not None or disposition not in self.successors():
             raise IdentityConflict("preengagement transition is not declared")
-        after = disposition.build(self.mode, self.execution_id, self.exact_target)
-        if not self.permits_preengagement(after):
-            raise IdentityConflict("preengagement transition is not declared")
+        after = disposition.build_preengagement(self.mode)
         if after.mode != self.mode:
             raise IdentityConflict("preengagement cannot change frozen wake policy")
         return after

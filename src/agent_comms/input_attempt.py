@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar
+from uuid import UUID, uuid4
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, projected
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, TextRepresentation, projected
+from .native_input_record import NativeInputIdText
 from .thread_identity import GenerationCounter, ThreadIncarnation
 from .threads import Thread
 
@@ -18,8 +20,23 @@ if TYPE_CHECKING:
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
 
-_NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
 
+class ACPInputIdText(TextRepresentation):
+    """One original submission ID, independent of its later native input ID."""
+
+    @classmethod
+    def new(cls) -> str:
+        return uuid4().hex
+
+    @classmethod
+    def encode(cls, value):
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if UUID(hex=value).hex != value:
+            raise ValueError("ACP submission requires a canonical UUID hex identity")
+        return value
 
 @dataclass(frozen=True, slots=True)
 class GoalInputDecision:
@@ -50,6 +67,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def queued_for(self, owner: ThreadIncarnation, admission: int, text: str) -> bool:
         return False
+
+    def require_started(self, admission: int) -> StartedInput:
+        raise RelationViolationError("Input start lacks its original native disposition")
 
     def proves_started(
         self,
@@ -228,8 +248,15 @@ class SentInput(StoredInput):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if not self.turn_id or _NATIVE_ID.fullmatch(self.native_id) is None or not self.sent_text:
-            raise ValueError("Invalid native input attempt")
+        try:
+            from .thread_identity import TurnId
+
+            TurnId.for_registration(self.turn_id)
+            NativeInputIdText.decode(self.native_id)
+            if not FieldCodec.decode(str, self.sent_text):
+                raise ValueError("Native input text cannot be empty")
+        except ValueError as error:
+            raise ValueError("Invalid native input attempt") from error
 
     @property
     def sent_digest(self) -> TextDigest:
@@ -260,6 +287,11 @@ class StartedInput(SentInput):
     has_started = True
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
+
+    def require_started(self, admission: int) -> StartedInput:
+        if not self.matches_admission(admission):
+            raise RelationViolationError("Input start admission changed")
+        return self
 
     def started_for_native(
         self,

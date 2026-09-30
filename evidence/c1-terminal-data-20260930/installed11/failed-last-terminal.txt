@@ -1,0 +1,44 @@
+                                                                                                                                                                
+  ☰     <──    ──>   ✓ beta ×  ⠋ immediate-fork ×                                                                                                              
+                                ━━━━━━━━━━━━━━━━                                                                                                                
+┌──────────────────────┐                             Name ▾    │                                                                                                
+│ Toad                 │                                       │ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔      
+│ Export wire history… │                     Date created ▾    │▌  ▶ Agent coordination context                                                                 
+│ Thread Import…       │                                       │▌                                                                                               
+└──────────────────────┘or provider response                   │▌                                                                                               
+  ✓ beta                                                       │▌─────────────────────────────────── User · 16:52:48 ────────────────────────────────────       
+    Ready                                                      │▌▊❯ FORK_PARENT_SEED                                                                            
+▸ #none                                      Date created ▾    │▌                                                                                               
+▸ #all                                       Date created ▾    │▌                                                                                               
+▾ #fork-added                                Date created ▾    │▌─────────────────────────────────── Agent · 16:52:48 ───────────────────────────────────       
+  ⠸ immediate-fork                                             │▌NATIVE_RESPONSE_1                                                                              
+    Thinking · Waiting for provider response                   │▌                                                                                               
+▸ #team                                      Date created ▾    │▌▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔      
+                                                               │▌  ▶ Agent coordination context                                                                 
+                                                               │▌                                                                                               
+                                                               │▌                                                                                               
+                                                               │▌─────────────────────────────────── User · 16:53:13 ────────────────────────────────────       
+                                                               │▌▊❯ FIRST_FORK_NEW_INPUT                                                                        
+                                                               │▌                                                                                               
+                                                             < │▌                                                                                             < 
+                                                               │▌─────────────────────────────────── Agent · 16:53:14 ───────────────────────────────────       
+                                                               │▌NATIVE_RESPONSE_2                                                                              
+                                                               │▌                                                                                               
+                                                               │▌▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔      
+                                                               │▌  ▶ Agent coordination context                                                                 
+                                                               │▌                                                                                               
+                                                               │▌                                                                                               
+                                                               │▌─────────────────────────────────── User · 16:53:20 ────────────────────────────────────       
+                                                               │▌▊❯ VISIBILITY_BUSY_TURN                                                                        
+                                                               │▌                                                                                               
+                                                               │                                                                                                
+                                                               │ Waiting for provider response · 0:14 elapsed                                                   
+                                                               │ ▶ Session details · Waiting for provider response · Saved history available                    
+                                                               │━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   
+                                                               │Queued (1): VISIBILITY_QUEUED_FOLLOWUP                                                          
+                                                               │ Enter queues · Send now (Ctrl+Enter / Ctrl+Y)                                                  
+                                                               │▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎   
+                                                               │▊ ❯                                                                                         ▎   
+40% ───────────────────────────────────────●────────────────   │▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎   
+  ──>   Float                                                  │  selected-offline/fixture · off  ~/wt/g458f/u01/fixture/application/project    0.1K (0.3%)     
+^s Channels                                                                                                                                         ▏^p palette 

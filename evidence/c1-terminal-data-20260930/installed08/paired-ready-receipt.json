@@ -1,0 +1,50 @@
+{
+  "state": "READY-IMMUTABLE-PAIRED-CANDIDATE-AWAITING-EINSTEIN-ACTUAL-GATE",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930",
+  "pins": {
+    "agent-comms": "6fabde90aca7166fe599efba8cd1aa6d84b17e11",
+    "batrachian-toad": "b3b1a8b549647d67c3f4387c040b62f9c259e5f5",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "frozen_packages": 68,
+  "source_proof": {
+    "agent-comms": {
+      "pin": "6fabde90aca7166fe599efba8cd1aa6d84b17e11",
+      "python_files_equal": 292,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact published candidate Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "b3b1a8b549647d67c3f4387c040b62f9c259e5f5",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact published candidate Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "native_full_trust": true,
+  "metadata_published_from_same_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3849031,
+        "start_ticks": 27234229,
+        "returncode": 0
+      }
+    ]
+  },
+  "builds": 1,
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "paid_calls": 0,
+  "native_inputs": 0,
+  "accepted_scope": "Packaging/source provenance/import/trust admission only; coherent Core456/457/458/459 source with parent250 declared matching metadata. Toad production unchanged from19970f; native593b unchanged. Einstein owns actual affected native/ACP/Toad first-fork and output gate before parent publication.",
+  "remaining_scope": "Candidate only, not release-ready/live. Actual producer-consumer acceptance and source closure owned by Einstein and parent; public cutover remains parent-owned. No global/default/native/process mutations by packaging."
+}

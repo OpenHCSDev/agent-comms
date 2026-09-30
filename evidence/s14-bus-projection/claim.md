@@ -29,3 +29,42 @@ WireLog.certified_read(blocking=False), removing the standalone page opener and
 its duplicate certificate/connection/stream. Original historical acceptance scripts
 under evidence/existing-checkpoint and pf2-checkpoint-seals remain unchanged raw
 proofs; they target their frozen historical commits, not the current API.
+
+Correction checkpoint: CoveragePage owns the partial/exhaustive rule; SourceCoverage
+only asks that declared query to admit its result. The initial required ratchet's
+new ForeignAbsenceProbe is retained as failed evidence, not suppressed. Typed
+RelationViolationError propagates unchanged from addressed_page; low-level read/
+decode failures retain their cause as the existing unavailable-page disposition.
+
+Provider-free source gates: 12 selected existing coverage/cursor/admission tests
+passed; the affected replacement-during-page guard passed; a real two-original
+page rejects unqualified truncation and a boolean limit, while declared partial
+coverage remains blocked at its original unproven source. These do not prove
+installed UI readiness or performance. Earlier 74 focused cases passed excluding
+the now-corrected replacement hook. Four sidebar clock/equality assertions also
+fail against unmodified installed6feb; they are not reported as candidate passes.
+The continuous installed saved-history DM/channel journey remains required.
+
+Activity caller closure: MessageBus no longer keeps _activity_revision and
+_activity_snapshot. The existing BusActivityIndex retains one ActivityCheckpoint
+resource; that declaration owns current-boundary reuse. Newly accumulated metrics
+do not mutate the previously published resource. A focused original wire journey
+proves cold/reopened clocks, unchanged-boundary reuse and exactly one appended
+row decoded. The preexisting whole coordination-snapshot equality assertion still
+fails on installed6feb (fresh unknown activity timestamps and thread/channel DTOs);
+its candidate/baseline failures are preserved rather than weakening that test.
+
+Frozen248 actual profile correlation is recorded separately. Kernel idle CPU is
+4.11s over16.592s (24.77%); observed Core stack transitions include viewer_snapshot,
+FieldCodec, original locked reads and source publication. These transition groups
+are not CPU shares/calls/durations, and resource metadata lacks per-query source
+clocks. They establish a source-read investigation lead, not redundant-read or
+performance-improvement proof. No new capture/provider/public mutation occurred.
+
+Final activity boundary closure: MessageBus's duplicate raw activity rescan is
+deleted too. Malformed or lost original byte boundaries fail through the existing
+RelationViolationError; disposable index damage still rebuilds inside its single
+original index owner. CandidateQuery now uses the existing WireRootIdText and
+StableLookupText declarations rather than admitting arbitrary nonempty strings.
+The affected activity-original and selected-candidate/no-wake cases both pass.
+No scheduling/native input permission is introduced by this projection/query.

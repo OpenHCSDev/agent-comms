@@ -104,11 +104,7 @@ class EditTool(PathTool, CodingTool):
 
     @classmethod
     def result_diff(cls, result, ok):
-        from .pi_payloads import NativeEditDetails
-
-        if not ok or result is None:
-            return None
-        return NativeEditDetails.capture_diff(result.details)
+        return result.edit_diff(ok)
 
     def _parse_resource(self) -> FileClaimPath:
         return ExistingFileClaim(Path(self.arguments["path"]))

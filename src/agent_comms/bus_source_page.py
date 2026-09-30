@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Annotated, Self
 
 from .bus_publication import StableLookupText
+from .coordination_errors import IdentityConflict
 from .field_codec import FieldCodec
+from .wire_metadata import WireRootIdText
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -42,17 +44,20 @@ class CoveragePage(AddressedPage):
         if self.after_seq and not self.partial:
             raise ValueError("Noninitial coverage page must declare partial coverage")
 
+    def require_exhausted(self, has_more: bool) -> None:
+        """An unqualified coverage request cannot admit a truncated prefix."""
+        if has_more and not self.partial:
+            raise IdentityConflict("source coverage exceeded its bounded private initial scan")
+
 
 @dataclass(frozen=True, kw_only=True)
 class CandidateQuery(SourcePage):
-    root_id: str
-    recipient_lookup: str
+    root_id: Annotated[str, WireRootIdText]
+    recipient_lookup: Annotated[str, StableLookupText]
     required_through_seq: int
     delivery_only: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if not self.recipient_lookup:
-            raise ValueError("Candidate query needs its original recipient")
         if self.required_through_seq < 0:
             raise ValueError("Candidate query high-water must be nonnegative")

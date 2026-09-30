@@ -121,12 +121,15 @@ END"""
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
     def retry_authorized(self, replay: ReplayAssessments | None, obligation) -> bool:
-        if not self.lifecycle.has_retry_budget(self.max_attempts):
+        if replay is None:
             return False
-        if replay is None or not replay.allows_retry:
-            return False
-        return self.origin is not ExecutionOrigin.WIRE or (
-            obligation is not None and obligation.lifecycle.retryable
+        return (
+            self.lifecycle.has_retry_budget(self.max_attempts)
+            and replay.allows_retry
+            and (
+                self.origin is not ExecutionOrigin.WIRE
+                or (obligation is not None and obligation.lifecycle.retryable)
+            )
         )
 
     execution_id: str = dataclass_field(

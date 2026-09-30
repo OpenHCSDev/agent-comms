@@ -1,0 +1,13 @@
+{
+  "exit_code": 1,
+  "elapsed_seconds": 60.23465625202516,
+  "stage": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930",
+  "core": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26",
+  "toad": "c0750340f069c90be2c65bb8f8d7f8affd32d02a",
+  "driver": "bc13567b34f9c6d65e12bd753c23c4a42f998781",
+  "runtime_activation_unchanged": true,
+  "manual_replay": false,
+  "public_mutations": 0,
+  "paid_calls": 0,
+  "gate": "original existing firstfork/queue/cancel installed native+ACP+Toad through real PTY; source and ANSI outcome review pending"
+}
