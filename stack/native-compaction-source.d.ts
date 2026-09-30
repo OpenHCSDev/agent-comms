@@ -19,7 +19,7 @@ export declare class HistorySummarySource extends SummarySource {
 export declare class ReducedSummarySource extends SummarySource {
     constructor();
     get count(): number;
-    append(text: string): void;
+    append(text: string, index?: number): void;
     pieces(): IterableIterator<string>;
     byteLength(): number;
     close(): void;
