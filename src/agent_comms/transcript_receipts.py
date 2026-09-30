@@ -157,15 +157,9 @@ class AssignedTranscriptSource:
             str(self.root), self.recipient, rows[0].message.seq if rows else 0
         )
 
-    def owns(self, sequence):
-        return bool(self.rows("w.seq=?", (sequence,)))
-
-    def next(self, traversal, sequence, through):
+    def page_rows(self, traversal, sequence, through, *, limit):
         predicate, parameters = traversal.predicate(sequence, through)
-        rows = self.rows(predicate, parameters, ascending=traversal.ascending)
-        if not rows:
-            return None
-        return rows[0]
+        return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
     def native_events(self, record, routes, reader):
         from dataclasses import replace
@@ -199,8 +193,19 @@ class AssignedTranscriptSource:
             # An assigned request has one original wire record in this source.
             # Its native prompt is a consumer of that record, not another input.
             if isinstance(event, UserTranscript) and event.routed:
+                requests = event.routing.requests
+                marks = ",".join("?" for _ in requests)
+                originals = self.rows(
+                    f"w.seq IN ({marks})",
+                    tuple(message.seq for message in requests),
+                    limit=len(requests),
+                )
                 remaining = tuple(
-                    message for message in event.routing.requests if not self.owns(message.seq)
+                    message
+                    for message in requests
+                    if not any(
+                        original.message.reference == message.reference for original in originals
+                    )
                 )
                 if not remaining:
                     continue

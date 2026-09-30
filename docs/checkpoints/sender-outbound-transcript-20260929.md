@@ -226,3 +226,36 @@ existing-coordinator-open write transaction and admission lock defect; Sch215
 owns already-open DM/IRC publication, late replay, next-message delay, physical
 reply uniqueness and cold/A-B/A proof. Run one coherent affected installed gate
 after those checkpoints are paired. No live root/default runtime was changed.
+
+## Original41MB profile: canonical read transaction
+
+Owner's actual installed nra-architecture held-scroll/reversal/End/15-second idle
+capture is the acceptance source, at comms-live-repro-20260929-original-read in
+persistent scratch. Before glyphs are visible; after and software SVG are blank.
+The1207 GIL samples name thread_presentation/recent_notifications, message_by_id,
+verification/metadata and store locks. Cross-thread inclusive weights are not
+wall-clock stall measurements. No provider prompt, replay or restart occurred;
+owned capture cleanup is empty. Do not replace this comparison with a tiny seed.
+
+Deleted the26-line _receipt_offsets cache/secondary identity index and its caller
+and import. ID-only reads use the original opened wire stream; display consumers
+now carry original(seq,id) references. Every notification window resolves them
+in one canonical wire-lock/certified-index/source-file lifetime. Conversation
+and reference reads share the existing certificate transaction and retain all
+seal, original reference, frozen sender and source-change checks. There is no
+new proof cache, message store, index, seen list or acknowledgement authority.
+
+Paged transcripts fetch at most max_messages+1 original source rows once per
+page, rather than certifying each following row separately. Native routed inputs
+resolve their original requests as one bounded source query and compare both
+sequence and ID. Delivery/native coverage and rendered/read frontiers remain
+separate. These resources are local to the existing bounded read.
+
+The existing source-ownership guard now forbids _receipt_offsets definitions and
+callers. Its real introduction232988e2 in declarations.py grows the scoped AST
+witness0 to2; candidate WireLog is0. receipt-offset-mirror-guard-history.json
+records the original path, distinguishing later file moves from introduction.
+Source/control verification is recorded in source-original-batch-run02.log.
+Full original-history installed comparison remains UNREVIEWED, paired with434's
+coordinator read-opening correction and215/217/221's existing UI resource owners.
+Parent owns the certified-index format rebuild and live paired activation.

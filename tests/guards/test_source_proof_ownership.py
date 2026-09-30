@@ -26,6 +26,7 @@ RETIRED = {
     "_session_runtime_metadata",
     "_private_cursor_announced",
     "_private_cursor_revisions",
+    "_receipt_offsets",
 }
 
 

@@ -334,7 +334,12 @@ class Transcripts:
             try:
                 record = next(native, None)
                 events = record.project(project_native) if record is not None else ()
-                message = receipts.next(traversal, consumed.wire_seq, frontier)
+                source_rows = iter(
+                    receipts.page_rows(
+                        traversal, consumed.wire_seq, frontier, limit=max_messages + 1
+                    )
+                )
+                message = next(source_rows, None)
                 while record is not None or message is not None:
                     if record is not None and not events:
                         if after and record.incomplete_tail(size):
@@ -361,7 +366,7 @@ class Transcripts:
                         events = record.project(project_native) if record is not None else ()
                     else:
                         consumed = consumed.at_sequence(traversal.receipt_position(message.message))
-                        message = receipts.next(traversal, consumed.wire_seq, frontier)
+                        message = next(source_rows, None)
                 if record is None:
                     consumed = consumed.at_offset(frontier.offset if after else 0)
                 if message is None:
