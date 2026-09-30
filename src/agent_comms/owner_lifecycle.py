@@ -17,8 +17,7 @@ from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
-from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
+from .owner_launch import RestartEnvironment
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -26,7 +25,6 @@ from .store_files import _store_lock
 from .threads import Thread
 from .thread_identity import OwnerIdentity
 from .restart_refusals import (
-    OwnerBusyRefusal,
     OwnerSelectionChangedRefusal,
     OwnerGenerationChangedRefusal,
 )
@@ -108,6 +106,9 @@ class OwnerReleaseStore(LockedStore[dict[str, OwnerReleaseReceipt]]):
 
     def empty(self) -> dict[str, OwnerReleaseReceipt]:
         return {}
+
+
+from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
 
 
 class OwnerLifecycle:
@@ -230,77 +231,14 @@ class OwnerLifecycle:
         original exits and before any replacement launches. It owns its writer
         proof and operation; failure leaves the fenced batch stopped for review.
         """
-        with _store_lock(self._wire_lock_path):
-            self.maintenance.assert_open_unlocked()
-            snapshot = self.registry.snapshot()
-            threads = (
-                [
-                    thread
-                    for thread in snapshot.threads.values()
-                    if thread.role.executable
-                    and snapshot.statuses[thread.name].active
-                    and thread.process_alive
-                ]
-                if names is None
-                else list(
-                    {
-                        snapshot.require_active(name).name: snapshot.require_active(name)
-                        for name in names
-                    }.values()
-                )
-            )
-            if expected is not None:
-                if len(threads) != 1 or threads[0].name != expected.name:
-                    raise OwnerSelectionChangedRefusal()
-                expected.require_current(snapshot)
-            cutover.require_selection(snapshot, threads)
-            captured = []
-            for thread in threads:
-                generation = snapshot.admission_generations[thread.name]
-                if not thread.role.executable or not snapshot.statuses[thread.name].active:
-                    raise RelationViolationError("Restart requires a running agent.")
-                if not thread.process_alive or thread.pid == os.getpid():
-                    raise RelationViolationError("Restart requires another live owner.")
-                try:
-                    thread.require_idle()
-                except RelationViolationError as error:
-                    raise OwnerBusyRefusal() from error
-                captured.append((thread, generation))
-            target_runtime = RestartEnvironment.inherit(self.restart_environment(
-                os.environ if runtime is None else runtime.encode()
-            ))
-            launches = tuple(
-                RetainedOwnerLaunch.capture(thread, snapshot, interpreter=source_interpreter)
-                for thread, _ in captured
-            )
-            # Fence before the first signal, so a concurrent channel wake cannot
-            # start a turn while shutdown is pending. No replay is scheduled.
-            captured = self.registry.fence_idle_owners(captured)
-        for thread, generation in captured:
-            self._stop_process(thread, generation)
-        with _store_lock(self._wire_lock_path):
-            for thread, generation in captured:
-                self._require_same_stop_owner(thread, generation)
-                if thread.process_alive:
-                    raise RelationViolationError("Owner survived retirement.")
-            cutover.after_stopped(self)
-            # The operation cannot replace the captured audience's registry or
-            # process proof before the batch resumes its existing launch path.
-            for thread, generation in captured:
-                self._require_same_stop_owner(thread, generation)
-            return tuple(
-                OwnerRestartResult(
-                    thread.name,
-                    thread.pid,
-                    self._launch_owner_unlocked(
-                        self.registry.require(thread.name),
-                        agent_bin or self.restart_entrypoint(launch.binary),
-                        agent_args if agent_args is not None else launch.arguments,
-                        environment=target_runtime.apply_runtime(launch.environment),
-                    ).pid,
-                )
-                for (thread, _), launch in zip(captured, launches, strict=True)
-            )
+        from .owner_restart import OwnerRestartRequest
+
+        request = OwnerRestartRequest(
+            tuple(names) if names is not None else None, agent_bin,
+            tuple(agent_args) if agent_args is not None else None,
+            expected, runtime, source_interpreter,
+        )
+        return cutover.restart(self, request)
 
     @contextmanager
     def _signal_guard(self, thread: Thread, admission_generation: int):

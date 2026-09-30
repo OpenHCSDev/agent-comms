@@ -5,20 +5,34 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
+from .owner_restart import OwnerRestartCompletion
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch
+    from .owner_lifecycle import OwnerRestartResult
 
 
-class OwnerCutover(ABC):
+class OwnerCutover(OwnerRestartCompletion, ABC):
     """An operation owns its audience and retained maintenance proof.
 
     Selection validation precedes every fence or signal. Installation runs with
     the existing wire admission lock held, after original process exit and before
     replacement launch. A member must not reacquire that lock or start owners.
     """
+
+    def restart(self, lifecycle: OwnerLifecycle, request: OwnerRestartRequest) -> tuple[OwnerRestartResult, ...]:
+        """The admission member owns which runtime may decode original records."""
+        from .owner_restart import AdmittedOwnerBatch
+
+        return AdmittedOwnerBatch.restart(lifecycle, request, self)
+
+    def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
+        """Default same-runtime installation and launch; transfer is a member."""
+        self.after_stopped(stopped.lifecycle)
+        return stopped.launch()
 
     @abstractmethod
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:
