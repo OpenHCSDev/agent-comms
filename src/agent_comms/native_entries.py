@@ -83,7 +83,11 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
 
         _private_session_dir(session_file.parent)
         with PrivateEvidenceRead.open(session_file) as source:
-            yield NativeEvidenceRead(source)
+            evidence = NativeEvidenceRead(source)
+            try:
+                yield evidence
+            finally:
+                evidence.close()
 
     @staticmethod
     def tracked_users(entries):
@@ -169,6 +173,10 @@ class NativeEvidenceRead:
         if self.source.path != session_file:
             raise NativePiUnavailable("Native evidence reader belongs to another source")
 
+    def close(self):
+        self.source.close()
+        self.entries = ()
+
     def observe(self):
         from .native_pi import NativePiUnavailable
 
@@ -179,7 +187,7 @@ class NativeEvidenceRead:
                 raise ValueError("Native Pi session header is invalid")
             entries[0].require_header()
         except (ValueError, TypeError, KeyError) as error:
-            self.source.close()
+            self.close()
             raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
         self.entries = entries
         return entries[0], entries

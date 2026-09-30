@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import NativeContextProof, NativePiUnavailable
+from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
 from native_proof_cases import write_proof_rows
 from test_native_pi import _evidence, INPUT_ID
 
@@ -71,6 +71,8 @@ def test_acquired_source_never_reuses_evidence_after_damage(tmp_path, damage):
             Path(str(session) + ".input-proof").write_bytes(b"corrupt original proof")
         with pytest.raises(NativePiUnavailable):
             NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
+        assert evidence.source.stream.closed
+        assert not evidence.entries
 
 
 def test_acquired_source_cannot_corroborate_another_file(tmp_path):
@@ -78,3 +80,22 @@ def test_acquired_source_cannot_corroborate_another_file(tmp_path):
     with NativeEntry.open_evidence(session) as evidence:
         with pytest.raises(NativePiUnavailable, match="another source"):
             NativeContextProof.read_evidence(session.with_name("foreign.jsonl"), INPUT_ID, evidence=evidence)
+        assert evidence.source.stream.closed
+
+
+@pytest.mark.parametrize("operation", ["append", "alter_prefix"])
+def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operation):
+    session = _evidence(tmp_path)
+    with PrivateEvidenceRead.open(session) as source:
+        rows = source.rows()
+        assert next(rows)["type"] == "session"
+        if operation == "append":
+            with session.open("a") as output:
+                output.write(json.dumps({"type": "compaction", "id": "new", "summary": "next snapshot"}) + "\n")
+            assert len(tuple(rows)) == 1
+            assert tuple(source.rows())[0]["id"] == "new"
+        else:
+            session.write_bytes(session.read_bytes().replace(b"separate", b"changed!"))
+            with pytest.raises(NativePiUnavailable, match="prefix changed"):
+                tuple(rows)
+            assert source.stream.closed

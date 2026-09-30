@@ -346,16 +346,20 @@ class NativeContextProof(NativeContextRecord):
                     session_file, input_id, request_generation=request_generation,
                     evidence=acquired,
                 )
-        evidence.require_path(session_file)
-        header, entries = evidence.observe()
-        tracked = NativeEntry.tracked_users(entries)
-        if input_id not in tracked:
-            raise NativePiUnavailable("The specified input was never durably committed")
-        with NativeContextJournal.open_evidence(session_file) as db:
-            row = NativeContextJournal.for_input(db, input_id, request_generation)
-            if row is None:
-                raise NativePiUnavailable("The input has no assembled-context proof")
-            return row.corroborate(session_file, header, tracked)
+        try:
+            evidence.require_path(session_file)
+            header, entries = evidence.observe()
+            tracked = NativeEntry.tracked_users(entries)
+            if input_id not in tracked:
+                raise NativePiUnavailable("The specified input was never durably committed")
+            with NativeContextJournal.open_evidence(session_file) as db:
+                row = NativeContextJournal.for_input(db, input_id, request_generation)
+                if row is None:
+                    raise NativePiUnavailable("The input has no assembled-context proof")
+                return row.corroborate(session_file, header, tracked)
+        except NativePiUnavailable:
+            evidence.close()
+            raise
 
     @classmethod
     def read_history_evidence(
@@ -665,8 +669,8 @@ def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 def _read_private_file(path: Path):
     """Yield strict private evidence rows, checking the same opened revision.
 
-    Historical bytes are not an admission quota. Memory follows one record;
-    callers must exhaust this iterator before relying on the observation.
+    Historical bytes are not an admission quota. A bounded byte snapshot is
+    validated before decoding; callers must exhaust the resulting observation.
     """
     with PrivateEvidenceRead.open(path) as evidence:
         yield from evidence.rows()
@@ -684,7 +688,7 @@ class PrivateEvidenceRead:
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
         self.size = 0
-        self.digest = hashlib.sha256().digest()
+        self.digest = hashlib.sha256()
 
     @classmethod
     @contextmanager
@@ -707,24 +711,20 @@ class PrivateEvidenceRead:
                 raise NativePiUnavailable("Native Pi evidence inode changed")
             if not info.st_size or info.st_size < self.size:
                 raise NativePiUnavailable("Native Pi evidence file is empty or truncated")
-            self.stream.seek(0)
-            digest = hashlib.sha256()
-            remaining = self.size
-            while remaining:
-                raw = self.stream.read(min(remaining, 128 * 1024))
-                if not raw:
-                    raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
-                remaining -= len(raw)
-                digest.update(raw)
-            if digest.digest() != self.digest:
-                raise NativePiUnavailable("Native Pi evidence original prefix changed")
-            remaining = info.st_size - self.size
-            while remaining:
-                raw = self.stream.readline(remaining)
-                if not raw or not raw.endswith(b"\n"):
-                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
-                remaining -= len(raw)
-                digest.update(raw)
+            self.stream.seek(self.size)
+            digest = self.digest.copy()
+            appended = self.stream.read(info.st_size - self.size)
+            if len(appended) != info.st_size - self.size or (appended and not appended.endswith(b"\n")):
+                raise NativePiUnavailable("Native Pi evidence file is incomplete")
+            digest.update(appended)
+            for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
+                PrivateFileRole.require(observed)
+                if revision != FileRevision.from_stat(observed):
+                    raise NativePiUnavailable("Native Pi evidence changed during observation")
+            # The byte snapshot has been verified before decoding. Appends by
+            # the native child during expensive typed decoding are observed on
+            # the next read; they cannot change these captured original bytes.
+            for raw in appended.splitlines(keepends=True):
                 try:
                     row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
                 except (UnicodeError, ValueError) as error:
@@ -732,17 +732,42 @@ class PrivateEvidenceRead:
                 if type(row) is not dict:
                     raise NativePiUnavailable("Native Pi evidence row has wrong type")
                 yield row
-            for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
-                PrivateFileRole.require(observed)
-                if revision != FileRevision.from_stat(observed):
-                    raise NativePiUnavailable("Native Pi evidence changed during observation")
-            self.size, self.digest = info.st_size, digest.digest()
+            self.verify_snapshot(info.st_size, digest.digest())
+            self.size, self.digest = info.st_size, digest
         except NativePiUnavailable:
             self.close()
             raise
         except (OSError, ValueError) as error:
             self.close()
             raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
+
+    def verify_snapshot(self, size, expected_digest):
+        """Validate the captured prefix after decoding, allowing later appends.
+
+        The current revision must stay fixed during this short hash read. It
+        need not equal the older capture revision: native appends during typed
+        decoding are legitimate, while altered captured bytes are refused.
+        """
+        before = os.fstat(self.stream.fileno())
+        PrivateFileRole.require(before)
+        revision = FileRevision.from_stat(before)
+        if revision.identity != self.identity or revision.size < size:
+            raise NativePiUnavailable("Native Pi evidence snapshot source changed")
+        self.stream.seek(0)
+        digest = hashlib.sha256()
+        remaining = size
+        while remaining:
+            raw = self.stream.read(min(remaining, 128 * 1024))
+            if not raw:
+                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
+            remaining -= len(raw)
+            digest.update(raw)
+        if digest.digest() != expected_digest:
+            raise NativePiUnavailable("Native Pi evidence original prefix changed")
+        for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
+            PrivateFileRole.require(observed)
+            if revision != FileRevision.from_stat(observed):
+                raise NativePiUnavailable("Native Pi evidence changed during snapshot verification")
 
 
 def _trusted_package(package: Path) -> Path:
@@ -890,6 +915,8 @@ def _verify_context(
         raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
     proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
     if proof != emitted:
+        if evidence is not None:
+            evidence.close()
         raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
     return proof
 
