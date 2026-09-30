@@ -1,0 +1,15 @@
+{
+  "owner": "Schrodinger454nativeprep",
+  "purpose": "reviewed native454 stable independent regular copy only, matching installed source/manifest trust; next merged paired stage separate",
+  "source": "/home/ts/wt/comms-native-request-wait-observation-20260930/stack/.pi-native-593b978a717ae8f6",
+  "destination": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6",
+  "source_head": "cfecae7053da322abc5de3ed02e2d734349058ed",
+  "installed_verifier": "/home/ts/wt/comms-native-request-wait-observation-20260930/.observations/runtime/bin/python",
+  "copy_function": "shutil.copy2 (no hardlinks)",
+  "public_route_changed": false,
+  "default_source_changed": false,
+  "owners_restarted": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "state": "PREPARING"
+}

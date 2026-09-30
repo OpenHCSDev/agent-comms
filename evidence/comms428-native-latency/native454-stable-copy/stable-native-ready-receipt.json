@@ -1,0 +1,32 @@
+{
+  "owner": "Schrodinger454nativeprep",
+  "purpose": "reviewed native454 stable independent regular copy only, matching installed source/manifest trust; next merged paired stage separate",
+  "source": "/home/ts/wt/comms-native-request-wait-observation-20260930/stack/.pi-native-593b978a717ae8f6",
+  "destination": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6",
+  "source_head": "cfecae7053da322abc5de3ed02e2d734349058ed",
+  "installed_verifier": "/home/ts/wt/comms-native-request-wait-observation-20260930/.observations/runtime/bin/python",
+  "copy_function": "shutil.copy2 (no hardlinks)",
+  "public_route_changed": false,
+  "default_source_changed": false,
+  "owners_restarted": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "state": "READY-STABLE-NATIVE-COPY-FULL-INSTALLED-TRUST",
+  "copy_and_fulltrust_seconds": 2.369521438027732,
+  "completed_utc": "2026-09-30T17:47:01.112629+00:00",
+  "cli": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "files": 19186,
+  "logical_bytes": 138378349,
+  "root_mode": "0700",
+  "native_manifest_sha256": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218",
+  "native_fulltree": "b7b2dc5693227740a91a09ac9aa9189519ca084e8fd9dfc71a9698aa65d76eda",
+  "manifest_matches_reviewed_git_source": true,
+  "installed_manifest": "/home/ts/wt/comms-native-request-wait-observation-20260930/.observations/runtime/lib/python3.14/site-packages/agent_comms/_native/pi-native.sha256",
+  "full_installed_trust": true,
+  "verifier_core_distribution_direct_url": {
+    "url": "file:///home/ts/wt/comms-native-request-wait-observation-20260930/.observations/wheels/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "scope": "Stable native copy and full original trust verification against accepted454 installed Core manifest only; no next merged pair/source or public readiness claim",
+  "remaining": "Next exact mergedCore454/pairedToad normal68 stage + matchingmanifest verification; parent owns retained idle/fenced operator cutover"
+}
