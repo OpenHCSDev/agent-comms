@@ -1,0 +1,38 @@
+{
+  "provider": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "source_bytes": 41270257,
+  "original_inputs_replayed": 0,
+  "completed_phases": [
+    "original_saved_history_both_open",
+    "irc_open_before_send"
+  ],
+  "composition_control": {
+    "original": {
+      "seq": 1,
+      "message_id": "48234bc58eb1"
+    },
+    "body_count_at_container_mount": 0,
+    "children_at_container_mount": 1,
+    "body_count_after_composition": 1,
+    "original_header_count": 1
+  },
+  "exit_code": 0,
+  "painted_original_token_count": 1,
+  "painted_outbound_header_count": 1,
+  "native_runtime_input_rows": 0,
+  "acp_prompt_requests": 0,
+  "owned_owner_pids": {
+    "alpha": 2595046,
+    "beta": 2595213
+  },
+  "owners_retired": true,
+  "defaults_changed": false,
+  "provider_calls": 0,
+  "remaining_acceptance": [
+    "fresh native original reply and target handling in sender/recipient/IRC",
+    "same open view 31 seconds",
+    "physical A/B/A with immediate distinct new input",
+    "cold reopen once"
+  ]
+}

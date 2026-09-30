@@ -473,3 +473,30 @@ Merged439's nativee36 artifact is assigned to Einstein for standalone full-tree
 trust verification. The614 messaging gate remains immutable; no mid-run native
 pin switch or default owner restart is authorized by a source merge. The next
 coherent paired stage and quiet cutover remain parent432's delivery work.
+
+### Critical wire family installed composition accepted
+
+Exact700/517/Text412/native614 provider-free215-02 exited0. The original
+41,270,257-byte history opened in both DMs and IRC before send. Original wire
+message48234bc58eb1/seq1 produced one OutgoingMessage parent, one child, one
+settled body, one header and one SVG token/header. Initial mount had zero bodies
+before composition, which is recorded rather than hidden. Zero native runtime
+inputs or ACP prompts; both exact fixture owners retired. Original real05 and
+all failed/UNKNOWN proofs remain untouched. Parent retained the verification
+and installed provenance under canonical-wire-composition215-02. This closes
+the demonstrated duplicate composition, not the full live handling workflow.
+
+Next sourcee59c8b5d normally integrates currentToadmain53154 and declares
+Core41a83508/Text650/SDK0.12.1. Sch owns the sole normal installed stage and
+fresh selected-native handling/31s idle/A-B-A/cold-reopen journey. CurrentCore41
+requires merged439 nativee36; do not mix native614 from the completed gate.
+Einstein owns standalone full-tree verification. No default backend switch yet.
+
+Declared format comparison at installed720 versus source41 changes only the
+private_bus_checkpoint schema. Compaction journal, native/coordinator schemas,
+durable transcript routing and InputDocument/all declared InputAttempt fields
+match. Their original UNKNOWN journals and durable observations are preserved;
+this release requires the existing old-writer certified checkpoint rebuild,
+not another input or compaction store reset. Receipt:
+canonical-cutover-format-comparison.json. This declaration inspection performs
+zero store reads or mutations and is not live cutover proof.
