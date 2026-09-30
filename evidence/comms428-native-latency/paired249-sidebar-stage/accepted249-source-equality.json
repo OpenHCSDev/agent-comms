@@ -1,0 +1,13 @@
+{
+  "accepted": "c191f29a45f1c7374dc44e88024dc71fc232f729",
+  "merged": "98bab35f834abb0793d0e066489b751a59393011",
+  "compared": [
+    "src",
+    "pyproject.toml",
+    "uv.lock"
+  ],
+  "diff_bytes": 0,
+  "source": "actualGitcomparison",
+  "accepted_physical_scope": "89.744s16checks/sourceheldremoval; existingproof not repeated",
+  "performance_claim": "none"
+}

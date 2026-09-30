@@ -1,0 +1,90 @@
+{
+  "owner": "Schrodinger249stage",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "98bab35f834abb0793d0e066489b751a59393011",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218",
+  "frozen_package_count": 68,
+  "only_changed_requirements": [
+    "agent-comms",
+    "batrachian-toad"
+  ],
+  "baseline": "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+  "requirements_sha256": "2a2358403581bb910b330c4023a3653e443226b9b4df452253c6fdfe29ef0cde",
+  "component_source_proof": {
+    "agent-comms": {
+      "pin": "6feb634ba184d94d763028406152fff07027cccc",
+      "python_files_equal": 291,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "98bab35f834abb0793d0e066489b751a59393011",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "component_provenance": {
+    "agent-comms": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "6feb634ba184d94d763028406152fff07027cccc",
+        "requested_revision": "6feb634ba184d94d763028406152fff07027cccc"
+      }
+    },
+    "batrachian-toad": {
+      "url": "https://github.com/OpenHCSDev/toad.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "98bab35f834abb0793d0e066489b751a59393011",
+        "requested_revision": "98bab35f834abb0793d0e066489b751a59393011"
+      }
+    },
+    "textual": {
+      "url": "https://github.com/OpenHCSDev/textual.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347",
+        "requested_revision": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+      }
+    }
+  },
+  "package_compatibility": "normal uv pip check passed68",
+  "affected_imports": [
+    "agent_comms.private_nk_entrypoint",
+    "agent_comms.active_route",
+    "agent_comms.cohort_foreground",
+    "agent_comms.response_conversation",
+    "agent_comms.coordination_response",
+    "toad.widgets.conversation",
+    "toad.widgets.viewport_body",
+    "toad.widgets.presentation_window",
+    "toad.screens.comms"
+  ],
+  "full_native_trust": true,
+  "build_count": 1,
+  "parent_activation_required": true,
+  "defaults_changed": false,
+  "owners_restarted": false,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_root_loaded": false,
+  "private_root_witness": {
+    "root": "/home/ts/wt/g454e/meta/wire",
+    "wire_root_id": "755ba55a60524b61b1a83cf07950e4aa",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "producer": "Einstein owned fresh current Core454 RootProducer, no native inputs/owners"
+  },
+  "actual_gate_owner": "Einstein231",
+  "accepted_scope": "Packaging/source provenance/import/trust admission only; scoped Sidebar249 accepted physical89.744s16checks plus source-held removal proof, testedproduction/config equals merged98bab. Core6feb/native593b unchanged. Parent owns UI-only defaults and Einstein ordinarydefault check; no overallCPU claim.",
+  "remaining_scope": "No full eleven-API installed claim or whole latency/performance closure. UI-only default publication and ordinarydefault acceptance owned by parent/Einstein. No backendrestart/route/TS/schema change; totalCPU target remains open."
+}
