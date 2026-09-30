@@ -22,12 +22,23 @@ version mirror or registry is added.
 
 ## Bounded acceptance and activation condition
 
-Extend the existing provider-free batch fixture with an isolated copy after all
-its workers retire. Preserve the accepted run09 root/receipt and UNKNOWN proof.
-Use authentic000 client imports, the existing disposable maintenance fixture,
-and actual history/metadata APIs. Demonstrate whether paused admission prevents
-the ordinary old writer and whether strict C3 decoding still accepts its result.
-No new native cohort, provider call, public mutation, signal or original replay.
+The existing provider-free batch fixture now includes the old-client crossing
+after all its workers retire. The bounded case04 reuses the accepted run09 root
+through an isolated copy, preserving its registry, wire, input dispositions,
+bus metadata and index hashes. Authentic000 imports execute actual
+HistoryViews.dm_display_page and ThinkingLevelConfigOption.persist while the
+existing maintenance fixture is paused. Ingress admission correctly refuses;
+the history read still registers a USER and the metadata update still commits.
+All five Thread records regain last_goal_report_turn. The original registry
+guard accepts the write; the strict current reader rejects it. Exit0, no provider
+calls or prompt admission. Sanitized receipt:
+../../evidence/phased-owner-cutover/old-client-receipt.json.
+
+Copying the bus creates a new inode, so its copied derived-index seal correctly
+refused the first history read. The successful case certifies only the disposable
+copy through the existing checkpoint installer. Accepted run09 originals,
+native journals and UNKNOWN proof are unchanged. Earlier failed probe traces
+remain private; no new native cohort or public mutation was needed.
 
 Public activation requires an external complete original writer audience and
 graceful retirement of all old UI/ACP clients, preserving their sessions, drafts,
@@ -35,6 +46,17 @@ history and UNKNOWN inputs. Ingress must remain excluded through the existing
 batch and default target launcher publication. A scan finding no matching Toad
 command is not complete writer exclusion. The executable batch alone cannot
 authorize reopening the root to old imported client code.
+
+Parent owns this external audience and its exact process/birth retirement. Select
+the target default launchers first, exclude new old-client launches, retire the
+identified original UI/ACP clients, then admit the existing single batch. User
+confirmed there are no unsent drafts. The operator's admission documentation now
+states this requirement explicitly; it does not invent a second client registry,
+pretend that an empty process scan is a proof, or signal clients itself.
+
+Patterns: IDEN-7, a batch owner census is wider than executable owners but narrower
+than all registry writers; TIME-2, outside-source one-shot carry; IMPL-13, reuse
+the acquired batch and checkpoint installer. Production source changes: zero.
 
 ## Current-format private capture closure
 
@@ -46,5 +68,6 @@ Original exact owner/admission/process/interpreter and repeated shared-read proo
 remain mandatory. Heisenberg owns the sole private A/B cohort; this continuation
 owns only that existing capture boundary extension.
 
-Draft opened before completing this follow-up. Existing442 source and installed
-UNKNOWN/batch gate remain accepted; public old-client exclusion is still pending.
+Existing442 source and installed UNKNOWN/batch gate remain accepted. The actual
+old-client writer proof passed; parent alone owns the public retirement condition.
+The explicit current-format private capture extension remains in progress.

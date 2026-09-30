@@ -4,13 +4,9 @@ from pathlib import Path
 import sys
 
 from agent_comms.comms import Comms
+from agent_comms.acp import CommsAgent
+from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.errors import RelationViolationError
-from agent_comms.maintenance_barrier import PausedPhase
-
-# Reuse the existing disposable fixture control; production exports no phase
-# writer. This script must never receive a live/public root.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tests'))
-from maintenance_control_fixture import FixtureMaintenanceControl
 
 
 def main():
@@ -20,8 +16,8 @@ def main():
     registry = root / 'registry.json'
     before = json.loads(registry.read_text())
     assert all('last_goal_report_turn' not in row for row in before['threads'].values())
-    control = FixtureMaintenanceControl(service.owners.maintenance)
-    closed = control.advance(control.begin('disposable-old-client-probe'), PausedPhase)
+    closed = service.owners.maintenance.read()
+    assert closed is not None and closed.phase == 'paused'
     try:
         with service.owners.maintenance.admit_ingress():
             raise AssertionError('Paused fixture admitted ingress')
@@ -31,6 +27,13 @@ def main():
     # The real UI-facing history API calls Messaging.user_identity. With no
     # prior USER, that registers a non-executable record without turn admission.
     service.views.dm_display_page('phase-alpha', worktree=str(root), limit=1)
+    # The ACP configuration owner has another ordinary metadata writer. No
+    # backend, session attachment or native operation is started by this call.
+    client = CommsAgent(service)
+    config = client.sessions.config
+    option = config.catalog_for(ThinkingLevelConfigOption)
+    option.persist(config, service.registry.require('phase-alpha'), 'high')
+    assert option.current_value(service.registry.require('phase-alpha')) == 'high'
     after = json.loads(registry.read_text())
     reintroduced = [name for name, row in after['threads'].items()
                     if 'last_goal_report_turn' in row]
@@ -42,6 +45,8 @@ def main():
     print(json.dumps({'client_operation': 'HistoryViews.dm_display_page',
                       'history_read_returned': True, 'maintenance_phase': 'paused',
                       'ingress_refused': True, 'user_identity_created': True,
+                      'metadata_operation': 'ThinkingLevelConfigOption.persist',
+                      'metadata_write_while_paused': True,
                       'retired_field_reintroduced_records': len(reintroduced),
                       'original_private_guard_accepts_write': True,
                       'provider_calls': 0, 'prompt_count': 0}), flush=True)
