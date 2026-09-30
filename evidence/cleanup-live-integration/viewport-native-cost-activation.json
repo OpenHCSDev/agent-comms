@@ -1,0 +1,32 @@
+{
+  "state": "FIVE-DEFAULTS-PUBLISHED-ORDINARY-ACCEPTANCE-PENDING",
+  "started": 1790793187.030671,
+  "target": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "0f6380536b87918cc5eec7ec4317266e4bbb4010",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "route_before": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "version": 1
+  },
+  "source_and_actual_accepted_receipt": "/home/ts/wt/toad-workspace-foreground-layout-continuation-20260930/evidence/workspace-foreground-layout-continuation-20260930/installed-actual/receipt.json",
+  "owners_restarted": 0,
+  "schema_resets": 0,
+  "native_inputs": 0,
+  "paid_calls": 0,
+  "ordinary_default_acceptance": "pending",
+  "finished": 1790793187.0386097,
+  "defaults": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930/bin/toad"
+  }
+}

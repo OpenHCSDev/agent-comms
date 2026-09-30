@@ -1,3 +1,29 @@
+## 2026-09-30 body-cost checkpoint merged and UI-only installed
+
+Toad245 merged0f638053 after parent source and actual physical A-return review.
+One production file deletes3/adds18 lines: original BodyMeasurement retains
+native resource cost at NodeList's own update revision, invalidating on actual
+child-tree mutation. Representative100 repeated admissions2400descendant walks
+→0; source profiled0.768→0.056ms. Real current-pair84.811s saved41MB/13MB
+heldUp/Down/reverse/End/idle/A-B-A/draft/Undo journey passes16checks, originals
+and owner births unchanged, cleanup0. Whole CPU remains high, no50ms/fullwarm
+or global responsiveness claim. Complete CPU/focus/TC1/T9/growing-End followup
+remains Heisenberg-owned, with Kepler source/profile support.
+
+Schrodinger's one normal immutable68package stage validates exactCore6feb,
+Toad0f638,Textual2e49,SDK0.12.1,native593b; source291+273matches and tested1de
+production/config equals0f. Parent published five defaults as runtime-viewport-
+native-cost-20260930. No route/native/ABI/store change or owner restart; ordinary
+physical default acceptance is Einstein-owned and running. Receipt:
+evidence/cleanup-live-integration/viewport-native-cost-activation.json.
+
+Remaining originalS14 whole-workflow claims: parent16-CURRENT-S14-OWNERS.md.
+Core456nativecustody,457coordinationstate,458terminaldata,459private-source
+validation,460bus-index/C4closure drafts active. ExistingC4 declaration scope
+is already satisfied:496/418lines and retiredAPIzero, installed/liveproof held;
+no extraction of already-small classes. Core455 one-useoperator closure merged
+3b216396, reviewed audit text retained and executable removed. Goal remainsactive.
+
 ## 2026-09-30 usage fixes live and actual ordinary default accepted
 
 453/454/242/247 are LIVE: Core6feb, Toad8a924, Textual2e49, SDK0.12.1,
