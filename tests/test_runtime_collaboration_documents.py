@@ -1,6 +1,7 @@
 """Saved documents, independent snapshots, and disposable activity projection."""
 
 import json
+import time
 from unittest.mock import patch
 
 import pytest
@@ -12,6 +13,52 @@ from agent_comms.locked_store import LockedStore
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.store_files import _store_lock
+
+pytest_plugins = ("test_backend_native_lifecycle",)
+
+
+async def test_installed_native_observation_producers_preserve_dates_without_input(native_backend, monkeypatch):
+    import asyncio
+
+    from agent_comms.comms import Comms
+    from delivery_owner_fixture import canonical_agent
+
+    native = native_backend
+    history = native.session.read_bytes()
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+    agent = canonical_agent(
+        Comms(native.root), auto_wake=False, runtime_enabled=False,
+        agent_args=["--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"],
+    )
+    child = None
+    try:
+        async with asyncio.timeout(15):
+            created = await agent.new_session(cwd=str(native.project), mcp_servers=[])
+            name = created.session_id
+            agent._comms.threads.attach_session(name, str(native.session))
+            thread = agent._comms.registry.require(name)
+            before = time.time()
+            prepared = await agent.turns.prepare_selected_session(name, thread)
+            assert before <= prepared.timestamp <= time.time()
+            assert prepared.model == "response-local/fixture"
+            child = agent.turns.persistent_backends[name].custody.child.proc
+            assert child.alive()
+            before = time.time()
+            agent._comms.agents.set_agent_info(name, model=prepared.model, context_size=prepared.context_size)
+            captured = agent._comms.agents.agent_info_of(name)
+            assert before <= captured.timestamp <= time.time()
+            store = agent._comms.agents.runtime_info
+            original = store.path.read_bytes()
+            with patch("time.time", side_effect=AssertionError("Reading cannot capture an observation")):
+                assert RuntimeInfoStore(store.path).read()[name] == captured
+                store.rename_thread(name, "renamed-observation")
+                assert RuntimeInfoStore(store.path).read()["renamed-observation"].timestamp == captured.timestamp
+            assert json.loads(original)[name]["ts"] == captured.timestamp
+            assert native.session.read_bytes() == history
+            assert native.provider.posts == len(native.saved_inputs()) == 0
+    finally:
+        await agent.shutdown()
+    assert child is not None and not child.alive()
 
 
 @pytest.mark.parametrize("store_type", [RuntimeInfoStore, SharedLedger])
@@ -36,19 +83,31 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path):
             "context_size": 1000,
             "ts": 456.25,
         },
-        "undated": {"thread": "undated"},
     }
     store.path.write_text(json.dumps(saved))
     original = store.path.read_bytes()
-    assert store.read()["undated"].timestamp == 0
+    assert store.read()["old"].timestamp == 456.25
     assert store.path.read_bytes() == original
     store.rename_thread("old", "new")
     reopened = RuntimeInfoStore(store.path).read()
     assert FieldCodec.encode(reopened["new"]) == {**saved["old"], "thread": "new"}
-    assert reopened["undated"].timestamp == 0
     before = store.path.stat()
     store.remove("absent")
     assert store.path.stat() == before
+
+
+@pytest.mark.parametrize("timestamp", [None, "missing", True, float("nan")])
+def test_runtime_observation_requires_original_finite_date(tmp_path, timestamp):
+    store = RuntimeInfoStore(tmp_path / RuntimeInfoStore.filename)
+    row = {"thread": "undated"}
+    if timestamp is not None:
+        row["ts"] = timestamp
+    store.path.write_text(json.dumps({"undated": row}))
+    original = store.path.read_bytes()
+    with patch("time.time", side_effect=AssertionError("Reading cannot capture an observation")):
+        with pytest.raises(ValueError):
+            store.read()
+    assert store.path.read_bytes() == original
 
 
 def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path):
@@ -73,7 +132,7 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path):
     [
         (
             RuntimeInfoStore,
-            lambda s: s.set(AgentRuntimeInfo("new")),
+            lambda s: s.set(AgentRuntimeInfo("new", timestamp=2.0)),
             '{"old": {"thread": "old", "ts": 1}}',
         ),
         (
