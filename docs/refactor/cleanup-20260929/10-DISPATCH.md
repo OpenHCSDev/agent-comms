@@ -84,6 +84,22 @@ They communicate directly rather than routing routine handoffs through the paren
 
 ## Current verified boundary
 
+Current default installation: Coreab3397a6 / Toad43949ee / Textual412 / native7817.
+Toad208 carries the complete202 retained-history checkpoint and209 progressive
+summary through a merge to main. The actual default `toad-comms` entrypoint
+completed session/load and loaded32 saved events with no error or new prompt.
+An intermittent late reader jump remains owned by Heisenberg213; this checkpoint
+does not claim complete warm-reader correctness or a50ms performance target.
+
+Core417,427 and429 are merged to main through7fcf826a. Parent has staged their
+noneditable installed artifact with Toad43949 and native4ab. Actual staged
+`toad-comms comms428` loaded27 saved events without errors or new input. Native
+package trust and the next paired cutover remain separate gates; staged attachment
+does not prove that the default workers run the new Core or that inbox recovery
+works. See [current integration ownership](13-LIVE-INTEGRATION.md).
+
+The older receipts below retain their historical verification boundaries.
+
 Core420/419/423 and Toad207 are activated as the default paired installation,
 initially Core66ee0ca2 / Toad533c7f6c / Textual412 / native776. Nine idle owners
 were restarted with sessions, models, thinking, tags and goals preserved.
