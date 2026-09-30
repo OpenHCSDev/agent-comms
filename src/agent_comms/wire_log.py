@@ -7,7 +7,7 @@ import json
 import os
 import stat
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -477,62 +477,9 @@ class WireLog:
             or stat.S_IMODE(marker_info.st_mode) != 0o600
         ):
             raise RelationViolationError("Claim bus read barrier is not durable and private.")
-        with ExitStack() as resources:
-            try:
-                # This original fsynced marker and opened source remain under the
-                # canonical flock. Its resource is never valid across releases.
-                flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-                try:
-                    descriptor = os.open(self.path, flags)
-                except FileNotFoundError:
-                    descriptor = None
-                from .private_bus_checkpoint import (
-                    certificate_enabled,
-                    opened_private_checkpoint_unlocked,
-                )
+        from .private_bus_checkpoint import opened_claim_source_unlocked
 
-                if descriptor is None and (
-                    certificate_enabled(self.path) or private_marker.checkpoint_seal is not None
-                ):
-                    raise RelationViolationError("Private checkpoint bus inode is missing.")
-                source = None
-                if descriptor is not None:
-                    stream = resources.enter_context(os.fdopen(descriptor, "rb"))
-                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                        raise RelationViolationError("Claim bus is not a regular file.")
-                    os.fsync(stream.fileno())
-                    if certificate_enabled(self.path) or private_marker.checkpoint_seal is not None:
-                        private_marker = self._private_marker_unlocked()
-                        if private_marker.checkpoint_seal is None:
-                            raise RelationViolationError(
-                                "Private checkpoint lacks durable marker binding."
-                            )
-                        directory_fd = os.open(
-                            self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-                        )
-                        try:
-                            os.fsync(directory_fd)
-                        finally:
-                            os.close(directory_fd)
-                        source = resources.enter_context(
-                            opened_private_checkpoint_unlocked(self, private_marker)
-                        )
-                    else:
-                        scan = WireScan(private_marker)
-                        while line := stream.readline(scan.max_row_bytes + 1):
-                            scan.read(line)
-                if source is None:
-                    directory_fd = os.open(
-                        self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-                    )
-                    try:
-                        os.fsync(directory_fd)
-                    finally:
-                        os.close(directory_fd)
-            except OSError as error:
-                raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
-            # Caller exceptions keep their own cause and disposition. Closing
-            # borrowed resources does not run another admission or proof check.
+        with opened_claim_source_unlocked(self, private_marker) as source:
             yield source
 
     @property

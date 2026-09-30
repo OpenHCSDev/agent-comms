@@ -27,7 +27,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .wire_metadata import WireMetadata
-from .wire_record import WireRecord
+from .wire_record import WireRecord, WireScan
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -57,6 +57,10 @@ class PrefixWitness(PrefixSeal):
     def seal(self) -> PrefixSeal:
         return FieldCodec.decode(PrefixSeal, FieldCodec.project(self, "seal"))
 
+    def require_marker(self, marker: WireMetadata) -> None:
+        if self.root_id != marker.root_id or self.through_seq != marker.last_seq:
+            raise RelationViolationError("Original certificate differs from its durable marker.")
+
 
 @dataclass(frozen=True)
 class CertifiedSourceRead:
@@ -76,10 +80,9 @@ class CertifiedSourceRead:
         if self.stream.closed:
             raise RelationViolationError("Certified source read has left its lock lifetime.")
         self.marker.seal.check_final(self.witness, _path(self.path))
+        self.witness.require_marker(self.marker)
         if (
-            self.witness.root_id != self.marker.root_id
-            or self.witness.through_seq != self.marker.last_seq
-            or file_revision(os.fstat(self.stream.fileno())) != self.witness.revision
+            file_revision(os.fstat(self.stream.fileno())) != self.witness.revision
             or file_revision(self.path.stat()) != self.witness.revision
         ):
             raise RelationViolationError("Conversation source needs a current certificate.")
@@ -499,6 +502,63 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata):
                 "Private bus checkpoint verification is unavailable."
             ) from error
         yield CertifiedSourceRead(bus.path, marker, db, stream, saved)
+
+
+@contextmanager
+def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
+    """The existing claim durability owner supplies this lock's opened source."""
+    with ExitStack() as resources:
+        try:
+            # This original fsynced marker and opened source remain under the
+            # canonical flock. Its resource is never valid across releases.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(bus.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                certificate_enabled(bus.path) or private_marker.checkpoint_seal is not None
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            source = None
+            if descriptor is not None:
+                stream = resources.enter_context(os.fdopen(descriptor, "rb"))
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    raise RelationViolationError("Claim bus is not a regular file.")
+                os.fsync(stream.fileno())
+                if certificate_enabled(bus.path) or private_marker.checkpoint_seal is not None:
+                    private_marker = bus._private_marker_unlocked()
+                    if private_marker.checkpoint_seal is None:
+                        raise RelationViolationError(
+                            "Private checkpoint lacks durable marker binding."
+                        )
+                    directory_fd = os.open(
+                        bus.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                    )
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+                    source = resources.enter_context(
+                        opened_private_checkpoint_unlocked(bus, private_marker)
+                    )
+                else:
+                    scan = WireScan(private_marker)
+                    while line := stream.readline(scan.max_row_bytes + 1):
+                        scan.read(line)
+            if source is None:
+                directory_fd = os.open(
+                    bus.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                )
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+        except OSError as error:
+            raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
+        # Caller exceptions keep their own cause and disposition. Closing
+        # borrowed resources does not run another admission or proof check.
+        yield source
 
 
 def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:

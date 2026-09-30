@@ -421,3 +421,29 @@ fixed or original41MB CPU/blanking acceptable. Sch215 owns the new read-only
 profile and continuous installed gate on the parent432 paired cohort. Current
 headroom assertion exits2 at15.9GiB swap; no build, capture, new worker or paid
 input was started here. Only bounded serial controls ran.
+
+## Descriptor consumers and certificate owner closure after9149
+
+Parent review found the multiline CompactionBoundary.hold bindings still lending
+StoreLock objects to the child. Both now lend their actual descriptor fields
+through HeldCompaction.retained_fds. A scoped AST census includes aliases and
+embedded test programs: six production bindings and one test-script binding,
+all migrated explicitly. No adapter or integer coercion was added. Its receipt
+is store-lock-bind-census.json under this branch's persistent scratch owner.
+
+The existing actual native commit passes in2.60s. The final persistent native4ab
+control runs that commit and a real child borrowing the entire held boundary:
+after parent scope unwind, wire, BUS, registry, inputs and native executor remain
+locked until the child retires, then all admit another owner. Both checks pass
+in3.74s; source sessions/journals remain in store-lock-native-fd-final. This is
+actual inherited descriptor/native CAS acceptance, with no provider invocation.
+It does not establish full selected-summary or original41MB UI readiness.
+
+The original marker-bound certificate owns marker agreement; the opened
+resource owns descriptor/path revision agreement. The claim source durability
+lifetime now lives with the existing certificate owner instead of growing
+WireLog. This corrects9149's new four-term chain and GodClass growth; source
+verification is unchanged, and the scoped ratchet must pass before publishing.
+23 affected source/read/notification/ownership controls pass at this checkpoint.
+Sch04 UNKNOWN and its original private evidence remain preserved; Sch215 runs
+the original41MB read-only three-view comparison before another paid journey.
