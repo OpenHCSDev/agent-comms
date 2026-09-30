@@ -182,3 +182,61 @@ callbacks observe and delegate to the actual publisher; they do not substitute
 native events. Proof: owned scratch `standby-native-run01.log`, private roots in
 `.standby-native-run01`. Setup fixture was renamed `retained_native_acp_owner`
 for reuse by the remaining original-injected/covered/reconnect contract.
+
+## Closure checkpoint, 2026-09-30
+
+The injected/covered/reconnect case now runs the actual private selected native
+pipeline rather than `_fake_model` or trusted-package overrides. Real ACP session
+creation, original bus send, native execution, published reply, announced cursor,
+session reload and duplicate inbox drain pass continuously in 4.33 seconds.
+`injected_seq` equals the original message's sequence; `covered_seq` equals the
+actual reply's later sequence, not a hardcoded 1 or 2. It retains the one
+NativeRuntimeInput/claim receipt and proven-cursor/revision obligations. Reload
+and the empty drain do not increase provider requests; no legacy ACK file exists.
+The first attempt returned zero before native execution because the reused
+standby fixture disables waking. Enabling this journey's actual wake policy
+closed that fixture setup error. Proof: `cursor-native-run02.log`. This module
+uses its existing sealed `/var/tmp` root fixture, which owns automatic disposal;
+no new worktree or source was placed there.
+
+Three remaining progress contracts also run through the actual native child:
+correlated source/text progress extends the inactivity deadline beyond a total
+elapsed duration; foreign progress yields UNKNOWN; repeated actual progress
+cannot conceal a stalled provider. The two fault cases observe the real native
+decoder without changing its result, then inject a correlation fault or copy
+that actual frame through the owned child's existing kernel stdout pipe. Reader,
+child, SDK history, reservation and local provider remain actual. The injector
+does not keep a writer open through reaping. Run01 passed two cases and exposed
+the test injector writing after expected child retirement in the repeated case;
+the injector now closes each write and verifies death on broken pipe. Only the
+repeated case was rerun, passing in 6.18 seconds. No manufactured native host,
+session header, attestation or result was substituted.
+
+Final source review strengthened the negative family's reservation setup to use
+an actual declared registry owner and held turn lease, rather than the generic
+manual_source helper's default incarnation. This concrete owner/source relation
+change required acceptance of the affected family: all 12 cases passed together
+in 65.47 seconds at the reviewed immutable native4ab/Core720 source. Proof:
+`native-negative-final01.log`. Final fixture runs remained sequential in the
+independent authorized lane. The original positive function's AST remains
+unchanged; its accepted 5.45-second result was not rerun.
+
+Named deletion mappings:
+
+| Retired facade contract | Current actual coverage owner |
+| --- | --- |
+| stale package/session/sidecar | retained_summary + three pre-reservation native cases |
+| decline/refusal + exact manual recovery/no replay | actual selected model/settings refusal and typed RetiredRefusalSummary recovery; existing selected-summary journal clean-prestart-decline family |
+| unknown/provider detail/strict malformed response | actual timeout/cancel/disconnect + joined provider failure; strict RPC failure/summary data family |
+| foreign/repeated/progress deadline | actual retained native progress and owned-pipe fault cases |
+| manual custom instructions/native summary details | accepted unchanged positive SDK journey; no duplicate run |
+| many file metadata/transport bounds | strict 3,800-file greater-than-8-MiB decode + existing fragmented reader cancellation/bounds |
+| correction/settings/source mutation after summary | existing selected owner compaction integration journeys; no source435 overlap |
+| standby delayed callback and terminal versus settled | four actual ACP/native standby journeys |
+| original injected versus covered/reconnect/no legacy ACK | actual private selected native pipeline journey |
+
+No production, common fixture builder, native package or installed launcher was
+changed. This is test-fixture closure on the pinned actual source/native contract,
+not installed-current-native614 or whole-app readiness. Original positive proof,
+failed local attempts and UNKNOWN private journals are retained. Heisenberg keeps
+the sole original physical paint capture; Textual13/Toad221 review scope is intact.

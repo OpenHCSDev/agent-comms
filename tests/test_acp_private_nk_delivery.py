@@ -37,6 +37,8 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from test_native_prompt_binding import _fake_model as separate_session_fake
+from test_backend_native_lifecycle import native_backend as native_backend
+from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
 
 tmp_path = private_root_fixture
 
@@ -299,54 +301,70 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
         )
 
 
-async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_path, monkeypatch):
-    comms, agent, root_id = _session(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
-    fake, calls = _fake_model(decision="FULL")
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    sent = invoke_tool(
-        comms, "comms_send", {"from": "sender", "to": "beta", "body": "Compute 17+25"}
+async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
+    retained_native_acp_owner,
+):
+    native, comms, agent, sid = retained_native_acp_owner
+    # The shared standby fixture disables autonomous wake. This explicit private
+    # delivery journey enables the real owner policy, with its observer stopped.
+    agent.inputs.auto_wake = True
+    comms.registry.declare(
+        Thread(
+            "sender",
+            frozenset(),
+            str(native.project),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
     )
+    chunks = native.provider.response_chunks
+
+    def controlled_response():
+        import json
+
+        native.provider.text = (
+            '{"decision":"FULL"}'
+            if "bounded triage" in json.dumps(native.provider.requests[-1])
+            else "42"
+        )
+        yield from chunks()
+
+    native.provider.response_chunks = controlled_response
+    with comms.bus.log.locked():
+        root_id = comms.bus.log.read_metadata_unlocked().root_id
+    sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": sid, "body": "Compute 17+25"})
     original = comms.bus.log.message_by_id(sent["id"])
-    before = cursor_envelope(agent.sessions.metadata("beta"))
+    before = cursor_envelope(agent.sessions.metadata(sid))
     assert before.status == "none"
     assert before.revision >= 1
-    assert before.scope.owner.incarnation.name == "beta"
+    assert before.scope.owner.incarnation.name == sid
     assert before.scope.wire_root_id == root_id
     updates = []
 
-    async def record_update(*, session_id, update):
-        assert session_id == "beta"
-        updates.append(update)
+    class Client:
+        async def session_update(self, *, session_id, update):
+            assert session_id == sid
+            updates.append(update)
 
-    monkeypatch.setattr(agent._runtime, "session_update", record_update)
-    assert await agent.inputs.drain_inbox("beta") == 1
-    assert len(calls) == 1
-    current = cursor_envelope(agent.sessions.metadata("beta"))
+    agent.on_connect(Client())
+    async with asyncio.timeout(30):
+        assert await agent.inputs.drain_inbox(sid) == 1
+    current = cursor_envelope(agent.sessions.metadata(sid))
     assert current.status == "proven"
-    assert current.observation.cursor.covered_seq == original.seq
+    (reply,) = comms.bus.inbox("sender")
+    assert reply.sender == sid and reply.body == "42"
     assert current.observation.cursor.injected_seq == original.seq
-    announced = cursor_envelope(updates[-1].field_meta)
+    assert current.observation.cursor.covered_seq == reply.seq
+    assert reply.seq > original.seq
+    announced_update = next(
+        update for update in reversed(updates) if cursor_fact(update.field_meta)
+    )
+    announced = cursor_envelope(announced_update.field_meta)
     assert announced.scope == current.scope
     assert before.revision < announced.revision < current.revision
     assert announced.observation.cursor.input_id == current.observation.cursor.input_id
-    assert cursor_fact(updates[-1].field_meta).selected_status == "proven"
-
-    async def noop(*_args, **_kwargs):
-        return None
-
-    async def no_options(*_args, **_kwargs):
-        return []
-
-    monkeypatch.setattr(agent._runtime, "start", noop)
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
-    monkeypatch.setattr(agent.sessions.config, "options", no_options)
-    reconnected = await agent.load_session(str(tmp_path), "beta", mcp_servers=[])
-    reconnect_cursor = cursor_envelope(reconnected.field_meta)
-    assert reconnect_cursor.scope == current.scope
-    assert reconnect_cursor.revision > current.revision
-    assert reconnect_cursor.observation.cursor.input_id == current.observation.cursor.input_id
+    assert cursor_fact(announced_update.field_meta).selected_status == "proven"
+    calls = native.provider.posts
+    assert calls > 0
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             len(
@@ -361,8 +379,14 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(tmp_pa
             ).fetchone()[0]
             == 1
         )
-    assert await agent.inputs.drain_inbox("beta") == 0
-    assert len(calls) == 1
+    async with asyncio.timeout(20):
+        reconnected = await agent.load_session(str(native.project), sid, mcp_servers=[])
+        reconnect_cursor = cursor_envelope(reconnected.field_meta)
+        assert reconnect_cursor.scope == current.scope
+        assert reconnect_cursor.status == "proven"
+        assert reconnect_cursor.observation.cursor == current.observation.cursor
+        assert await agent.inputs.drain_inbox(sid) == 0
+    assert native.provider.posts == calls
     assert agent.inputs.pending_turns == {}
     assert not (comms.root / "acks.json").exists()
 

@@ -1,4 +1,3 @@
-
 """Standby liveness preserves goal authority and never replays an input."""
 
 import asyncio
@@ -37,11 +36,22 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(native.root)
     agent = canonical_agent(
-        comms, agent_bin="pi", runtime_enabled=True, auto_wake=False,
+        comms,
+        agent_bin="pi",
+        runtime_enabled=True,
+        auto_wake=False,
         adaptive_compaction_enabled=False,
-        agent_args=["--provider=response-local", "--model=fixture", "--thinking=off",
-                    "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-                    "--no-prompt-templates", "--no-tools"],
+        agent_args=[
+            "--provider=response-local",
+            "--model=fixture",
+            "--thinking=off",
+            "--offline",
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--no-prompt-templates",
+            "--no-tools",
+        ],
     )
     try:
         child = (await agent.new_session(str(native.project))).session_id
@@ -438,7 +448,8 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
     async def capture_emit(session_id, event, client=None, **kwargs):
         if isinstance(event, ae.InputStarted):
             comms.goals.update_goal(
-                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+                "owner",
+                StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)),
             )
         if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
             terminal.append("settled")
@@ -516,9 +527,14 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(
     async def delayed_emit(session_id, event, client=None, **kwargs):
         if isinstance(event, ae.InputStarted):
             comms.goals.update_goal(
-                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+                "owner",
+                StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)),
             )
-        if isinstance(event, TurnTranscriptUpdate) and not event.state.busy and not old_settled.is_set():
+        if (
+            isinstance(event, TurnTranscriptUpdate)
+            and not event.state.busy
+            and not old_settled.is_set()
+        ):
             old_settled.set()
             await release_old.wait()
         await real_emit(session_id, event, client, **kwargs)
@@ -561,7 +577,8 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
         if isinstance(event, ae.InputStarted):
             observed.append("started")
             comms.goals.update_goal(
-                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+                "owner",
+                StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,)),
             )
         if isinstance(event, ae.StreamSettled):
             observed.append("native-settled")
