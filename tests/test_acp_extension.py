@@ -59,7 +59,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             )
         ),
         QueueChangedUpdate(queue_scope, 1, AvailableQueueProjection((QueueItem("input", "text"),))),
-        InputStartedUpdate("input", "text", queue_scope, 2),
+        InputStartedUpdate("input", "text", queue_scope, 2, "b" * 32),
         CoordinationChangedUpdate(
             owner.incarnation,
             "/home/ts/wt/pilot",

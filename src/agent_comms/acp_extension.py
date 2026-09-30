@@ -154,7 +154,9 @@ class AttachmentRelation:
 
     @property
     def current(self):
-        return not (self.foreign or self.ambiguous or self.newer or self.older)
+        return (self.same_incarnation
+                and self.original.admission_generation == self.received.admission_generation
+                and self.original.owner_pid == self.received.owner_pid)
 
 
 @dataclass(frozen=True)
@@ -369,6 +371,7 @@ class InputStartedUpdate(AgentCommsUpdate):
     text: str | None
     scope: QueueScope | None
     revision: int | None
+    native_id: str | None
 
     def for_session(self, session_id: str) -> InputStartedUpdate:
         return (
