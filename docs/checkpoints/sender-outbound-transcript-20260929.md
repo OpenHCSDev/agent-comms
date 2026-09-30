@@ -259,3 +259,31 @@ Source/control verification is recorded in source-original-batch-run02.log.
 Full original-history installed comparison remains UNREVIEWED, paired with434's
 coordinator read-opening correction and215/217/221's existing UI resource owners.
 Parent owns the certified-index format rebuild and live paired activation.
+
+## Real original-source preparation: scoped publication identity
+
+Sch215's real41MB private run01 reached startup and exposed a page-preparation
+StaleRevision while coordinator activity changed. Its preserved archive has one
+native runtime input, one wake claim and one obligation, with zero publication
+receipts. Do not repeat the superseded zero-input/no-provider inference, and do
+not replay that original attempt. The first driver's send/Message API error and
+all source/native stage evidence remain with the integration owner.
+
+The content fence now derives PublishedReplyRevision from the existing typed
+native input/execution/response owners: original recipient lookup, exact native
+session path/header and execution attempt, then immutable published receipts.
+Its maximum published sequence and input cardinality are SQL query results only;
+neither is persisted or independently advanced. Publication and proof removal
+change this identity; unrelated handling/activity does not. Full coordinator
+database/WAL revisions remain in the existing annotation/handling identity.
+Native bytes, routes, original wire, fork source and incarnation remain fenced.
+The public source-owned content_current() API is unchanged; the paired public
+read identity gains reply_revision with no compatibility field or reader.
+
+Both original-reply resolution and its revision query use one existing owner's
+read-only transaction, closed before wire access or UI awaits. The original
+handling test now verifies that annotation invalidation preserves prepared
+content.25 focused source/guard checks pass with one pre-existing skip in2.72s.
+Installed original-source race/blanking/CPU acceptance remains UNREVIEWED until
+Sch215's coherent paired gate. This correction supersedes the global coordinator
+content fence described at the earlier checkpoint; it does not waive proof.
