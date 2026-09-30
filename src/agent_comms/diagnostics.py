@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from traceback import TracebackException
@@ -13,6 +16,9 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from .store_files import _atomic_write_text
+from .field_codec import FieldCodec
+
+_LOG = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .pi_events import Response
@@ -51,6 +57,55 @@ class FailureReason(StrEnum):
     INPUT_MISSING = "current_prompt_input_missing"
     FINAL_STOP_MISSING = "assistant_final_stop_missing"
     QUEUED_INPUT_MISSING = "queued_input_start_missing"
+
+
+@dataclass
+class PublicationMeasurements:
+    """Bounded transport timing counters, not a message or phase authority."""
+    count: int = 0
+    total_ns: int = 0
+    maximum_ns: int = 0
+    maximum_started_ns: int = 0
+    maximum_finished_ns: int = 0
+
+    @contextmanager
+    def measuring(self):
+        started = time.monotonic_ns()
+        try:
+            yield
+        finally:
+            finished = time.monotonic_ns()
+            duration = finished - started
+            self.count += 1
+            self.total_ns += duration
+            if duration > self.maximum_ns:
+                self.maximum_ns = duration
+                self.maximum_started_ns, self.maximum_finished_ns = started, finished
+
+
+def record_request_progress(root, lease, progress, *, native_process, publication=None):
+    """Append original measurements with the exact existing turn/owner fence.
+
+    This private diagnostic does not contain prompt bodies, headers or credentials,
+    grant retry or participate in lifecycle decisions. Native clocks remain native;
+    receipt and publication spans use the local monotonic clock independently.
+    """
+    now = time.monotonic_ns()
+    record = {"turn": FieldCodec.encode(lease), "native": FieldCodec.encode(progress),
+              "native_process": FieldCodec.encode(native_process),
+              "recorded_monotonic_ns": now}
+    if publication is not None:
+        record["publication_completed_cumulative"] = FieldCodec.encode(publication)
+    try:
+        directory = root / "diagnostics"
+        directory.mkdir(mode=0o700, exist_ok=True)
+        path = directory / f"{lease.turn_id}.requests.jsonl"
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(descriptor, "w") as output:
+            output.write(json.dumps(record) + "\n")
+    except OSError:
+        # Optional observation cannot change an admitted original's outcome.
+        _LOG.warning("Native request timing diagnostic unavailable", exc_info=True)
 
 
 def terminal_failure_reason(event: dict) -> FailureReason:

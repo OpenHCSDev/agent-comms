@@ -2,17 +2,21 @@
 
 import asyncio
 from pathlib import Path
+import os
+from types import SimpleNamespace
 
 from agent_comms.agent_events import NativePhaseChanged
 from agent_comms.backend import TurnSession
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart, UnknownPiEvent
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
+from agent_comms.child_process import ProcessIdentity
 
 
 async def test_native_tool_lifecycle_publishes_actual_phase_after_effects():
     root = Path.cwd()
     session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, root, None, root), "unused")
+    session.native = SimpleNamespace(proc=SimpleNamespace(identity=ProcessIdentity.capture(os.getpid())))
     session.active_tools = set()
     session.watchdog.clock = asyncio.get_running_loop().time
     session.watchdog.phase = ModelWaitPhase()

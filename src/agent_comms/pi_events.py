@@ -12,6 +12,7 @@ from . import turn_failure as failures
 from .declared_family import DeclaredFamily
 from .compaction_progress import CompactionSourceProgress
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
+from .request_progress import RequestProgress
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
     AbsentMessage,
@@ -76,6 +77,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def observe_abort(self, session: TurnSession) -> None:
         pass
 
+    def observed_phase(self, phase):
+        return phase
+
 
 @dataclass(frozen=True)
 class UnknownPiEvent(PiEvent):
@@ -126,6 +130,14 @@ class AgentStart(PiEvent):
     @property
     def invalidates_stop(self) -> bool:
         return True
+
+
+@dataclass(frozen=True, kw_only=True)
+class ModelRequestProgress(PiEvent):
+    progress: "RequestProgress"
+
+    def observed_phase(self, phase):
+        return phase.model_request(self.progress)
 
 
 @dataclass(frozen=True, kw_only=True)

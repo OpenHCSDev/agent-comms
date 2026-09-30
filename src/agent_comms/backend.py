@@ -354,7 +354,7 @@ class TurnSession:
     def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
         """Publish the actual observer phase without storing another phase copy."""
         if self.watchdog.phase != previous:
-            yield events.NativePhaseChanged(self.watchdog.phase)
+            yield events.NativePhaseChanged(self.watchdog.phase, self.native.proc.identity)
 
     @property
     def started_input(self):
