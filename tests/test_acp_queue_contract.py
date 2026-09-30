@@ -70,7 +70,7 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
 
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
     item = agent.inputs.queued_inputs["beta"].pop(first)
-    await agent.inputs.emit_input_started("beta", item.text, first, queued_item=item)
+    await agent.inputs.emit_input_started("beta", item.text, first, source_scope=initial.scope)
     started = updates[-1]
     assert isinstance(started, InputStartedUpdate)
     assert (started.input_id, started.scope, started.revision) == (

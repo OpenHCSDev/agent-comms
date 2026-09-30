@@ -289,9 +289,6 @@ class OwnedTurn:
             routing=self.routing,
             checkpoint=self.checkpoint,
             task=self.task,
-            original_keys=self.original_keys,
-            accepted_input_id=self.accepted_input_id,
-            initial_display_text=self.initial_display_text,
             finish_event=self.finish_event,
             goals=TurnGoalAccount(
                 comms=self.runner.comms,

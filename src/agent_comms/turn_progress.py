@@ -13,7 +13,8 @@ from acp.schema import (
 )
 
 from . import agent_events as events
-from .acp_extension import TranscriptChangedUpdate, encode_updates
+from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
+from .thread_identity import OwnerIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
 from .diagnostics import record_terminal_failure
@@ -73,9 +74,6 @@ class TurnProgress(events.AgentEventConsumer):
         routing,
         checkpoint,
         task,
-        original_keys,
-        accepted_input_id,
-        initial_display_text,
         finish_event,
         goals: TurnGoalAccount,
         sync_goals,
@@ -86,8 +84,6 @@ class TurnProgress(events.AgentEventConsumer):
         self.session_id, self.thread = session_id, thread
         self.turn_id, self.turn_lease = turn_id, turn_lease
         self.routing, self.checkpoint, self.task = routing, checkpoint, task
-        self.original_keys = original_keys
-        self.accepted_input_id, self.initial_display_text = accepted_input_id, initial_display_text
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
         self.result: events.Done | None = None
@@ -196,9 +192,11 @@ class TurnProgress(events.AgentEventConsumer):
     async def input_started(self, event: events.InputStarted) -> None:
         await self.inputs.input_started(
             self.session_id,
-            event.id if event.id is not None else self.accepted_input_id,
-            self.original_keys,
-            self.initial_display_text,
+            event.id,
+            QueueScope(self.session_id, OwnerIdentity(
+                self.turn_lease.identity.incarnation,
+                self.turn_lease.admission_generation,
+            ), self.thread.pid),
         )
 
     @handles(events.SettingChangeResult)
