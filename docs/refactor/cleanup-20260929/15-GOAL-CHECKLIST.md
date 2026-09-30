@@ -649,3 +649,45 @@ visibility. Kepler owns the preserved ACP shutdown/renderer descriptor failure
 trace, coordinating existing child ownership with Arendt and Sch. Mendel takes
 the unclaimed original C0 markdown-it rule/registry boundary with a draft before
 sustained work. No new worker fleet or duplicate shared-file owner was created.
+
+### September30 accepted messaging and physical End checkpoints
+
+Toad215 merged d56f8138 at reviewed head bdabfde7. Its production source is
+identical to the accepted installed173901b stage with Core000a31c5, Textual650
+and nativee36. Controlled native hot delivery, Processing/Responded in DM and
+IRC, one original/reply body/header,31-second stability and physical A/B/A
+clicks with three distinct replies passed. The original hot05 immediate mounted
+user-count assertion remains a preserved failure without recorded provenance;
+it is not relabeled. The bounded cold02 continuation read the same original
+native ID once in canonical source, mounted and painted it after Home, and
+completed shutdown without new prompts or native-journal changes. Installed
+actual Window/Snapshot cancellation gate d3061dc0 independently verified
+provisional cleanup and shielded accepted-resource retirement through real
+unmount completion. No source deduplication list or mirror was added.
+
+Toad224 merged ce40495e at exact6f620f61, production-identical to accepted
+installede583. The sole57.418-second original41 MB physical ST/Xvfb recording
+screened3453 frames; every End neighbor35.3-36.3 seconds and individual minima
+were inspected. Previous body persisted until destination paint, no complete
+body blank candidate remained, and stationary End reached native y88/max88.
+The earlier183ms failure stays recorded. Idle CPU59.16percent is still high;
+this is not full T9, partial-gap, warm-resource or performance closure. Remaining
+scope has named integration owner Heisenberg in new draft227.
+
+Toad226 merged efede206 at reviewed70860bf4. C0 Markdown token handling now
+uses the external library's native rule registry with declaration-owned rules,
+deleting62 production lines and adding140. Original four-arm token dispatch
+is gone. Installed actual App file-link click, real Markdown/code preview and
+draft return passed; no provider or native prompt was needed. The original
+C0 ledger records this target's closure, not complete C0 completion.
+
+None of these merges changes default runtime720/Toadf92/native4ab. Mendel is
+preparing the exact accepted first backend cohort Core000/Toad173/Text650/e36
+under runtime-canonical-source-publication-20260930. Parent alone executes441's
+atomic idle-fenced original routing carry and owner restart, then verifies the
+actual default launcher. Current Toad main216 requires Core421 APIs; pairing
+it with000 would repeat a demonstrated mismatch. Arendt442 owns the later
+strict C3 original-format admission/cutover; no compatibility bridge is added.
+Einstein225/440 current-main large-history CPU capture depends on that authentic
+original typed private-fixture capability, with no public mutation. Source
+closed-bars receipt updates pass, but large-history CPU improvement is unproven.
