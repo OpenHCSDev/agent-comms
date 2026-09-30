@@ -30,7 +30,7 @@ history is changed by this worker. This is a draft scope, not a readiness claim.
 
 ## Reviewed installed checkpoint
 
-Nine production lines deleted relative to main 7fc. Toad #210 owns the paired
+Ten production lines deleted relative to main 7fc. Toad #210 owns the paired
 recovery consumer; #425 owns canonical turn/input lifecycle. The original failed
 load command captures RegistrySnapshot full OwnerIdentity/ProcessIdentity before
 proxy subscription. Its FieldCodec FailedSessionLoadAdmission disposition is
@@ -73,3 +73,23 @@ birth and owner generation, rename, unavailable and missing original-witness
 checks pass. Required ratchets remain zero. The exact affected installed paired
 journey with accepted-record assertions is next after the active #425 fixture;
 this new accepted-path closure is not yet claimed live-verified.
+
+
+## Final corrected installed pair: READY
+
+Core 3e4e0c88 + Toad 93dbb8a8, fixture 5d40d302, Textual412/native4ab passed
+actual physical beta opening, old producer schema failure, original failed
+registry/process proof, owner replacement and same OPEN view recovery in 4.793
+seconds. ORIGINAL successful response proof exactly matches RegistrySnapshot
+owner/process and cannot be falsely invalidated by an unrelated admission
+counter. Preserved editor Document/undo; zero provider calls during repair;
+explicit new native reply painted; stopped-owner strict read-only load refused
+without owner start. Exit 0; no input replay.
+
+Exact pins and receipt are committed in paired Toad #210
+`evidence/owner-attachment-recovery/installed-receipt.json`; raw logs and proof
+are in persistent owned scratch `owner-recovery-original-accepted-final`.
+The installed product source is the current production source (later commits
+only fixture/docs). Required ratchets have zero positive measures. No CI wait
+or broader retesting. Parent owns final paired merge, installation and selected
+default entrypoint verification. #215/#430 source workflow remains independent.
