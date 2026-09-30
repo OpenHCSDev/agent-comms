@@ -98,6 +98,9 @@ Affected installed command (fresh stage required; never reuse old originals):
 
 The reusable fixture now additionally gates controlled provider responses until
 all three original native turns are concurrently active. This strengthens the
-observer without altering the already accepted production source. Its separate
-fresh-root receipt will be appended when it finishes; it does not hold this
-accepted checkpoint.
+observer without altering the already accepted production source. Its fresh-root26.577s receipt also passed and is published as
+`evidence/shared-bus-admission/installed-native-restart06.json`:259 retained
+history rows/844690 bus bytes, all three original native turns simultaneously
+active before provider release, exactly3 localPOSTs/native user entries/replies,
+26 actualACP notifications, all owned workers retired. No public mutation,
+paid usage or original replay. No additional native gate is required here.

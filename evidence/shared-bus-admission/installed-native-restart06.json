@@ -1,0 +1,38 @@
+{
+  "elapsed_seconds": 26.5773569070152,
+  "owners": 3,
+  "history_rows": 259,
+  "bus_bytes": 844690,
+  "localhost_provider_posts": 3,
+  "native_originals": [
+    {
+      "session": "wire/native-sessions/9900ac12628441e6d1345bd08d4884f8/2026-09-30T15-18-14-427Z_01a0f2e5-149a-77ad-8d16-6d32f4916fa8.jsonl",
+      "entry_id": "824814f8"
+    },
+    {
+      "session": "wire/native-sessions/b6932b46d789e20d5075cf5c12d60a9c/2026-09-30T15-18-13-127Z_01a0f2e5-0f86-73ef-a014-8c5b472e88fa.jsonl",
+      "entry_id": "55137a43"
+    },
+    {
+      "session": "wire/native-sessions/b1a6e4f6023a168b69aaa50cb6146c71/2026-09-30T15-18-12-228Z_01a0f2e5-0c03-70d4-b4df-cb28ac0aba63.jsonl",
+      "entry_id": "3777f291"
+    }
+  ],
+  "failure": null,
+  "all_owned_workers_retired": true,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "installed_interpreter": "/home/ts/wt/comms-shared-bus-admission-custody-20260930/.contention/candidate-runtime/bin/python",
+  "acp_notification_count": 26,
+  "all_native_turns_active_before_provider_release": true,
+  "acp_fact_counts": {
+    "CoordinationChangedUpdate": 3,
+    "CursorAdvancedUpdate": 5,
+    "GoalChangedUpdate": 5,
+    "InputDeliveryChangedUpdate": 8,
+    "QueueChangedUpdate": 3,
+    "TranscriptSnapshotUpdate": 6,
+    "TurnChangedUpdate": 3
+  }
+}
