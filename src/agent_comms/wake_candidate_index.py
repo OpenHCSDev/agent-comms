@@ -8,7 +8,6 @@ The original bus, coordinator and live owner must be verified independently.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sqlite3
@@ -16,12 +15,17 @@ import time
 from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from .bus_publication import (
     unique_wire_object,
 )
 from .delivery_policy import KeyedResponseReceipt
+from .bus_source_page import CandidateQuery
+from .bus_projection import AppendCheckpoint
+from .checkpoint_seals import PrefixSource
+from .field_codec import FieldCodec
+from .wire_metadata import WireRootIdText
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .typed_table import Column, Index, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
@@ -53,6 +57,19 @@ class CandidateCheckpoint(CandidateTable, TypedTable):
     byte_offset: int = field(metadata={"sql": Column(check="byte_offset>=0")})
     tail_digest: str
     last_seq: int = field(metadata={"sql": Column(check="last_seq>=0")})
+
+
+    @property
+    def source_identity(self) -> PrefixSource:
+        return PrefixSource(self.root_id, self.device, self.inode)
+
+    def require_source(self, stream, info: os.stat_result, root_id: str) -> None:
+        if self.source_identity != PrefixSource(root_id, info.st_dev, info.st_ino):
+            raise ProjectionRebuildRequiredError("candidate bus source changed")
+        if self.byte_offset > info.st_size:
+            raise ProjectionRebuildRequiredError("candidate bus prefix was truncated")
+        if AppendCheckpoint.fingerprint(stream, self.byte_offset) != self.tail_digest:
+            raise ProjectionRebuildRequiredError("candidate bus prefix changed")
 
 
 @dataclass(frozen=True)
@@ -87,8 +104,19 @@ class CandidatePage:
 class CommittedAppendHint:
     """Untrusted scheduling hint, never a sealed claim or native input receipt."""
 
-    root_id: str
+    root_id: Annotated[str, WireRootIdText]
     through_seq: int
+
+    def __post_init__(self) -> None:
+        if self.through_seq <= 0:
+            raise ValueError("exact append hint requires a positive original sequence")
+
+    @classmethod
+    def capture(cls, root_id: str, through_seq: int):
+        return FieldCodec.decode(cls, {"root_id": root_id, "through_seq": through_seq})
+
+    def validated(self):
+        return FieldCodec.decode(type(self), FieldCodec.encode(self))
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,12 +157,6 @@ class WakeCandidateIndex:
             raise TypeError("candidate index requires the canonical bus")
         self.bus = bus
         self.path = bus.log.path.with_name("wake_candidates.sqlite3")
-
-    @staticmethod
-    def _tail(stream: Any, offset: int) -> str:
-        start = max(0, offset - 4096)
-        stream.seek(start)
-        return hashlib.sha256(stream.read(offset - start)).hexdigest()
 
     @staticmethod
     def _connect(path: Path, *, readonly: bool) -> sqlite3.Connection:
@@ -199,14 +221,7 @@ class WakeCandidateIndex:
             raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
         if rebuild:
             return 0, 0
-        if (
-            checkpoint.root_id != root_id
-            or checkpoint.device != stat.st_dev
-            or checkpoint.inode != stat.st_ino
-            or checkpoint.byte_offset > stat.st_size
-            or cls._tail(stream, checkpoint.byte_offset) != checkpoint.tail_digest
-        ):
-            raise ProjectionRebuildRequiredError("candidate bus prefix changed")
+        checkpoint.require_source(stream, stat, root_id)
         return checkpoint.byte_offset, checkpoint.last_seq
 
     @staticmethod
@@ -285,7 +300,7 @@ class WakeCandidateIndex:
         current_path = self.bus.log.path.stat()
         if (after.st_dev, after.st_ino) != (current_path.st_dev, current_path.st_ino):
             raise ProjectionRebuildRequiredError("candidate bus was replaced")
-        return after, self._tail(stream, next_offset)
+        return after, AppendCheckpoint.fingerprint(stream, next_offset)
 
     @staticmethod
     def _commit_batch(
@@ -375,15 +390,8 @@ class WakeCandidateIndex:
         a later hint or explicit maintenance can catch up from the checkpoint.
         No hint proves that its claimed sequence actually committed.
         """
-        if (
-            type(root_id) is not str
-            or len(root_id) != 32
-            or any(ch not in "0123456789abcdef" for ch in root_id)
-            or type(through_seq) is not int
-            or through_seq <= 0
-        ):
-            raise ValueError("candidate append hint requires exact private root and sequence")
-        return CommittedAppendHint(root_id, through_seq)
+        return CommittedAppendHint.capture(root_id, through_seq)
+
 
     def _verified_checkpoint(self, root_id: str) -> int:
         """Check one WAL checkpoint against its bounded source prefix-tail witness."""
@@ -431,18 +439,10 @@ class WakeCandidateIndex:
         the index catches up. This
         contains no seal, owner, claim or native proof and never retries work.
         """
-        if (
-            type(hint) is not CommittedAppendHint
-            or type(hint.root_id) is not str
-            or len(hint.root_id) != 32
-            or any(ch not in "0123456789abcdef" for ch in hint.root_id)
-            or type(hint.through_seq) is not int
-            or hint.through_seq <= 0
-            or type(bootstrap_new) is not bool
-        ):
-            raise ValueError(
-                "candidate catch-up requires an exact append hint and bootstrap choice"
-            )
+        if type(hint) is not CommittedAppendHint:
+            raise ValueError("candidate catch-up requires the original append hint")
+        hint = hint.validated()
+        bootstrap_new = FieldCodec.decode(bool, bootstrap_new)
         self._validate_limits(max_rows, max_bytes)
         if self.bus.log._private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
@@ -485,19 +485,9 @@ class WakeCandidateIndex:
         Root and high-water must come from the caller's trusted snapshot, never
         agent/model arguments. Returning a page does not attest current state.
         """
-        if (
-            type(root_id) is not str
-            or type(recipient_lookup) is not str
-            or not recipient_lookup
-            or type(after_seq) is not int
-            or after_seq < 0
-            or type(required_through_seq) is not int
-            or required_through_seq < 0
-            or type(limit) is not int
-            or not 1 <= limit <= 100
-            or type(delivery_only) is not bool
-        ):
-            raise ValueError("candidate page requires bounded trusted inputs")
+        request = CandidateQuery.capture(root_id=root_id, recipient_lookup=recipient_lookup,
+                     after_seq=after_seq, required_through_seq=required_through_seq,
+                     limit=limit, delivery_only=delivery_only)
         try:
             with closing(self._connect(self.path, readonly=True)) as db:
                 self._schema(db, create=False)
@@ -505,8 +495,8 @@ class WakeCandidateIndex:
                 checkpoint = CandidateCheckpoint.one(db, singleton=1)
                 if (
                     checkpoint is None
-                    or checkpoint.root_id != root_id
-                    or checkpoint.last_seq < required_through_seq
+                    or checkpoint.root_id != request.root_id
+                    or checkpoint.last_seq < request.required_through_seq
                 ):
                     raise ProjectionUnavailableError("candidate projection is stale or unrelated")
                 with self.bus.log.path.open("rb") as stream:
@@ -517,31 +507,24 @@ class WakeCandidateIndex:
                             raise ProjectionUnavailableError(
                                 "candidate source has an incomplete tail"
                             )
-                    if (
-                        (stat.st_dev, stat.st_ino) != (checkpoint.device, checkpoint.inode)
-                        or stat.st_size < checkpoint.byte_offset
-                        or self._tail(stream, checkpoint.byte_offset) != checkpoint.tail_digest
-                    ):
-                        raise ProjectionRebuildRequiredError(
-                            "candidate source changed; omit supplement"
-                        )
+                    checkpoint.require_source(stream, stat, request.root_id)
                 data = Candidate.read(
                     db.execute(
                         f'SELECT * FROM "{Candidate.declared_name}" '
                         "WHERE recipient_lookup=? AND source_seq>? "
                         + (
                             "AND wake_mode IS NULL "
-                            if delivery_only
+                            if request.delivery_only
                             else "AND wake_mode IS NOT NULL "
                         )
                         + "ORDER BY source_seq LIMIT ?",
-                        (recipient_lookup, after_seq, limit + 1),
+                        (request.recipient_lookup, request.after_seq, request.limit + 1),
                     )
                 )
                 return CandidatePage(
                     checkpoint.last_seq,
-                    tuple(data[:limit]),
-                    len(data) > limit,
+                    tuple(data[:request.limit]),
+                    len(data) > request.limit,
                 )
         except (OSError, sqlite3.DatabaseError, ValueError, TypeError) as error:
             raise ProjectionUnavailableError("candidate projection read unavailable") from error

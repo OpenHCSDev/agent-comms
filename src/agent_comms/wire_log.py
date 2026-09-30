@@ -55,9 +55,9 @@ class WireLog:
             yield lock.descriptor
 
     @contextmanager
-    def certified_read(self):
+    def certified_read(self, *, blocking: bool = True):
         """Borrow the original source verified by this canonical lock barrier."""
-        with _store_lock(self.path) as lock:
+        with _store_lock(self.path, blocking=blocking) as lock:
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
             source.require_marker(marker)

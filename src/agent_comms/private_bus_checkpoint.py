@@ -23,7 +23,8 @@ from pathlib import Path
 from collections.abc import Iterator, Set
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
-from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, file_revision
+from .bus_source_page import AddressedPage
+from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource, file_revision
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
@@ -63,6 +64,13 @@ class PrefixWitness(PrefixSeal):
     def require_marker(self, marker: WireMetadata) -> None:
         if self.root_id != marker.root_id or self.through_seq != marker.last_seq:
             raise RelationViolationError("Original certificate differs from its durable marker.")
+
+    def require_append(self, marker: WireMetadata, info: os.stat_result,
+                       offset: int, sequence: int) -> None:
+        if self.source_identity != PrefixSource(marker.root_id, info.st_dev, info.st_ino):
+            raise RelationViolationError("Private bus checkpoint append lost its source fence.")
+        if offset != self.offset or sequence <= self.through_seq:
+            raise RelationViolationError("Private bus checkpoint append lost its prefix fence.")
 
 
 @dataclass(frozen=True)
@@ -116,6 +124,40 @@ class CertifiedSourceRead:
                     raise RelationViolationError("Certified address differs from original frozen row.")
                 yield initial
         self.require_current()
+
+    def addressed_page(self, bus: WireLog, request: AddressedPage):
+        """Read a bounded original addressed window through this one certificate.
+
+        The query carries no input/ACK authority. The complete page, latest
+        initial and original bytes share this connection and opened stream;
+        the same original seal/resource must still hold after publication.
+        """
+        self.require_current()
+        self.require_marker(bus._private_marker_unlocked())
+        db, stream, witness = self.connection, self.stream, self.witness
+        try:
+            rows = DeliverySources.read(db.execute(
+                f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} "
+                f"FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
+                "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
+                (request.lookup, request.after_seq, request.limit + 1),
+            ))
+            last = DeliverySources.read(db.execute(
+                f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1"))
+            latest = last[0].seq if last else 0
+            if not 0 <= latest <= witness.through_seq:
+                raise RelationViolationError("Certified initial high-water is invalid.")
+            originals = []
+            for row in rows[:request.limit]:
+                original = row.delivery(stream, witness.root_id)
+                if not any(r.recipient_lookup == request.lookup for r in original.audience.recipients):
+                    raise RelationViolationError("Certified initial lookup differs from bus row.")
+                originals.append(original)
+            self.require_current()
+            self.require_marker(bus._private_marker_unlocked())
+            return replace(witness, latest_source_seq=latest), tuple(originals), len(rows) > request.limit
+        except (sqlite3.Error, OSError, ValueError, TypeError) as error:
+            raise RelationViolationError("Certified initial page is unavailable.") from error
 
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
@@ -628,13 +670,7 @@ def append_private_bus_checkpoint_unlocked(
             saved = _saved(db)
             info = os.fstat(stream.fileno())
             offset = info.st_size - len(raw)
-            if (
-                saved.root_id != marker.root_id
-                or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
-                or offset != saved.offset
-                or record.message.seq <= saved.through_seq
-            ):
-                raise RelationViolationError("Private bus checkpoint append lost its prefix fence.")
+            saved.require_append(marker, info, offset, record.message.seq)
             marker.seal.check_final(saved, path)
             stream.seek(offset)
             if stream.read(len(raw)) != raw or _tail(stream, offset) != saved.tail:
@@ -660,81 +696,6 @@ def append_private_bus_checkpoint_unlocked(
             return _saved(db)
     except (sqlite3.Error, OSError) as error:
         raise RelationViolationError("Private bus checkpoint append outcome UNKNOWN.") from error
-
-
-def certified_delivery_page_unlocked(
-    bus: WireLog,
-    marker: WireMetadata,
-    lookup: str,
-    *,
-    after: int = 0,
-    limit: int = 100,
-) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
-    """Complete addressed page; caller holds bus lock and must bind SQL/native proof.
-
-    The returned through sequence is a global bus bound. The page witness's
-    latest_source_seq is derived from this same sealed index connection under
-    the final revision fence; only that field bounds initial-source coverage.
-    Neither bound grants native-input acceptance, ACK, or skip permission.
-    Recheck the witness under the same bus-held SQL commit; an unlocked return
-    is advisory only.
-    """
-    from .bus_publication import CommittedDelivery, unique_wire_object
-
-    if (
-        type(lookup) is not str
-        or len(lookup) != 32
-        or any(c not in "0123456789abcdef" for c in lookup)
-        or type(after) is not int
-        or after < 0
-        or type(limit) is not int
-        or not 1 <= limit <= 100
-    ):
-        raise ValueError("Exact bounded recipient page required")
-    witness = verify_private_bus_checkpoint_unlocked(bus, marker)
-    try:
-        with (
-            closing(_connect(_path(bus.path), readonly=True)) as db,
-            bus.path.open("rb") as stream,
-        ):
-            rows = DeliverySources.read(
-                db.execute(
-                    f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} FROM {Addressed.declared_name} a "
-                    f"JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
-                    "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq LIMIT ?",
-                    (lookup, after, limit + 1),
-                )
-            )
-            has_more = len(rows) > limit
-            last = DeliverySources.read(
-                db.execute(
-                    f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC LIMIT 1"
-                )
-            )
-            latest_source_seq = last[0].seq if last else 0
-            if latest_source_seq < 0 or latest_source_seq > witness.through_seq:
-                raise RelationViolationError("Certified initial high-water is invalid.")
-            initials = []
-            for row in rows[:limit]:
-                initial = row.delivery(stream, witness.root_id)
-                if not any(r.recipient_lookup == lookup for r in initial.audience.recipients):
-                    raise RelationViolationError("Certified initial lookup differs from bus row.")
-                initials.append(initial)
-            if (
-                file_revision(_path(bus.path).stat()) != marker.seal.db_revision
-                or bus._private_marker_unlocked().seal != marker.seal
-                or file_revision(bus.path.stat()) != witness.revision
-            ):
-                raise RelationViolationError("Certified page changed during its read fence.")
-            return (
-                replace(witness, latest_source_seq=latest_source_seq),
-                tuple(initials),
-                has_more,
-            )
-    except RelationViolationError:
-        raise
-    except (sqlite3.Error, OSError, ValueError, TypeError) as error:
-        raise RelationViolationError("Certified initial page is unavailable.") from error
 
 
 def source_references_unlocked(source: CertifiedSourceRead, references):
