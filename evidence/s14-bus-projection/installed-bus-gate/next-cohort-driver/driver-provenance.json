@@ -1,0 +1,25 @@
+{
+  "original_git_source": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+  "copied_test_and_css_resources": {
+    "tests/canonical_wire_conversation_installed_pilot.py": {
+      "sha256": "e16b3033d24d082645502d868e884dfaa0a72e384b08775c14ab0b8c88ac4552",
+      "bytes": 31750
+    },
+    "tests/l0a_native_installed_pilot.py": {
+      "sha256": "6086cbc3c671537d92b8c95c8f6f80c28a88813d001090c18fa04b7eb963878b",
+      "bytes": 30913
+    },
+    "tests/runtime_fixture.py": {
+      "sha256": "617beb92230456c164115ff0e1e14ec9c03250e999137bab1ba54999f4b84294",
+      "bytes": 6378
+    },
+    "src/toad/toad.tcss": {
+      "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636",
+      "bytes": 5498
+    }
+  },
+  "application_source": "installed970/d3ba/6b prefix only; copiedsrc/toad contains CSS resource only",
+  "public_effects": 0,
+  "native_inputs": 0,
+  "purpose": "same-cohort wholebus actualhotDM/IRC/31s/A-B-A/cold/shutdown aftersoleEinsteinjointPASS"
+}
