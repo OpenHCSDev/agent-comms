@@ -78,3 +78,30 @@ retired tuple access was added. The final47 checks (real593b optional native
 controls included) pass2.58s. source-validation.json records scope and limits.
 The actual native/ACP/Toad integrated first-input gate remains Einstein458's
 integration claim; no separate redundant parent gate is launched.
+
+
+## Item5: explicit file-validation states before merge
+
+The premerge review found two newly introduced nullable policy fields in
+FreshFileCheck: revision and exact_size. They selected whether a rule existed,
+so they were internal validation state, not optional POSIX data (IDEN-3,
+IMPL-14). Those fields and the prewrite Boolean selector are deleted.
+StableFreshFileCheck owns a mandatory FileRevision.
+UnwrittenBootstrapFileCheck derives the required size from the original minted
+source; it stores no second bootstrap size. FreshFileRule asks the check's
+polymorphic revision_changed/prewritten behavior. Saved-identity and prewrite
+entrypoints select their named check type through one shared implementation.
+All current callers were read; none passed the deleted prewrite parameter.
+
+This followup deletes13/adds36 production lines in one file. The two preexisting
+optional selected-bootstrap fields are unchanged external enrollment inputs,
+not new validation switches. The existing startup damage control now also
+appends to the actual file during fsync, proving a mandatory stable revision
+rejects a write racing attestation. The guard rejects nullable check fields.
+
+The48 focused checks pass2.62s, including both real pinned593b SessionManager
+read/append controls. Evidence: evidence/fresh-file-validation-states-20260930.
+This is source/native preparation. The frozen ea8/c075 installed cohort is
+unchanged; Einstein458 receives this production delta for the next affected
+installed native/ACP journey. No runtime reset, new store, authority mirror,
+codec or original input replay is introduced.

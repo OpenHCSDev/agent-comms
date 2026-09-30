@@ -51,8 +51,6 @@ class FreshFileCheck:
     source: FreshPrivateSession
     observed: os.stat_result
     minimum_size: int
-    revision: FileRevision | None = None
-    exact_size: int | None = None
 
     @property
     def identity(self) -> FileIdentity:
@@ -61,6 +59,14 @@ class FreshFileCheck:
     @property
     def observed_revision(self) -> FileRevision:
         return FileRevision.from_stat(self.observed)
+
+    @property
+    def revision_changed(self) -> bool:
+        return False
+
+    @property
+    def prewritten(self) -> bool:
+        return False
 
     def require_valid(self, context: str) -> None:
         try:
@@ -72,6 +78,21 @@ class FreshFileCheck:
                 raise NativePiUnavailable(
                     f"{context}: {member.declared_name} {member.explanation}"
                 )
+
+
+@dataclass(frozen=True, slots=True)
+class StableFreshFileCheck(FreshFileCheck):
+    revision: FileRevision
+
+    @property
+    def revision_changed(self) -> bool:
+        return self.observed_revision != self.revision
+
+
+class UnwrittenBootstrapFileCheck(FreshFileCheck):
+    @property
+    def prewritten(self) -> bool:
+        return self.observed.st_size != self.source.bootstrap_size
 
 
 class FreshFileRule(DeclaredFamily, affix="Rule"):
@@ -103,7 +124,7 @@ class TruncatedFreshFileRule(FreshFileRule):
 class ChangedFreshFileRule(FreshFileRule):
     @classmethod
     def violated(cls, check):
-        return check.revision is not None and check.observed_revision != check.revision
+        return check.revision_changed
 
 
 class PrewrittenFreshFileRule(FreshFileRule):
@@ -111,7 +132,7 @@ class PrewrittenFreshFileRule(FreshFileRule):
 
     @classmethod
     def violated(cls, check):
-        return check.exact_size is not None and check.observed.st_size != check.exact_size
+        return check.prewritten
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,13 +325,16 @@ class FreshPrivateSession:
                 "Selected fresh source cannot reopen without exact first-start token"
             ) from error
 
-    def verify_saved_identity(self, *, prewrite: bool = False) -> None:
-        """Verify the original header/inode, optionally requiring no Pi appends yet."""
+    def verify_saved_identity(self) -> None:
+        """Verify the original header and inode, allowing Pi's later appends."""
+        self._verify_saved_identity(FreshFileCheck)
+
+    def _verify_saved_identity(self, check_type: type[FreshFileCheck]) -> None:
         if os.getpid() != self.creator_pid:
             raise NativePiUnavailable("Fresh-session creator process changed")
         try:
             info = self.path.lstat()
-            FreshFileCheck(self, info, 1, exact_size=self.bootstrap_size if prewrite else None).require_valid(
+            check_type(self, info, 1).require_valid(
                 "Fresh-session saved inode changed"
             )
             descriptor = os.open(self.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -336,9 +360,8 @@ class FreshPrivateSession:
                 raise NativePiUnavailable("Fresh-session bootstrap changed")
             row = NativeEntry.from_evidence(json.loads(header))
             after = self.path.lstat()
-            FreshFileCheck(
+            check_type(
                 self, after, self.bootstrap_size,
-                exact_size=self.bootstrap_size if prewrite else None,
             ).require_valid("Fresh-session path changed after bootstrap read")
             if (
                 not isinstance(row, SessionEntry)
@@ -357,7 +380,7 @@ class FreshPrivateSession:
             ) from error
 
     def verify_prewrite(self) -> None:
-        self.verify_saved_identity(prewrite=True)
+        self._verify_saved_identity(UnwrittenBootstrapFileCheck)
 
     def verify_selected_startup(self) -> FileRevision:
         """Attest exactly Pi's two expected metadata appends, no raw messages.
@@ -378,7 +401,7 @@ class FreshPrivateSession:
             try:
                 opened = os.fstat(descriptor)
                 observed = FreshFileCheck(self, info, self.bootstrap_size)
-                FreshFileCheck(self, opened, self.bootstrap_size, observed.observed_revision).require_valid(
+                StableFreshFileCheck(self, opened, self.bootstrap_size, observed.observed_revision).require_valid(
                     "Selected startup inode/revision changed"
                 )
                 chunks = bytearray()
@@ -391,7 +414,7 @@ class FreshPrivateSession:
                 # Fail closed on uncertain fsync before the raw prompt writer.
                 os.fsync(descriptor)
                 synced = os.fstat(descriptor)
-                FreshFileCheck(
+                StableFreshFileCheck(
                     self, synced, self.bootstrap_size, FileRevision.from_stat(opened),
                 ).require_valid("Selected startup changed across fsync")
             finally:
@@ -409,7 +432,7 @@ class FreshPrivateSession:
             SelectedStartupCheck(self, model, thinking).require_valid()
             after = self.path.lstat()
             revision = FileRevision.from_stat(info)
-            FreshFileCheck(self, after, self.bootstrap_size, revision).require_valid(
+            StableFreshFileCheck(self, after, self.bootstrap_size, revision).require_valid(
                 "Selected startup revision changed after read"
             )
             return revision
