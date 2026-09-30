@@ -1,0 +1,25 @@
+{
+  "stage": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930",
+  "activation": {
+    "stage": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930",
+    "pins": {
+      "agent-comms": "6fabde90aca7166fe599efba8cd1aa6d84b17e11",
+      "batrachian-toad": "b3b1a8b549647d67c3f4387c040b62f9c259e5f5",
+      "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+    },
+    "sdk": "0.12.1",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "state": "verified-immutable-cohort",
+    "staging_receipt_sha256": "f9e3a64b7f90400ce22adc0b614dfc1501717eef76fbc6aceb7f13a6f23df496"
+  },
+  "toad": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/lib/python3.14/site-packages/toad/__init__.py",
+  "core": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "existing_journey": "first_fork_native_installed_pilot.default_acceptance",
+  "fixture": "/home/ts/wt/g458e/u01/fixture",
+  "tests": "/home/ts/wt/toad-provider-login-action-modal-20260930/tests",
+  "ui": "Actual installed Toad, Pilot clicks and committed compositor/SVG",
+  "physical_st_xvfb_gate": false,
+  "controlled_posts_budget": 2,
+  "production_source_pythonpath": false,
+  "public_inputs": 0
+}

@@ -33,3 +33,11 @@ Original TC2/T2/C1 requirements already present are documented in docs/refactor/
 Core458 `6fabde90aca7166fe599efba8cd1aa6d84b17e11` normally merges parent459 final9890 and Arendt456 ff9fbc39, including the canonical FileRevision helper. The producer/consumer tuple gap is closed. Current six-file C1 delta remains70 production deletions/95 additions, distinct from shared builder/native custody/coordination ancestry. Combined affected focus67PASS2optional-nativeSKIP2.87s; raw log retained.
 
 Sch owns ONE normal68 immutable candidate; parent owns the required exact Toad/Core metadata+lock pin. No URL override or no-deps backdoor. Actual installed Native→ACP→Toad first-input acceptance remains pending that paired artifact; no draftReady/public activation claim yet.
+
+## Actual installed outcome (supersedes pending status above)
+
+Frozen Core6fab / Toad250b3b / native593b normal68 candidate: **16 installed native checks passed in21.17s**, wrapper23.2102s. Both optional real-native bootstrap/inode controls ran and passed. Existing real native terminal-failure/tool/final-answer/image-redaction journeys and live/replay edit formats passed; no paid or public inputs and no replay.
+
+The continuous actual first-fork UI journey **failed46.2752s**: the first new answer was mounted and painted twice. Native journal, saved transcript and ACP each contain exactly one answer; there is one saved first input and two controlled localhost provider requests for the parent/child journey. Canonical ACP has44 typed turn callbacks,30 measured native model-wait callbacks, idle settlement and zero fresh protocol errors. Original owner processes exited and no fixture processes remain.
+
+Full terminal outcome/raw failure/census/typed source-custody/provenance is retained at `evidence/c1-terminal-data-20260930/installed08/installed-receipt.json`. Heisenberg owns the existing frontend source/live publication defect. **Draft remains not Ready and the tested pair is not published.** No retries or optional replacement gates hide the first failure. Parent accepted the scoped16 native checks; frontend closure is a separate concrete blocking gate. Current C1 production deletion count is70 lines across six owned files, distinct from shared identity/custody ancestry.
