@@ -33,3 +33,13 @@ The original TurnOutput six-term success recombination now settles through its e
 AssistantMessage owns tracked completion and existing PiStopReason dispatch. PiContent owns admissible final text; final_text_allowed capability checks are deleted. The existing NativeTool family owns edit-result projection for both live tool events and retained ToolResultMessage replay. NativeEditDetails decodes once with FieldCodec. Unified patch and legitimate external numbered Pi details remain exact; unsupported extension metadata preserves original output without granting edit evidence.
 
 At source checkpoint5fe06b30, **73 production lines deleted /181 added across seven production files**, distinct from tests and retained raw failure logs. Recompute against normally integrated main after parent459/Arendt456 seams land. Installed acceptance is pending; source focus is preparation only.
+
+## Shared source integration checkpoint
+
+Core458 normally merges parent459 final `9890c75e` (mint stores original FileIdentity directly, no device/inode aliases) and Arendt456 `ff9fbc39492db5e13105b3f54ed2727784283699` (the original native helper returns FileRevision). Integrated source `6fabde90aca7166fe599efba8cd1aa6d84b17e11` keeps parent FreshFileRule/FreshRuntimeRule and the strict native proof owner. The only second merge conflict was the coordinated fixture assertion, resolved to original `fresh_session.file_identity` rather than the deleted computed projection.
+
+The current C1-owned production delta against parent459 is **70 deleted /95 added across six files**. The earlier181/73 checkpoint included the shared FreshRuntimeRule and StateData/model relation now owned by parent459; do not count shared builder changes twice. Native input/custody and coordination ancestry are also not C1-owned deletions.
+
+Combined affected source sanity: **67 passed, two optional real-native controls skipped,2.87s**. This includes full Pi-content/summary boundary, fresh enrollment/runtime refusals, actual fake-child prewrite boundary, live/replayed edit metadata, vocabulary guard and Core T2 guards. The two skipped controls will run against the staged native593b artifact, not be claimed native acceptance.
+
+Sch owns one normal68 immutable candidate. Its Toad package must declare the exact tested Core checkpoint through a normal paired metadata/lock change; an independent URL/no-deps override would violate the package boundary. Parent owns that pin and all public publication. One existing continuous native/ACP/Toad first-fork/first-input journey is prepared; installed acceptance remains pending until the matching candidate exists.

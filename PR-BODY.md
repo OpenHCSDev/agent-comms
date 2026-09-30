@@ -26,3 +26,10 @@ Source preparation:57 passed /2 optional-native skipped in the expanded boundary
 Arendt456 owns the remaining native `_fresh_selected_revision` producer's FileRevision migration and original native context proof. Stage and actual installed acceptance must include that producer rather than run a knowingly mixed tuple/record pair. Prepared acceptance reuses the existing installed native output/real-tool fixtures and the existing continuous actual Native→ACP→Toad first-fork/first-input journey with controlled localhost responses, no paid/public calls or uncertain input replay.
 
 Original TC2/T2/C1 requirements already present are documented in docs/refactor/c1-terminal-data/original-boundary-closure.md, including exact historical deletion counts and retained installed proofs. This draft introduces no Toad production change and no repeated optional performance/GUI gate.
+
+
+## Coherent producer integration
+
+Core458 `6fabde90aca7166fe599efba8cd1aa6d84b17e11` normally merges parent459 final9890 and Arendt456 ff9fbc39, including the canonical FileRevision helper. The producer/consumer tuple gap is closed. Current six-file C1 delta remains70 production deletions/95 additions, distinct from shared builder/native custody/coordination ancestry. Combined affected focus67PASS2optional-nativeSKIP2.87s; raw log retained.
+
+Sch owns ONE normal68 immutable candidate; parent owns the required exact Toad/Core metadata+lock pin. No URL override or no-deps backdoor. Actual installed Native→ACP→Toad first-input acceptance remains pending that paired artifact; no draftReady/public activation claim yet.
