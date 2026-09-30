@@ -1140,3 +1140,34 @@ input. Zero prompt/provider/public writes, all fixture workers retired. Deletes
 48 production lines and adds51; no new store or ABI. Merged, not installed in
 the public default yet. Preserve the nine original configuration preimages for
 the next reviewed activation; do not silently clamp or claim they were restored.
+
+### Merged usage-blocking checkpoint awaiting paired activation
+
+Core449 merged d16238a5 at13:34:36Z: reviewed1c653f91, 22 production lines
+deleted/43 added. Argument parsing now precedes route/owner admission; worker
+startup requires an explicitly declared owner. Native phase observations update
+the existing fenced turn lease instead of three independent activity writes.
+Actual native triage/FULL/tool/answer journey passed in9.37s; help and unknown
+arguments return without participant creation. Original public seq161 completed
+at13:34:02Z after only the proven accidental helpers retired; no replay, original
+owner/native interruption or manual lease clearing. Later receipt head9684a99e
+adds evidence only and stays preserved on its source branch.
+
+Core445 merged4295d680 at13:41:32Z and Toad237 merged13f9da11 at13:45:54Z.
+Core446 is marked MERGED through its included contribution, not an unfinished
+parallel implementation. Core deletes67 production lines, Toad deletes20;
+original journal states own retained outcomes and the canonical transcript
+declaration owns their decoding. The continuous installed continuation preserves
+the original707507-byte UNKNOWN source and journal through cold-load, A/B/A
+return and fresh ACP reconnect; one source outcome and one painted resource in
+every phase, zero prompt/compaction/provider requests, fixture processes retired.
+The fresh-decoder failure remains recorded before the passing continuation.
+
+Arendt builds one noneditable immutable cohort with Core4295d680/Toad13f9da11,
+Textual2e49/SDK0.12.1/nativee36. Current-format retained restart preserves runtime
+and original journal state; no repeated C3 conversion or uncertain input replay.
+These merged fixes are not yet public-default activated. The performance236
+buffer/hang scope and the original comms428 native latency gap remain separate.
+
+The latest automatic goal continuation reports ACTIVE updated1790775061; earlier
+BLOCKED/ACTIVE observations remain historical, with no goal-tool resume/replay.
