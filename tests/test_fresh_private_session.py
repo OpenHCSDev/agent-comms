@@ -21,8 +21,8 @@ def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> No
     enrollment = create_fresh_private_session(session_dir, worktree=tmp_path)
     info = enrollment.path.lstat()
     assert (info.st_dev, info.st_ino, info.st_nlink, info.st_mode & 0o777) == (
-        enrollment.device,
-        enrollment.inode,
+        enrollment.file_identity.device,
+        enrollment.file_identity.inode,
         1,
         0o600,
     )
