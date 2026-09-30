@@ -12,10 +12,28 @@ class LoopbackProvider:
         self.posts = 0
         self.paths = []
         self.requests = []
+        self.tool_call = None
+        self.response_gate = None
 
     def response_chunks(self):
-        yield {"content": self.text}, None
-        yield {}, "stop"
+        if self.tool_call is None:
+            yield {"content": self.text}, None
+            yield {}, "stop"
+            return
+        name, arguments = self.tool_call
+        self.tool_call = None
+        assert any(tool["function"]["name"] == name for tool in self.requests[-1]["tools"])
+        yield {
+            "tool_calls": [
+                {
+                    "index": 0,
+                    "id": "local-tool-once",
+                    "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(arguments)},
+                }
+            ]
+        }, None
+        yield {}, "tool_calls"
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -35,6 +53,8 @@ class LoopbackProvider:
             if length:
                 body = await asyncio.wait_for(reader.readexactly(length), 3)
                 self.requests.append(json.loads(body))
+            if self.response_gate is not None:
+                await asyncio.wait_for(self.response_gate.wait(), 15)
             if self.status == 0:
                 # This attempt stays in flight until Pi is cancelled.
                 await asyncio.wait_for(reader.read(), 20)

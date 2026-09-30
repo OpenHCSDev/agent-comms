@@ -359,6 +359,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     opaque: ClassVar[bool] = False
     assistant: ClassVar[bool] = False
     user: ClassVar[bool] = False
+    final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
     usage: PiUsage | None = None
     input_id: str | None = wire_field("inputId")
@@ -431,6 +432,10 @@ class AbsentMessage(PiMessage):
 
 class AssistantMessage(PiMessage):
     assistant = True
+
+    @property
+    def final_reply(self):
+        return self.stop_reason.successful
 
     async def apply_start(self, session, event):
         session.output.start_message()
@@ -543,9 +548,8 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
     details: Any = None
 
     def transcript_events(self, context):
-        from .routing import MessageRoute, TurnRouting
         from .tool_results import ToolDiff
-        from .transcript_events import SentTranscript, ToolEndTranscript
+        from .transcript_events import ToolEndTranscript
 
         if not self.parts:
             return []
@@ -560,17 +564,6 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
                 diff=ToolDiff.from_result(self.tool_name, result, not self.is_error),
             )
         ]
-        sent = (
-            context.sent_tool_message(self.tool_name, output, not self.is_error)
-            if context.sent_tool_message
-            else None
-        )
-        if sent is not None:
-            events.append(
-                SentTranscript(
-                    sent.body, routing=TurnRouting(reply=MessageRoute(sent.sender, (sent.target,)))
-                )
-            )
         return events
 
 
