@@ -1,3 +1,26 @@
+## 2026-09-30 normal candidate installed; physical regression acceptance started
+
+The single normal noneditable stage runtime-native-source-queue-cohort-20260930
+is installed: Core970bc527/Toadd3ba4cf3/mergedTextual6b5895fa, SDK0.12.1,
+native593b and the shared audit dependency. Actual installed count is69.
+All303Core/304Toad/266Textual original package files match the frozen Git
+sources; native full trust, affected imports and pip check pass. Parent checked
+activation/staging artifact hashes against the ready receipt. Metadata probe
+completed with no remaining owned processes and no input/provider/public effects.
+
+Einstein has started the fresh installed terminal/native/ACP journey. The
+queue is explicitly a regression: physical Enter must visibly retain the pending
+message before native Started and then transfer it once into saved/chat output.
+Schrodinger owns the subsequent same-cohort sender/receiver/IRC and tab-return
+checks. Their results are not yet claimed. Public five defaults remain scoped253.
+
+Parent verified actual open PR coverage:456/459/462/467 heads are ancestors of
+Core970;457 and460 have only later evidence/assembly files outside the integrated
+source. Arendt prepares the existing canonical quiet-cutover operator for these
+exact pins and current default preimages, retaining the actual acceptance gate.
+No signals, store resets, route changes or live publication are authorized by
+package readiness alone. Receipt:evidence/native-source-queue-cohort-20260930/parent-package-review.json.
+
 ## 2026-09-30 next coherent pair frozen and normal assembly dispatched
 
 Parent Toad250 d3ba4cf330acd4d2eec6cd806fab8113c3a046ec normally merges
