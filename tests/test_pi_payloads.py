@@ -94,11 +94,16 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
         assert not state.matches_model(("p", "m"))
         with pytest.raises(ValueError, match="owner selection"):
             state.model.require_selection(None)
+        with pytest.raises(ValueError, match="owner selection"):
+            state.model.for_compaction("p/m")
         assert FieldCodec.decode(StateData, FieldCodec.encode(state)) == state
-    reported = StateData.from_wire({"model": {"provider": "p", "id": "m"}})
+    reported = StateData.from_wire({"model": {"provider": "p", "id": "m", "contextWindow": 1024}})
     assert isinstance(reported.model, ReportedModel)
     assert reported.matches_model(("p", "m"))
     assert reported.model.require_selection("p/m") is reported.model
+    assert reported.model.for_compaction("p/m").context_window == 1024
+    with pytest.raises(ValueError, match="owner selection"):
+        reported.model.for_compaction("p/other")
     for result_wire in ({}, {"result": None}, {"result": {"content": []}}):
         event = decode({"type": "tool_execution_end", **result_wire})
         assert isinstance(event.result, ProvidedToolResult if "result" in result_wire and result_wire["result"] == {"content": []} else MissingToolResult)

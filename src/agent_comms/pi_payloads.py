@@ -707,6 +707,9 @@ class PiModel(PiPayload, DeclaredFamily, affix="Model"):
     def require_selection(self, selected: str | None):
         raise ValueError("Prepared native model does not match the owner selection")
 
+    def for_compaction(self, configured_model: str | None):
+        return self.require_selection(configured_model)
+
 
 class UnreportedModel(PiModel):
     """The external state has not reported a model; no identity is implied."""
@@ -733,6 +736,12 @@ class ReportedModel(PiModel):
         if self.display_name != selected:
             return super().require_selection(selected)
         return self
+
+    def for_compaction(self, configured_model: str | None):
+        from .pi_summary_payloads import SelectedModel
+
+        self.require_selection(configured_model)
+        return SelectedModel(self.provider, self.id, self.context_window)
 
     @property
     def display_name(self):
