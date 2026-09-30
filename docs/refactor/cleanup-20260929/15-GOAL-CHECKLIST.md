@@ -1,3 +1,45 @@
+## 2026-09-30 scoped253 installed and ordinary user entrypoint verified
+
+Toad253 mergedade1496216bab216fbc8f52b69ab7eaec376f030,10production
+linesdeleted/12added across2files. Nested visible bodies derive readiness from
+original mounted resources; descendant traversal occurs when retiring their
+materialization, not in each frame's readiness query. Full CPU/warm/focus/
+TC1/T9/growing-End scope continues in receiving254 under Heisenberg.
+
+Parent staged one normal68noneditable pair with unchanged liveCore6feb,
+Toadade149,Textual2e49,SDK0.12.1,native593b. All291Core/273Toad source files
+equal exact Git. The actual current-pair physical Up/Down/reverse/End15idle/
+A-B-A/draftUndo journey passed16checks83.919s, preserving20ready body
+resources and original41MB/13MB journals/owner identities. Parent personally
+reviewed actual return/idle frames. Source profile is retained for followup;
+no whole CPU gain, instant raster return or50ms claim is made.
+
+Five defaults now select runtime-body-readiness-20260930. Ordinary unoverridden
+toad-comms in isolated st passed34.633s: original saved history visible,
+canonical idle turn/nullgoal/emptyAvailablequeue and0fresh protocol errors;
+original source/owner/route unchanged, cleanup0. No owner restart, store reset
+or new native/provider input occurred. Parent viewed the actual frame. Receipt:
+evidence/cleanup-live-integration/body-readiness-20260930/activation.json.
+The footer identity lead was disproved: original CoordinationChangedUpdate for
+nra-architecture itself publishes NRA worktree and94579context usage, exactly
+matching the visible footer. Earlier capture alone did not certify this fact.
+
+The requested persistent question was sent, explicitly scoping this UI checkpoint
+and stating the larger bus/lifecycle release is still staged. Existing running
+Toad windows retain their loaded version until restarted. Core463 typed errors
+is merged958a5546 after59source controls and actual installed SDK/native error
+acceptance. Its2-file total is114production linesdeleted/269added including
+the sharedcodec; rewrite alone113deleted/206added. It is not yet in liveCore.
+
+Schrodinger465 original same-ACP attachment resource closure passed actual
+load/load/onefailure/passive-reattach,2localhost posts/2native originals/
+noReplay and original disposition/history unchanged. Source readiness receipt
+is publishing; no publicactivation occurred. Arendt467 owns complete original
+NativeInputContext and selected-start state; Einstein458 published named
+payload states and received parent4595743 fresh-file check states. Kepler owns
+NRA15 plus the original Core receiving ratchet extension and OpenHCS pin.
+These are the next integration dependencies, not new parallel coordinators.
+
 ## 2026-09-30 structural cleanup dispatch and concrete progress
 
 | Requested item | PR and integration owner | Current evidence and next action |

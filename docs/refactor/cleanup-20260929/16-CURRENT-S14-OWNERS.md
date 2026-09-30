@@ -1,3 +1,23 @@
+## Latest actual live and active delivery owners
+
+Live UI checkpoint253:runtime-body-readiness-20260930,Core6feb/Toadade149/
+Textual2e49/SDK0.12.1/native593b. Actual current-pair83.919s16checks and
+ordinary unoverridden34.633s st/saved-history acceptance passed;0newinputs,
+owner restarts or store resets. Fullperformance receiving254 Heisenberg.
+Canonical originalCoordinationChanged confirms observed footer, so the old
+peer-footer hypothesis is disproved. Largerbackend candidate is notlive.
+
+Core463 merged958a5546, typed externalerror/centralcodec/source59+actualSDK
+error acceptance complete. Originalattachment reload leak is Schrodinger465:
+actual repeatedload/failure/reattach gate passes, final publication inprogress.
+Arendt467 owns complete acquirednativecontext/selectedstart state. Einstein458
+owns namedpayload + originaltracked lifecycle closure/newcohort jointgate;
+parent4595743 freshfile states received. Mendel462 certifiedreply11.19sactual
+acceptance complete, dependencyNativeInputContext noted. Kepler ratchet
+integration is NRA15 (14superseded) and originalCore receivingMeasure
+extension; no duplicated checker/dynamicskillpath. SessionRevision remains
+parent-owned after requestedstackmerges.
+
 ## Current structural extension owners
 
 Core464 prompt is merged and exact authorized live project file replaced,
