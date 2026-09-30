@@ -50,7 +50,7 @@ def main(package: Path) -> None:
     )
     patch(
         package / "dist/core/agent-session.js",
-        "7ed95dd04ce837fc30dd5b89ecf1517da5b34d620115d815ed77b179279bfcd0",
+        "1100105722d5f4d5635bc3103a73209e0d3b23759467bd1f1ee2b108be4ba2b0",
         (
             (
                 "if (!this._nativeRunHadTrackedInput || !this.model || this.model.contextWindow <= 0)",

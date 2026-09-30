@@ -74,8 +74,8 @@ class GoalScheduler:
             self.comms.registry.status(thread.name).require_running()
         except RelationViolationError:
             return
-        goal = thread.goal
-        if goal is not None and goal.state.active:
+        goal = thread.active_goal
+        if goal is not None:
             if self.comms.goals.goal_wait(thread.name) is not None:
                 return
             if self.pending_goal_origins.get(thread.name) == goal.id:
@@ -256,4 +256,3 @@ class GoalScheduler:
             return
         await self.effects._emit_event(session_id, event)
         self.goal_execution_signatures[session_id] = event.signature
-

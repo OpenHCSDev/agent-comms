@@ -1489,7 +1489,13 @@
 -            trailingTokens: estimated,
 -            lastUsageIndex: null,
 -        };
--    }
++    let usageTokens=0, trailingTokens=0, lastUsageIndex=null, index=0;
++    for(const message of messages) {
++        const usage=getAssistantUsage(message);
++        if(usage) {usageTokens=calculateContextTokens(usage);trailingTokens=0;lastUsageIndex=index;}
++        else trailingTokens+=estimateTokens(message);
++        index++;
+     }
 -    const usageTokens = calculateContextTokens(usageInfo.usage);
 -    let trailingTokens = 0;
 -    for (let i = usageInfo.index + 1; i < messages.length; i++) {
@@ -1501,13 +1507,6 @@
 -        trailingTokens,
 -        lastUsageIndex: usageInfo.index,
 -    };
-+    let usageTokens=0, trailingTokens=0, lastUsageIndex=null, index=0;
-+    for(const message of messages) {
-+        const usage=getAssistantUsage(message);
-+        if(usage) {usageTokens=calculateContextTokens(usage);trailingTokens=0;lastUsageIndex=index;}
-+        else trailingTokens+=estimateTokens(message);
-+        index++;
-+    }
 +    return {tokens:usageTokens+trailingTokens,usageTokens,trailingTokens,lastUsageIndex};
  }
  /**
@@ -1600,7 +1599,7 @@
  // ============================================================================
  // Summarization
  // ============================================================================
-@@ -495,12 +386,7 @@
+@@ -497,12 +388,7 @@
      };
  }
  /** Generate or update a conversation summary and return its provider usage. */
@@ -1612,10 +1611,10 @@
 -}
 +
  function sourceCallbacks(callbacks, done, total, phase) {
-     return { ...callbacks, sourceProgress: {
+     return { ...callbacks, get sourceProgress() { return {
          sourceBytesDone: (callbacks?.sourceOffset ?? 0) + done,
-@@ -508,111 +394,67 @@
-         summaryPhase: phase ?? callbacks?.sourcePhase ?? "history",
+@@ -515,111 +401,68 @@
+             ? sourceCallbacks(callbacks, total, total, phase).sourceProgress : undefined);
      } };
  }
 -function summaryChunkEnd(source, start, byteLimit) {
@@ -1681,6 +1680,7 @@
 -                        : `Independently summarize chronological segment ${index + 1} of ${parts.length}. Preserve unresolved requests, constraints, exact paths, tool evidence and decisions; later synthesis will combine every segment.`;
 -                    const partCallbacks = { ...callbacks, sourceProgress: {},
 +    signal?.throwIfAborted();
++    if (callbacks?.sourceStartedAt === undefined) callbacks = { ...callbacks, sourceStartedAt: Math.floor(performance.timeOrigin + performance.now()) };
 +    const policy=CompactionPolicy.fromEnvironment(env);
 +    const byteLimit=policy.inputBytes(model,reserveTokens);
 +    const source=new HistorySummarySource(currentMessages,previousSummary);
@@ -1721,6 +1721,13 @@
 -                        failure ??= error;
 -                        controller.abort(error);
 -                    }
+-                }
+-            });
+-            await Promise.all(workers);
+-            if (failure) throw failure;
+-            if (controller.signal.aborted) throw controller.signal.reason ?? new Error('Compaction aborted');
+-            for (const result of results) combinedUsage = combinedUsage ? combineUsage(combinedUsage, result.usage) : result.usage;
+-            return results.map(result => result.text);
 +                    const item=await generateSummaryWithUsage([{role:'user',content:[{type:'text',text:part}],timestamp:Date.now()}],
 +                        model,reserveTokens,apiKey,headers,controller.signal,[customInstructions,focus].filter(Boolean).join('\n\n'),
 +                        undefined,thinkingLevel,streamFn,env,{enabled:false,maxRetries:0,provider:{maxRetries:0}},
@@ -1730,9 +1737,19 @@
 +                }, controller);
 +                return result;
 +            } catch(error) {result.close();throw error;}
-+        };
+         };
 +        let reduced;
-+        try {
+         try {
+-            let summaries = await summarizeParts(partsOf(source), "map");
+-            for (;;) {
+-                const ordered = summaries.map((text, index) =>
+-                    `<segment-summary index="${index + 1}">\n${text}\n</segment-summary>`).join('\n\n');
+-                const pieces = partsOf(ordered);
+-                const next = await summarizeParts(pieces, "synthesis");
+-                if (pieces.length === 1) return { text: next[0], usage: combinedUsage };
+-                if (next.reduce((sum, text) => sum + Buffer.byteLength(text, 'utf8'), 0) >= Buffer.byteLength(ordered, 'utf8'))
+-                    throw new Error('Compaction summaries did not shrink within the context budget');
+-                summaries = next;
 +            reduced=await summarizeSource(source,'map');
 +            for(;;) {
 +                const bytes=reduced.byteLength();
@@ -1745,25 +1762,7 @@
 +                        model,reserveTokens,apiKey,headers,controller.signal,customInstructions,undefined,thinkingLevel,
 +                        streamFn,env,retry,sourceCallbacks(callbacks,sourceBytes,sourceBytes,'synthesis'),sessionId,true);
 +                    return {text:final.text,usage:combinedUsage?combineUsage(combinedUsage,final.usage):final.usage};
-                 }
--            });
--            await Promise.all(workers);
--            if (failure) throw failure;
--            if (controller.signal.aborted) throw controller.signal.reason ?? new Error('Compaction aborted');
--            for (const result of results) combinedUsage = combinedUsage ? combineUsage(combinedUsage, result.usage) : result.usage;
--            return results.map(result => result.text);
--        };
--        try {
--            let summaries = await summarizeParts(partsOf(source), "map");
--            for (;;) {
--                const ordered = summaries.map((text, index) =>
--                    `<segment-summary index="${index + 1}">\n${text}\n</segment-summary>`).join('\n\n');
--                const pieces = partsOf(ordered);
--                const next = await summarizeParts(pieces, "synthesis");
--                if (pieces.length === 1) return { text: next[0], usage: combinedUsage };
--                if (next.reduce((sum, text) => sum + Buffer.byteLength(text, 'utf8'), 0) >= Buffer.byteLength(ordered, 'utf8'))
--                    throw new Error('Compaction summaries did not shrink within the context budget');
--                summaries = next;
++                }
 +                const next=await summarizeSource(reduced,'synthesis');
 +                reduced.close();reduced=next;
 +                if(reduced.byteLength()>=bytes)throw new Error('Compaction summaries did not shrink within native policy');
@@ -1772,15 +1771,14 @@
 -            controller.abort();
 -            signal?.removeEventListener("abort", abort);
 -        }
--    }
--    if (!boundedChunk) callbacks = sourceCallbacks(callbacks, sourceBytes, sourceBytes);
 +        } finally {reduced?.close();signal?.removeEventListener('abort',abort);}
-+    }
-+    if(!boundedChunk)callbacks=sourceCallbacks(callbacks,sourceBytes,sourceBytes);
-     const maxTokens = boundedChunk ? policy.summaryTokens(model, byteLimit, reserveTokens) : Math.min(Math.floor(0.8 * reserveTokens), model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
+     }
+-    if (!boundedChunk) callbacks = sourceCallbacks(callbacks, 0, sourceBytes);
++    if(!boundedChunk)callbacks=sourceCallbacks(callbacks,0,sourceBytes);
+     const maxTokens = policy.summaryTokens(model, byteLimit, reserveTokens);
      // Use update prompt if we have a previous summary, otherwise initial prompt
      let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
-@@ -621,8 +463,7 @@
+@@ -628,8 +471,7 @@
      }
      // Serialize conversation to text so model doesn't try to continue it
      // Convert to LLM messages first (handles custom types like bashExecution, custom, etc.)
@@ -1790,7 +1788,7 @@
      // Build the prompt with conversation wrapped in tags
      let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
      if (previousSummary) {
-@@ -642,72 +483,56 @@
+@@ -649,72 +491,56 @@
      const textContent = contentText(response.content);
      return { text: textContent, usage: response.usage };
  }
@@ -1912,7 +1910,7 @@
  }
  // ============================================================================
  // Main compaction function
-@@ -736,18 +561,25 @@
+@@ -743,19 +569,26 @@
   */
  export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
      const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
@@ -1929,8 +1927,9 @@
 +    const historyBytes = !messagesToSummarize.isEmpty() || !isSplitTurn
 +        ? new HistorySummarySource(messagesToSummarize, previousSummary).byteLength() : 0;
 +    const prefixBytes = isSplitTurn ? new HistorySummarySource(turnPrefixMessages).byteLength() : 0;
-     callbacks = { ...callbacks, sourceTotal: historyBytes + prefixBytes, sourceOffset: 0, sourcePhase: "history" };
-     callbacks.onSummaryStart?.({ sourceBytesDone: 0, sourceBytesTotal: callbacks.sourceTotal, summaryPhase: "history" });
+     callbacks = { ...callbacks, sourceTotal: historyBytes + prefixBytes, sourceOffset: 0, sourcePhase: "history",
+         sourceStartedAt: Math.floor(performance.timeOrigin + performance.now()) };
+     callbacks.onSummaryStart?.(sourceCallbacks(callbacks, 0, callbacks.sourceTotal, "history").sourceProgress);
      // Generate summaries and merge into one
      let summary;
      let summaryUsage;
@@ -1943,7 +1942,7 @@
              const historyResult = await generateSummaryWithUsage(messagesToSummarize, model, settings.reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env, retry, callbacks, sessionId);
              historyText = historyResult.text;
              historyUsage = historyResult.usage;
-@@ -767,6 +599,12 @@
+@@ -775,6 +608,12 @@
      // Compute file lists and append to summary
      const { readFiles, modifiedFiles } = computeFileLists(fileOps);
      summary += formatFileOperations(readFiles, modifiedFiles);
@@ -1956,7 +1955,7 @@
      if (!firstKeptEntryId) {
          throw new Error("First kept entry has no UUID - session may need migration");
      }
-@@ -777,30 +622,8 @@
+@@ -790,30 +629,8 @@
   * Generate a summary for a turn prefix (when splitting a turn).
   */
  async function generateTurnPrefixSummary(messages, model, reserveTokens, apiKey, headers, env, signal, thinkingLevel, streamFn, retry, callbacks, sessionId, customInstructions) {
@@ -1991,7 +1990,6 @@
  }
  //# sourceMappingURL=compaction.js.map
 \ No newline at end of file
-
 --- a/dist/core/agent-session-runtime.js
 +++ b/dist/core/agent-session-runtime.js
 @@ -1,3 +1,4 @@

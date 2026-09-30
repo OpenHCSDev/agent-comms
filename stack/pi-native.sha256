@@ -1,8 +1,8 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-b00974709a1c2241fba67f093e4400234da8b9e40de814f0d1766860b3217b9d  dist/core/agent-session.js
-ac803d997a19a56afd2946cf9038cdb515b4924fd109a14123c158cdd630886a  dist/core/compaction/compaction.js
+3ac3fdef20729789387e985a07c51a5a1027823d5c030f1a9f721cd5e83d6fa3  dist/core/agent-session.js
+e8efa3d8f2ad36c2692d22ea15c45297060a5393b0c3af708529ab37f2bbe4a8  dist/core/compaction/compaction.js
 4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67  dist/core/session-manager.js
-94000a48d2a8e3c7b1874156ef6e7d4f5a44ad6785bedfd2544b95f210483ecc  dist/modes/rpc/rpc-mode.js
+3043ce0f2673af47c11c467ab58973805a77c02e676fb629ac0a181a0450cacc  dist/modes/rpc/rpc-mode.js
 fced5349c36bc329acf9ed5fe1d8ba63fe29e455e23ac3926a96bd025a9d999c  dist/core/agent-session.d.ts
 79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0  dist/core/session-manager.d.ts
 c6e90c36ed4567e30e2318cd1a8d11984b7dd4d1760335be34b6cbd492438fe5  dist/modes/rpc/rpc-types.d.ts
@@ -27,4 +27,4 @@ fc662902a510c19c5b0af7e3cf96742f5d6071c004fe226a992a59cd0bf7522a  dist/core/sdk.
 d2cee72e8e69b5dc8f8d0c84944c1a341e85ed7aa283b94463bafa5b4107ea1c  dist/core/native-proof-schema.js
 ada3b43980c4fd627cf67c8c7836c0b8118e4fb3b0e7bf49adf3c7b7192c9383  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
 e3572ebbb69891ae0789c90aa018eef981e335a4c1113ff90ec10f53740b0a10  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js
-# agent-comms-native-tree-v1 b6c67bbd60acd066e2fa01d3cc41d43c63b1d14c82c42ca0bb01caa7c22f65cd
+# agent-comms-native-tree-v1 614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a

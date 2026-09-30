@@ -28,6 +28,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
+from .agent_events import Done
 from .comms import Comms
 from .coordination_errors import CoordinationError
 from .input_attempt import InputAttempt
@@ -40,7 +41,7 @@ from .schedule_rules import WakeScheduleCheck
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock, file_revision
-from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_watch import WireWatch
@@ -104,7 +105,7 @@ class InputDrain(FutureInputQueue):
             return None
         return QueueScope(
             session_id,
-            OwnerIdentity(ThreadIncarnation(owner.name, owner.created_at), admission),
+            AdmissionIdentity(owner.incarnation, admission),
             owner.pid,
         )
 
@@ -120,7 +121,7 @@ class InputDrain(FutureInputQueue):
             return tuple(
                 QueueItem(input_id, item.text)
                 for input_id, item in values.items()
-                if item.echo and item.context.owns(scope.owner)
+                if item.echo and item.context.owns(scope.admission)
             )
 
         items = current(self.queued_inputs.get(session_id, {}))
@@ -460,6 +461,14 @@ class InputDrain(FutureInputQueue):
             await self.emit_input_delivery_changed(session_id)
         if self.queued_inputs.get(session_id, {}).pop(input_id, None):
             await self.emit_queue_state(session_id)
+
+    def continue_in_project(
+        self, session_id: str, terminal: Done, original_project: str, current_project: str
+    ) -> None:
+        if self.closing or current_project == original_project:
+            return
+        if continuation := terminal.project_continuation(current_project):
+            self.pending_turns.setdefault(session_id, []).append(continuation)
 
     async def finish_turn_inputs(
         self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]

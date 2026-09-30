@@ -24,6 +24,7 @@ from .native_admission_rules import (
 from .registry_document import RegistrySnapshot
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
+from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -45,12 +46,16 @@ class RegistryOwner:
         return cls(thread=thread, admission_generation=admission)
 
     def require_exact(
-        self, snapshot: RegistrySnapshot, expected: Thread, generation: int
+        self, snapshot: RegistrySnapshot, expected: Thread, owner_generation: int
     ) -> None:
-        if snapshot.owner_identity(self.thread.name) != expected.owner_identity(generation):
+        if snapshot.owner_identity(self.thread.name) != OwnerIdentity(expected.incarnation, owner_generation):
             raise RelationViolationError("live owner generation changed")
-        if self.thread != expected:
-            raise RelationViolationError("live owner declaration changed")
+        try:
+            RegistryOwner(
+                thread=expected, admission_generation=self.admission_generation
+            ).require_snapshot(snapshot, "live owner source changed")
+        except StaleFence as error:
+            raise RelationViolationError(str(error)) from error
 
     def require_claim(self, expected: Thread, admission: int) -> None:
         try:
