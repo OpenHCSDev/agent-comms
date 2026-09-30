@@ -1,51 +1,27 @@
-# Coordination and closure
+# Implementation and cutover
 
-**Rules:** [00-RULES.md](00-RULES.md). This draft does not assign implementation
-without acceptance. User requested the evidence/scaffold PR, not live activation.
+**Rules:** [00-RULES.md](00-RULES.md). **Order:** [01-INDEX.md](01-INDEX.md).
 
-| Surface | Current owner | Next dispatch |
-| --- | --- | --- |
-| planning and offline oracle | `comms428` | PR428 followthrough in `/home/ts/wt/comms428` |
-| S1 timing | Unassigned | Accept receipt after S2 source contract is settled |
-| S2 memory | Unassigned | Trace canonical correction/failure/source owners; admit bounded projection |
-| S3 cache | Unassigned | Trace selected transports and supported cache semantics |
-| S4 native/model evaluation | Unassigned | Use existing native fixture, then request paid-run budget |
-| native output accounting | Arendt, PR416 (PR-reported ownership) | Do not duplicate fix |
-| core deployment/crossing decisions | `codex-bootstrap` contacted | Confirm scope/owners before production edits |
+S2 establishes canonical source projections and Decision emission first. S1 then
+uses those source contracts for boundary observations. S3 extends the selected
+transport's cache capability. S4 exercises the existing saved-native/ACP journeys
+and requests the model/sample/spend budget for matched-provider runs. Keep shared
+native preparation, packing, admission and commit edits under one implementation
+owner; preserve PR416 output accounting and the merged state/lifecycle contracts.
 
-Fresh open-PR snapshot is in the index. Integrate merged changes normally; never
-force-push another branch. Refresh file/line receipts and declared import roots at
-dispatch time. Ownership proposals stay provisional until the complete relevant
-context admits the relation. No requirement to rewrite unrelated cleanup debt.
+Before implementation, integrate main normally, refresh source/import receipts,
+and trace declarations, callers and outcomes. Migrate all consumers and delete
+displaced dormant contracts/tests. Review required-answer relations, new-case
+edit counts and behavior gates directly, without delegating review.
 
-## Prompt for a surface implementer
+Use matched core/native/UI tests with a localhost provider and unchanged unrelated
+UNKNOWN inputs. Derived views rebuild from their owners. Durable changes use one
+reviewed migration and quiet operator cutover. Commit exact retained facts and
+narrative atomically through the existing operation. Refuse stale source at
+preparation and commit; invalidate on correction, rename, deletion, goal replacement
+and revision changes. Keep trust- and spend-sensitive additions opt-in until
+measured deployment is approved.
 
-Read rules, index, existing owners, evidence, then your receipt. Trace the actual
-public declaration, caller and outcome before editing. Delete displaced dormant
-contracts and their synthetic structural tests when the production replacement
-is complete. Preserve all other agents' work and historical source evidence.
-Extend native packing, commit, original-input admission and publication rather
-than making a task-memory engine beside them. No provider attempt or live data
-mutation is authorized by this prompt. Report source coverage, required-answer
-admission, new-case edit count, behavior gates and OPEN decisions separately.
-
-## Cutover and completion
-
-A docs/scorer PR needs no runtime cutover. For implementation, require pinned
-matched core/native/UI tests with a localhost provider and unchanged unrelated
-UNKNOWN inputs. A new derived projection must be rebuildable from its owners.
-If durable schema changes, use the explicit owner-approved one-shot migration;
-never reset the active journal or bus because a plan template says so.
-
-Retained facts and narrative summary must be committed atomically through the
-existing operation. Invalidate on correction, rename, deletion, goal replacement
-and source revision changes. Refuse stale projections before paid work and commit.
-Do not declare done until intended consumers derive from the owner and repeated
-native/retention gates pass. Keep opt-in behavior for newly introduced trust- or
-spend-sensitive features until Tristan approves measured deployment.
-
-Disposable large output belongs in a named directory under
-`/home/ts/.cache/agent-scratch`, recorded by owner/purpose/path and removed after
-workers exit. This draft creates no such large output, no agents and no paid calls.
-Headroom check warned about disk/swap; verification uses small sequential tests
-and installed dependencies, not a full-suite or parallel fleet launch.
+Keep large disposable outputs outside the repository, record their purpose,
+and retire them after their workers exit. Use bounded sequential checks and
+existing dependencies. Publish useful checkpoints without waiting for CI.

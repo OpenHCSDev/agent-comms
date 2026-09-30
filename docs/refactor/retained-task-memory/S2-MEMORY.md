@@ -1,8 +1,8 @@
 # S2: Exact retained task facts
 
-**Head audited:** `697bba42f5f03e169ff8eae9490090cbd0d0b89e`.
+**Source reviewed:** `4295d680`.
 **Rules:** [00-RULES.md](00-RULES.md). **Step 2. Origin:** PR48 proposal.
-**Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* none. *Uses:* existing fact stores, source/witness, native packing and commit.
+**Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* Decision. *Uses:* existing fact stores, source/witness, native packing and commit.
 
 ## Gap and source witnesses
 
@@ -12,25 +12,24 @@ not obtain them from real stores. `HistorySummarySource` serializes conversation
 and previous summary. Goals, attempts, inputs and native history already have
 owners; retaining them in another mutable memory store would create a replica.
 
-## Required questions and proposed relation
+## Required questions and relation
 
 For each preserved fact: what is its identity, exact current value, canonical
 source reference/revision, allowed lifetime, and invalidation rule? Distinguish
 canonical availability, presence in the model prompt, and actual recall.
 
-Provisional required: current Goal/revision -> retained goal view; current
-InputDispositions row -> retained disposition; current user correction/source
-receipt -> exact correction and symbol/path/revision view; failure owner ->
-unresolved-failure view; native witness -> checkpoint source equality. User task
-and original PR48 authorize investigating these relations, not inventing their
-canonical sources or automatic selection heuristics.
+Required: current Goal/revision -> retained goal view; current InputDispositions
+row -> retained disposition; current user correction/source receipt -> exact
+correction and symbol/path/revision view; failure owner -> unresolved-failure view;
+native witness -> checkpoint source equality. PR48 requires source-owned facts
+and revision-bound selection.
 
 Forbidden: summary text -> goal completion, UNKNOWN clearance, input replay or
 claim mutation; prior correction -> current export root after supersession;
 renamed/deleted fact -> active retained fact after invalidation. A source reference
 must identify the same fact, not just a similar spelling (IDEN-5, BOUND-2).
 
-## Candidate owner and counterevidence
+## Ownership
 
 Project facts from their existing authorities, carrying revisions and evidence.
 Extend native preparation/packing and the existing summary payload/commit so facts
@@ -39,20 +38,24 @@ derived view; no separate text injector, authoritative memory database or codec.
 Derived lookup/storage can be an optimization only when its owner/rebuild and
 invalidation are proved, not an independently writable authority (TIME-9).
 
-Goals and input disposition are traced. Canonical user-correction, symbol receipt
-and unresolved-failure projection APIs remain OPEN: transcript statements cannot
-be promoted blindly to structured authority. Bounded selection when facts exceed
-the budget, source concurrency, constructors/MRO, dynamic and alternate callers
-also require admission. Do not auto-enable a fact extractor to close a checklist.
+### Source decisions and defaults
+
+| Question | Decision and default |
+| --- | --- |
+| User correction source | Original user-authored wire Message with seq/ID, exact text and explicit supersedes reference. For direct native input, use the original durable input/native-user entry and its turn identity. Resolve the existing input-to-wire link once when present; never mint a duplicate correction. |
+| Constraint applicability | Use original sender role, recipient/project/goal scope and claim generation. User instructions outrank peer instructions. Ambiguous scope retains exact evidence and blocks the affected optional action until clarified; it never grants authority. |
+| Symbol/path/hash receipts | Derive from the original completed filesystem/tool result with repository revision, tool-call/result identity and original source turn. Revalidate the referenced source revision before packing/commit. Missing provenance blocks exact-retention acceptance; narrative guesses cannot fill it. |
+| Unresolved failures | Read original failed input/attempt/operation diagnostics and their durable IDs through existing failure owners. Keep the failure unresolved until its owner records an explicit resolution; an assistant's reassuring prose cannot resolve it. |
+| Facts exceed the budget | Pack all mandatory exact material first; shrink narrative and the policy-owned recent window while preserving outstanding tool pairs. If mandatory material still does not fit, refuse optional compaction and use the existing hard-limit policy's safe refusal rather than silently discard constraints. |
+| Concurrent source changes | Capture one existing certified wire/native source boundary; recheck at preparation and commit. A mismatch discards the candidate and leaves original state unchanged. |
+| Missing binding, dynamic caller or constructor/MRO effect | Refuse that unsupported projection; resolve the determining declaration and migrate every caller before enabling the surface. |
 
 ## Four retention classes and lock-in
 
-The user's Paper4b translation supplies the intended retention semantics below.
-Its proposition numbering, `D < K`, full signature `Y_T`, and `rec_P` terminology
-are user-supplied theoretical references, not independently verified paper
-citations in this checkpoint. Do not claim a formal result has been proved by
-this plan or the scorer. The practical distinction is between collapsing
-irrelevant narrative and deleting a constraint or a real choice distinction.
+Tristan's paper4b supplies the four retention classes below. A summary is an
+installed rule: collapsing distinctions can lock in a choice that a later task
+needs to revisit. Dropping a constraint enlarges the valid-action set. Preserve
+constraints and choice-resolving signatures (`D < K`, `Y_T`); compress narrative.
 
 1. **Constraints:** user corrections, prohibitions, scope limits and valid claims.
    Preserve exact wording and original source references, never a paraphrase.
@@ -75,9 +78,9 @@ irrelevant narrative and deleting a constraint or a real choice distinction.
 
 These are behavioral ownership obligations, not authorization for a repeated
 string-kind switch or independently maintained kind registry (MEMB-1, IMPL-5).
-Admit the projection/selection contracts and all consumers before implementing
-retention cases. If exact mandatory material exceeds the budget, refuse or change
-packing/strategy through the existing policy owner; do not silently summarize it.
+Implement projection/selection contracts and migrate all consumers together.
+When mandatory material exceeds budget, follow the source-default table above;
+never silently summarize it.
 
 ### Original message provenance, not transcript reconstruction
 
@@ -88,9 +91,9 @@ revision, author, recipient and scope. At refreshed main `4295d680`, Message
 provides its original seq/ID reference; WireLog reads those references under its
 existing certificate lifetime. ClaimTransition binds claims/releases to that
 original message and ClaimProjection derives current claim ownership from wire
-rows. Do not introduce a separate mutable claims store. The join to retained
-constraints and their admission remains OPEN; a native transcript event ID is not
-interchangeable with a bus message ID (IDEN-5, BOUND-2).
+rows. Join retained constraints by Message.reference through WireLog's certified
+reference read and apply the original authority/scope contract. A native transcript
+event ID is not interchangeable with a bus message ID (IDEN-5, BOUND-2).
 
 Exact retention does not promote every peer sentence into an instruction. Existing
 authority, trust, claim validity and scope rules determine applicability. A thread's
@@ -100,21 +103,31 @@ an explicit authorized source correction changes the effective retained value.
 
 ### Declared Decision owner
 
-A decision currently represented only as prose cannot be reconstructed losslessly
-by a compactor. Plan a nominal `Decision` record emitted through an explicit tool
-when the agent resolves an ambiguity: choice, valid rejected alternatives, scope
-and original source turn, with stable identity and correction lineage. The agent
-emits the record at decision time, not during summarization. The bounded alternative
-set and emission authority must be admitted; an incomplete record cannot certify
-full `Y_T` retention. Audit any existing richer decision authority before adding it.
+S2 owns a typed `Decision` payload on the original wire Message and an agent tool
+`comms_decision` that emits it when resolving an ambiguity. Declare these fields:
+chosen alternative, tuple of valid rejected alternatives, scope, author and source
+turn. Identity is the enclosing original Message.reference, not a second generated
+record ID. Corrections name that reference and retain original lineage.
 
-There must be one canonical Decision owner, integrated with the existing durable
-owner/ledger and declared tool/FieldCodec capabilities. A separate task-memory
-store, mirrored transcript extractor, parallel codec or second commit pipeline is
-forbidden. Retention, packing, UI and evaluation only project that owner's facts.
-The storage location, tool admission, native-turn/message join, update authority
-and all-callers closure are production design obligations, not implemented here.
-Decision emission and later correction must not authorize execution or input replay.
+The tool accepts chosen/rejected alternatives and scope. Existing admitted owner
+and turn context supply author and source turn; callers cannot impersonate them.
+The original message append commits the Decision and its provenance together.
+FieldCodec derives decoding/schema from the typed declaration; existing tools
+derive their argument contract from it. No independent Decision ledger, memory
+store, mirrored transcript extractor, codec or second commit pipeline.
+
+Default scope is the current project and active goal revision, or the current turn
+when no goal exists. Require a nonempty chosen value, nonempty unique valid
+rejected alternatives, and chosen absent from rejected. Forced facts use their
+source references instead of empty Decision records. The agent emits the bounded
+admissible set at choice time; a compactor never invents alternatives. A missing
+record fails the choice-retention gate rather than reconstructing prose.
+
+Default update authority is the original author under the same scoped authority,
+or an explicit superseding user correction. A correction must name the original
+Decision reference. Cross-author agent updates reject. Retention, packing, UI and
+S4 derive the effective value from original wire records and correction events.
+Emission and correction cannot authorize execution or replay input.
 `PiCompactionDecision` is an existing settings/threshold observation, not a record
 of an agent's chosen/rejected task alternatives; do not overload it into a second
 purpose because its name contains Decision.
@@ -137,9 +150,8 @@ facts fit with narrative and tool pairs; cancellation never commits partial data
 Run S4's oracle separately on authoritative projection and model recall. Add
 verbatim-constraint and source-message identity checks, Decision emission and
 supersession checks, zero unauthorized revision mass, and held-out probes needing
-previously irrelevant alternatives. These new gates are planned, not supplied by
-the existing seven-question scaffold. Same
+previously irrelevant alternatives. S4 owns those gates. Same
 history/questions/models for controls. Stored facts passing is not a model pass.
-Done means all intended consumers derive from the accepted source owners, guarded
-invalidation is complete, and native plus repeated recall gates pass. No owner is
-assigned by this draft; confirm source contract before S1's shared changes.
+Done means all intended consumers derive from accepted source owners, guarded
+invalidation is complete, and native plus repeated recall gates pass. Complete
+S2's source contract before S1's shared changes.

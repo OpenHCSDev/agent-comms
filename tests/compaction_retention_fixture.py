@@ -1,4 +1,4 @@
-"""Synthetic repeated-compaction recall oracle. No provider or runtime mutation.
+"""Synthetic repeated-compaction recall oracle.
 
 Run directly to export public history/questions, or use --answers FILE to score
 one condition's recorded answers. Oracle metadata is omitted from exported questions.
@@ -16,9 +16,16 @@ from itertools import chain
 import json
 from pathlib import Path
 
+from agent_comms.field_codec import FieldCodec
+
+
+@dataclass(frozen=True)
+class RecordedAnswers:
+    rounds: dict[str, dict[str, str]]
+
 
 class Condition(str, Enum):
-    """Value-only experimental labels, not production strategy selection."""
+    """Value-only experimental labels."""
 
     FULL_CONTEXT = "full-context"
     BOUNDED = "bounded"
@@ -164,14 +171,14 @@ class RecallScenario:
     def public(self) -> dict:
         return {"scenario": self.identity, "rounds": [item.public() for item in self.rounds]}
 
-    def score(self, condition: Condition, answers: dict[str, dict[str, str]]) -> ScoredScenario:
-        unexpected = answers.keys() - {item.identity for item in self.rounds}
+    def score(self, condition: Condition, answers: RecordedAnswers) -> ScoredScenario:
+        unexpected = answers.rounds.keys() - {item.identity for item in self.rounds}
         if unexpected:
             raise ValueError(f"Unknown rounds: {sorted(unexpected)}")
         return ScoredScenario(
             self,
             condition,
-            tuple(item.score(answers.get(item.identity, {})) for item in self.rounds),
+            tuple(item.score(answers.rounds.get(item.identity, {})) for item in self.rounds),
         )
 
 
@@ -291,7 +298,7 @@ def coding_scenario() -> RecallScenario:
     )
 
 
-def decode_answers(text: str) -> dict[str, dict[str, str]]:
+def decode_answers(text: str) -> RecordedAnswers:
     def unique_object(pairs):
         result = {}
         for key, value in pairs:
@@ -300,15 +307,9 @@ def decode_answers(text: str) -> dict[str, dict[str, str]]:
             result[key] = value
         return result
 
-    answers = json.loads(text, object_pairs_hook=unique_object)
-    if not isinstance(answers, dict):
-        raise ValueError("Answers must be a round-to-answer object")
-    for identity, values in answers.items():
-        if not isinstance(values, dict) or any(
-            not isinstance(value, str) for value in values.values()
-        ):
-            raise ValueError(f"Answers for {identity} must map question IDs to strings")
-    return answers
+    return FieldCodec.decode(
+        RecordedAnswers, {"rounds": json.loads(text, object_pairs_hook=unique_object)}
+    )
 
 
 def main() -> None:

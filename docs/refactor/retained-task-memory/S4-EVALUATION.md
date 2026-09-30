@@ -1,8 +1,8 @@
 # S4: Repeated-compaction retention evaluation
 
-**Head audited:** `697bba42f5f03e169ff8eae9490090cbd0d0b89e`.
+**Source reviewed:** `4295d680`.
 **Rules:** [00-RULES.md](00-RULES.md). **Step 1 scaffold, step 4 native/model runs.**
-**Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* none. *Uses:* existing retained native fixture and lifecycle journeys.
+**Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* none. *Uses:* Decision, existing retained native fixture and lifecycle journeys.
 
 ## Gap and supplied infrastructure
 
@@ -12,35 +12,36 @@ tests. One authored synthetic scenario has three cumulative history snapshots
 and seven exact-answer questions per round: symbol, file, export root, goal,
 source revision, unresolved failure and input disposition. Later rounds supersede
 corrections, rename source, replace goal and change commit. They deliberately keep
-failure/input unresolved. This is a seed fixture, not representative coverage.
+failure/input unresolved.
 
 Question owns its expected answer and stale answers; RecallRound computes answer
 outcomes. ScoredRound/ScoredScenario derive counts through the shared ScoreView
 contract, without stored totals or copied source identities. Condition labels are
-value-only experiment names,
-not production behavior dispatch. New question/scenario does not require an edit
-to the scoring algorithm (MEMB-1/IMPL-5 avoidance). Truth comes from authored
+value-only experiment names. A new question/scenario uses the same scoring
+algorithm (MEMB-1/IMPL-5). Truth comes from authored
 fixture events, not candidate summaries (IDEN-1).
 
 Exporter omits expected/obsolete/evidence metadata from held-out questions. Their
 answers necessarily occur in the source history, as a recall test requires.
-Answers JSON maps round ID to question ID to exact answer string. Missing answers
-are counted, not dropped; unknown keys and duplicate/malformed payloads reject.
-Exact matching is intentionally strict for these identifiers, not a general
-semantic grader. No regex matches, substring credit or LLM judge is claimed.
+Answers JSON maps round ID to question ID to exact answer string. FieldCodec
+decodes that boundary into RecordedAnswers; retain the JSON duplicate-key hook.
+Internal scoring consumes the typed record. Missing answers keep the denominator;
+unknown keys and malformed values reject. Use exact identifier matching rather
+than regex, substring credit or an LLM judge.
 
 ## Run now
 
 ```sh
 python -m unittest discover -s tests -p test_compaction_retention_fixture.py -v
 python tests/compaction_retention_fixture.py
-python tests/compaction_retention_fixture.py --condition task-memory --answers /persistent/path/answers.json
+python tests/compaction_retention_fixture.py --condition task-memory --answers answers.json
 ```
 
 All four labels use the same oracle: full-context, bounded, task-memory and
-recent-only. Labels do not construct those context conditions. The scorer accepts
-externally recorded responses; no model/compaction adapter exists in this PR.
-Fabricated self-answers can test the scorer, never produce a retention result.
+recent-only. For native/model evaluation, construct each condition in the runner
+and record its context digest.
+The scorer accepts recorded responses. Authored answers test the scorer; model
+retention requires actual model responses.
 
 ## Required next infrastructure and owner boundaries
 
@@ -50,6 +51,9 @@ Reuse `tests/retained_native_fixture.py`,
 actual saved-native/ACP/provider journeys. Do not duplicate native launch,
 credential, commit or goal fixtures. S4 measures them; it never owns task state or
 production context selection. Trace their actual source/guard scope at dispatch.
+
+Preserve S1's compaction-feedback and post-compaction-continuation journeys and
+its per-journey p95 budgets in every timing comparison.
 
 An evaluation runner must record immutable implementation/model/settings,
 scenario seed, round, actual context construction and digest, summary/checkpoint
@@ -64,16 +68,20 @@ Add coding, research and long-running-goal traces. Include corrections crossing
 summary segments and repeated split turns, Unicode/exact paths, and missing
 source evidence. At least three sequential real checkpoints per applicable trace.
 Randomize/repeat controls with same model and report sample counts/distributions.
-Predeclare quality/cost/latency margins. Require zero stale-authority or UNKNOWN
-mutation in exact-state controls; numerical recall margins need agreement before
-model results. External paid run authorization is a separate gate.
+Default quality gates: zero stale authority, zero UNKNOWN mutation, zero
+unauthorized constraint/Decision revision mass, and no held-out invalid action.
+For model recall use a paired 95% confidence interval: candidate minus bounded
+control lower bound >= -2 percentage points. Cost and end-to-end p95 latency must
+each improve by at least 10% without failing S1's local budgets. Register margins,
+sample count and spend before runs; changes require approval before viewing model
+results. Default paid-run budget is zero until explicitly authorized.
 
 ## Revision mass and lock-in acceptance gates
 
 Add the four-class [S2 retention contract](S2-MEMORY.md) to the evaluation design.
 Retrieval accuracy alone does not test whether a summary discarded alternatives
-or enlarged the valid-action set. The existing fixture/scorer does not implement
-these additional metrics or probes.
+or enlarged the valid-action set. Extend the runner and fixtures with these
+metrics and probes.
 
 For each adjacent checkpoint pair, match constraints and Decisions by canonical
 owner identity, scope and original source reference. Derive **unauthorized revision
@@ -94,9 +102,8 @@ If no identities are eligible, report not-applicable rather than a perfect zero.
 If source/correction evidence is absent, mark the comparison unevaluable and fail
 exact-retention acceptance rather than assuming no correction occurred.
 
-This operational metric is motivated by the user's `rec_P`/Paper4b proposal;
-formal equivalence to that notation remains unverified. Constraint drift target is
-zero, and zero unauthorized Decision revisions is the proposed exact-state gate.
+Revision mass (`rec_P`) follows paper4b. The exact-state gate is zero unauthorized
+constraint and Decision revisions.
 An authorized revision must preserve the original evidence and alternatives while
 projecting the new effective value. Forced artifact references can change with
 their source owners and must not be mislabeled constraint/Decision drift.
@@ -115,8 +122,7 @@ Add provider-free controls proving that an unchanged item scores zero drift,
 unauthorized change/deletion scores drift, authorized correction does not, unrelated
 correction cannot excuse drift, and missing provenance fails closed. Then exercise
 the actual saved-native/ACP projection path before making retention claims. Paid
-model probes still require authorization. No additional native/model adapter or
-metric implementation is claimed by this planning update.
+model probes still require authorization.
 
 ## Negative tests, guards and done when
 
@@ -131,6 +137,5 @@ fixtures, authorized matched-model results and acceptance margins, reproducible
 reports, and guards separating measurements from authority. Include the revision-mass
 and held-out lock-in gates above, not only retrieval questions. CI queue latency
 does not hold useful checkpoints: publish after focused local verification, while
-respecting enforced merge rules and reporting unexecuted CI accurately. Current provider-free
-checks verify only the oracle/scorer and exporter. No full-suite, native acceptance,
-model-quality or deployment claim is implied.
+respecting enforced merge rules. Provider-free checks verify the oracle/scorer and
+exporter; native and model runs establish the corresponding acceptance results.

@@ -1,4 +1,4 @@
-"""Provider-free checks of the recall measurement, not of model retention."""
+"""Behavioral checks of the offline recall oracle."""
 
 from dataclasses import replace
 import json
@@ -7,7 +7,13 @@ import subprocess
 import sys
 import unittest
 
-from compaction_retention_fixture import Condition, Question, coding_scenario, decode_answers
+from compaction_retention_fixture import (
+    Condition,
+    Question,
+    RecordedAnswers,
+    coding_scenario,
+    decode_answers,
+)
 
 
 class RecallMeasurementTests(unittest.TestCase):
@@ -21,7 +27,7 @@ class RecallMeasurementTests(unittest.TestCase):
     def test_conditions_share_the_same_oracle(self):
         for condition in Condition:
             with self.subTest(condition=condition):
-                score = self.scenario.score(condition, self.exact)
+                score = self.scenario.score(condition, RecordedAnswers(self.exact))
                 self.assertEqual(
                     (score.questions, score.correct, score.stale, score.missing),
                     (21, 21, 0, 0),
@@ -29,18 +35,18 @@ class RecallMeasurementTests(unittest.TestCase):
 
     def test_old_answers_fail_after_correction_and_goal_replacement(self):
         answers = {item.identity: self.exact["r1"] for item in self.scenario.rounds}
-        score = self.scenario.score(Condition.RECENT_ONLY, answers)
+        score = self.scenario.score(Condition.RECENT_ONLY, RecordedAnswers(answers))
         self.assertEqual([item.correct for item in score.rounds], [7, 4, 2])
         self.assertEqual([item.stale for item in score.rounds], [0, 3, 5])
 
     def test_missing_answers_are_not_silently_removed_from_denominator(self):
-        score = self.scenario.score(Condition.BOUNDED, {})
+        score = self.scenario.score(Condition.BOUNDED, RecordedAnswers({}))
         self.assertEqual((score.questions, score.correct, score.missing), (21, 0, 21))
 
     def test_nearly_matching_identifier_and_invented_completion_are_wrong(self):
         self.exact["r3"]["symbol"] = "frameowner"
         self.exact["r3"]["input"] = "COMPLETED"
-        score = self.scenario.score(Condition.TASK_MEMORY, self.exact)
+        score = self.scenario.score(Condition.TASK_MEMORY, RecordedAnswers(self.exact))
         self.assertEqual(score.correct, 19)
         self.assertEqual(score.stale, 1)
 
@@ -56,7 +62,7 @@ class RecallMeasurementTests(unittest.TestCase):
         self.assertEqual(original.score(self.exact["r1"]).questions, 7)
 
     def test_round_and_scenario_totals_derive_from_their_outcomes(self):
-        score = self.scenario.score(Condition.BOUNDED, self.exact)
+        score = self.scenario.score(Condition.BOUNDED, RecordedAnswers(self.exact))
         first = score.rounds[0]
         shortened = replace(first, answers=first.answers[:1])
         changed = replace(score, rounds=(shortened,) + score.rounds[1:])
@@ -65,7 +71,7 @@ class RecallMeasurementTests(unittest.TestCase):
         self.assertEqual((score.questions, score.correct), (21, 21))
 
     def test_caller_cannot_supply_an_independent_total(self):
-        score = self.scenario.score(Condition.BOUNDED, self.exact)
+        score = self.scenario.score(Condition.BOUNDED, RecordedAnswers(self.exact))
         for view in (score, score.rounds[0]):
             with self.subTest(view=view), self.assertRaises(TypeError):
                 replace(view, correct=999)
@@ -73,19 +79,30 @@ class RecallMeasurementTests(unittest.TestCase):
     def test_unknown_round_or_question_is_rejected(self):
         for answers in ({"r4": {}}, {"r1": {"invented": "answer"}}):
             with self.subTest(answers=answers), self.assertRaises(ValueError):
-                self.scenario.score(Condition.BOUNDED, answers)
+                self.scenario.score(Condition.BOUNDED, RecordedAnswers(answers))
 
     def test_invalid_or_duplicate_recorded_answers_are_rejected(self):
         for text in (
             "[]",
+            "null",
+            "false",
             '{"r1":[]}',
+            '{"r1":null}',
             '{"r1":{"symbol":false}}',
+            '{"r1":{"symbol":17}}',
+            '{"r1":{"symbol":null}}',
+            '{"r1":{"symbol":[]}}',
             '{"r1":{},"r1":{}}',
             '{"r1":{"symbol":"a","symbol":"b"}}',
         ):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 decode_answers(text)
-        self.assertEqual(decode_answers(json.dumps(self.exact)), self.exact)
+        decoded = decode_answers(json.dumps(self.exact))
+        self.assertEqual(decoded, RecordedAnswers(self.exact))
+        score = self.scenario.score(Condition.BOUNDED, decoded)
+        self.assertEqual((score.questions, score.correct, score.missing), (21, 21, 0))
+        missing = self.scenario.score(Condition.BOUNDED, decode_answers("{}"))
+        self.assertEqual((missing.questions, missing.missing), (21, 21))
 
     def test_export_omits_answer_metadata_and_entrypoint_runs_without_provider(self):
         result = subprocess.run(

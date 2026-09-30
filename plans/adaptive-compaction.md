@@ -5,10 +5,8 @@ Current completion planning is in
 Its S2/S4 contracts now include verbatim constraints, real decisions with valid
 rejected alternatives, exact forced references and lossy narrative; original
 wire-message provenance and explicit Decision ownership; and unauthorized
-revision-mass plus held-out lock-in gates. Those additions are planning, not
-implemented retention or measured model-quality results. The original draft below
-is historical PR48 evidence; its activation-status statements are not a description
-of today's shipped transaction/journal pipeline.
+revision-mass plus held-out lock-in gates. The original draft below records PR48's
+historical contracts and implementation sequence.
 
 **Status: historical draft plan. Implementation remains DORMANT.** The
 prototype and decision record now live in

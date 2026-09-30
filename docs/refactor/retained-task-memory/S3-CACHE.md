@@ -1,31 +1,31 @@
 # S3: Cache-preserving summary capability
 
-**Head audited:** `697bba42f5f03e169ff8eae9490090cbd0d0b89e`.
+**Source reviewed:** `4295d680`.
 **Rules:** [00-RULES.md](00-RULES.md). **Step 3. Origin:** PR48 proposal.
 **Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* none. *Uses:* selected transport, native strategy and outcome owners.
 
 ## Gap and source witnesses
 
-**The verified selected compaction path makes separate summary requests, not the proposed prefix-preserving query.**
+**The selected compaction path makes separate summary requests.**
 Native776 uses fresh summarization routing and cacheRetention none. The selected
 RPC calls native compact through the already selected stream, without a separate
 client or credential resolver. CompactionPolicy owns bounded map/reduction.
 
-## Required questions and proposed relation
+## Required questions and relation
 
 Does this actual selected transport support prefix-preserving summarization? What
 exact ordered messages, instructions, routing identity, tool/hook exclusion and
 usage semantics does the external API require? How is support established before
 spending? What measured cache usage and total cost/latency result?
 
-Provisional required: transport capability -> allowed request form; selected
+Required: transport capability -> allowed request form; selected
 source/witness -> unchanged prefix; CompactionPolicy -> packing/budget;
 provider usage -> cache measurement; existing journal/outcome -> settlement.
 Forbidden: model-name string heuristic -> support (MEMB-2); matching prefix text ->
 asserted cache hit; failed/uncertain request -> automatic alternate strategy/replay.
-This is an external route capability, not a global promise every model supports it.
+Declare support per external route.
 
-## Candidate owner and counterevidence
+## Ownership
 
 Extend the actual provider/route capability declaration and existing native
 strategy planning seam. A capable route owns request formation; unsupported
@@ -34,11 +34,18 @@ Pi's transport, copy SDK cache settings into ACP, or add a second credentials/
 request pipeline (IMPL-13, TIME-7). Keep provider usage/cost and retained-output
 accounting distinct; PR416's merged shared check is integrated here, not duplicated.
 
-OPEN: actual supported API, route catalog, hooks/auth effects, selected model
-limits, request equivalence, documented cache lifetime and usage accounting.
-Inspect current Pi provider sources/docs for each admitted route before prescribing
-classes or request changes. The historical external study is motivation, not a
-cache-performance guarantee for this stack.
+## Route decisions and defaults
+
+| Question | Decision and default |
+| --- | --- |
+| Supported API and route catalog | The selected provider/transport declaration supplies the capability and exact API. Absent an implemented capability, choose bounded summaries before sending. |
+| Hooks, tools and auth effects | Use existing native transport/auth; summary requests exclude action-producing tools and reuse current approved hooks. A route unable to enforce that uses bounded strategy. |
+| Selected model limits | Read effective limits from the selected settings/transport owner; never copy defaults into ACP or match model-name strings. |
+| Prefix equivalence | Preserve the original ordered prefix and append only declared summary instructions. Source mismatch refuses preparation/commit. |
+| Cache lifetime | Use the provider's documented route lifetime. Unspecified lifetime means no assumed reuse or savings. |
+| Usage accounting | Record original per-response cacheRead/cacheWrite and billed input/output/reasoning usage; missing cache fields are unavailable, not inferred hits. |
+
+Measure cache performance on each admitted route.
 
 ## New-case experiment, deletions and guards
 
@@ -54,5 +61,5 @@ Localhost adapter tests prove exact prefix ordering, summary-only behavior,
 capability selected before send, unsupported skip, cancellation/source race and
 no replay. Authorized real-provider comparisons report cacheRead/cacheWrite,
 billed input/output/reasoning, latency distributions, request count and recall.
-Done requires actual capability and measured gains, not same-text or fake-stream
-cache assertions. No paid calls or owner assignment is part of this draft.
+Done requires an implemented capability and measured gains. Same-text and
+fake-stream cache assertions cannot establish provider cache behavior.

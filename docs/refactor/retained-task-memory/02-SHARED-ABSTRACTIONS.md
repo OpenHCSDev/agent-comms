@@ -1,8 +1,6 @@
 # Existing owners to extend
 
-No new shared abstraction is built by this planning PR. Extend the owners below
-only after admitting each surface's required answer and proving its callers.
-New names in the historical plan are sketches, not a mandate to add classes.
+Extend the determining owners below and migrate their callers together.
 
 | Fact or operation | Existing determining owner | Derived consumers and forbidden replicas |
 | --- | --- | --- |
@@ -17,27 +15,23 @@ New names in the historical plan are sketches, not a mandate to add classes.
 | publication | TurnProgress/event family and existing compaction outbox | UI derives view; no memory authority in Toad |
 | original peer message and claims | `Message.reference`, `WireLog.messages_for_references`, wire-owned `ClaimTransition` / `ClaimProjection` | Preserve original seq/ID, author, scope and wire evidence; no reconstructed transcript authority or independent claims/memory store |
 
-## Newly requested provenance obligations
+## Shared Decision contract
 
-[S2](S2-MEMORY.md) now requires four retention classes and a declared Decision
-owner. No Decision abstraction or storage is built by this planning PR. Existing
-message/wire and claim authorities must determine authored constraints; native
-transcript injection is only a representation. At refreshed main `4295d680`,
-`Message.reference` carries seq/ID and WireLog exposes certified bounded original
-reference reads. Claims/releases reside in original message ClaimTransition rows;
-ClaimProjection derives their current state, not a separately writable claims
-store. The retention/constraint-admission join still needs implementation admission.
+| Abstraction | Builder | Users |
+| --- | --- | --- |
+| Decision | S2 | S4 |
 
-Audit existing richer decision authorities before introducing the proposed nominal
-Decision. If none supplies choice, valid rejected alternatives, scope, source turn
-and explicit correction lineage, add that fact family once under the existing
-durable ownership mechanism. Retention, summary packing/commit, UI and S4 metrics
-consume derived projections. Do not duplicate the Decision in a memory store,
-retrospective prose extractor, FieldCodec subclass, codec or second checkpoint.
+S2 owns the nominal wire Decision and emission tool. S4 reads original Decision
+records for revision mass and distinction probes. Native retention, packing,
+commit and UI derive views from the same original wire record. Extend FieldCodec
+and existing tool/message declarations; never subclass FieldCodec or add another
+memory store, prose extractor, codec or checkpoint pipeline.
 
-S2 is the receiving design surface; S4 owns measurement only. Wire/tool admission,
-source joining and native checkpoint files remain sequenced crossings with their
-existing implementation owners, not new delegated review tasks.
+Message.reference carries seq/ID; WireLog provides certified bounded reads.
+ClaimTransition lives on the original message; ClaimProjection derives current
+claim ownership. Constraint applicability follows those original authority/scope
+contracts. Sequence shared wire/tool/preparation changes under their existing
+implementation owners.
 
 ## Correct-factoring experiment
 
@@ -51,6 +45,6 @@ Add one provider route capability. That transport determines support and request
 shape. Strategy selection consumes that capability; it cannot guess from a model
 name in Python, JavaScript and Toad separately.
 
-These are provisional desired maintenance relations. Dependency/MRO/effect and
-all-consumer census are OPEN until production design admission. The bounded NRA
-class census in [04-EVIDENCE.md](04-EVIDENCE.md) is discovery evidence only.
+Check dependency binding, MRO, constructor effects and every consumer before
+applying an ownership migration. Default to refusing unsupported bindings, rather
+than creating aliases or parallel interpreters.

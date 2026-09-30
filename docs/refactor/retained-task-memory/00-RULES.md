@@ -1,75 +1,56 @@
-# Binding rules for this completion
+# Binding rules
 
-## Correct factoring
+## Ownership
 
-Own every admitted answer at the declaration that determines it. Put shared
-algorithms on the meaningful public parent and irreducible behavior on its cases.
-Derive consumers, names and discovery from those declarations. Do not relocate a
-switch into a helper, author a parallel roster, or add a data class that mirrors
-another mutable authority. A new case must not require synchronized edits to
-several interpreters.
+Own each answer at the declaration that determines it. Put shared algorithms on
+the meaningful public parent and irreducible behavior on its cases. Derive
+consumers, names and discovery from those declarations. A new case must not need
+synchronized edits to several interpreters, a helper switch or a parallel roster.
 
-**Owner instruction: no state duplication ever. Always derive from the
-authoritative source.** No shadow state, authoritative cache, second registry,
-or independently maintained replica. Read-only projections and exported views
-must derive from the existing source, not acquire their own update lifecycle.
+**No state duplication.** Derive from the authoritative source. Read-only views
+and exports have no independent update lifecycle, shadow store or second cache.
+Settings own budgets; goals and inputs own their state; native history owns its
+entries; the wire owns authored messages and claims; transport owns cache support;
+existing admission and commit owners retain execution authority. A summary or
+model answer cannot finish a goal, clear UNKNOWN, grant execution or replay input.
 
-Before any code edit, use the refactor-audit and nra-refactoring skill tools.
-Record class-first evidence and complete contextual detector coverage, including
-omissions. Local reasoning, a partial census, or tests alone do not satisfy this
-gate. Trace and adjudicate tool leads against the authoritative source; matching
-field names alone never licenses merging different fact families.
+Before code edits, run refactor-audit and NRA tools. Census original classes,
+trace determining declarations and every caller, and record complete contextual
+detector coverage and omissions. Matching field names alone cannot establish
+identity between independently owned facts. Pattern IDs identify ownership risks.
 
-One owner per fact family does not mean one god object for independent facts:
-Pi settings own budget/enablement; goal and input stores own their state; native
-transcript owns history; provider transport owns its cache capabilities; commit
-and admission owners retain their authority. A summary, rubric or model answer
-cannot grant execution, declare completion, clear UNKNOWN, or replay an input.
+## Boundaries
 
-Pattern IDs in receipts identify risks and candidate ownership moves, not a
-claim that every touched module is defective. Read the determining declarations,
-alternative owners and ordered failure paths before admitting a relation.
+Decode external input once using existing FieldCodec and typed declarations.
+Extend their capabilities rather than adding codecs, queues, journals, registries
+or provider clients. Honor external Pi/provider/ACP/OS contracts. Change our
+formats and callers together; delete displaced readers, aliases and dormant
+contracts when their production replacement lands.
 
-## Boundaries and proof
+Record conditional/nested classes, aliases, dynamic binding and alternate callers.
+Default to refusing an unsupported binding or effect until its source contract is
+resolved. Inspect omitted detectors and raw-shape leads. Clean syntax and passing
+scorer tests cannot establish runtime equivalence or model retention.
 
-Decode external input once at its existing boundary. Extend existing FieldCodec,
-DeclaredFamily and typed payload owners when relevant. Do not introduce a second
-codec, queue, journal, cache of authoritative task facts, or provider client.
-Keep external Pi/provider/ACP/OS contracts exact. Change our formats and callers
-in lockstep, with no duplicate readers, aliases or replacement pipeline left live.
+## Data protection and cutover
 
-Census original classes before choosing owners. Keep conditional/nested classes,
-aliases, dynamic binding, alternative callers and unsupported proof rows OPEN.
-Run a complete contextual NRA scan where an ownership claim requires it; inspect
-omitted detectors and raw shape leads. A focused census, clean syntax, passing
-scorer, or dormant contract test is not source equivalence or model quality.
-
-## Source and data
-
-Use isolated worktrees under `/home/ts/wt`. Preserve the dirty primary checkout,
-active bus, saved sessions, journals, unresolved inputs, and other agents' work.
-No live reset, replay, manual compaction, provider call, paid evaluation or install
-is authorized by this draft. Synthetic fixtures contain no private user history.
-
-When a replacement lands, delete the displaced dormant contract/tests rather
-than retaining a parallel authority. Do not delete historical evidence documents
-as if they were runtime implementations. Any durable schema change needs an
-explicit one-shot migration and reviewed operator cutover; no blanket journal or
-input reset. Rebuildable projections may be replaced after their producers stop.
+Use isolated persistent worktrees. Preserve the primary checkout, active bus,
+saved sessions, journals, unresolved inputs and others' work. Use synthetic public
+fixtures. Live resets, replay, paid evaluations and installation require explicit
+authorization. Durable schema changes use one reviewed migration and operator
+cutover; never reset journals or inputs. Replace rebuildable projections only
+after their producers stop.
 
 ## Verification and delivery
 
-This owner performs review directly using Python and the skill-provided tools.
-Do not invoke subagents or delegate review. Coordination with existing owners
-of genuinely crossed mechanisms does not authorize taking over their work.
+Review directly with Python and the skill tools; do not delegate review. Tests
+protect behavior and exact-state invalidation, rather than internal-format goldens.
+Measure storage availability, prompt presence and model recall separately. Add a
+new-case maintenance experiment and narrow guard with each ownership change;
+finish every consumer before closing a surface.
 
-Tests protect behavior and exact-state invalidation, not an internal JSON golden.
-Measure model recall separately from authoritative-store availability. Admit the
-new-case maintenance experiment and add a narrow guard with each real ownership
-move; broad syntax counts alone cannot prove factoring. Finish all consumers of
-the admitted mechanism before claiming the surface complete.
-
-Run bounded provider-free tests first. Preserve errors and negative controls.
-Real-model comparisons require authorization and a predeclared spend/sample
-budget. Report code/fixture coverage, native behavior, model quality and deployed
-state separately. Never infer a cache hit from matching text alone.
+Run bounded provider-free tests first, retaining errors and negative controls.
+Real-model runs require a declared model/sample/spend budget. Report source,
+native, model and deployment results separately. Matching text cannot establish a
+provider cache hit. Publish useful verified checkpoints without waiting for CI;
+respect enforced merge rules.
