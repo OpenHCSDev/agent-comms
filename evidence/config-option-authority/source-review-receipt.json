@@ -1,0 +1,26 @@
+{
+  "base": "ea1c275ae849c0bb7ac8b32f500096c820fc263a",
+  "head": "16b7f0a063598fb49fc1eca465c25c8de8c64faf",
+  "production_paths": [
+    "src/agent_comms/config_options.py",
+    "src/agent_comms/session_lifecycle.py",
+    "src/agent_comms/thread_management.py",
+    "src/agent_comms/threads.py",
+    "src/agent_comms/turn_progress.py"
+  ],
+  "increases": {},
+  "decreases": {
+    "ForeignAbsenceProbe:src/agent_comms/config_options.py": -2
+  },
+  "string_dispatch_type_switch_subject_arm_growth": 0,
+  "noneditable_installed_python_files_equal": 288,
+  "source_tree_sha256": "b2a88bbe0ff3e5ea4d5407b386a992e4fc5972c3937bcfdc91e0210bc87052d4",
+  "focused_checks": {
+    "passed": 3,
+    "seconds": 1.65,
+    "suite": "tests/test_session_components.py"
+  },
+  "legacy_collection_blocker": "test_acp/test_runtime still import deleted TurnSettledUpdate; no full-suite claim",
+  "production_lines_deleted": 48,
+  "production_lines_added": 51
+}

@@ -136,8 +136,10 @@ class TestHandlers:
             "anthropic/two",
         ]
         thinking_config = response.config_options[1]
-        assert thinking_config.current_value == "medium"
+        assert thinking_config.current_value == ""
+        assert agent._comms.registry.require("proj").thinking_level is None
         assert [option.value for option in thinking_config.options] == [
+            "",
             "off",
             "minimal",
             "low",
