@@ -249,6 +249,19 @@ class Done(AgentEvent):
     reason_code: str | None = None
     diagnostic: dict[str, Any] | None = None
 
+    def project_continuation(self, project: str):
+        """Only the original successful native result grants new-project work."""
+        from .routing import ScheduledTurn
+
+        if not self.ok:
+            return None
+        return ScheduledTurn(
+            f"Project change completed: tools and context now use {project!r}. "
+            "Continue the user's previous request from this directory. "
+            "If the request was only to switch projects, report that you are ready; "
+            "do not invent extra work."
+        )
+
 
 @dataclass(frozen=True)
 class StreamSettled(AgentEvent):

@@ -62,3 +62,27 @@ def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):
     with pytest.raises(StaleRevision):
         fresh.read()
     assert [event.text for event in comms.transcripts.capture_page_read("child").read().events] == ["child answer"]
+
+
+def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
+    from dataclasses import replace
+    from agent_comms.acp_extension import TranscriptSnapshotUpdate
+
+    comms = wire(tmp_path / "wire")
+    path = tmp_path / "native.jsonl"
+    path.write_text(json.dumps({"type": "message", "message": {
+        "role": "assistant", "content": "Original retained answer",
+    }}) + "\n")
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+    captured = comms.transcripts.capture_page_read("worker")
+    original = captured.read()
+    comms.registry.heartbeat("worker")
+    assert captured.current()
+    comms.registry.register(replace(comms.registry.require("worker"), title="Updated annotation"))
+    # The original source owner still fences native bytes, routes, publication
+    # proof and incarnation. A heartbeat changes annotations, not those bytes.
+    assert not captured.current()
+    assert captured.read() == original
+    fresh = comms.transcripts.capture_page_read("worker")
+    assert fresh.identity.same_content(captured.identity)
+    assert TranscriptSnapshotUpdate.capture(comms.transcripts, "worker").page == original
