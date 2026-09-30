@@ -14,7 +14,7 @@ from acp.schema import (
 
 from . import agent_events as events
 from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
-from .thread_identity import OwnerIdentity
+from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
 from .diagnostics import record_terminal_failure
@@ -179,7 +179,7 @@ class TurnProgress(events.AgentEventConsumer):
         await self.inputs.input_started(
             self.session_id,
             event.id,
-            QueueScope(self.session_id, OwnerIdentity(
+            QueueScope(self.session_id, AdmissionIdentity(
                 self.turn_lease.identity.incarnation,
                 self.turn_lease.admission_generation,
             ), self.thread.pid),

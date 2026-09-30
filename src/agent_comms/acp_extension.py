@@ -23,7 +23,7 @@ from .goals import Goal
 from .native_runtime_input import CurrentNativeCursor
 from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
-from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .thread_identity import AdmissionIdentity, ThreadIncarnation
 from .turn_lease import TurnState
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 
@@ -104,7 +104,7 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
 class AttachmentScope:
     """Logical ACP attachment and executor evidence have separate identities."""
     session_id: str
-    owner: OwnerIdentity
+    admission: AdmissionIdentity
     owner_pid: int
 
     @property
@@ -113,11 +113,11 @@ class AttachmentScope:
 
     @property
     def owner_created_at(self):
-        return self.owner.incarnation.created_at
+        return self.admission.incarnation.created_at
 
     @property
     def admission_generation(self):
-        return self.owner.generation
+        return self.admission.admission_generation
 
     def relation(self, other: AttachmentScope) -> AttachmentRelation:
         return AttachmentRelation(self, other)
@@ -162,7 +162,7 @@ class AttachmentRelation:
 class CursorScope(AttachmentScope):
     session_id: str
     wire_root_id: str
-    owner: OwnerIdentity
+    admission: AdmissionIdentity
     owner_pid: int
 
     def __post_init__(self):
@@ -171,8 +171,8 @@ class CursorScope(AttachmentScope):
             or len(self.wire_root_id) != 32
             or any(c not in "0123456789abcdef" for c in self.wire_root_id)
             or self.owner_pid <= 0
-            or self.owner.generation <= 0
-            or self.owner.incarnation.created_at <= 0
+            or self.admission.admission_generation <= 0
+            or self.admission.incarnation.created_at <= 0
         ):
             raise ValueError("Invalid native cursor scope")
 
@@ -228,8 +228,8 @@ class VerifiedCursorObservation(CursorObservation):
         if (
             scope is None
             or cursor.wire_root_id != scope.wire_root_id
-            or cursor.owner_thread != scope.owner.incarnation.name
-            or cursor.owner_admission_generation != scope.owner.generation
+            or cursor.owner_thread != scope.admission.incarnation.name
+            or cursor.owner_admission_generation != scope.admission_generation
             or not 0 <= cursor.injected_seq <= cursor.covered_seq
         ):
             raise ValueError("Cursor observation does not belong to its scope")
@@ -280,7 +280,7 @@ class CursorAdvancedUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class QueueScope(AttachmentScope):
     session_id: str
-    owner: OwnerIdentity
+    admission: AdmissionIdentity
     owner_pid: int
 
     @property
