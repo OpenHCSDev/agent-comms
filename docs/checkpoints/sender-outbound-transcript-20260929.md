@@ -143,3 +143,22 @@ turn. Core capture/page reads have no busy-state rejection; their canonical
 identity still revokes a read if native or source bytes change. Immediate hot
 original wire publication must pass through that existing frontend lifetime,
 without a second backend projector or synthetic live append.
+
+Schrodinger215's mounted history can exceed a single query window. The existing
+MessageNotification now declares its one window_limit; reference reads partition
+through that owner without a frontend limit copy, new store/index or seen cache.
+The full mounted result remains a derived publication, fenced by215's captured
+source identity after preparation. Six affected source controls pass2.37s,
+including a reference input larger than one allowed query window and exact-source
+mismatch refusal.
+
+Whole selected-recipient reply acceptance must also check whether its ordinary
+native Assistant entry and original KeyedResponseReceipt both project the same
+reply. Only the tool-result synthetic send copies and routed incoming request
+copies have been closed so far. If the actual retained journey demonstrates that
+additional copy, close it through ResponseObligation/ExecutionRecord/native-input
+and original wire provenance. Never infer the relation from equal body text,
+chronology alone or a seen list. No matching successful selected-reply record was
+found in the two reviewed424 restart fixtures (both have zero obligations/native
+runtime inputs), or425's ordinary bash-rename fixture. Preserve those limits;
+the original recipient selected-response native journey remains required.

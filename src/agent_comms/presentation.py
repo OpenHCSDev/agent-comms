@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .activity import Activity, ActivityState
 from .audience_manifest import FrozenRecipient
@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
 
+    window_limit: ClassVar[int] = 120
     recipient_identity: FrozenRecipient
     state: str
     detail: str
@@ -70,7 +71,7 @@ class MessageNotification:
         """
         from .notification_assignment import NotificationAssignment
 
-        if len(messages) > 120:
+        if len(messages) > cls.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         keys = {(message.seq, message.message_id) for message in messages if message.seq > 0}
         result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}

@@ -9,6 +9,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
+from agent_comms.presentation import MessageNotification
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 import pytest
@@ -104,8 +105,9 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
         comms.views.message_notifications_for_references(
             (MessageReference(message.seq + 1, message.message_id),)
         )
-    with pytest.raises(ValueError):
-        comms.views.message_notifications_for_references((message.reference,) * 121)
+    assert comms.views.message_notifications_for_references(
+        (message.reference,) * (MessageNotification.window_limit + 1)
+    ) == {(message.seq, message.message_id): outcomes}
     target_outcome = next(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
