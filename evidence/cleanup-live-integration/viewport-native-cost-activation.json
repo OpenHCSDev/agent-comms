@@ -1,5 +1,5 @@
 {
-  "state": "FIVE-DEFAULTS-PUBLISHED-ORDINARY-ACCEPTANCE-PENDING",
+  "state": "FIVE-DEFAULTS-PUBLISHED-ORDINARY-ACCEPTANCE-PASS",
   "started": 1790793187.030671,
   "target": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930",
   "pins": {
@@ -20,7 +20,15 @@
   "schema_resets": 0,
   "native_inputs": 0,
   "paid_calls": 0,
-  "ordinary_default_acceptance": "pending",
+  "ordinary_default_acceptance": {
+    "state": "PASS",
+    "receipt": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence/default-viewport-native-cost-20260930/joint-ready-receipt.json",
+    "duration_seconds": 16.594429807038978,
+    "parent_personally_viewed_physical_frame": true,
+    "fresh_protocol_errors": 0,
+    "original_source_and_owner_unchanged": true,
+    "cleanup_errors": []
+  },
   "finished": 1790793187.0386097,
   "defaults": {
     "agent-comms": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930/bin/agent-comms",

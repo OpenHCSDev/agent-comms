@@ -14,7 +14,9 @@ Schrodinger's one normal immutable68package stage validates exactCore6feb,
 Toad0f638,Textual2e49,SDK0.12.1,native593b; source291+273matches and tested1de
 production/config equals0f. Parent published five defaults as runtime-viewport-
 native-cost-20260930. No route/native/ABI/store change or owner restart; ordinary
-physical default acceptance is Einstein-owned and running. Receipt:
+physical default acceptance passed16.594s: original41MB history readable,
+canonical goal/queue/turn received,0 new protocol errors, originals unchanged,
+cleanup0. Parent personally viewed the actual frame. Receipt:
 evidence/cleanup-live-integration/viewport-native-cost-activation.json.
 
 Remaining originalS14 whole-workflow claims: parent16-CURRENT-S14-OWNERS.md.
