@@ -1,0 +1,15 @@
+test_caller_cannot_supply_an_independent_total (test_compaction_retention_fixture.RecallMeasurementTests.test_caller_cannot_supply_an_independent_total) ... ok
+test_conditions_share_the_same_oracle (test_compaction_retention_fixture.RecallMeasurementTests.test_conditions_share_the_same_oracle) ... ok
+test_export_omits_answer_metadata_and_entrypoint_runs_without_provider (test_compaction_retention_fixture.RecallMeasurementTests.test_export_omits_answer_metadata_and_entrypoint_runs_without_provider) ... ok
+test_invalid_or_duplicate_recorded_answers_are_rejected (test_compaction_retention_fixture.RecallMeasurementTests.test_invalid_or_duplicate_recorded_answers_are_rejected) ... ok
+test_missing_answers_are_not_silently_removed_from_denominator (test_compaction_retention_fixture.RecallMeasurementTests.test_missing_answers_are_not_silently_removed_from_denominator) ... ok
+test_nearly_matching_identifier_and_invented_completion_are_wrong (test_compaction_retention_fixture.RecallMeasurementTests.test_nearly_matching_identifier_and_invented_completion_are_wrong) ... ok
+test_new_question_uses_existing_scoring_contract (test_compaction_retention_fixture.RecallMeasurementTests.test_new_question_uses_existing_scoring_contract) ... ok
+test_old_answers_fail_after_correction_and_goal_replacement (test_compaction_retention_fixture.RecallMeasurementTests.test_old_answers_fail_after_correction_and_goal_replacement) ... ok
+test_round_and_scenario_totals_derive_from_their_outcomes (test_compaction_retention_fixture.RecallMeasurementTests.test_round_and_scenario_totals_derive_from_their_outcomes) ... ok
+test_unknown_round_or_question_is_rejected (test_compaction_retention_fixture.RecallMeasurementTests.test_unknown_round_or_question_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.449s
+
+OK

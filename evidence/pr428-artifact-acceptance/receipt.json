@@ -1,0 +1,324 @@
+{
+  "measured_at_utc": "2026-09-30T20:42:23.263265+00:00",
+  "artifact_merged_sha": "17a43e0271cb661ee893d0ce6b34d2ae6ac6e5d2",
+  "artifact_author_head": "7b146f808dce3270168987aa7c67a94f181ccbb2",
+  "worktree": "/home/ts/wt/comms428-artifact-acceptance-20260930",
+  "scratch": "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930",
+  "installed": {
+    "runtime": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930",
+    "python": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+    "sys_prefix": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930",
+    "python_version": "3.14.2 (main, Jan 27 2026, 23:59:57) [Clang 21.1.4 ]",
+    "agent_comms_file": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "field_codec_file": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+    "field_codec_sha256": "92b8c04cf60629f1d6918b7f7d922e0a081c7389e1afe6e83a97c063eb5f1f77",
+    "direct_url": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "6feb634ba184d94d763028406152fff07027cccc",
+        "requested_revision": "6feb634ba184d94d763028406152fff07027cccc"
+      }
+    },
+    "activation_file": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/activation.json",
+    "activation_sha256": "c3f1f4b484e15f037507b9f98a9011d00bbe9582d78236987af7031838ef7acc",
+    "default_agent_comms": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms",
+    "PYTHONPATH": "unset",
+    "isolated_python": true,
+    "default_agent_comms_at_completion": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms",
+    "default_unchanged_at_completion": true
+  },
+  "artifact_sha256": {
+    "tests/compaction_retention_fixture.py": "4e9a23ffd79bbbdd8b4fd441ae9bba7fadcaa99eb9bd276431865d6ff68162f9",
+    "tests/test_compaction_retention_fixture.py": "2b1df9d4138bbb4c0db97d02dbf2747146352489ae177842e93746aacded9a74"
+  },
+  "prior_receipt": {
+    "url": "https://github.com/OpenHCSDev/agent-comms/pull/428",
+    "saved_json": "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/pr428-original-receipt.json",
+    "sha256": "a9df5dafc95d19e60b0d411abb51e969686ea7e991f479f1c4f9198c1c184711",
+    "source_and_installed_codec_hashes_match": true,
+    "preserved_published_counts": {
+      "scorer_tests": 10,
+      "paired_baseline_candidate_cli_scores": 20,
+      "invalid_cli_inputs": 11
+    },
+    "raw_historical_matrix_not_rerun": true,
+    "historical_counts_are_prior_published_evidence_not_new_runs": true
+  },
+  "current_exact_unittest": {
+    "tests": 10,
+    "result": "PASS",
+    "unittest_reported_seconds": 0.449,
+    "log": "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/exact-10-controls.log",
+    "log_sha256": "ae85e323e41d494b7c479d121a6ad22042c6780257005f231141e4521a0c7124",
+    "argv": [
+      "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+      "-I",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "/home/ts/wt/comms428-artifact-acceptance-20260930/tests",
+      "-p",
+      "test_compaction_retention_fixture.py",
+      "-v"
+    ]
+  },
+  "current_selected_cli": {
+    "cases": 12,
+    "accepted": 4,
+    "rejected": 8,
+    "total_seconds": 5.210135,
+    "results": [
+      {
+        "name": "exporter",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py"
+        ],
+        "exit_code": 0,
+        "seconds": 0.447163,
+        "expected": "export",
+        "totals": null,
+        "stderr_last_line": null,
+        "stdout_sha256": "6c22d4d262c9170bc188e72f086f3fd2ae3ebaa3efbba04f7dce27369ca6b46f",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "authored_exact_oracle",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/authored_exact_oracle.answers.json"
+        ],
+        "exit_code": 0,
+        "seconds": 0.433568,
+        "expected": [
+          21,
+          21,
+          0,
+          0
+        ],
+        "totals": {
+          "questions": 21,
+          "correct": 21,
+          "stale": 0,
+          "missing": 0
+        },
+        "stderr_last_line": null,
+        "stdout_sha256": "22ebc400f5ddeaee1987b77ce4a1e28c4ffd383c23c0623a560478522c298edd",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "stale_original_answers",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/stale_original_answers.answers.json"
+        ],
+        "exit_code": 0,
+        "seconds": 0.445342,
+        "expected": [
+          21,
+          13,
+          8,
+          0
+        ],
+        "totals": {
+          "questions": 21,
+          "correct": 13,
+          "stale": 8,
+          "missing": 0
+        },
+        "stderr_last_line": null,
+        "stdout_sha256": "506e5199242311d989d2ee9d7496e37c38e7387e6d070b73238cef6bf0ba3e48",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "missing_fixed_denominator",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/missing_fixed_denominator.answers.json"
+        ],
+        "exit_code": 0,
+        "seconds": 0.418522,
+        "expected": [
+          21,
+          0,
+          0,
+          21
+        ],
+        "totals": {
+          "questions": 21,
+          "correct": 0,
+          "stale": 0,
+          "missing": 21
+        },
+        "stderr_last_line": null,
+        "stdout_sha256": "4868dc5a914f20c2cdda9470a706ba6addfce45846759042b72c9b97e9f1e14e",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "malformed_json",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/malformed_json.answers.json"
+        ],
+        "exit_code": 1,
+        "seconds": 0.439995,
+        "expected": "reject",
+        "totals": null,
+        "stderr_last_line": "json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "d59b84fc827cce901183109a8a86851c416fe65c04f78c6166c13cd0fd97af28"
+      },
+      {
+        "name": "duplicate_round",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/duplicate_round.answers.json"
+        ],
+        "exit_code": 1,
+        "seconds": 0.425745,
+        "expected": "reject",
+        "totals": null,
+        "stderr_last_line": "ValueError: Duplicate answer key: r1",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "bc9f2f37382177a4e6930a570fb066993b2634d2c21ffa88bb4024d6b4600a37"
+      },
+      {
+        "name": "duplicate_question",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/duplicate_question.answers.json"
+        ],
+        "exit_code": 1,
+        "seconds": 0.443731,
+        "expected": "reject",
+        "totals": null,
+        "stderr_last_line": "ValueError: Duplicate answer key: symbol",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "8ece2a1639cdcd3ba6df33c233ea06514a4e4703db285cfab36239178a2a44bf"
+      },
+      {
+        "name": "boolean_answer",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/boolean_answer.answers.json"
+        ],
+        "exit_code": 1,
+        "seconds": 0.441705,
+        "expected": "reject",
+        "totals": null,
+        "stderr_last_line": "ValueError: Expected <class 'str'>, received bool",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "0f0da0b11172943a6a4ac8046535a2307961794587b2fa14f8ff3cd0aecb145a"
+      },
+      {
+        "name": "null_answer",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/null_answer.answers.json"
+        ],
+        "exit_code": 1,
+        "seconds": 0.417427,
+        "expected": "reject",
+        "totals": null,
+        "stderr_last_line": "ValueError: Expected <class 'str'>, received NoneType",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "8e7d0f6df1561c789c287910bb1c7bfd612a576380eb77f1489e347518dbe7b9"
+      },
+      {
+        "name": "array_top_level",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/array_top_level.answers.json"
+        ],
+        "exit_code": 1,
+        "seconds": 0.412688,
+        "expected": "reject",
+        "totals": null,
+        "stderr_last_line": "ValueError: Expected a JSON object with string keys.",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "3b4ac5df14bd8b9d9b0db95a63bacb0af7e43810c2a6e808243eb69232cd28d2"
+      },
+      {
+        "name": "unknown_round",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/unknown_round.answers.json"
+        ],
+        "exit_code": 1,
+        "seconds": 0.450981,
+        "expected": "reject",
+        "totals": null,
+        "stderr_last_line": "ValueError: Unknown rounds: ['r4']",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "ab72e8903b2de38f704e7cbbfd768fd40a3a6d991c2628fdfbb3956dc80a00af"
+      },
+      {
+        "name": "unknown_question",
+        "argv": [
+          "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/python",
+          "-I",
+          "/home/ts/wt/comms428-artifact-acceptance-20260930/tests/compaction_retention_fixture.py",
+          "--answers",
+          "/home/ts/.cache/agent-scratch/comms428-artifact-acceptance-20260930/unknown_question.answers.json"
+        ],
+        "exit_code": 1,
+        "seconds": 0.433268,
+        "expected": "reject",
+        "totals": null,
+        "stderr_last_line": "ValueError: Unknown questions in r1: ['invented']",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr_sha256": "746bef0cddfe089366ec0d347db7c6dd00c3407c2eac80b496860838a869c3e5"
+      }
+    ]
+  },
+  "scope": {
+    "runtime_changed": false,
+    "production_code_changed": false,
+    "provider_calls": 0,
+    "native_inputs": 0,
+    "public_inputs": 0,
+    "public_root_mutation": false,
+    "process_cleanup": "Each bounded CLI subprocess exited via subprocess.run; no native owners or background processes launched."
+  },
+  "measurement_limits": [
+    "Authored exact answers validate the scoring oracle; they are not model recall.",
+    "Four condition names are labels, not evidence of four actual context-construction policies.",
+    "No real compaction/native/model benchmark or S1-S4 runtime implementation is delivered by #428.",
+    "S4 revision-mass, frozen distinction/lock-in probes, native projection, matched-model confidence/cost/latency margins remain future implementation/acceptance."
+  ],
+  "completed_at_utc": "2026-09-30T20:44:04.520003+00:00",
+  "historical_fixture_and_codec_hashes_verified": true
+}
