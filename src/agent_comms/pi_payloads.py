@@ -526,7 +526,6 @@ class UserMessage(PiMessage):
         session.observe_input_during_abort(event)
 
     def transcript_events(self, context):
-        from .routing import TurnRouting
         from .transcript_events import ContextTranscript, UserTranscript
 
         routing, display = context.routing, context.input_display
@@ -537,11 +536,6 @@ class UserMessage(PiMessage):
                 routing = display.routing
             else:
                 routing = display = None
-        if routing is not None and routing.requests:
-            return [
-                UserTranscript(request.body, routing=TurnRouting((request,), None), native_id=self.input_id)
-                for request in routing.requests
-            ]
         parts = self.parts
         events = []
         if display is not None:

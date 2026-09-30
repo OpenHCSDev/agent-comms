@@ -163,12 +163,24 @@ class AssignedTranscriptSource:
 
         entry = record.entry
         published = False
+        routing = routes.get(entry.id)
         if entry.final_reply:
             from .native_runtime_input import NativeRuntimeInput
 
-            user = reader.input_ancestor(record)
+            lookup = stable_thread_lookup(self.recipient.created_at)
+            if routing is not None and routing.publications:
+                marks = ",".join("?" for _ in routing.publications)
+                originals = self.rows(
+                    f"w.seq IN ({marks})", tuple(ref.seq for ref in routing.publications),
+                    limit=len(routing.publications),
+                )
+                published = all(
+                    any(original.message.reference == ref
+                        and original.audience.sender_lookup == lookup for original in originals)
+                    for ref in routing.publications
+                )
+            user = reader.input_ancestor(record) if not published else None
             if user is not None:
-                lookup = stable_thread_lookup(self.recipient.created_at)
                 reference = NativeRuntimeInput.published_reply(self.root, reader, user, lookup)
                 if reference is not None:
                     originals = self.rows("w.seq=?", (reference.seq,))
@@ -178,7 +190,7 @@ class AssignedTranscriptSource:
                     )
         events = entry.events(
             TranscriptProjection(
-                routes.get(entry.id),
+                routing,
                 routes.input_display(entry.input_id),
             )
         )
@@ -193,14 +205,14 @@ class AssignedTranscriptSource:
                 marks = ",".join("?" for _ in requests)
                 originals = self.rows(
                     f"w.seq IN ({marks})",
-                    tuple(message.seq for message in requests),
+                    tuple(reference.seq for reference in requests),
                     limit=len(requests),
                 )
                 remaining = tuple(
-                    message
-                    for message in requests
+                    reference
+                    for reference in requests
                     if not any(
-                        original.message.reference == message.reference for original in originals
+                        original.message.reference == reference for original in originals
                     )
                 )
                 if not remaining:
@@ -226,6 +238,6 @@ class AssignedTranscriptSource:
                 timestamp=message.timestamp,
                 source=message.reference,
                 route=MessageRoute(message.sender, (message.target,)),
-                routing=TurnRouting((message,)),
+                routing=TurnRouting((message.reference,)),
             ),
         )

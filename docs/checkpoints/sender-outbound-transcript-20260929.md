@@ -482,3 +482,41 @@ original seq2/e66efc014771 publication. Its native reply file is distinct from
 the41MB retained display. No input, prompt, provider replay or archive mutation
 was performed during this source diagnosis. The four prior admission-budget
 probes passed;40s CPU35.49 remains open.
+
+## Future ordinary publication source API (not paired activation)
+
+TurnRouting.requests now stores only original MessageReference values. Empty
+publication references are omitted from existing routing JSON; committed
+references belong only to the actual final native entry. No table, column,
+index, message store, body comparison or seen cache is added. The synthetic
+request-body reconstruction in Pi UserMessage and the former
+Transcripts.record_turn_routing producer are deleted. Remaining consumer
+constructor/publication changes belong to Arendt's same canonical workflow.
+
+Public record_turn_publication(lease, checkpoint, routing, published) validates
+the existing local RegistryOwner and exact public turn lease, original native
+parent/input/digest and current source revision, then the original STARTED row
+group from InputDocument.started_for_native with the locked RegistrySnapshot.
+Existing frozen sender/addressed membership proves original seq/id references
+and authorized targets. A first committed send subset survives a later send
+failure. Native traversal closes before BUS/registry/input/annotation custody;
+no UI await or new monitoring authority is introduced. Source annotation
+commit finishes before the original lease retires. Publication rebinding is
+rejected without losing the original committed wire rows.
+
+20 focused source/annotation/ownership controls pass in5.08s. A wider source
+run finds43 passes and two old InputDocuments target/bus negative assumptions;
+both reproduce on installed baseline8691 in0.06s. Arendt owns their proper
+original-proof contract migration; no compatibility restriction was restored
+in StartedInput. This does not prove actual ordinary native/ACP/UI acceptance.
+Arendt owns the repaired real OwnedTurn/Loopback native producer controls.
+
+Durable carry required before this future paired activation: existing
+transcript_routes.sqlite3 TranscriptRoute.routing and InputDisplay.routing JSON
+and registry Thread.active_turn.routing, including retained registry snapshots,
+can contain old embedded Message objects. Parent must carry those once under
+quiet original certificate custody to original(seq,id), never today's sender
+name or a body match. Preserve native bytes, original wire, frozen audiences,
+goal journals, proof records and UNKNOWN. Do not reset this durable annotation
+store or install an old-format reader. Critical cf48759d remains independently
+usable with its unchanged routing format and paired215 consumers.
