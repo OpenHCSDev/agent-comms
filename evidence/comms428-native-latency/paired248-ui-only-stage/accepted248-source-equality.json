@@ -1,0 +1,11 @@
+{
+  "accepted_source": "386500df100c7e01ba35be8f613deb7b117aedb4",
+  "merged_source": "19970f56899674932584138ff5e6fbe533c4af8f",
+  "exact_equal": [
+    "src",
+    "pyproject.toml",
+    "uv.lock"
+  ],
+  "full_UI_repeat": 0,
+  "proof": "parent reviewed248 actual84s16PASS+A-returnPNG; no new latency/CPUclaim"
+}
