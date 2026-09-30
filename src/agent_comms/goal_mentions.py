@@ -9,7 +9,17 @@ from __future__ import annotations
 import hashlib
 import re
 
-from .goals import GoalMentionBinding, GoalMentionSource
+from .goals import (
+    GoalMentionBinding,
+    GoalMentionSource,
+    LimitExceededMentionBinding,
+    MalformedMentionBinding,
+    SelfMentionBinding,
+    AliasMentionBinding,
+    UnknownMentionBinding,
+    NonExecutableMentionBinding,
+    ResolvedMentionBinding,
+)
 from .registry_document import RegistrySnapshot
 from .threads import Thread
 
@@ -35,22 +45,28 @@ def bind_goal_mentions(
         if len(token) > _MAX_TOKEN_CHARS or len(bindings) >= _MAX_BINDINGS:
             # Never present an incomplete subset as the owner's complete goal
             # contact set. Only the diagnostic survives an over-limit goal.
-            bindings = [GoalMentionBinding("<goal-mentions>", "limit_exceeded")]
+            bindings = [LimitExceededMentionBinding(token="<goal-mentions>")]
             break
         seen.add(token)
         peer = registry.threads.get(token)
         if any(char in token for char in "./\\@"):
-            bindings.append(GoalMentionBinding(token, "malformed"))
+            bindings.append(MalformedMentionBinding(token=token))
         elif token == owner.name:
-            bindings.append(GoalMentionBinding(token, "self"))
+            bindings.append(SelfMentionBinding(token=token))
         elif peer is None:
             bindings.append(
-                GoalMentionBinding(token, "alias" if token in registry.aliases else "unknown")
+                (AliasMentionBinding if token in registry.aliases else UnknownMentionBinding)(
+                    token=token
+                )
             )
         elif not peer.role.executable:
-            bindings.append(GoalMentionBinding(token, "non_executable"))
+            bindings.append(NonExecutableMentionBinding(token=token))
         else:
-            bindings.append(GoalMentionBinding(token, "resolved", peer.name, peer.created_at))
+            bindings.append(
+                ResolvedMentionBinding(
+                    token=token, peer_name=peer.name, peer_created_at=peer.created_at
+                )
+            )
     return GoalMentionSource(
         goal_id,
         revision,

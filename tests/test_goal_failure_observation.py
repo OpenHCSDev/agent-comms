@@ -8,15 +8,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import agent_events as ae
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.diagnostics import FailureReason
-from agent_comms.goal_actions import (
-    GoalPrecondition,
-    OwnerInvocable,
-    PausedGoalAction,
-    SetGoalAction,
-)
 from agent_comms.goal_attempts import (
     AttemptRecord,
     GoalAttemptStore,
@@ -26,7 +19,6 @@ from agent_comms.goal_attempts import (
 )
 from agent_comms.goal_failure_observation import FailedTurnObservation, read_failed_turn_projection
 from agent_comms.goal_generation import BlockedGeneration, ReservedGeneration
-from agent_comms.goal_pauses import GoalPauseEvent
 from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
@@ -87,7 +79,7 @@ def blocked(owner):
 
 def read(store, owner, **kwargs):
     return read_failed_turn_projection(
-        store.path, owner=owner, owner_status=IdleThreadStatus(), admission=3, pause=None, **kwargs
+        store.path, owner=owner, owner_status=IdleThreadStatus(), admission=3, **kwargs
     )
 
 
@@ -222,7 +214,7 @@ def test_commit_or_sync_error_never_yields_execution_success(bound, monkeypatch,
     )
 
 
-@pytest.mark.parametrize("source", [None, "stale", OwnerPause(), ModelPause()])
+@pytest.mark.parametrize("source", [OwnerPause(), ModelPause()])
 def test_pause_projection_never_becomes_runnable(bound, source):
     store, owner, _, observation = bound
     observation.reservation.fail(store, "failed", observation=observation)
@@ -230,22 +222,13 @@ def test_pause_projection_never_becomes_runnable(bound, source):
         owner,
         goal=replace(
             owner.goal,
-            state=PausedGoal(ModelPause() if isinstance(source, ModelPause) else OwnerPause()),
+            state=PausedGoal(source),
             revision=3,
         ),
     )
-    pause = (
-        None
-        if source is None
-        else GoalPauseEvent(
-            "goal",
-            2 if source == "stale" else 3,
-            OwnerPause() if source == "stale" else source,
-        )
-    )
     before = store.path.read_bytes()
     projection = read_failed_turn_projection(
-        store.path, owner=owner, owner_status=IdleThreadStatus(), admission=3, pause=pause
+        store.path, owner=owner, owner_status=IdleThreadStatus(), admission=3
     )
     assert projection.state == (
         "paused_uncertain" if isinstance(source, ModelPause) else "owner_paused"
@@ -292,126 +275,11 @@ def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
     before = {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     assert (
         read_failed_turn_projection(
-            path, owner=blocked(owner), owner_status=IdleThreadStatus(), admission=3, pause=None
+            path, owner=blocked(owner), owner_status=IdleThreadStatus(), admission=3
         ).state
         == "unavailable"
     )
     assert {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
-
-
-@pytest.mark.parametrize(
-    "outcome", ["failed_done", "eof", "observation_error", "observation_rollback"]
-)
-@pytest.mark.parametrize("owner_pauses", [False, True])
-async def test_acp_terminal_binding_retains_inputs_pause_and_no_schedule(
-    wired, tmp_path, monkeypatch, outcome, owner_pauses
-):
-    from agent_comms.acp import CommsAgent
-    from goal_owner_fixture import activate_empty_source
-    from test_acp import TestAgentTurn as GoalFixture
-
-    root_id = wired.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(
-        wired,
-        agent_bin="pi",
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
-    )
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    await agent.new_session(str(tmp_path / "project"))
-    activate_empty_source(agent)
-    goal = wired.goals.update_goal("project", SetGoalAction(text="private goal"))
-    GoalFixture()._authorize_test_goal(agent, wired, goal)
-    store = agent.turns.goals.goal_store
-    admission = wired.registry.snapshot().admission_generations["project"]
-    for state in ("unknown", "started"):
-        key = f"acp:earlier-{state}"
-        agent.inputs.dispositions.record(
-            key,
-            seq=None,
-            owner="project",
-            admission=admission,
-            target="project",
-            text="private earlier input",
-        )
-        if state == "started":
-            binding = dict(turn_id="b" * 32, native_id="c" * 32, text="private native text")
-            assert agent.inputs.dispositions.bind(key, admission=admission, **binding)
-            assert agent.inputs.dispositions.started(key, **binding)
-    ledger_before = agent.inputs.dispositions.path.read_bytes()
-    if outcome in {"observation_error", "observation_rollback"}:
-        action = "ROLLBACK" if outcome == "observation_rollback" else "ABORT"
-        with sqlite3.connect(store.path) as conn:
-            conn.execute(
-                "CREATE TRIGGER reject_observation BEFORE INSERT ON failed_turn_evidence "
-                f"BEGIN SELECT RAISE({action},'injected error'); END"
-            )
-    pause_bytes = None
-
-    async def failed_events(*args, **kwargs):
-        nonlocal pause_bytes
-        if owner_pauses:
-            wired.goals.update_goal(
-                "project",
-                PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
-                actor=OwnerInvocable,
-            )
-            pause_bytes = (wired.root / "goal_pause_events.json").read_bytes()
-        yield ae.StreamSettled()
-        if outcome != "eof":
-            yield ae.Done(
-                ok=False,
-                text="private provider text",
-                reason_code="assistant_final_stop_missing",
-                diagnostic={"exit_code": 0},
-            )
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", failed_events)
-    try:
-        if outcome == "observation_rollback":
-            with pytest.raises(StorageUncertainError):
-                await agent.turns.run_agent_turn(
-                    "project", "project", "Continue", autonomous_goal=True
-                )
-        else:
-            await agent.turns.run_agent_turn("project", "project", "Continue", autonomous_goal=True)
-        assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
-        with pytest.raises(UnresolvedAttemptError):
-            store.resume(goal.id, 1)
-        owner = wired.registry.require("project")
-        expected = "owner_paused" if owner_pauses else "backend_suspended"
-        if outcome in {"observation_error", "observation_rollback"}:
-            expected = "unavailable"
-        before = store.path.read_bytes()
-        projection = read_failed_turn_projection(
-            store.path,
-            owner=owner,
-            owner_status=wired.registry.snapshot().statuses["project"],
-            admission=admission,
-            pause=wired.goals.goal_pause("project"),
-        )
-        assert projection.state == expected
-        assert store.path.read_bytes() == before
-        assert agent.inputs.dispositions.path.read_bytes() == ledger_before
-        if owner_pauses:
-            assert owner.goal.state.declared_name == "paused"
-            assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
-        else:
-            assert owner.goal.state.declared_name == "blocked"
-        agent.turns.goals.schedule_goal("project")
-        assert not agent.inputs.pending_turns.get("project")
-        observations = rows(store, "failed_turn_evidence")
-        assert len(observations) == (
-            0 if outcome in {"observation_error", "observation_rollback"} else 1
-        )
-        if observations:
-            terminal = json.loads(next((wired.root / "diagnostics").glob("*.json")).read_text())
-            assert observations[0][9] == terminal["turn_id"]
-            assert observations[0][10] == terminal["reason"]
-            assert observations[0][1:3] == (goal.id, 1)
-            assert observations[0][8] == goal.revision
-    finally:
-        await agent.shutdown()
 
 
 def _crash_recording(root, observation, after_commit):
@@ -459,7 +327,7 @@ def test_stopped_status_is_unavailable_even_with_retained_pid(bound, status):
     observation.reservation.fail(store, "failed", observation=observation)
     assert (
         read_failed_turn_projection(
-            store.path, owner=blocked(owner), owner_status=status, admission=3, pause=None
+            store.path, owner=blocked(owner), owner_status=status, admission=3
         ).state
         == "unavailable"
     )

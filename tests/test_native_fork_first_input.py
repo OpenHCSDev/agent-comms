@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from acp.schema import TextContentBlock
 
+from agent_comms.relationships import RelationshipEdit
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
     CompactionChangedUpdate,
@@ -100,7 +101,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
         super().verify_relationships(comms, thread)
         parent = comms.registry.require(thread.parent)
         assert parent.name == "physical-parent"
-        edge = comms.relationships.edit(parent.name, "add", thread.name, "Actual native fork")
+        edge = comms.relationships.edit(parent.name, RelationshipEdit.decode('add'), thread.name, "Actual native fork")
         assert edge.pair_identity == frozenset((parent.incarnation, thread.incarnation))
         for owner, peer in ((parent, thread), (thread, parent)):
             saved = comms.relationships.collaborations(owner.name)

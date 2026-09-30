@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .coordination_errors import IntegrityViolationError
+from .coordination_errors import IntegrityViolationError, IdentityConflict
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 
@@ -45,6 +45,15 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
             raise IntegrityViolationError("only published obligations may have a receipt")
         return cls()
 
+    def require_preparation(self) -> None:
+        raise IdentityConflict("response obligation cannot prepare a new intent")
+
+    def require_existing_preparation(self) -> None:
+        raise IdentityConflict("prepared response envelope conflicts")
+
+    def require_publishing(self) -> None:
+        raise IdentityConflict("no frozen publishing intent for current owner")
+
     def require_nonpublication(self) -> None:
         from .coordination_errors import IdentityConflict
 
@@ -64,6 +73,9 @@ class PendingResponse(ResponseState):
     retryable = True
     pending = True
 
+    def require_preparation(self) -> None:
+        pass
+
     @classmethod
     def successors(cls):
         return PublishingResponse, DeferredResponse, SilentResponse, FailedResponse
@@ -73,6 +85,12 @@ class PublishingResponse(ResponseState):
     publishing = True
     allows_intent = True
     requires_intent = True
+
+    def require_publishing(self) -> None:
+        pass
+
+    def require_existing_preparation(self) -> None:
+        pass
 
     @classmethod
     def successors(cls):

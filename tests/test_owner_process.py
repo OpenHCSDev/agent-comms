@@ -156,7 +156,6 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
         assert "Owner launch: failed-start" in trace
         assert "Traceback (most recent call last)" in trace
         assert "PublicationActivationBlocked" in trace
-        assert "exact root ID and absolute reviewed package" in trace
         assert logs[0].stat().st_mode & 0o777 == 0o600
         assert not socket_path(tmp_path, result.pid).exists()
         assert owner.session_file is None

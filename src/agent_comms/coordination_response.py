@@ -109,8 +109,10 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
 
     def matches(self, wire_root_id: str, fence: OwnerFence) -> bool:
         return self == PublicationAppendDispatches(
-            execution_id=fence.execution_id, wire_root_id=wire_root_id,
-            owner_generation=fence.owner_generation, attempt_ordinal=fence.attempt_ordinal,
+            execution_id=fence.execution_id,
+            wire_root_id=wire_root_id,
+            owner_generation=fence.owner_generation,
+            attempt_ordinal=fence.attempt_ordinal,
             dispatched_at_ms=self.dispatched_at_ms,
         )
 
@@ -129,10 +131,15 @@ class SelectedResponseRoute(TypedRow):
 
     def require_source(self, initial, assignment: WakeAssignment) -> None:
         expected = SelectedResponseRoute(
-            initial.message.message_id, initial.message.target,
-            initial.audience.wire_envelope_digest, initial.audience.digest,
-            initial.decisions_digest, assignment.resolver_version,
-            assignment.policy_version, assignment.recipient_lookup, assignment.recipient,
+            initial.message.message_id,
+            initial.message.target,
+            initial.audience.wire_envelope_digest,
+            initial.audience.digest,
+            initial.decisions_digest,
+            assignment.resolver_version,
+            assignment.policy_version,
+            assignment.recipient_lookup,
+            assignment.recipient,
         )
         if self != expected:
             raise IdentityConflict("response sealed route differs from committed source")
@@ -254,8 +261,7 @@ def _require_cohort_assignments(
     db = store.session._connection
     _assert_response_schema(db)
     assert_cohort_schema(db)
-    if not snapshot.assignments or snapshot.obligation is None:
-        raise IdentityConflict("wire response requires selected claims and obligation")
+    snapshot.require_wire_response()
     metadata = bus.log._private_marker_unlocked()
     if metadata.root_id != wire_root_id:
         raise IdentityConflict("cohort bus root changed")
@@ -294,13 +300,16 @@ def _require_cohort_assignments(
         if assignment.recipient_lookup not in selected:
             raise IdentityConflict("response recipient was not selected by the original source")
         engagement = (
-            assignment.lifecycle.require_completion() if terminal
+            assignment.lifecycle.require_completion()
+            if terminal
             else assignment.lifecycle.require_engagement()
         )
         target = snapshot.execution.exact_target
-        if engagement.exact_target != target or derive_exact_reply_target(initial.message) != target:
+        if (
+            engagement.exact_target != target
+            or derive_exact_reply_target(initial.message) != target
+        ):
             raise IdentityConflict("response claim conflicts with original selected bus route")
-
 
 
 def _require_final_owner(
@@ -311,17 +320,7 @@ def _require_final_owner(
     owner_witness: LiveResponseOwner,
 ) -> RecoverySnapshot:
     snapshot, attempt = store.attempts.require_fence(fence)
-    execution = snapshot.execution
-    if execution.owner_lookup != owner_witness.recipient_lookup:
-        raise StaleFence("response turn belongs to a different SQL recipient")
-    if (
-        not execution.lifecycle.active
-        or not attempt.lifecycle.publication_ready
-        or snapshot.obligation is None
-        or snapshot.obligation.exact_target != execution.exact_target
-        or execution.exact_target is None
-    ):
-        raise RecoveryBlocked("response requires final model/death evidence and exact wire route")
+    snapshot.require_final_response(owner_witness.recipient_lookup)
     _require_cohort_assignments(store, bus, snapshot, wire_root_id)
     return snapshot
 
@@ -360,25 +359,21 @@ def prepare_fenced_response(
         with store.session.transaction() as db:
             snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness)
             execution = snapshot.execution
-            assert execution.exact_target is not None
+            target = execution.require_response_target()
             existing = snapshot.publication_intent
             if existing is not None:
-                if (
-                    snapshot.obligation is None
-                    or not snapshot.obligation.lifecycle.publishing
-                    or not existing.matches_request(
-                        execution.execution_id,
-                        Message(
-                            execution.owner_thread, execution.exact_target, payload, message_type,
-                            timestamp=existing.timestamp if timestamp is None else timestamp,
-                            notice=notice,
-                        ),
+                snapshot.require_existing_preparation(
+                    Message(
+                        execution.owner_thread,
+                        target,
+                        payload,
+                        message_type,
+                        timestamp=existing.timestamp if timestamp is None else timestamp,
+                        notice=notice,
                     )
-                ):
-                    raise IdentityConflict("prepared response envelope conflicts")
+                )
                 return AlreadyApplied(existing)
-            if snapshot.obligation is None or not snapshot.obligation.lifecycle.pending:
-                raise IdentityConflict("response obligation cannot prepare a new intent")
+            obligation = snapshot.require_preparation()
             when = time.time() if timestamp is None else timestamp
             candidate = Message(
                 execution.owner_thread,
@@ -406,10 +401,10 @@ def prepare_fenced_response(
             ResponseObligation.update(
                 db,
                 where="execution_id=? AND state='pending' AND revision=?",
-                parameters=(execution.execution_id, snapshot.obligation.revision),
+                parameters=(execution.execution_id, obligation.revision),
                 lifecycle=PublishingResponse(),
-                revision=snapshot.obligation.revision + 1,
-                updated_at_ms=store.session.now(snapshot.obligation.updated_at_ms),
+                revision=obligation.revision + 1,
+                updated_at_ms=store.session.now(obligation.updated_at_ms),
             )
             return Applied(intent)
 
@@ -423,18 +418,17 @@ def _terminal_replay(
 ) -> AlreadyApplied[RecoverySnapshot] | None:
     """A finished immutable receipt may be re-read, never re-published."""
     snapshot = store.snapshots.get(fence.execution_id)
-    if not snapshot.execution.lifecycle.completed:
+    if not snapshot.completed_response():
         return None
     if snapshot.execution.owner_lookup != owner_witness.recipient_lookup:
         raise StaleFence("finished response belongs to a different SQL recipient")
     attempt = snapshot.require_attempt()
     if attempt.authority != fence.authority:
         raise StaleFence("finished response is not this owner's original attempt")
-    if snapshot.publication_intent is None or snapshot.publication_receipt is None:
-        raise StaleFence("finished response has no frozen publication evidence")
+    intent, receipt = snapshot.require_published_evidence()
     _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=True)
-    matched, _, _ = bus.log._keyed_receipt_unlocked(snapshot.publication_intent)
-    if matched is None or matched.reference != snapshot.publication_receipt.reference:
+    matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
+    if matched is None or matched.reference != receipt.reference:
         raise PublicationUncertain("published SQL receipt has no exact durable bus row")
     return AlreadyApplied(snapshot)
 
@@ -467,14 +461,7 @@ def _settle_fenced_response(
                 if terminal is not None:
                     return terminal
                 snapshot = _require_final_owner(store, bus, fence, wire_root_id, owner_witness)
-                if (
-                    snapshot.publication_intent is None
-                    or snapshot.obligation is None
-                    or not snapshot.obligation.lifecycle.publishing
-                    or snapshot.publication_intent.sender != snapshot.execution.owner_thread
-                    or snapshot.publication_intent.exact_target != snapshot.execution.exact_target
-                ):
-                    raise IdentityConflict("no frozen publishing intent for current owner")
+                snapshot.require_publishing_intent()
                 prior = PublicationAppendDispatches.one(db, execution_id=fence.execution_id)
                 if prior is None:
                     PublicationAppendDispatches(
@@ -493,18 +480,8 @@ def _settle_fenced_response(
             if terminal is not None:
                 return terminal
             snapshot = _require_final_owner(store, bus, fence, wire_root_id, owner_witness)
-            attempt = snapshot.attempt
-            if attempt is None:
-                raise RecoveryBlocked("response attempt disappeared")
-            intent = snapshot.publication_intent
-            if (
-                intent is None
-                or snapshot.obligation is None
-                or not snapshot.obligation.lifecycle.publishing
-                or intent.sender != snapshot.execution.owner_thread
-                or intent.exact_target != snapshot.execution.exact_target
-            ):
-                raise IdentityConflict("no frozen publishing intent for current owner")
+            attempt = snapshot.require_attempt()
+            intent, obligation = snapshot.require_publishing_intent()
             dispatch = PublicationAppendDispatches.one(db, execution_id=fence.execution_id)
             if dispatch is None or not dispatch.matches(wire_root_id, fence):
                 raise PublicationUncertain("no matching durable append dispatch")
@@ -527,7 +504,6 @@ def _settle_fenced_response(
                 message_id=matched.message_id,
                 received_at_ms=now,
             ).insert(db)
-            obligation = snapshot.obligation
             ResponseObligation.update(
                 db,
                 where="execution_id=? AND revision=?",
