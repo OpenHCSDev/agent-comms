@@ -94,7 +94,41 @@ entrypoint gate and source archival. No duplicate restart is performed here.
 
 ## Remaining public lifecycle
 
-The new acquired batch source is still uncommitted and unaccepted. Original
-admission, all-idle fencing, all-stop, both durable carrier retirement, guarded
-publication and target launch remain442's full S14 scope. First441 excludes C3
-and remains independently ready. This helper does not authorize a public carry.
+442 merged ea1c275 and parent completed the C3 public cutover through that acquired
+batch. Original admission, all-idle fencing, all-stop, both durable carrier
+retirement, guarded publication and target launch remain that single lifecycle.
+The helper does not authorize a public carry.
+
+## Current-format producer after C3 activation
+
+447 extends the SAME shared read and RetainedOwnerLaunch capture. For an authentic
+current-format producer, select the declared current projection explicitly:
+
+```python
+from original_owner_capture import CurrentTypedCapture
+
+capture = CurrentTypedCapture(
+    root=Path(source_root),
+    original_python=Path(
+        '/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/python'
+    ),
+).read(source_owner)
+```
+
+The inherited implementation still requires exact interpreter, OWNER generation,
+ADMISSION and process/birth, and repeats the shared read after credential capture.
+CurrentThreadProjection encodes the producer's already validated document;
+RetiredGoalReportProjection owns the original-format one-shot member removal.
+The child decodes the declared projection once. Neither probes missing fields,
+falls back, writes the public root, or introduces another registry reader.
+Selecting retirement for an already-current document refuses.
+
+Provider-free proof uses the genuine accepted run09 current registry: strict
+current roundtrip and wrong retirement member refusal, with original bytes
+unchanged. Receipt: ../../evidence/phased-owner-cutover/current-capture-receipt.json.
+This checks projection closure; the original acquisition/revalidation proof is
+unchanged and is not claimed as a new real-process gate. Heisenberg owns the236
+private A/B caller and already certified both SDK copies before releasing the
+original public process witness. After public retirement he may acquire new
+current launch credentials in RAM through this member, while reusing those
+certified copies. Do not recopy the original or reassert its retired PID.

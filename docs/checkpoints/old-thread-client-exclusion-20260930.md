@@ -60,14 +60,19 @@ the acquired batch and checkpoint installer. Production source changes: zero.
 
 ## Current-format private capture closure
 
-OriginalTypedCapture currently always invokes the strict C3 field-retirement
-member. After actual C3 public activation, a matched current-format producer must
-use the same capture ownership with an explicitly declared current-format
-projection. No missing-field fallback or second reader/capture implementation.
+OriginalTypedCapture declares the strict C3 field-retirement member.
+CurrentTypedCapture now declares CurrentThreadProjection and inherits the SAME
+capture/read/revalidation implementation for an authentic current producer.
+The subprocess decodes the projection through the existing DeclaredFamily.
+No missing-field fallback or second reader/capture implementation.
 Original exact owner/admission/process/interpreter and repeated shared-read proof
 remain mandatory. Heisenberg owns the sole private A/B cohort; this continuation
 owns only that existing capture boundary extension.
 
 Existing442 source and installed UNKNOWN/batch gate remain accepted. The actual
 old-client writer proof passed; parent alone owns the public retirement condition.
-The explicit current-format private capture extension remains in progress.
+The explicit current-format private capture extension passed strict roundtrip
+and wrong-member refusal on the genuine run09 current document. Its projection
+receipt distinguishes that bounded check from unchanged real-process proof.
+Parent subsequently confirmed completed public client retirement and C3 cutover;
+this continuation performs no public signal, write or replay.
