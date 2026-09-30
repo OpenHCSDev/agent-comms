@@ -68,8 +68,8 @@ class LockedStore(ABC, Generic[T]):
     @contextmanager
     def locked(self, *, shared: bool = False, blocking: bool = True) -> Iterator[int]:
         """Canonical lock, including a descriptor for scoped child authority."""
-        with _store_lock(self.path, shared=shared, blocking=blocking) as descriptor:
-            yield descriptor
+        with _store_lock(self.path, shared=shared, blocking=blocking) as lock:
+            yield lock.descriptor
 
     @contextmanager
     def reading(self) -> Iterator[T]:

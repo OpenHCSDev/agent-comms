@@ -8,7 +8,7 @@ from typing import Any
 
 from .declared_family import DeclaredFamily
 from .message_reference import MessageReference
-from .routing import TurnRouting
+from .routing import MessageRoute, TurnRouting
 from .tool_results import ToolDiff
 from .transcript_merge import EventMerge, StreamingMerge
 
@@ -27,6 +27,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     @property
     def native_inputs(self) -> frozenset[str]:
         return frozenset()
+
+    @property
+    def incoming_sources(self) -> tuple[MessageReference, ...]:
+        return ()
 
     def with_native_input(self, native_id: str | None) -> TranscriptEvent:
         return self
@@ -50,7 +54,11 @@ class TextTranscript(TranscriptEvent):
         return len(self.text)
 
 
-class LiveTextTranscript(StreamingMerge, TextTranscript):
+class MarkdownTranscript(TextTranscript):
+    """Text whose body uses the shared Markdown preparation owner."""
+
+
+class LiveTextTranscript(StreamingMerge, MarkdownTranscript):
     """Text that can continue streaming inside an already mounted presentation."""
 
 
@@ -60,12 +68,36 @@ class SilentTranscript:
         return False
 
 
-class AgentTextTranscript(LiveTextTranscript):
-    """Text that can carry an outgoing route and be updated in place."""
+class OutgoingRoute:
+    """Route capability shared by native output and original wire projection."""
 
     @property
     def routed(self) -> bool:
         return self.routing is not None and self.routing.reply is not None
+
+
+class AgentTextTranscript(OutgoingRoute, LiveTextTranscript):
+    """Native output that can continue streaming inside one mounted block."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class WireTextTranscript(MarkdownTranscript):
+    """Immutable presentation of one original committed wire record."""
+
+    source: MessageReference = field()
+
+    @property
+    def routed(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True, kw_only=True)
+class IncomingTranscript(WireTextTranscript):
+    route: MessageRoute
+
+    @property
+    def incoming_sources(self) -> tuple[MessageReference, ...]:
+        return (self.source,)
 
 
 @dataclass(frozen=True)
@@ -92,8 +124,8 @@ class NoticeTranscript(AgentTextTranscript):
     pass
 
 
-class SentTranscript(AgentTextTranscript):
-    pass
+class SentTranscript(OutgoingRoute, WireTextTranscript):
+    """One immutable original wire row, separate from native assistant output."""
 
 
 class ThinkingTranscript(SilentTranscript, LiveTextTranscript):

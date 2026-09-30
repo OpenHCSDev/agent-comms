@@ -50,8 +50,8 @@ class CompactionBoundary:
         # that edge, even though this scope does not yet publish an outcome.
         with (
             idle_session_writer_fence(expected.session_file) as executor_fd,
-            _store_lock(self.root / "wire") as wire_fd,
-            _store_lock(self.root / "bus.jsonl") as bus_fd,
+            _store_lock(self.root / "wire") as wire_lock,
+            _store_lock(self.root / "bus.jsonl") as bus_lock,
             self.registry.guard_owner_compaction(owner, expected) as (
                 receipt,
                 fd,
@@ -62,7 +62,10 @@ class CompactionBoundary:
                 self.inputs._read_unlocked().compaction_rows(
                     owner, pending_input_key, self.future_queue
                 )
-            yield HeldCompaction(self, witness, receipt, fd, (executor_fd, wire_fd, bus_fd, input_fd))
+            yield HeldCompaction(
+                self, witness, receipt, fd,
+                (executor_fd, wire_lock.descriptor, bus_lock.descriptor, input_fd),
+            )
 
 
     @staticmethod

@@ -64,6 +64,19 @@ class NativeRecord:
     def size(self) -> int:
         return self.end - self.start
 
+    @property
+    def annotation_id(self) -> str | None:
+        entry = self.entry
+        return entry.id if entry is not None and entry.is_message else None
+
+    def publication_producer(self) -> NativeEntry | None:
+        if not self.complete or self.entry is None:
+            raise ValueError("Native publication has incomplete evidence")
+        if self.entry.final_reply:
+            self.entry.require_entry_id()
+            return self.entry
+        return None
+
 
 class NativeTranscript:
     def __init__(self, path: Path):
@@ -74,6 +87,32 @@ class NativeTranscript:
         with self.path.open("rb") as stream:
             entry = NativeEntry.read(stream.readline())
         return entry.id if isinstance(entry, SessionEntry) else None
+
+    def annotation_ids(self, after: int, through: int) -> tuple[str, ...]:
+        return tuple(identity for record in self.forward(after, through)
+                     if (identity := record.annotation_id) is not None)
+
+    def require_publication_context(self, user):
+        """Corroborate the existing native producer's context, without replay.
+
+        Native inputDigest identifies a request envelope, not plain text. The
+        original STARTED ledger separately proves the exact sent text. Native's
+        journal owns context inclusion for the actual header/input/entry identity;
+        this bounded indexed lookup does not guess a request kind or options.
+        """
+        from .native_pi import NativeContextJournal, _private_session_dir
+
+        _private_session_dir(self.path.parent)
+        with self.path.open("rb") as stream:
+            header = NativeEntry.read(stream.readline())
+        if not isinstance(header, SessionEntry):
+            raise ValueError("Native publication has no original session header")
+        header.require_header()
+        with NativeContextJournal.open_evidence(self.path.absolute()) as db:
+            proof = NativeContextJournal.for_input(db, user.input_id)
+            if proof is None:
+                raise ValueError("Native publication has no committed context inclusion")
+            return proof.corroborate(self.path.absolute(), header, {user.input_id: user})
 
     def input_ancestor(self, record: NativeRecord):
         """Follow original parent IDs to the input boundary, without an index.
@@ -95,6 +134,28 @@ class NativeTranscript:
             if parent is None:
                 return None
         return None
+
+    def publication_input(self, *, after: int, through: int):
+        """Return the final producer and its actual tracked input ancestry.
+
+        This bounded reverse walk runs before any BUS/registry lock is acquired.
+        A display-tolerant malformed record cannot supply publication evidence.
+        """
+        from .errors import RelationViolationError
+
+        for record in self.reverse(through):
+            if record.start < after:
+                break
+            producer = record.publication_producer()
+            if producer is None:
+                continue
+            user = self.input_ancestor(record)
+            if user is None:
+                raise RelationViolationError("Native publication has no tracked input ancestry")
+            user = user.require_tracked_user()
+            self.require_publication_context(user)
+            return record, user
+        raise RelationViolationError("Native turn has no final reply after its checkpoint")
 
     def tail(self, *, max_bytes: int | None = None):
         try:

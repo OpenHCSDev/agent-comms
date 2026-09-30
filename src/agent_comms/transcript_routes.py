@@ -4,7 +4,7 @@ import hashlib
 import os
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .errors import RelationViolationError
@@ -23,6 +23,10 @@ class TranscriptRoute(RouteAnnotationTable, TypedTable):
     entry_id: str = field(metadata={"sql": Column(primary_key=True)})
     routing: TurnRouting
     without_rowid = True
+
+    def require_publication(self, routing: TurnRouting) -> None:
+        if self.routing.publications and self.routing != routing:
+            raise RelationViolationError("Original native publication cannot be rebound")
 
 
 @dataclass(frozen=True)
@@ -192,6 +196,77 @@ class TranscriptRoutes:
             with connection:
                 for entry_id in entry_ids:
                     TranscriptRoute(session_file, entry_id, routing).upsert(connection)
+
+    def record_turn_publication(self, registry, log, lease, checkpoint, routing, published):
+        """Join a completed native producer to its original committed wire rows.
+
+        Native traversal closes before taking source custody. Existing wire,
+        registry and input owners remain held until durable annotations commit.
+        A partial successful send subset remains published if a later send fails.
+        """
+        from .bus_publication import stable_thread_lookup
+        from .input_disposition import InputDispositions
+        from .native_transcript import NativeTranscript
+        from .native_input_owner import RegistryOwner
+        from .private_bus_checkpoint import conversation_sources_unlocked
+
+        if not routing.requires_annotation(published):
+            return
+        initial = registry.snapshot()
+        incarnation = lease.identity.incarnation.resolved(initial)
+        thread = RegistryOwner.capture_local(initial, incarnation.name).thread
+        if thread.turn_lease != lease.renamed(incarnation.name):
+            raise RelationViolationError("Native publication has no current original turn")
+        path = Path(thread.require_saved_session())
+        revision = file_revision(path)
+        if revision is None:
+            raise RelationViolationError("Native publication has no retained session")
+        reader = NativeTranscript(path)
+        floor = checkpoint.offset if str(path) == checkpoint.session_file else 0
+        try:
+            final, user = reader.publication_input(after=floor, through=revision[1])
+        except (ValueError, TypeError) as error:
+            raise RelationViolationError("Native publication evidence is invalid") from error
+        ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
+        inputs = InputDispositions(log.path.parent / InputDispositions.filename)
+        lookup = stable_thread_lookup(incarnation.created_at)
+        with log.certified_read() as source, registry.store.reading() as document, inputs.reading() as attempts:
+            snapshot = document.snapshot()
+            incarnation = lease.identity.incarnation.resolved(snapshot)
+            current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
+            if current.turn_lease != lease.renamed(incarnation.name):
+                raise RelationViolationError("Native publication turn lease changed")
+            if current.session_file != str(path) or file_revision(path) != revision:
+                raise RelationViolationError("Native publication session changed")
+            if not attempts.started_for_native(lease, user.input_id, user.message.text, snapshot=snapshot):
+                raise RelationViolationError("Native publication has no original STARTED input")
+            references = tuple(dict.fromkeys((*routing.requests, *published)))
+            marks = ",".join("?" for _ in references)
+            originals = conversation_sources_unlocked(
+                source, lookup, f"w.seq IN ({marks})", tuple(ref.seq for ref in references),
+                limit=len(references), ascending=True,
+            ) if references else ()
+            if {item.message.reference for item in originals} != set(references) or len(set(published)) != len(published):
+                raise RelationViolationError("Publication is not its original seq/id relation")
+            routing.require_publications(
+                tuple(item for item in originals if item.message.reference in published), lookup
+            )
+            self._record_publication(str(path), ids, final.entry.id, routing, published)
+
+    def _record_publication(self, session_file, entry_ids, final_id, routing, published):
+        self._ensure_database(create=True)
+        with _store_lock(self.database_path), closing(sqlite3.connect(self.database_path, timeout=30)) as connection:
+            connection.execute("PRAGMA synchronous=FULL")
+            with connection:
+                final_routing = replace(routing, publications=published)
+                previous = TranscriptRoute.one(connection, session_file=session_file, entry_id=final_id)
+                if previous is not None:
+                    previous.require_publication(final_routing)
+                for entry_id in entry_ids:
+                    if entry_id == final_id:
+                        continue
+                    TranscriptRoute(session_file, entry_id, routing).upsert(connection)
+                TranscriptRoute(session_file, final_id, final_routing).upsert(connection)
 
     def record_input_display(
         self,

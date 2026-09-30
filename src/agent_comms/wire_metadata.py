@@ -89,6 +89,11 @@ class WireMetadata:
         return self.claim_envelopes_version is not None
 
     @property
+    def requires_checkpoint(self) -> bool:
+        """The original marker declares whether its durable seal is required."""
+        return self.checkpoint_seal is not None
+
+    @property
     def root_id(self) -> str:
         if self.wire_root_id is None:
             raise RelationViolationError("Private bus writer has no durable protocol marker.")

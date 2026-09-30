@@ -38,7 +38,8 @@ closure. The repeated violation must be checked through the existing ownership
 guards with real-history evidence, without a new parallel checking framework.
 
 Sender outbound projection: Schrodinger owns the complete sender-chat workflow
-in Toad210; Mendel contributes the durable wire/routing/index/source closure.
+in Toad215; Mendel contributes the durable wire/routing/index/source closure in
+Core430. Toad210/Core426 retain attachment recovery and source-operation ownership.
 The pr159 reply at 19:27:10 to codex-bootstrap is visible in IRC but absent from
 its sender DM. Both views must project the same original durable record once,
 chronologically, through immediate updates, A/B/A and cold reopening. No second
@@ -68,7 +69,11 @@ recovery remains with Schrodinger; canonical lifecycle425/211 remains Arendt.
 
 ## Direct coordination and write ownership
 
-Six coding agents are active; each keeps one complete implementation assignment.
+Five coding agents carry active work at this checkpoint. Einstein completed431
+and was closed after its native children retired. Kepler resumed his existing
+Toad214 task in that slot; its pushed implementation remains assigned to him.
+Do not report a PR assignment as a running agent. Heavy installed native fixtures
+run serially while the resource check reports swap pressure.
 They communicate directly rather than routing routine handoffs through the parent.
 
 - Arendt ↔ Einstein: native summary accounting versus Pi/SummaryData boundary
@@ -83,6 +88,24 @@ They communicate directly rather than routing routine handoffs through the paren
   versus mechanism seals and Pi vocabulary. No duplicated identity or status type.
 
 ## Current verified boundary
+
+Current default installation: Coreab3397a6 / Toad43949ee / Textual412 / native7817.
+Toad208 carries the complete202 retained-history checkpoint and209 progressive
+summary through a merge to main. The actual default `toad-comms` entrypoint
+completed session/load and loaded32 saved events with no error or new prompt.
+An intermittent late reader jump remains owned by Heisenberg213; this checkpoint
+does not claim complete warm-reader correctness or a50ms performance target.
+
+Core417,427 and429 are merged to main through7fcf826a. Parent has staged their
+noneditable installed artifact with Toad43949 and native4ab. Actual staged
+`toad-comms comms428` loaded27 saved events without errors or new input. Native
+package trust and the next paired cutover remain separate gates; staged attachment
+does not prove that the default workers run the new Core or that inbox recovery
+works. See [current integration ownership](13-LIVE-INTEGRATION.md).
+The [full goal checklist](15-GOAL-CHECKLIST.md) separates original PR disposition,
+remaining plan scope, installed acceptance and the next paired activation.
+
+The older receipts below retain their historical verification boundaries.
 
 Core420/419/423 and Toad207 are activated as the default paired installation,
 initially Core66ee0ca2 / Toad533c7f6c / Textual412 / native776. Nine idle owners

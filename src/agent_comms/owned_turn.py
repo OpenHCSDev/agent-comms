@@ -129,7 +129,7 @@ class OwnedTurn:
         self.runner.emitted_errors.pop(self.session_id, None)
         self.turn_id = uuid4().hex
         self.routing = TurnRouting(
-            self.origins,
+            tuple(origin.reference for origin in self.origins),
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,
         )
         self.checkpoint = self.runner.comms.transcripts.transcript_checkpoint(self.thread_name)
@@ -296,11 +296,10 @@ class OwnedTurn:
             emitted_errors=self.runner.emitted_errors,
             session_id=self.session_id,
             thread=self.thread,
-            turn_id=self.turn_id,
             turn_lease=self.turn_lease,
             routing=self.routing,
+            original=self.original,
             checkpoint=self.checkpoint,
-            task=self.task,
             finish_event=self.finish_event,
             goals=TurnGoalAccount(
                 comms=self.runner.comms,

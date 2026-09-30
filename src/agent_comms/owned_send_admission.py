@@ -185,7 +185,9 @@ class OwnedSendAdmission:
                 native_id,
                 source.display(self.inputs.dispositions, sent_text),
                 sent_text=sent_text,
-                routing=TurnRouting(source.origins, None) if source.origins else None,
+                routing=TurnRouting(
+                    tuple(origin.reference for origin in source.origins), None
+                ) if source.origins else None,
             )
             yield True
 

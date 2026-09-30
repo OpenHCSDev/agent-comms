@@ -30,6 +30,7 @@ from .thread_identity import ThreadIncarnation
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .bus_publication import CommittedDelivery
     from .agent_activity import AgentActivity
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -113,14 +114,21 @@ class MessageNotification:
         Reads the original assignments and source messages. This is not a DM
         delivery or a read acknowledgement, and never schedules another turn.
         """
-        from .bus_publication import stable_thread_lookup
-
         if not 1 <= limit <= 20:
             raise ValueError("Recent notification limit must be between 1 and 20")
         owner = registry.require(name)
         from .transcript_receipts import AssignedTranscriptSource
 
         sources = AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit)
+        return cls.for_sources(root, registry, owner, sources)
+
+    @classmethod
+    def for_sources(
+        cls, root: Path, registry: Registration, owner: Thread, sources: Sequence[CommittedDelivery]
+    ) -> tuple[MessageNotification, ...]:
+        """Project outcomes from the caller's original certified source window."""
+        from .bus_publication import stable_thread_lookup
+
         lookup = stable_thread_lookup(owner.created_at)
         messages = tuple(source.message for source in sources)
         projected = cls.window(root, registry, messages)

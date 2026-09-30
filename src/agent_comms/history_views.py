@@ -49,6 +49,7 @@ from .store_files import _store_lock, file_revision
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
+from .coordination_errors import StaleRevision
 
 _LOG = logging.getLogger(__name__)
 
@@ -311,10 +312,15 @@ class HistoryViews:
             self.agents.runtime_info.read().get(thread.name),
             GoalWaits(self.root / GoalWaits.filename).read(),
         )
+        read, sources = self.transcripts.capture_page_window(thread.name, source_limit=5)
+        if not read.identity.thread.incarnation.current(snapshot):
+            raise StaleRevision("Thread source incarnation changed during presentation")
         return replace(
             view.presentation,
-            notifications=self.recent_notifications(thread.name),
-            read_identity=self.transcripts.capture_page_read(thread.name).identity,
+            notifications=MessageNotification.for_sources(
+                self.root, self.registry, read.identity.thread, sources
+            ),
+            read_identity=read.identity,
         )
 
     def coordination_snapshot(
