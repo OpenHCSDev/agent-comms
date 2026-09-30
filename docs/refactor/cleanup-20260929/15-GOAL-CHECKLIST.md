@@ -29,17 +29,29 @@ Parallel outstanding owners and measured progress:
   extension/actual managed-tool acceptance remains pending. The separate129.898s
   tool-result-to-assistant gap has no established provider/reasoning attribution.
   Core450 is neither merged nor installed.
-- Schrodinger, Toad238: tab restoration awaits canonical goal observation before
-  first paint, with a3s read timeout. Navigation-wide causal measurement and the
-  source fix remain pending. A model-capacity failure stopped its last turn;
-  a fresh continuation on the same configured model is active. Arendt has a
-  read-only preparation assignment for takeover if capacity repeats.
+- Schrodinger, Toad238: checkpointdef49f06 replaces5 production lines, releases
+  native tab restoration from the awaited goal read, and invalidates the existing
+  canonical observation resource instead. Actual original-read lifetime gate
+  reproduced first-paint exclusion while both navigation lock and atomic selection
+  were held. Candidate installed saved-history/ACP A/B/A acceptance remains pending;
+  no actual mid-compaction latency result is claimed. Capacity has not recurred.
 - Heisenberg, Toad236: configurable3-viewport baseline buffer, directional dynamic
   lookahead and retained preparation measurement are implemented. Physical
   attempt02 could navigate but correctly refused a stopped private fixture;
   it provides no physical buffer/scroll acceptance. Canonical private-owner
   startup and one corrected capture remain pending. Kepler owns the recording
   driver/CPU correlation and rejects captures without actual history movement.
+
+The actual normal default UI capture reads original41MB history and exposed
+NEW current native admission failures on NRA inbox drain. Diagnostic
+`f39210bb4366844c3a898b0010ba9538` (nra-class-first-name-review, originalseq247)
+records nonblocking message-bus log flock contention, then the five-second native
+admission deadline produces PromptSendUnknown before any prompt bytes. Several
+NRA owners now expose InboxUnavailable. Public inputs/UNKNOWN dispositions are
+preserved, with no retry. Arendt owns the new shared admission/lock-lifetime
+investigation and coordinates shared route timing directly with Mendel450;
+restoration451 is parked at its draft checkpoint. Installation is verified;
+whole-system live readiness is explicitly NOT established.
 
 Nine thinking-level settings changed by the prior startup reader are still
 pending guarded original-incarnation restoration. This activation preserves
