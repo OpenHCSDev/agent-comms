@@ -1,0 +1,28 @@
+{
+  "state": "FULL_GATE_NOT_READY",
+  "candidate": "ea8aa4eaee1ce3eed9aef19cd44010b592f83b26/c0750340f069c90be2c65bb8f8d7f8affd32d02a/Text2e49/SDK0.12.1/native593b",
+  "u01": "no-prompt startup failure: fixture AF_UNIX path length; NativeRuntimeInput count0",
+  "u02": "three windows attached; originalwire1 committed; senderOutgoingMessage not observed by deadline; failedproviderhold secondary; preserved/no replay",
+  "u03": "source admission current+source_current TRUE and roots match; original+reply/Processing\u2192Responded hot3views, onepaintedreply/header,31s no repeatedoriginalrows PASS; firstreturn nativeinput/answer once butUIwait timeout inPilot._wait_for_screen; cold/shutdown fullgate unproven",
+  "diagnostic_limit": "u03 added canonical source-read census may affect disposable source certification or timing; does not waive u02",
+  "remaining_owned_attempt_processes": [],
+  "paid_provider_calls": 0,
+  "public_mutations": 0,
+  "original_inputs_replayed": 0,
+  "followup_owners": {
+    "hot_source_claim_domain": "Heisenberg252",
+    "original_source_queries_and_installed_bus_gate": "Schrodinger460",
+    "source_certification_cursor_unavailable": "Mendel withEinsteinoriginalproof",
+    "queue_button_original_PTY_oracle": "Kepler251/Einstein"
+  },
+  "protected": [
+    "u01",
+    "u02",
+    "u03",
+    "/home/ts/wt/g460b/u02",
+    "/home/ts/wt/g460b/u03",
+    "candidateprefix",
+    "originalnative/journals/inputdispositions"
+  ],
+  "no_further_native_attempt": "preserved source/read-only consumer tracing before any new originalinput"
+}
