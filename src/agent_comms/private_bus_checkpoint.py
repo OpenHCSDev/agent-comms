@@ -517,7 +517,7 @@ def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
             except FileNotFoundError:
                 descriptor = None
             if descriptor is None and (
-                certificate_enabled(bus.path) or private_marker.checkpoint_seal is not None
+                certificate_enabled(bus.path) or private_marker.requires_checkpoint
             ):
                 raise RelationViolationError("Private checkpoint bus inode is missing.")
             source = None
@@ -526,12 +526,9 @@ def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
                 if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                     raise RelationViolationError("Claim bus is not a regular file.")
                 os.fsync(stream.fileno())
-                if certificate_enabled(bus.path) or private_marker.checkpoint_seal is not None:
+                if certificate_enabled(bus.path) or private_marker.requires_checkpoint:
                     private_marker = bus._private_marker_unlocked()
-                    if private_marker.checkpoint_seal is None:
-                        raise RelationViolationError(
-                            "Private checkpoint lacks durable marker binding."
-                        )
+                    private_marker.seal
                     directory_fd = os.open(
                         bus.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
                     )
