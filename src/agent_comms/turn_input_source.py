@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from .goals import Goal
     from .input_disposition import InputDispositions
     from .input_drain import InputDrain
-    from .registry_document import RegistrySnapshot
     from .thread_identity import TurnId
     from .threads import Thread
 
@@ -36,7 +35,7 @@ class TurnInputSource(ABC):
         return True
 
     @abstractmethod
-    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool: ...
+    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool: ...
 
     @abstractmethod
     def allows_goal_input(self, goal: Goal | None) -> bool: ...
@@ -59,7 +58,7 @@ class InputDependency(ABC):
     def current(self, wait: GoalWait | None) -> bool: ...
 
     @abstractmethod
-    def allows(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool: ...
+    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool: ...
 
     @abstractmethod
     def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool: ...
@@ -69,7 +68,7 @@ class NoInputDependency(InputDependency):
     def current(self, wait: GoalWait | None) -> bool:
         return True
 
-    def allows(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool:
         return wait is None
 
     def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
@@ -79,15 +78,21 @@ class NoInputDependency(InputDependency):
 @dataclass(frozen=True)
 class CapturedInputDependency(InputDependency):
     wait_id: str
-    origins: tuple[Message, ...]
 
     def current(self, wait: GoalWait | None) -> bool:
         return wait is not None and wait.wait_id == self.wait_id
 
-    def allows(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
-        return wait is None or (
-            self.current(wait) and any(wait.matches(origin, registry) for origin in self.origins)
-        )
+    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool:
+        if wait is None:
+            return True
+        if not self.current(wait):
+            return False
+        with comms.bus.log.certified_read() as source:
+            for origin in origins:
+                original = source.delivery(origin.seq)
+                if original.message.reference == origin.reference and wait.matches(original):
+                    return True
+        return False
 
     def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
         return wait is None or comms.goals.consume_goal_wait(canonical, wait.wait_id)
@@ -142,7 +147,7 @@ class OriginalTurnInput(TurnInputSource):
 
 
 class DirectInput(TurnInputSource):
-    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:
         return True
 
     def allows_goal_input(self, goal: Goal | None) -> bool:
@@ -160,7 +165,7 @@ class OwnerOriginalInput(OriginalTurnInput, DirectInput):
 
 
 class RoutedInput(TurnInputSource):
-    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
+    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:
         return wait is None
 
     def allows_goal_input(self, goal: Goal | None) -> bool:
@@ -172,8 +177,8 @@ class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
 
 
 class DependencyOriginalInput(OriginalTurnInput, DirectInput):
-    def allows_wait(self, wait: GoalWait | None, registry: RegistrySnapshot) -> bool:
-        return self.dependency.allows(wait, registry)
+    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:
+        return self.dependency.allows(wait, comms, self.origins)
 
 
 class ScheduledOriginalInput(DependencyOriginalInput):

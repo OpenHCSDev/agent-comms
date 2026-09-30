@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import replace
 
 import pytest
+from acp import RequestError
 
 from agent_comms import agent_events as events
 from agent_comms import cohort_foreground, coordinated_runtime
@@ -84,7 +85,21 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
         assert not starts
         release.set()
-        await asyncio.wait_for(turn, 8)
+        if native_ok:
+            await asyncio.wait_for(turn, 8)
+        else:
+            from agent_comms.acp_failure import PromptFailureReceipt
+
+            with pytest.raises(RequestError) as failed:
+                await asyncio.wait_for(turn, 8)
+            assert failed.value.__cause__ is not None
+            receipt_failure = PromptFailureReceipt.from_error(
+                failed.value.code, str(failed.value), failed.value.data
+            )
+            assert receipt_failure.notification_published
+            assert receipt_failure.failure.input_state is type(
+                agent.inputs.dispositions.read().lookup(f"acp:{receipt.input_id}")
+            )
         assert len(starts) == 1 and "Fresh owner input" in starts[0]
         row = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
         assert not row.unresolved and row.native_id == "b" * 32
@@ -93,7 +108,9 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert "beta" not in agent.turns.turn_tasks
         assert comms.registry.require("beta").active_turn is None
         assert comms.registry.require("beta").goal == before_goal
-        assert comms.goals.goal_wait("beta") == before_wait
+        # The completed selected reply consumes its certified dependency wait;
+        # a queued owner input keeps its admission/goal authority across that change.
+        assert comms.goals.goal_wait("beta") == (None if goal_mode == "standby" else before_wait)
         assert not (comms.root / "goal-private").exists()
     finally:
         release.set()
