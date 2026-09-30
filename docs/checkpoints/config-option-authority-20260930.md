@@ -110,3 +110,30 @@ wire, input dispositions and journals remain hash-identical. No paths were
 deleted and no bytes reclaimed. Its private root and this continuation's receipts
 remain protected. Headroom warned on swap; no helper fleet or large test matrix
 was launched, and each actual model worker was run and retired serially.
+
+## Ready checkpoint and reuse
+
+Normal main integration includes merged447 f4d06630; all288 installed source files
+remain identical after that integration. Production delta:48 lines deleted,
+51 added across five existing declaration/consumer files. The same-run bounded
+ratchet reports no increases, zero StringDispatch/TypeSwitch subject or arm
+growth, and two fewer foreign absence probes. Source/check receipt:
+../../evidence/config-option-authority/source-review-receipt.json.
+
+Exact completed installed UI command (one isolated configured model):
+
+```sh
+env PYTHONDONTWRITEBYTECODE=1 \
+  PYTHONPATH=/home/ts/wt/comms-config-option-authority-20260930/.proof-runtime/installed-final \
+  timeout --signal=TERM --kill-after=3 45 \
+  /home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/python \
+  tests/config_option_authority_installed_pilot.py \
+  --stage /home/ts/wt/comms-config-option-authority-20260930/.configuration-fixtures/ui04 \
+  --package /home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent \
+  --model openai-codex/gpt-6.1-sol --ui
+```
+
+ui04 is retained evidence; use a fresh stage for an authorized future check.
+Ready means source and the affected installed private UI/native-catalog path are
+verified. Public/default installation and live original configuration restoration
+remain parent-owned. No native/durable/public phase ABI changes are introduced.
