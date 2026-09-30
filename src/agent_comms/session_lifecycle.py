@@ -57,6 +57,7 @@ class SessionLifecycle:
         self.display_titles: dict[str, str | None] = {}
         self.worktrees: dict[str, str] = {}
         self.proxies: dict[str, RuntimeProxy] = {}
+        self._attachment_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms, runtime)
         self.config = ConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
 
@@ -149,6 +150,8 @@ class SessionLifecycle:
         return thread
 
     async def bind_owned(self, thread: Thread, session_id: str) -> None:
+        async with self._attachment_lock:
+            await self.retire_proxy(session_id)
         self.bindings[session_id] = thread.name
         self.titles[session_id] = thread.name
         self.worktrees[session_id] = thread.worktree
@@ -196,24 +199,28 @@ class SessionLifecycle:
         )
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
-        snapshot = self.comms.registry.snapshot()
-        binding = snapshot.owner_binding(thread.name)
-        failed_command = FailedSessionLoadAdmission(binding)
-        proxy = self.effects._create_runtime_proxy(thread, session_id)
-        try:
-            snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
-            metadata = await proxy.subscribe()
-        except (OSError, RuntimeError, TypeError, ValueError) as error:
-            await proxy.close()
-            raise RequestError.invalid_params(
-                {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}",
-                 **failed_command.failure_metadata()}
-            ) from error
-        self.proxies[session_id] = proxy
-        return LoadSessionResponse(
-            config_options=metadata.pop("configOptions", []),
-            field_meta={**metadata, **ExistingSessionLoadAdmission(binding).metadata()},
-        )
+        async with self._attachment_lock:
+            await self.retire_proxy(session_id)
+            snapshot = self.comms.registry.snapshot()
+            binding = snapshot.owner_binding(thread.name)
+            failed_command = FailedSessionLoadAdmission(binding)
+            proxy = self.effects._create_runtime_proxy(thread, session_id)
+            try:
+                snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
+                metadata = await proxy.subscribe()
+                self.proxies[session_id] = proxy
+            except (OSError, RuntimeError, TypeError, ValueError) as error:
+                raise RequestError.invalid_params(
+                    {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}",
+                     **failed_command.failure_metadata()}
+                ) from error
+            finally:
+                if self.proxies.get(session_id) is not proxy:
+                    await proxy.close()
+            return LoadSessionResponse(
+                config_options=metadata.pop("configOptions", []),
+                field_meta={**metadata, **ExistingSessionLoadAdmission(binding).metadata()},
+            )
 
     async def sync_identity(self, session_id: str) -> str:
         cached_name = self.require(session_id)
@@ -284,10 +291,17 @@ class SessionLifecycle:
             *self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
         )
 
-    async def close_proxies(self) -> None:
-        for proxy in self.proxies.values():
+    async def retire_proxy(self, session_id: str) -> None:
+        """Keep custody until the original reader is closed and joined."""
+        proxy = self.proxies.get(session_id)
+        if proxy is not None:
             await proxy.close()
-        self.proxies.clear()
+            del self.proxies[session_id]
+
+    async def close_proxies(self) -> None:
+        async with self._attachment_lock:
+            for session_id in tuple(self.proxies):
+                await self.retire_proxy(session_id)
 
     async def release_owned(self) -> None:
         for name in set(self.bindings.values()):

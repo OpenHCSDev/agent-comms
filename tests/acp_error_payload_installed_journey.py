@@ -56,7 +56,7 @@ class FailureSubscriber(ReceiptSubscriber):
         raise AssertionError("Controlled provider journey needs no external permission")
 
 
-async def journey(package: Path, evidence: Path, installed: Path):
+async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load: bool = False):
     assert Path(agent_comms.__file__).is_relative_to(installed), "Must use noneditable installed wheel"
     assert "src" not in Path(agent_comms.__file__).parts
     evidence.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -153,6 +153,9 @@ async def journey(package: Path, evidence: Path, installed: Path):
                 assert len(requests) == 1 and not subscriber.failure_facts
             async with attached(subscriber) as client:
                 assert len(requests) == 1, "Saved-history attach emitted another input"
+                if repeat_load:
+                    await client.load_session(cwd=str(project), session_id="error-native", mcp_servers=[])
+                    assert len(requests) == 1, "Repeated load emitted another input"
                 try:
                     await client.prompt(session_id="error-native", prompt=[
                         TextContentBlock(type="text", text="One private provider failure input")])
@@ -183,7 +186,7 @@ async def journey(package: Path, evidence: Path, installed: Path):
                 assert len(users) == 2
                 report = {"installed_core": str(Path(agent_comms.__file__).parent),
                           "sdk": importlib.metadata.version("agent-client-protocol"),
-                          "provider_posts": 2, "native_originals": 2,
+                          "provider_posts": 2, "native_originals": 2, "same_client_repeated_load": repeat_load,
                           "notification_published": receipt.notification_published,
                           "failure_title": receipt.failure.title,
                           "disposition": receipt.failure.input_disposition,
@@ -204,5 +207,6 @@ if __name__ == "__main__":
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--installed", type=Path, required=True)
+    parser.add_argument("--repeat-load", action="store_true")
     args = parser.parse_args()
-    asyncio.run(journey(args.package, args.evidence, args.installed))
+    asyncio.run(journey(args.package, args.evidence, args.installed, repeat_load=args.repeat_load))

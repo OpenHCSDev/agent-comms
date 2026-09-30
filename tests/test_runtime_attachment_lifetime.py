@@ -62,3 +62,60 @@ async def test_unsent_attachment_ends_with_actual_lifetime(tmp_path, ending):
         await asyncio.gather(pending, return_exceptions=True)
         await proxy.close()
         await process.stop()
+
+
+@pytest.mark.parametrize("ending", ["invalid_ready", "cancel"])
+async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending):
+    """Exercise lifecycle cleanup at the actual subscription protocol boundary."""
+    import json
+    from agent_comms.acp import CommsAgent
+    from acp import RequestError
+
+    comms = Comms(tmp_path / "wire")
+    thread = Thread("owner", frozenset(), str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()))
+    comms.registry.declare(thread)
+    path = socket_path(comms.root, os.getpid())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entered = asyncio.Event()
+    closed = asyncio.get_running_loop().create_future()
+
+    async def subscribe(reader, writer):
+        try:
+            request = json.loads(await reader.readline())
+            assert request["action"] == "subscribe"
+            entered.set()
+            if ending == "invalid_ready":
+                writer.write(b'{"ready": {}}\n')
+                await writer.drain()
+            assert await reader.read() == b""
+        except BaseException as error:
+            closed.set_exception(error)
+        else:
+            closed.set_result(None)
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    server = await asyncio.start_unix_server(subscribe, path=path)
+    agent = CommsAgent(comms, auto_wake=False)
+    loading = asyncio.create_task(agent.sessions.attach_owner(thread, "owner"))
+    try:
+        async with asyncio.timeout(3):
+            await entered.wait()
+            if ending == "cancel":
+                loading.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await loading
+            else:
+                with pytest.raises(RequestError):
+                    await loading
+            await closed
+        assert not agent.sessions.proxies
+    finally:
+        loading.cancel()
+        await asyncio.gather(loading, return_exceptions=True)
+        await agent.shutdown()
+        server.close()
+        await server.wait_closed()
+        path.unlink(missing_ok=True)
