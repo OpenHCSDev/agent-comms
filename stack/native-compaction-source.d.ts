@@ -14,6 +14,12 @@ export declare abstract class SummarySource {
 }
 export declare class HistorySummarySource extends SummarySource {
     constructor(messages: Iterable<AgentMessage>, previousSummary?: string);
+    readonly sourceBytes: number;
+    readonly consumedBytes: number;
+    readonly summaryPhase: string;
+    summaryInstructions(instructions?: string): string | undefined;
+    consume(bytes: number): void;
+    complete(): void;
     pieces(): IterableIterator<string>;
 }
 export declare class ReducedSummarySource extends SummarySource {
