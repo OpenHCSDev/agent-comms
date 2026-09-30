@@ -1,0 +1,39 @@
+{
+  "owner": "Schrodinger",
+  "timestamp": 1790799859.1116307,
+  "removed": [
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930",
+      "allocated_file_bytes": 81948672,
+      "reclaimable_bytes_at_removal": 23891968,
+      "files": 3928,
+      "provenance_archive": "/home/ts/.cache/agent-scratch/retired-ui-stage-cleanup-20260930/retired-runtime-provenance/runtime-viewport-native-cost-20260930",
+      "staging_owner": "Schrodinger245stage"
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930",
+      "allocated_file_bytes": 92852224,
+      "reclaimable_bytes_at_removal": 34873344,
+      "files": 4556,
+      "provenance_archive": "/home/ts/.cache/agent-scratch/retired-ui-stage-cleanup-20260930/retired-runtime-provenance/runtime-private-launch-caller-20260930",
+      "staging_owner": "Schrodinger241stage"
+    }
+  ],
+  "protected_prefixes": [
+    "runtime-sidebar-native-custody-20260930",
+    "runtime-viewport-native-residency-20260930",
+    "runtime-native-custody-integrated-20260930",
+    "runtime-all-merged-20260930",
+    "runtime-native-budget-request-progress-20260930"
+  ],
+  "native_packages_preserved": true,
+  "source_worktrees_preserved": true,
+  "original_proofs_and_unknown_inputs_preserved": true,
+  "reference_census_sha256": "af672fe767a8e72f7620a13992f01fbba4b94e6bf5c80aa1cf324847cdf02622",
+  "free_before_bytes": 16701923328,
+  "free_after_bytes": 16760631296,
+  "observed_net_free_increase_bytes": 58707968,
+  "reclaimed_allocated_bytes": 58765312,
+  "measurement_limit": "Observed filesystem net includes concurrent writes; reclaimable allocation excludes surviving hardlinks.",
+  "state": "completed"
+}
