@@ -10,16 +10,15 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
 
-from .pi_vocabulary import ThinkingLevel
 from . import pi_commands as commands
 from . import pi_events as pi
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
 from .child_process import AttachedChild
-from .native_custody import PiSessionChild
 from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
+from .native_custody import PiSessionChild
 from .native_pi import (
     CAPABILITY,
     NativeContextProof,
@@ -37,6 +36,7 @@ from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import AssistantMessage, TextDelta
 from .pi_rpc import PiRpcChannel
+from .pi_vocabulary import ThinkingLevel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .store_files import _store_lock
 
@@ -60,7 +60,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         observe_event,
     ):
         super().__init__(
-            launch, command.message, session_file=launch.session_file,
+            launch,
+            command.message,
+            session_file=launch.session_file,
             model_wait_timeout=model_wait_timeout,
         )
         self.command = command
@@ -237,9 +239,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 f"Native Pi RPC record is invalid or incomplete; {type(error).__name__}: {error}"
             ) from error
         if event is None:
-            async with asyncio.timeout(self.watchdog.read_timeout(self)):
-                await self.proc.wait()
-                stderr = await self.stderr_task
+            await self.proc.finish()
+            stderr = await self.stderr_task
             raise NativePiUnavailable(
                 f"Native Pi RPC record is incomplete; native exit={self.proc.returncode}; "
                 f"stderr={stderr or '(empty)'}"

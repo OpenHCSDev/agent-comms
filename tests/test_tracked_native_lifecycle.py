@@ -19,7 +19,7 @@ from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
-from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from test_coordinated_runtime import _root  # noqa: F401
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Reviewed prepared native package required")
@@ -34,23 +34,38 @@ class CodingProvider(LoopbackProvider):
     def response_chunks(self):
         self.round += 1
         if self.round == 1:
-            yield {"tool_calls": [{
-                "index": 0, "id": "actual_sleep", "type": "function",
-                "function": {"name": "bash", "arguments": json.dumps({
-                    "command": (
-                        f"printf native-started > native-started; sleep {self.seconds}; "
-                        "printf native-tool-finished"
-                    ),
-                    "timeout": self.seconds + 10,
-                })},
-            }]}, None
+            yield {
+                "tool_calls": [
+                    {
+                        "index": 0,
+                        "id": "actual_sleep",
+                        "type": "function",
+                        "function": {
+                            "name": "bash",
+                            "arguments": json.dumps(
+                                {
+                                    "command": (
+                                    "printf native-started > native-started; "
+                                    f"sleep {self.seconds}; "
+                                        "printf native-tool-finished"
+                                    ),
+                                    "timeout": self.seconds + 10,
+                                }
+                            ),
+                        },
+                    }
+                ]
+            }, None
             yield {}, "tool_calls"
         else:
             yield from super().response_chunks()
 
 
 @pytest.mark.parametrize("outcome", ["complete", "cancel", "exit"])
-async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monkeypatch, outcome):
+async def test_installed_selected_long_tool_and_uncertain_cleanup(
+    private_root, monkeypatch, outcome
+):
+    tmp_path = private_root
     package = Path(PACKAGE).resolve(strict=True)
     # The default acceptance crosses the removed whole-turn90 boundary. A shorter
     # environment override is for fixture development, never evidence of that gate.
@@ -73,17 +88,41 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monk
 
     server = await asyncio.start_server(serve, "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
-    (config / "models.json").write_text(json.dumps({"providers": {"response-local": {
-        "baseUrl": f"http://127.0.0.1:{port}/v1", "api": "openai-completions",
-        "models": [{"id": "fixture", "name": "Local coding fixture", "contextWindow": 272000,
-                    "maxTokens": 128}],
-    }}}))
-    (config / "auth.json").write_text(json.dumps({
-        "response-local": {"type": "api_key", "key": "local-only"},
-    }))
-    (config / "settings.json").write_text(json.dumps({
-        "compaction": {"enabled": False}, "retry": {"enabled": False},
-    }))
+    (config / "models.json").write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "response-local": {
+                        "baseUrl": f"http://127.0.0.1:{port}/v1",
+                        "api": "openai-completions",
+                        "models": [
+                            {
+                                "id": "fixture",
+                                "name": "Local coding fixture",
+                                "contextWindow": 272000,
+                                "maxTokens": 128,
+                            }
+                        ],
+                    }
+                }
+            }
+        )
+    )
+    (config / "auth.json").write_text(
+        json.dumps(
+            {
+                "response-local": {"type": "api_key", "key": "local-only"},
+            }
+        )
+    )
+    (config / "settings.json").write_text(
+        json.dumps(
+            {
+                "compaction": {"enabled": False},
+                "retry": {"enabled": False},
+            }
+        )
+    )
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     children = []
@@ -96,9 +135,14 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monk
 
     monkeypatch.setattr(AttachedChild, "start", observe_child)
     started = time.monotonic()
-    task = asyncio.create_task(SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=package,
-    ).run())
+    task = asyncio.create_task(
+        SelectedExecution(
+            root=root,
+            wire_root_id=root_id,
+            owner_name="beta",
+            native_package=package,
+        ).run()
+    )
     try:
         if outcome == "complete":
             result = await asyncio.wait_for(task, seconds + 40)
@@ -131,8 +175,11 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monk
         sessions = list((root / "native-sessions").rglob("*.jsonl"))
         assert len(sessions) == 1
         entries = [json.loads(line) for line in sessions[0].read_text().splitlines()]
-        inputs = [row["message"] for row in entries
-                  if row["type"] == "message" and row["message"]["role"] == "user"]
+        inputs = [
+            row["message"]
+            for row in entries
+            if row["type"] == "message" and row["message"]["role"] == "user"
+        ]
         assert len(inputs) == 1
         proofs = read_proof_rows(sessions[0])
         assert {row["inputId"] for row in proofs} == {inputs[0]["inputId"]}
@@ -147,15 +194,28 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monk
         before = provider.posts
         try:
             replay = await SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=package,
+                root=root,
+                wire_root_id=root_id,
+                owner_name="beta",
+                native_package=package,
             ).run()
             assert replay is None
         except CoordinationError:
             assert outcome != "complete"
         assert provider.posts == before
-        print(json.dumps({"outcome": outcome, "elapsed_seconds": elapsed,
-                          "provider_posts": provider.posts, "saved_inputs": len(inputs),
-                          "native_children_retired": True, "no_replay": True}), flush=True)
+        print(
+            json.dumps(
+                {
+                    "outcome": outcome,
+                    "elapsed_seconds": elapsed,
+                    "provider_posts": provider.posts,
+                    "saved_inputs": len(inputs),
+                    "native_children_retired": True,
+                    "no_replay": True,
+                }
+            ),
+            flush=True,
+        )
     finally:
         if not task.done():
             task.cancel()
