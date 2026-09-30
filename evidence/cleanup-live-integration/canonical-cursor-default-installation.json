@@ -1,5 +1,5 @@
 {
-  "state": "installed-actual-default-entrypoint-check-pending",
+  "state": "installed-actual-default-entrypoint-verified",
   "runtime": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930",
   "previous_runtime": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929",
   "pins": {
@@ -33,5 +33,7 @@
       "old": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/toad",
       "new": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/toad"
     }
-  }
+  },
+  "actual_entrypoint_receipt": "canonical-cursor-default-entrypoint.json",
+  "accepted_scope": "Actual default toad-comms nra-architecture with no runtime override: original saved history, End/stationary and actual ToolCall expand/collapse/reopen. No prompt, provider call, owner restart or source reset; owned cleanup empty."
 }

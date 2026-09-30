@@ -32,8 +32,8 @@ The default UI checkpoint is now Core72062939, Toadf92fc54b,
 Textual65053c5a and reviewed native4ab91006. The September30 UI-only switch
 changed the five matching executable launchers without restarting owners or
 resetting stores. Its exact installed-stage physical acceptance passed57.0837s;
-the final actual default-launcher check is assigned to Einstein and remains
-pending. Existing Toad windows require restart. This fixes the retired cursor
+the actual default-launcher check subsequently passed25.241s with Einstein
+using isolated st/Xvfb, no runtime override and actual tool clicks. Existing Toad windows require restart. This fixes the retired cursor
 consumer crash and stationary End blanking; a33ms fast-PageDown body gap and
 high CPU remain open in draft224. Receipt:
 `evidence/cleanup-live-integration/canonical-cursor-default-installation.json`.
@@ -449,8 +449,8 @@ history. Original native owner identity was unchanged and owned cleanup empty.
 Parent individually inspected the physical idle PNG and the two-frame PageDown
 body gap. This does not close high CPU, transient blanking, warm return or the
 full116 resource scope. Those remain in draft224 with Heisenberg integration
-and Kepler preparation contributions. The actual default launcher gate remains
-assigned to Einstein; installation alone is not that gate.
+and Kepler preparation contributions. The actual default launcher gate subsequently passed25.241s; its exact
+receipt and physical screenshots are retained separately from stage acceptance.
 
 Core422 merged6fed7b05:435 obsolete test lines deleted, actual native negative
 family and affected current614 ACP/cursor/standby journeys retained. No product
@@ -500,3 +500,23 @@ this release requires the existing old-writer certified checkpoint rebuild,
 not another input or compaction store reset. Receipt:
 canonical-cutover-format-comparison.json. This declaration inspection performs
 zero store reads or mutations and is not live cutover proof.
+
+### Actual default UI entrypoint accepted and next native prepared
+
+Actual `/home/ts/bin/toad-comms nra-architecture` with no runtime override
+passed25.241s in isolated st/Xvfb: original41,270,257-byte history readable,
+End then four seconds stationary, actual ToolCall expanded/collapsed/reopened.
+Parent individually viewed raw after.png with readable retained history and
+no exception. Source hash888b79c4 and original owner2126072/start20963438
+were unchanged, zero prompts/provider calls/restarts/resets, cleanup empty.
+Prior failed driver targeting/context attempts remain preserved; they are not
+passed acceptance. Receipt: canonical-cursor-default-entrypoint.json. This
+verifies the scoped UI default, not new backend activation or broader performance.
+
+Native439e36 is now a whole-copy standalone protected artifact at
+`/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017`. Exact
+manifest e36a1dde and full tree5ea25e3f verified with all committed files and
+no hardlinks. Old4ab/614/source artifacts and UNKNOWN proofs retained. Sch's
+sole next normal68 stage uses Core41/Toade59/Text650/SDK0.12.1/nativee36;
+actual full native send/reply/handling and idle/reopen/return acceptance remains
+pending before the central old-writer quiet cutover.
