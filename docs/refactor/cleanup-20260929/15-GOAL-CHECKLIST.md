@@ -723,3 +723,44 @@ or input replay occurred. Arendt442 owns the global receiving relation: target
 launch and default route publication must be one lifecycle cutover, never
 parallel pin copies. Heisenberg's justified attempt02 verifies the corrected
 normal launcher; no guard was weakened and no alternate runtime override used.
+
+### Actual default startup/End verified; CPU checkpoint merged
+
+Heisenberg's attempt02 used the normal launcher with no runtime override and
+the matched000/173/650/e36 route. Real41 MB history opened Ready; actual End
+then four stationary seconds remained readable. Original owner2823983 and
+journal hash888b79c4 stayed unchanged. Parent individually inspected before.png.
+The gate's extra ToolCall assertion failed because the current tail contained
+eight wire fragments and no tool resource: no tool click was executed. Driver
+and ST exit1, harness termination and incomplete recording remain explicit;
+no new application fatal was observed and cleanup had no leftovers/errors.
+ToolCall/navigation production bytes are unchanged from the prior acceptedf92
+cursor gate. This accepts scoped default startup/End, not tool coverage or
+full T9. The exact receipt is evidence/canonical-source-publication-default-entrypoint.json.
+
+Core440095fc9c9 and Toad225645d63d1 are now merged. The current installed
+candidate's real SDK/native/ACP/mounted application opened the same original
+41 MB source, with both bars closed and canonical Ready, then consumed
+1.325568 process CPU seconds over40.000145 wall seconds (3.3139percent of
+one core). This was headless UI, not a matched physical before/after comparison;
+490 GIL samples and13 profile errors are retained. Original source/owner were
+unchanged, no prompts/providers/replays occurred and owned children retired.
+The pair deletes50 production lines and uses one app-owned revision observer,
+with SQLite WAL receipt invalidation owned by its existing Core declaration.
+It is not default-installed; current C3 activation still belongs to Arendt442.
+
+The real default screenshot exposed a fresh refactor-r1 preflight failure,
+diagnostic5a71d2b95ecda3268ea166ff25496e1b. Arendt verified original channel
+seq160, not new user input; failure occurred awaiting initial GetState before
+prompt admission, with the reserved row's send fields unbound. The failed
+input remains unreplayed. Native startup semantics and bounded diagnostic
+retention belong to the shared lifecycle owner, not a timeout increase. Exact
+timestamps rule out the parent batch wire-held interval and disabled extensions;
+the first cause remains under investigation. Whole fleet stability is not claimed.
+
+Sch229 reproduced repeated headers with one canonical Assistant/one request
+and39 native streaming chunks, and its matched normal candidate passes. Parent
+identified a new pre-prune cancellation await in accepted resource retirement;
+Heisenberg227 and Sch229 are validating this same owned lifetime before merge.
+No source deduplication, header flag, mirror or independent retirement registry
+is accepted. Other named workers continue editor focus and fork-task/tag paths.
