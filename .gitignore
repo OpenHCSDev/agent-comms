@@ -38,3 +38,10 @@ coverage.xml
 /bus_activity_latest.json
 /bus_route_counts.sqlite3*
 /activity_latest.json
+/.native-init-fixtures/
+/.phase-fixtures/
+/.catalog-fixtures/
+/.configuration-fixtures/
+/.proof-runtime/
+/.focused-tests/
+/.orphan-cleanup-receipt.json

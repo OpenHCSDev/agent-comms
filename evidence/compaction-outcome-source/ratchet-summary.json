@@ -1,0 +1,14 @@
+[
+  {
+    "path": ".artifacts/required-ratchet-final.json",
+    "base": "eeb328da1499edad29af753cdacb80e5fe5a09ef",
+    "head": "17e290f4d7fdaaceca44358ae94b3fa432cc7486",
+    "positive": {}
+  },
+  {
+    "path": "/home/ts/wt/comms-compaction-outcome-source-20260930/.artifacts/required-ratchet-final.json",
+    "base": "ea1c275ae849c0bb7ac8b32f500096c820fc263a",
+    "head": "2ed2ee3f41292e2bb94b9c40b0a227a620bd1fa3",
+    "positive": {}
+  }
+]

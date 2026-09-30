@@ -1,0 +1,10 @@
+{
+  "current_projection_strict_roundtrip": true,
+  "wrong_retirement_member_refused": true,
+  "capture_and_revalidation_implementation": "shared_original_owner_capture",
+  "original_admission_process_proof_unchanged": true,
+  "source_registry_sha256": "38006469d2cc785ab029fc4d07ea852cd2a9a2ef304f62b0f8ca75363b7d92c3",
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_mutations": 0
+}

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import shutil
+import time
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,20 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
         lambda: PrivateNkLaunch(tmp_path, "f" * 32, package, None),
     )
     with CodexLoopbackProvider(retained=20000 if overrun else 20) as provider:
+        latency_receipt = os.environ.get("COMPACTION_LATENCY_RECEIPT")
+        starts, finishes = {}, {}
+        if latency_receipt and not overrun:
+            def response(request, number):
+                starts[number] = time.monotonic()
+                time.sleep(0.8 if number in (1, 5) else 0.02)
+                return provider.text, provider.retained, provider.reasoning
+
+            def completed(request, number, index):
+                if index == (len(provider.text) + provider.chunk_characters - 1) // provider.chunk_characters + 2:
+                    finishes[number] = time.monotonic()
+
+            provider.response_factory = response
+            provider.after_chunk = completed
         (tmp_path / "models.json").write_text(
             json.dumps(
                 {
@@ -187,6 +202,22 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
             assert not provider.failures, provider.failures
             assert 1 <= len(provider.requests) <= 16
             assert all(original not in json.dumps(request) for request in provider.requests)
+            if latency_receipt and not overrun:
+                assert len(provider.requests) == 9
+                assert len(starts) == len(finishes) == 9
+                rolling = os.environ.get("COMPACTION_LATENCY_BASELINE") != "1"
+                assert (starts[5] < finishes[1]) is rolling
+                first = starts[1]
+                Path(latency_receipt).write_text(json.dumps({
+                    "rolling": rolling,
+                    "provider_posts": len(provider.requests),
+                    "history_map_seconds": max(finishes[n] for n in range(1, 6)) - first,
+                    "provider_workflow_seconds": max(finishes.values()) - first,
+                    "spans": [{"call": n, "start": starts[n] - first, "finish": finishes[n] - first}
+                              for n in sorted(starts)],
+                    "original_bindings": len(admitted),
+                    "journal_state": rows[0].state.declared_name,
+                }, indent=2) + "\n")
             print(
                 json.dumps(
                     {

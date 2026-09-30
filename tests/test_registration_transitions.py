@@ -70,11 +70,24 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_admission(tmp_path):
     admission = original.admission_generations['owner']
     registry.register(replace(expected, title='changed'))
     with pytest.raises(RelationViolationError, match='changed'):
-        registry.fence_idle_owner(expected, expected_admission_generation=admission)
+        registry.fence_idle_owners(((expected, admission),))
     current = registry.require('owner')
     registry.register(current, new_owner=True)
     with pytest.raises(RelationViolationError, match='admission'):
-        registry.fence_idle_owner(current, expected_admission_generation=admission)
+        registry.fence_idle_owners(((current, admission),))
     generation = registry.snapshot().admission_generations['owner']
-    assert registry.fence_idle_owner(current, expected_admission_generation=generation) > generation
+    assert registry.fence_idle_owners(((current, generation),))[0][1] > generation
     assert registry.status('owner').stopped
+
+
+def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
+    registry = Registration(tmp_path / "registry.json")
+    for name in ("first", "second"):
+        registry.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    before = registry.snapshot()
+    selected = tuple((before.threads[name], before.admission_generations[name]) for name in ("first", "second"))
+    registry.register(replace(before.threads["second"], active_turn=ActiveTurn("busy", os.getpid())))
+    protected = registry.snapshot()
+    with pytest.raises(RelationViolationError, match="idle before restart"):
+        registry.fence_idle_owners(selected)
+    assert registry.snapshot() == protected

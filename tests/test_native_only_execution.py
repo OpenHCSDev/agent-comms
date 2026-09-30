@@ -14,6 +14,23 @@ from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
+@pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
+def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, code):
+    import subprocess
+
+    root = tmp_path / 'must-remain-absent'
+    environment = dict(os.environ, AGENT_COMMS_ROOT=str(root))
+    environment.pop('AGENT_COMMS_THREAD', None)
+    # An ambient Pi identity is not permission to launch a persistent owner.
+    environment['PI_AGENT_ID'] = 'ambient-model-child'
+    result = subprocess.run(
+        (sys.executable, '-c', 'from agent_comms.worker import main; raise SystemExit(main())', *arguments),
+        env=environment, capture_output=True, timeout=3,
+    )
+    assert result.returncode == code, result.stderr.decode()
+    assert not root.exists()
+
+
 def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
     from agent_comms import native_pi, private_nk_entrypoint
 

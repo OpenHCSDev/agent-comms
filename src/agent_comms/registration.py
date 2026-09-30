@@ -23,6 +23,7 @@ from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_phase import TurnPhase
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -111,13 +112,19 @@ class Registration:
             edit.commit()
             return result
 
-    def fence_idle_owner(self, expected: Thread, *, expected_admission_generation: int) -> int:
+    def fence_idle_owners(
+        self, selected: Sequence[tuple[Thread, int]]
+    ) -> tuple[tuple[Thread, int], ...]:
+        """Commit all original idle owner fences together, or change none."""
         with self.store.editing() as edit:
-            result = edit.document.fence_idle_owner(
-                expected, expected_admission_generation=expected_admission_generation
+            fenced = tuple(
+                (thread, edit.document.fence_idle_owner(
+                    thread, expected_admission_generation=generation
+                ))
+                for thread, generation in selected
             )
             edit.commit()
-            return result
+            return fenced
 
     def unregister(self, name: str) -> None:
         with (
@@ -166,6 +173,12 @@ class Registration:
             result = edit.document.release_turn(lease)
             edit.commit()
             return result
+
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> bool:
+        with self.store.editing() as edit:
+            changed = edit.document.transition_turn(lease, phase)
+            edit.commit()
+            return changed
 
     def live_owner_with_generation(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.
@@ -308,11 +321,7 @@ class Registration:
             return document.last_seen.get(name, 0.0)
 
     def require(self, name: str) -> Thread:
-        with self.store.reading() as document:
-            name = document.aliases.get(name, name)
-            if name not in document.threads:
-                raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-            return document.threads[name]
+        return self.snapshot().require(name)
 
     def status(self, name: str) -> ThreadStatus:
         with self.store.reading() as document:

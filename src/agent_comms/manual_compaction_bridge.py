@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from . import agent_events as events
-from .activity import ActivityState
 from .compaction_errors import CompactionJournalError
 from .compaction_result import CompactionResult, RefusedCompactionResult
-from .transcript_updates import StartedTranscriptUpdate
+from .turn_phase import CompactionPhase, PublishingPhase
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
@@ -25,10 +24,10 @@ async def compact_context(
         return RefusedCompactionResult("Compaction instructions are invalid.")
     thread_name = await runner.sessions.sync_identity(session_id)
     lock = runner.turn_locks.setdefault(session_id, asyncio.Lock())
-    if lock.locked() or session_id in runner.active_turns:
+    if lock.locked() or runner.session_busy(session_id):
         return RefusedCompactionResult("Wait for the current response before compacting.")
     async with lock:
-        if session_id in runner.active_turns:
+        if runner.session_busy(session_id):
             return RefusedCompactionResult("Wait for the current response before compacting.")
         runner.effects._private_nk_marker()
         thread = runner.comms.registry.require(thread_name)
@@ -38,25 +37,11 @@ async def compact_context(
         task = asyncio.current_task()
         assert task is not None
         turn_lease = runner.comms.agents.begin_turn(thread_name, turn_id, "Compacting context")
-        runner.active_turns[session_id] = turn_id
         runner.turn_tasks[session_id] = task
         started = False
         terminal_attempted = False
         try:
-            runner.comms.agents.set_activity(
-                thread_name, ActivityState.WORKING, "Compacting context"
-            )
-            active = runner.comms.registry.require(thread_name).active_turn
-            assert active is not None and active.id == turn_id
-            await runner.effects._emit_event(
-                session_id,
-                StartedTranscriptUpdate(
-                    turn_id=turn_id,
-                    started_at=active.started_at,
-                    activity="working",
-                    activity_detail="Compacting context",
-                ),
-            )
+            await runner.transition_turn(session_id, turn_lease, CompactionPhase(resume=PublishingPhase()))
             info = runner.comms.agents.agent_info_of(thread_name)
             # An old usage sample cannot describe the context after a manual
             # compaction attempt, including one with an uncertain outcome.

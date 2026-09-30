@@ -34,6 +34,11 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
 
         raise RelationViolationError("live owner is stopped or unavailable")
 
+    def require_stopped(self) -> None:
+        from .errors import RelationViolationError
+
+        raise RelationViolationError("Retired owner is no longer stopped")
+
     def require_mutable(self, name: str) -> None:
         """Registration/heartbeat may update this thread's presence."""
 
@@ -54,8 +59,11 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def for_deletion(self) -> ThreadStatus:
         return DeletingThreadStatus()
 
-    def allows_control(self, tool: str, *, owner_pid: int) -> bool:
+    def allows_owner_control(self) -> bool:
         return True
+
+    def allows_owner_start(self, *, owner_pid: int) -> bool:
+        return self.allows_owner_control()
 
     def presentation(self, title: str, activity: Activity) -> ThreadPresentation:
         from .thread_presentation import ThreadPresentation
@@ -80,8 +88,8 @@ class ActiveThreadPresence:
 
         raise RelationViolationError("Stop a running thread before permanently deleting it.")
 
-    def allows_control(self, tool: str, *, owner_pid: int) -> bool:
-        return tool != "comms_start" or owner_pid <= 0
+    def allows_owner_start(self, *, owner_pid: int) -> bool:
+        return owner_pid <= 0
 
     def presentation(self, title: str, activity: Activity) -> ThreadPresentation:
         return activity.presentation(title)
@@ -100,6 +108,9 @@ class IdleThreadStatus(ActiveThreadPresence, ThreadStatus):
 
 class StoppedThreadStatus(ThreadStatus):
     stopped = True
+
+    def require_stopped(self) -> None:
+        pass
     visible = True
 
     def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
@@ -113,8 +124,8 @@ class ArchivedThreadStatus(ThreadStatus):
     def restored(self) -> ThreadStatus:
         return self
 
-    def allows_control(self, tool: str, *, owner_pid: int) -> bool:
-        return tool not in {"comms_start", "comms_stop", "comms_queue_restart", "comms_archive"}
+    def allows_owner_control(self) -> bool:
+        return False
 
 
 class DeletingThreadStatus(ThreadStatus):

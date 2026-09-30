@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .catalog_store import ChannelCatalog
-from .goal_pauses import GoalPauseEvents
 from .goal_waits import GoalWaits
 from .registration import Registration
 
@@ -34,6 +33,7 @@ from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
 from .message_page import MessagePage
+from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
 from .presentation import (
@@ -48,6 +48,7 @@ from .store_files import _store_lock, file_revision
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
+from .coordination_errors import StaleRevision
 
 _LOG = logging.getLogger(__name__)
 
@@ -83,6 +84,15 @@ class HistoryViews:
 
     def message_notifications(self, messages: Sequence[Message]):
         return MessageNotification.window(self.root, self.registry, messages)
+
+    def message_notifications_for_references(self, references: Sequence[MessageReference]):
+        """Read mounted references in the notification owner's bounded windows."""
+        result = {}
+        limit = MessageNotification.window_limit
+        for start in range(0, len(references), limit):
+            messages = self.bus.log.messages_for_references(references[start : start + limit])
+            result.update(self.message_notifications(messages))
+        return result
 
     def recent_notifications(self, name: str, *, limit: int = 5):
         return MessageNotification.recent(self.root, self.registry, self.bus.log, name, limit=limit)
@@ -301,7 +311,16 @@ class HistoryViews:
             self.agents.runtime_info.read().get(thread.name),
             GoalWaits(self.root / GoalWaits.filename).read(),
         )
-        return replace(view.presentation, notifications=self.recent_notifications(thread.name))
+        read, sources = self.transcripts.capture_page_window(thread.name, source_limit=5)
+        if not read.identity.thread.incarnation.current(snapshot):
+            raise StaleRevision("Thread source incarnation changed during presentation")
+        return replace(
+            view.presentation,
+            notifications=MessageNotification.for_sources(
+                self.root, self.registry, read.identity.thread, sources
+            ),
+            read_identity=read.identity,
+        )
 
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
@@ -438,6 +457,8 @@ class HistoryViews:
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
+        from .notification_assignment import NotificationAssignment
+
         return WireRevision(
             tuple(
                 file_revision(path)
@@ -450,6 +471,7 @@ class HistoryViews:
                     self.agents.runtime_info.path,
                     self.bus.reads.path,
                     self.root / GoalWaits.filename,
+                    *NotificationAssignment.source_paths(self.root),
                 )
             ),
             int(time.time()),
@@ -491,9 +513,6 @@ class HistoryViews:
                 "status": snapshot.statuses[name].declared_name,
                 "is_fork": t.is_fork,
                 "pending": pending[name],
-                "goal_pause": (
-                    pause.to_wire() if (pause := GoalPauseEvents.for_goal(t.goal)) else None
-                ),
                 "goal_execution": (
                     asdict(execution)
                     if (execution := GoalWaits.execution(t.goal, waits, snapshot))

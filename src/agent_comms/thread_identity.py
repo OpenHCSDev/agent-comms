@@ -36,6 +36,15 @@ class ThreadIncarnation:
             else thread is not None and thread.created_at == self.created_at
         )
 
+    def matches_recorded_name(self, name: str, snapshot: RegistrySnapshot) -> bool:
+        """Relate a partial stored name to this original current incarnation.
+
+        The registry owns aliases and birth. A stored name does not supply or
+        manufacture either fact, including after a name is reused.
+        """
+        thread = snapshot.threads.get(snapshot.aliases.get(name, name))
+        return thread is not None and self.resolved(snapshot) == thread.incarnation
+
 
 @dataclass(frozen=True, slots=True)
 class TurnId:
@@ -57,8 +66,16 @@ class TurnId:
 
 @dataclass(frozen=True, slots=True)
 class OwnerIdentity:
+    """An allocation from RegistryDocument.owners, used with process proof."""
     incarnation: ThreadIncarnation
     generation: int
+
+
+@dataclass(frozen=True, slots=True)
+class AdmissionIdentity:
+    """An allocation from RegistryDocument.admissions, never an owner lease."""
+    incarnation: ThreadIncarnation
+    admission_generation: int
 
 
 @dataclass(frozen=True, slots=True)

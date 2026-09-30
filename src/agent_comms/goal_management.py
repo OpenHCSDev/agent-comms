@@ -10,10 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
-from .goal_actions import required_block_reason as _required_block_reason
 from .goal_history import GoalHistoryEntry
-from .goal_pauses import GoalPauseEvent, GoalPauseEvents
-from .goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from .goal_waits import GoalInputReview, GoalReplyScope, GoalWait, GoalWaits
 from .registration import Registration
 
@@ -38,11 +35,6 @@ class Goals:
         self.bus = bus
         self._wire_lock_path = root / "wire"
         self.waits = GoalWaits(root / GoalWaits.filename)
-        self.pauses = GoalPauseEvents(root / GoalPauseEvents.filename)
-
-    def goal_pause(self, name: str) -> GoalPauseEvent | None:
-        """Project the pause source carried by the current goal."""
-        return GoalPauseEvents.for_goal(self.registry.require(name).goal)
 
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
@@ -106,7 +98,7 @@ class Goals:
             raise ValueError("This goal was replaced or cleared; refresh its state.")
         if not goal.state.active:
             raise ValueError(
-                (pause.owner_instruction if (pause := self.goal_pause(thread.name)) else None)
+                (pause.instruction() if (pause := goal.state.pause_source) else None)
                 or "This goal is no longer active; refresh its state."
             )
         if not wait_for:
@@ -188,10 +180,10 @@ class Goals:
             snapshot = self.registry.snapshot()
             canonical = snapshot.aliases.get(name, name)
             owner = snapshot.threads.get(canonical)
-            if owner is None or owner.active_turn is not None:
+            if owner is None or owner.executing:
                 return ()
-            goal = owner.goal
-            if goal is None or not goal.state.active:
+            goal = owner.active_goal
+            if goal is None:
                 return ()
             waits = self.waits
             rows = waits.read()
@@ -243,21 +235,24 @@ class Goals:
                 fence.identity.incarnation.name, fence.identity.incarnation.name
             )
             source = snapshot.threads.get(canonical)
+            observed = (
+                source.observed_turn(snapshot.admission_generations.get(canonical, 0))
+                if source is not None
+                else None
+            )
             if (
                 source is None
-                or source.created_at != fence.identity.incarnation.created_at
-                or source.active_turn is not None
-                or source.turn_generation != fence.identity.generation
-                or source.last_finished_turn_id != fence.turn_id
-                or snapshot.admission_generations.get(canonical) != fence.admission_generation
+                or source.executing
+                or observed is None
+                or not observed.matches(fence.renamed(canonical))
                 or not snapshot.statuses[canonical].active
             ):
                 return ()
             waits = self.waits.read()
             released: list[str] = []
             for owner in snapshot.threads.values():
-                goal = owner.goal
-                if goal is None or not goal.state.active:
+                goal = owner.active_goal
+                if goal is None:
                     continue
                 wait = waits.get(goal.id)
                 if (
@@ -340,9 +335,9 @@ class Goals:
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""
-        goal = self.registry.require(name).goal
+        goal = self.registry.require(name).active_goal
         return bool(
-            goal is not None and goal.state.active and self.waits.clear(goal.id, wait_id=wait_id)
+            goal is not None and self.waits.clear(goal.id, wait_id=wait_id)
         )
 
     def update_goal(
@@ -375,21 +370,11 @@ class Goals:
                 thread.worktree != expected_worktree
                 or current is None
                 or current.id != started_goal.id
-                or not isinstance(current.state, (ActiveGoal, PausedGoal, CompletedGoal))
             ):
                 return current
-            if current.state.protected:
-                # Preserve this exact owner-authored pause. The caller still
-                # records the failed private attempt and terminal diagnostic;
-                # preserving intent grants neither resume nor replay authority.
+            blocked = current.after_failed_turn(diagnostic)
+            if blocked is current:
                 return current
-            progress = f"{current.progress}\n\n{diagnostic}" if current.progress else diagnostic
-            blocked = replace(
-                current,
-                state=BlockedGoal(_required_block_reason(diagnostic)),
-                progress=progress,
-                revision=current.revision + 1,
-            )
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked
 
@@ -405,18 +390,10 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             current = thread.goal
-            if (
-                thread.worktree != expected_worktree
-                or current is None
-                or current != expected_goal
-                or not isinstance(current.state, CompletedGoal)
-            ):
+            if thread.worktree != expected_worktree or current is None or current != expected_goal:
                 return current
-            blocked = replace(
-                current,
-                state=BlockedGoal(_required_block_reason(diagnostic)),
-                progress=diagnostic,
-                revision=current.revision + 1,
-            )
+            blocked = current.after_unverified_completion(diagnostic)
+            if blocked is current:
+                return current
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked

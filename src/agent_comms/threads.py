@@ -15,14 +15,13 @@ from .pi_vocabulary import ThinkingLevel
 from .goals import Goal, GoalRevision
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
-    OwnerIdentity,
     ThreadIncarnation,
     ThreadPublicationIdentity,
     ThreadRole,
     TurnId,
     TurnIdentity,
 )
-from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence
+from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence, TurnState
 
 if TYPE_CHECKING:
     from .owner_compaction_gate import OwnerCompactionAttestation
@@ -67,10 +66,13 @@ class Thread:
     title: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     role: ThreadRole = ThreadRole.AGENT
     active_turn: ActiveTurn | None = None
-    last_goal_report_turn: str | None = None
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
+
+    @property
+    def turn_state(self) -> TurnState:
+        return TurnState(self.active_turn, self.last_finished_turn_id)
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -87,10 +89,6 @@ class Thread:
                 or self.active_turn.turn_generation != self.turn_generation
             ):
                 raise RelationViolationError("Active turn generation differs from its owner.")
-        if self.last_goal_report_turn is not None and not isinstance(
-            self.last_goal_report_turn, str
-        ):
-            raise ValueError("Last goal report turn must be a string or null.")
         if (
             type(self.channel_scope_generation) is not int
             or not 0 <= self.channel_scope_generation < 1 << 63
@@ -120,6 +118,18 @@ class Thread:
         if self.thinking_level is not None:
             object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
+
+    def initialized_native_configuration(
+        self, *, model: str | None, thinking_level: str | None
+    ) -> Thread:
+        """The native producer may fill unset fields, never replace a selection."""
+        return replace(
+            self,
+            model=self.model if self.model is not None else model,
+            thinking_level=(
+                self.thinking_level if self.thinking_level is not None else thinking_level
+            ),
+        )
 
     @property
     def pid(self) -> int:
@@ -188,6 +198,21 @@ class Thread:
             raise ValueError("The goal changed before this action; the action was not applied.")
         assert self.goal is not None
         return self.goal
+
+    @property
+    def active_goal(self) -> Goal | None:
+        """Project the original goal's declaration; retain no activity copy."""
+        goal = self.goal
+        return goal if goal is not None and goal.state.active else None
+
+    def continuation_goal(self, original: Thread) -> Goal | None:
+        """The current active goal still belongs to this captured project/goal."""
+        if self.worktree != original.worktree:
+            return None
+        goal, captured = self.active_goal, original.active_goal
+        if goal is None or captured is None:
+            return None
+        return goal if goal.id == captured.id else None
 
     def require_active_goal(self, goal_id: str) -> Goal:
         goal = self.goal
@@ -262,9 +287,6 @@ class Thread:
     @property
     def incarnation(self) -> ThreadIncarnation:
         return ThreadIncarnation(self.name, self.created_at)
-
-    def owner_identity(self, generation: int) -> OwnerIdentity:
-        return OwnerIdentity(self.incarnation, generation)
 
     @property
     def turn_identity(self) -> TurnIdentity | None:

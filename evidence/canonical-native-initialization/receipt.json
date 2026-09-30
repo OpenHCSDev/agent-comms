@@ -1,0 +1,69 @@
+{
+  "owner": "Arendt",
+  "source_base": "095fc9c9",
+  "native": "e36a1dde326b7017",
+  "wheel_sha256": "63d96a3f60e12bb27277a2a53f4bb31eaa8624add30b612d72798104c6d2a9a0",
+  "cold_configured_r1": {
+    "provider": "openrouter",
+    "model": "z-ai/glm-5.3-flash",
+    "thinking": "off",
+    "prompt_commands": 0,
+    "control_commands": [
+      "get_state"
+    ],
+    "pid": 2915982,
+    "spawn_ms": 17,
+    "ok": true,
+    "attested_ms": 741,
+    "native_input_capability": "pi-native-input-v1-live-only",
+    "message_count": 0,
+    "pending_message_count": 0,
+    "stderr_bytes": 0,
+    "child_retired": true,
+    "elapsed_ms": 800
+  },
+  "baseline": {
+    "case": "test_actual_tracked_ready_pipe_survives_busy_owner",
+    "outcome": "failed_before_prompt",
+    "error": "native_preflight_timeout: phase=await_get_state; no progress for 0.844s; input_started=False",
+    "test_seconds": 1.83,
+    "trace_sha256": "0c54192e9d8931371876423ccee32b1eec3c2f5cb6566a915a6d26a9cc08a3ef"
+  },
+  "installed": {
+    "native_initialization_and_eof": {
+      "passed": 7,
+      "seconds": 23.5
+    },
+    "bounded_triage_four_tools_publication": {
+      "passed": 1,
+      "seconds": 5.27
+    },
+    "startup_wait_and_admitted_cancel": {
+      "passed": 2,
+      "seconds_including_failed_eof_publication": 6.97
+    },
+    "final_selected_cancel_eof_and_authority_seal": {
+      "passed": 3,
+      "seconds": 7.14
+    }
+  },
+  "provider": "controlled localhost only, configured R1 probe sends no prompt",
+  "public_actions": 0,
+  "original_seq160_replayed": false,
+  "historical_reservation": "UNKNOWN unchanged",
+  "limits": "Historical native stdout/stderr absent; reproduced ready-response discard is proven, historical exact wait resource is not.",
+  "production_diff": {
+    "deleted": 168,
+    "added": 233,
+    "includes": "acquired-scope indentation and import formatting"
+  },
+  "resource_cleanup": {
+    "paths": [
+      ".native-init-fixtures/wheel",
+      ".native-init-fixtures/installed-site"
+    ],
+    "bytes": 3309723,
+    "preserved": "all failure traces/native journals/UNKNOWN and final installed stage"
+  },
+  "fixture_processes_alive": []
+}

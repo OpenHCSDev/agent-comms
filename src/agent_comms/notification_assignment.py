@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_schema import COORDINATION_SCHEMA_VERSION
+from .audience_manifest import FrozenRecipient
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import CurrentExecutions
 from .typed_table import SQLiteUserVersion, TypedRow
@@ -24,8 +25,10 @@ class AssignmentActivity(TypedRow):
     current_execution_id: str | None
 
     def blocks(self, assignment: WakeAssignment) -> bool:
-        return (self.current_execution_id is not None
-                and self.current_execution_id != assignment.lifecycle.execution_id)
+        return (
+            self.current_execution_id is not None
+            and self.current_execution_id != assignment.lifecycle.execution_id
+        )
 
 
 @dataclass(frozen=True)
@@ -34,14 +37,32 @@ class NotificationAssignment:
     activity: AssignmentActivity
 
     @classmethod
-    def select(cls, root: Path, predicate: str, parameters: tuple, *, limit: int = 0, ascending: bool = False):
+    def database_path(cls, root: Path) -> Path:
+        return root / "coordination.sqlite3"
+
+    @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        """SQLite may publish original recipient changes only in its WAL."""
+        database = cls.database_path(root)
+        return database, database.with_name(database.name + "-wal")
+
+    @classmethod
+    def select(
+        cls,
+        root: Path,
+        predicate: str,
+        parameters: tuple,
+        *,
+        limit: int = 0,
+        ascending: bool = False,
+    ):
         import sqlite3
         from contextlib import closing
 
         from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 
-        database = root / "coordination.sqlite3"
+        database = cls.database_path(root)
         failure = _preflight(database)
         if failure == "missing":
             return ()
@@ -62,9 +83,7 @@ class NotificationAssignment:
                 SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
             ]:
                 raise ValueError("Channel notification status has an unsupported schema")
-            columns = ",".join(
-                f"w.{name}" for name in WakeAssignment.columns()
-            )
+            columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
             rows = WakeAssignment.joined(
                 connection.execute(
                     f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
@@ -77,18 +96,19 @@ class NotificationAssignment:
                     f"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient"
                     + (" LIMIT ?" if limit else ""),
                     (*parameters, limit) if limit else parameters,
-                ), AssignmentActivity,
+                ),
+                AssignmentActivity,
             )
             return tuple(cls(assignment, activity) for assignment, activity in rows)
 
     def project(self, owners: Mapping[str, Thread]) -> MessageNotification:
         owner = owners.get(self.assignment.recipient_lookup)
         return self.assignment.lifecycle.notification(
-            self.assignment.recipient,
+            FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient),
             owner_active=owner is not None,
-            current_turn=owner.turn_started_by(self.assignment.updated_at_ms)
-            if owner is not None
-            else False,
+            current_turn=(
+                owner.turn_started_by(self.assignment.updated_at_ms) if owner is not None else False
+            ),
             triage_inflight=self.activity.triage_inflight,
             blocked_by_prior=self.activity.blocks(self.assignment),
             prior_turn_active=owner.executing if owner is not None else False,

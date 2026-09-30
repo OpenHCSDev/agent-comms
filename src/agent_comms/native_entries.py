@@ -5,14 +5,12 @@ from __future__ import annotations
 import json
 import re
 from abc import abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, ClassVar, Literal
 
 from .pi_vocabulary import ThinkingLevel
 from .declared_family import DeclaredFamily
-from .messages import Message
 from .pi_payloads import PiMessage, PiPayload
 from .pi_rpc import unique_fields
 from .routing import TurnRouting
@@ -24,7 +22,6 @@ from .transcript_routes import InputDisplay
 class TranscriptProjection:
     routing: TurnRouting | None = None
     input_display: InputDisplay | None = None
-    sent_tool_message: Callable[[str, str, bool], Message | None] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -36,6 +33,8 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     timestamp: str | None = None
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
+    input_boundary: ClassVar[bool] = False
+    final_reply: ClassVar[bool] = False
 
     @classmethod
     def wire_member(cls, value):
@@ -108,6 +107,17 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     def tracked_user(self) -> MessageEntry | None:
         return None
 
+    def require_entry_id(self) -> str:
+        if not self.id:
+            raise ValueError("Native publication requires an original entry ID")
+        return self.id
+
+    def require_tracked_user(self) -> MessageEntry:
+        tracked = self.tracked_user
+        if tracked is None:
+            raise ValueError("Native publication requires an original tracked input")
+        return tracked
+
     @property
     def model_choice(self) -> tuple[str, str] | None:
         return None
@@ -147,7 +157,9 @@ class SelectedFreshMarker(PiPayload):
 
     strict_fields = True
     schema: Literal[1]
-    thinking_level: str = field(metadata={"wire_name": "thinkingLevel", "wire_choices": ThinkingLevel.selected_names})
+    thinking_level: str = field(
+        metadata={"wire_name": "thinkingLevel", "wire_choices": ThinkingLevel.selected_names}
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -166,6 +178,14 @@ class SessionEntry(NativeEntry):
 class MessageEntry(NativeEntry):
     message: PiMessage
     is_message = True
+
+    @property
+    def input_boundary(self):
+        return self.message.user
+
+    @property
+    def final_reply(self):
+        return self.message.final_reply
 
     @property
     def assistant_message(self) -> bool:

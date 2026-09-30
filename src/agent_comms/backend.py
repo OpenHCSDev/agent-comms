@@ -6,10 +6,10 @@ thinking indicators and tool-call cards.
 
 Events are frozen nominal values declared in :mod:`agent_events`.
 
-The runner never raises on backend failure; it yields ``done`` with
-``ok=False`` and the error as text. Callers own presentation. Provider
-failures that Pi reports as a completed assistant message (for example an
-exhausted usage limit) also fail the turn, carrying ``errorMessage``.
+Native terminal failures yield ``done`` with ``ok=False``. Unexpected producer
+faults retain their original exception for the existing owner-turn failure
+publisher after child retirement. Provider failures reported as an assistant
+message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 """
 
 from __future__ import annotations
@@ -32,14 +32,15 @@ from . import pi_events as pi
 from . import turn_failure as failures
 from .child_process import TimedOutOutcome
 from .diagnostics import FailureReason
+from .extension_ui import ExtensionUiSession
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
 from .native_attestation import AttestationError, SavedSessionReopenError
 from .native_custody import (
     BorrowedNative,
     EmptyNative,
-    NativeCustody,
     NativeCleanupFailed,
+    NativeCustody,
     PiSessionChild,
     RetainedNative,
 )
@@ -48,10 +49,10 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
 from .store_files import _store_lock
-from .turn_admission import UnacknowledgedPrompt
+from .turn_admission import UnwrittenPrompt
 from .turn_inputs import InputForwarding
-from .extension_ui import ExtensionUiSession
 from .turn_output import TurnOutput
+from .turn_phase import TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import ProgressWatchdog
@@ -121,8 +122,7 @@ class PersistentPiSession:
         if child is None:
             await self.close()
             expected = await self.custody.expected(launch, session_file, require_input_id)
-            if require_input_id and startup is not None:
-                await startup.acquire(finish_event)
+            await startup.acquire(finish_event)
             watchdog.launching(asyncio.get_running_loop().time, session_file)
             child = await PiSessionChild.start(key, expected)
             self.custody = BorrowedNative(child, self.custody)
@@ -226,7 +226,7 @@ async def stream_agent_events(
     persistent_session: PersistentPiSession | None = None,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
 ) -> AsyncIterator[events.AgentEvent]:
-    """Run the backend and yield events. Always ends with a ``done`` event.
+    """Run the backend; native completion ends with a ``done`` event.
 
     The no-progress watchdog applies only while waiting for the model. A running
     tool has no deadline in this intentionally incomplete first slice: preventing
@@ -235,14 +235,6 @@ async def stream_agent_events(
     coordinator, never this transport adapter.
     """
     owner = asyncio.current_task()
-    terminal_seen = False
-    startup = NativeStartupAdmission(
-        Path(
-            (env_extra or {}).get("AGENT_COMMS_ROOT")
-            or os.environ.get("AGENT_COMMS_ROOT")
-            or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
-        ).expanduser()
-    )
     try:
         try:
             launch = await asyncio.to_thread(
@@ -281,28 +273,19 @@ async def stream_agent_events(
                         interrupt_boundary=interrupt_boundary,
                         persistent_session=persistent_session,
                         ui_request=ui_request,
-                        startup=startup,
                     ).run()
                 ) as stream:
                     async for event in stream:
-                        if isinstance(event, events.Done):
-                            terminal_seen = True
                         yield event
             finally:
-                startup.release()
                 if owner is not None:
                     await terminate_task_process(owner)
     except Exception:
-        # A malformed RPC row cannot certify a completed turn. Preserve no
-        # raw payload/stderr in the wire response and always reap the child.
+        # The owner-turn publisher owns diagnostic privacy and input settlement.
+        # Preserve the producer's original cause instead of fabricating a terminal.
         if owner is not None:
             await terminate_task_process(owner)
-        if not terminal_seen:
-            yield events.Done(
-                ok=False,
-                reason_code="pi_invalid_rpc_event",
-                text="Pi RPC returned an invalid event; this turn was not completed.",
-            )
+        raise
 
 
 class TurnSession:
@@ -352,13 +335,14 @@ class TurnSession:
             persistent_session if persistent_session is not None else PersistentPiSession()
         )
         self.extension_ui = ExtensionUiSession(ui_request)
-        self.startup = startup
+        self.startup = startup if startup is not None else NativeStartupAdmission.for_launch(launch)
         self.inputs = InputForwarding(steering_queue)
         self.steering_task: asyncio.Task[None] | None = None
-        self.admission = UnacknowledgedPrompt()
+        self.admission = UnwrittenPrompt()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
         self.output = TurnOutput(sensitive=bool(images))
+        self.rejected_signal = asyncio.Event()
 
     @property
     def has_start_listener(self):
@@ -367,9 +351,33 @@ class TurnSession:
     def notify_input_started(self, public_id, native_id, text):
         return self.native_start is None or self.native_start(public_id, native_id, text)
 
+    def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
+        """Publish the actual observer phase without storing another phase copy."""
+        if self.watchdog.phase != previous:
+            yield events.NativePhaseChanged(self.watchdog.phase)
+
     @property
     def started_input(self):
         return self.admission.started and self.inputs.permits_admission
+
+    @property
+    def awaiting_native_attestation(self):
+        return self.require_input_id and not self.native.attestation.observed
+
+    async def consume_native_event(self, event):
+        """Observe one decoded event through the shared native lifecycle owner."""
+        previous = self.watchdog.phase
+        async for update in self.watchdog.observe(event, self):
+            yield update
+        async for update in self.apply_native_event(event):
+            yield update
+        self.watchdog.transition(event, self.active_tools)
+        for update in self.native_phase_changes(previous):
+            yield update
+
+    async def apply_native_event(self, event):
+        async for update in event.apply(self):
+            yield update
 
     @property
     def accepts_output(self):
@@ -510,60 +518,61 @@ class TurnSession:
                 return
             if self.owner is not None:
                 self.active[self.owner] = self
-            self.prepare_launch()
-            self.output.sensitive |= self.native.sensitive_diagnostics
-            self.prompt_dispatched = False
-            if self.native.proc.stdin is not None:
-                try:
-                    self.prompt_dispatched = not self.require_input_id
-                    self.native.proc.stdin.write(self.stdin_payload)
-                    await self.native.proc.stdin.drain()
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
-            async for event in self.initialize_rpc():
-                yield event
-            while True:
-                self.skip = False
-                async for event in self.receive_record():
-                    yield event
-                if self.finished:
-                    break
-                if self.skip:
-                    continue
-                if self.require_input_id and self.native.attestation.state is None:
+            async with self.native.failures():
+                self.prepare_launch()
+                self.output.sensitive |= self.native.sensitive_diagnostics
+                if self.native.proc.stdin is not None:
                     try:
-                        self.native.attestation = self.native.attestation.accept(self.payload)
-                    except AttestationError as error:
-                        await error.refuse(self)
-                        break
-                    if self.startup is not None:
-                        self.startup.release()
-                    await self.input_ready()
+                        if not self.require_input_id:
+                            self.admission = self.admission.dispatch()
+                        self.native.proc.stdin.write(self.stdin_payload)
+                        await self.native.proc.stdin.drain()
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+                async for event in self.initialize_rpc():
+                    yield event
+                while True:
+                    self.skip = False
+                    async for event in self.receive_record():
+                        yield event
                     if self.finished:
                         break
-                async for event in self.payload.consume(self):
+                    if self.skip:
+                        continue
+                    if self.awaiting_native_attestation:
+                        try:
+                            self.native.attestation = self.native.attestation.accept(self.payload)
+                        except AttestationError as error:
+                            await error.refuse(self)
+                            break
+                        self.startup.release()
+                        await self.input_ready()
+                        if self.finished:
+                            break
+                    async for event in self.payload.consume(self):
+                        yield event
+                    if self.finished:
+                        break
+                    if self.skip:
+                        continue
+                    async for event in self.stats.settle(self):
+                        yield event
+                    if self.finished:
+                        break
+                self.finished = False
+                async for event in self.retain_or_close():
                     yield event
-                if self.finished:
-                    break
-                if self.skip:
-                    continue
-                async for event in self.stats.settle(self):
+                async for event in self.finish_diagnostics():
                     yield event
-                if self.finished:
-                    break
-            self.finished = False
-            async for event in self.retain_or_close():
-                yield event
-            async for event in self.finish_diagnostics():
-                yield event
-            async for event in self.finish_result():
-                yield event
+                async for event in self.finish_result():
+                    yield event
         finally:
             try:
                 await self.stop_forwarding()
                 if not self.native_session.custody.retained:
                     await self.native_session.close()
             finally:
+                self.startup.release()
                 self.active.pop(self.owner, None)
 
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
@@ -577,7 +586,7 @@ class TurnSession:
                 yield event
             return
         if not self.line:
-            if self.require_input_id and (self.native.attestation.state is None):
+            if self.awaiting_native_attestation:
                 self.output.preflight_failure = FailureReason.PREFLIGHT_EXIT
                 self.output.diagnostic = {
                     "elapsed_ms": round(
@@ -604,7 +613,7 @@ class TurnSession:
             self.skip = True
             return
         except (ValueError, TypeError) as error:
-            if self.require_input_id and self.native.attestation.state is None:
+            if self.awaiting_native_attestation:
                 self.output.record_failure(
                     failures.InputIdUnavailable(
                         f"Invalid Pi capability preflight response: {error}"
@@ -632,7 +641,7 @@ class TurnSession:
             )
             with self.boundary_context as self.authorized:
                 if self.authorized:
-                    self.prompt_dispatched = True
+                    self.admission = self.admission.dispatch()
                     self.native.proc.stdin.write(self.prompt_payload)
             if not self.authorized:
                 self.output.record_failure(
@@ -693,7 +702,6 @@ class TurnSession:
     async def initialize_rpc(self) -> AsyncIterator[events.AgentEvent]:
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
-        self.rejected_signal = asyncio.Event()
         if self.inputs.can_forward(self.native.proc.stdin):
             self.stdin = self.native.proc.stdin
             if not self.require_input_id:

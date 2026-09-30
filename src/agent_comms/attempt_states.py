@@ -10,9 +10,10 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import ClassVar
 
-from .coordination_errors import IntegrityViolationError, IdentityConflict, RecoveryBlocked
+from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .coordination_errors import ResponseAdmissionBlocked
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,7 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     starting: ClassVar[bool] = False
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
+    has_model_context: ClassVar[bool] = False
 
     def observed(self, phase, *, backend_done: bool, process_dead: bool, progress: bool):
         if phase is not type(self) and phase not in self.successors():
@@ -55,6 +57,9 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     @property
     def tool_admission_open(self) -> bool:
         return self.allows_tool_admission and not (self.backend_done or self.process_dead)
+
+    def require_final_response(self) -> None:
+        raise ResponseAdmissionBlocked()
 
     @property
     def publication_ready(self) -> bool:
@@ -137,7 +142,13 @@ class PromptAcceptedAttempt(LiveAttempt):
         )
 
 
-class ModelRunningAttempt(LiveAttempt):
+class ContextualAttempt(LiveAttempt):
+    """A live phase reached only after the tracked model context was observed."""
+
+    has_model_context = True
+
+
+class ModelRunningAttempt(ContextualAttempt):
     allows_tool_admission = True
     running = True
 
@@ -154,7 +165,7 @@ class ModelRunningAttempt(LiveAttempt):
         )
 
 
-class ToolRunningAttempt(LiveAttempt):
+class ToolRunningAttempt(ContextualAttempt):
     allows_tool_admission = True
 
     @classmethod
@@ -167,7 +178,7 @@ class ToolRunningAttempt(LiveAttempt):
         )
 
 
-class CompactionAttempt(LiveAttempt):
+class CompactionAttempt(ContextualAttempt):
     @classmethod
     def successors(cls):
         return (
@@ -178,7 +189,7 @@ class CompactionAttempt(LiveAttempt):
         )
 
 
-class SettlingAttempt(LiveAttempt):
+class SettlingAttempt(ContextualAttempt):
     def require_silent_completion(self) -> None:
         pass
 
@@ -187,6 +198,10 @@ class SettlingAttempt(LiveAttempt):
     @property
     def publication_ready(self) -> bool:
         return self.backend_done and self.process_dead
+
+    def require_final_response(self) -> None:
+        if not self.publication_ready:
+            raise ResponseAdmissionBlocked()
 
     @classmethod
     def successors(cls):

@@ -28,6 +28,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
+from .agent_events import Done
 from .comms import Comms
 from .coordination_errors import CoordinationError
 from .input_attempt import InputAttempt
@@ -40,7 +41,7 @@ from .schedule_rules import WakeScheduleCheck
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock, file_revision
-from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_watch import WireWatch
@@ -104,7 +105,7 @@ class InputDrain(FutureInputQueue):
             return None
         return QueueScope(
             session_id,
-            OwnerIdentity(ThreadIncarnation(owner.name, owner.created_at), admission),
+            AdmissionIdentity(owner.incarnation, admission),
             owner.pid,
         )
 
@@ -120,7 +121,7 @@ class InputDrain(FutureInputQueue):
             return tuple(
                 QueueItem(input_id, item.text)
                 for input_id, item in values.items()
-                if item.echo and item.context.owns(scope.owner)
+                if item.echo and item.context.owns(scope.admission)
             )
 
         items = current(self.queued_inputs.get(session_id, {}))
@@ -149,12 +150,13 @@ class InputDrain(FutureInputQueue):
         session_id: str,
         text: str | None,
         input_id: str | None = None,
-        queued_item: QueuedInput | None = None,
+        source_scope: QueueScope | None = None,
         *,
+        native_id: str | None,
         client: Any = None,
     ) -> None:
         scope = self.queue_binding(session_id)
-        if queued_item is None or scope is None or not queued_item.context.owns(scope.owner):
+        if source_scope is None or scope is None or not source_scope.relation(scope).current:
             scope = None
         revision = None
         if scope is not None:
@@ -165,7 +167,7 @@ class InputDrain(FutureInputQueue):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(InputStartedUpdate(input_id, text, scope, revision)),
+                field_meta=encode_updates(InputStartedUpdate(input_id, text, scope, revision, native_id)),
             ),
         )
 
@@ -269,7 +271,7 @@ class InputDrain(FutureInputQueue):
             self.sessions.runtime_enabled,
             self.sessions.bindings.get(session_id),
             session_id in self.backend_inboxes,
-            session_id in self.effects.turns.active_turns,
+            self.effects.turns.turn_state(session_id).busy,
             session_id in self.effects.turns.turn_tasks,
             file_revision(self.comms.bus.log.path),
             file_revision(self.comms.registry.store.path),
@@ -282,7 +284,7 @@ class InputDrain(FutureInputQueue):
         # ordinary loop still synchronizes configuration and schedules goals.
         before = self._private_observation_revision(session_id, root_id)
         if self._idle_private_revisions.get(session_id) == before:
-            await self.effects._refresh_private_cursor(session_id)
+            await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
             return 0
         self._idle_private_revisions.pop(session_id, None)
         result = await self.effects._drain_private_nk(session_id, root_id)
@@ -423,25 +425,29 @@ class InputDrain(FutureInputQueue):
         self,
         session_id: str,
         input_id: str | None,
-        original_keys: tuple[str, ...],
-        initial_display_text: str | None,
+        source_scope: QueueScope,
     ) -> None:
+        original = self.original_sources[session_id]
+        input_id = input_id if input_id is not None else original.accepted_id
         source = self.following_sources.get(session_id, {}).get(input_id)
-        started_keys = original_keys if input_id is None else source.keys if source else ()
+        started_keys = original.keys if input_id is None else source.keys if source else ()
         for key in started_keys:
             row = self.dispositions.read().rows.get(key)
             if row is not None and not row.unresolved:
                 await self.emit_input_disposition(session_id, row)
         item = self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
+        text = item.text if item and item.echo else None
+        row = self.dispositions.read().lookup(started_keys[0] if len(started_keys) == 1 else None)
+        if input_id is None and original.notice_keys:
+            row = self.dispositions.read().lookup(original.notice_keys[0])
+            if row.has_started and row.matches_admission(source_scope.admission_generation):
+                input_id, text = row.public_id, original.notice_text
         await self.emit_input_started(
             session_id,
-            (
-                item.text
-                if item and item.echo
-                else initial_display_text if input_id is None else None
-            ),
+            text,
             input_id,
-            queued_item=item,
+            source_scope=source_scope,
+            native_id=row.native_id if row.has_started else None,
         )
         await self.emit_queue_state(session_id)
 
@@ -455,6 +461,14 @@ class InputDrain(FutureInputQueue):
             await self.emit_input_delivery_changed(session_id)
         if self.queued_inputs.get(session_id, {}).pop(input_id, None):
             await self.emit_queue_state(session_id)
+
+    def continue_in_project(
+        self, session_id: str, terminal: Done, original_project: str, current_project: str
+    ) -> None:
+        if self.closing or current_project == original_project:
+            return
+        if continuation := terminal.project_continuation(current_project):
+            self.pending_turns.setdefault(session_id, []).append(continuation)
 
     async def finish_turn_inputs(
         self, session_id: str, inbox: asyncio.Queue[str | dict[str, Any]]

@@ -63,7 +63,15 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), status)
+    registry.register(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
+        status,
+    )
     before = registry.snapshot()
     saved = registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError, match="Stop a running thread"):
@@ -78,7 +86,15 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 @pytest.mark.parametrize("status", [StoppedThreadStatus(), ArchivedThreadStatus()])
 def test_reactivation_rotates_owner_and_admission_without_rebinding_history(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())), status)
+    registry.register(
+        Thread(
+            "owner",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ),
+        status,
+    )
     before = registry.snapshot()
     registry.heartbeat("owner")
     after = registry.snapshot()
@@ -102,18 +118,19 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
+    from agent_comms.tools import CommsStartTool, OwnerLifecycleControl, ToolRequest
+
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived
     assert not archived.in_view()
     assert archived.in_view(show_archived=True)
-    assert not archived.allows_control("comms_start", owner_pid=123)
-    assert not archived.allows_control("comms_stop", owner_pid=123)
-    assert not archived.allows_control("comms_archive", owner_pid=123)
+    for command in ToolRequest.members_with(OwnerLifecycleControl):
+        assert not command.available_for(archived, owner_pid=123)
     stopped = StoppedThreadStatus()
     assert stopped.in_view() and not stopped.in_view(show_stopped=False)
-    assert stopped.allows_control("comms_start", owner_pid=123)
+    assert CommsStartTool.available_for(stopped, owner_pid=123)
     assert not DeletingThreadStatus().in_view(show_stopped=True, show_archived=True)
     for live in (RunningThreadStatus(), IdleThreadStatus()):
         assert live.restored() == stopped
-        assert not live.allows_control("comms_start", owner_pid=123)
-        assert live.allows_control("comms_start", owner_pid=0)
+        assert not CommsStartTool.available_for(live, owner_pid=123)
+        assert CommsStartTool.available_for(live, owner_pid=0)

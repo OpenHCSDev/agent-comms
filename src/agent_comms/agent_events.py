@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
+from .compaction_progress import CompactionSourceProgress
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goal_presentation import GoalExecution
     from .goals import Goal
+    from .turn_phase import TurnPhase
 
 
 class AgentEvent(ABC):
@@ -65,6 +67,12 @@ class InputRefused(InputDisposition):
 @dataclass(frozen=True)
 class PromptCancelled(AgentEvent):
     input_state: type[InputAttempt] | None
+
+
+@dataclass(frozen=True)
+class NativePhaseChanged(AgentEvent):
+    """Actual native observer phase; never reconstructed from visible chunks."""
+    phase: TurnPhase
 
 
 @dataclass(frozen=True)
@@ -165,17 +173,6 @@ class CompactionStart(CompactionEvent):
 
 
 @dataclass(frozen=True)
-class CompactionSourceProgress:
-    source_bytes_done: int = field(metadata={"wire_name": "sourceBytesDone"})
-    source_bytes_total: int = field(metadata={"wire_name": "sourceBytesTotal"})
-    summary_phase: str = field(metadata={"wire_name": "summaryPhase"})
-
-    def __post_init__(self):
-        if not 0 <= self.source_bytes_done <= self.source_bytes_total:
-            raise ValueError("Invalid compaction source progress")
-
-
-@dataclass(frozen=True)
 class CompactionSummaryProgress(CompactionEvent):
     """Provisional provider text and source work, never a committed summary."""
 
@@ -240,12 +237,9 @@ class ManualCompactionEnd(CompactionEnd):
         return "" if self.aborted else "Summary: "
 
 
-@dataclass(frozen=True)
-class CompactionProgress(AgentEvent):
+@dataclass(frozen=True, kw_only=True)
+class CompactionProgress(CompactionSummaryProgress):
     chunk_index: int
-    source_bytes_done: int | None = None
-    source_bytes_total: int | None = None
-    summary_phase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -254,6 +248,19 @@ class Done(AgentEvent):
     ok: bool
     reason_code: str | None = None
     diagnostic: dict[str, Any] | None = None
+
+    def project_continuation(self, project: str):
+        """Only the original successful native result grants new-project work."""
+        from .routing import ScheduledTurn
+
+        if not self.ok:
+            return None
+        return ScheduledTurn(
+            f"Project change completed: tools and context now use {project!r}. "
+            "Continue the user's previous request from this directory. "
+            "If the request was only to switch projects, report that you are ready; "
+            "do not invent extra work."
+        )
 
 
 @dataclass(frozen=True)
@@ -348,10 +355,6 @@ class AgentEventConsumer(MroDispatch, ABC):
     def thread_name(self) -> str:
         pass
 
-    @abstractmethod
-    def update_activity(self, state: ActivityState, detail: str) -> None:
-        pass
-
     async def before_agent_info(self, event: AgentInfo) -> None:
         pass
 
@@ -369,7 +372,3 @@ class AgentEventConsumer(MroDispatch, ABC):
             context_size=event.context_size,
         )
         await self.after_agent_info(event)
-
-    @handles(ActivityEvent)
-    async def activity(self, event: ActivityEvent) -> None:
-        self.update_activity(event.activity_state, event.activity_detail)

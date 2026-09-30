@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from . import agent_events as events
 from . import turn_failure as failures
 from .declared_family import DeclaredFamily
+from .compaction_progress import CompactionSourceProgress
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
@@ -53,11 +54,8 @@ class PiEvent(PiPayload, DeclaredFamily):
 
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         """Apply shared progress and phase behavior around this event's meaning."""
-        async for update in session.watchdog.observe(self, session):
-            yield update
-        async for event in self.apply(session):
+        async for event in session.consume_native_event(self):
             yield event
-        session.watchdog.transition(self, session.active_tools)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if False:
@@ -234,10 +232,11 @@ class CompactionEnd(ReasonedCompaction):
 
 @dataclass(frozen=True, kw_only=True)
 class CompactionProgress(PiEvent):
-    chunk_index: int | None = field(default=None, metadata={"wire_name": "chunkIndex"})
-    source_bytes_done: int | None = field(default=None, metadata={"wire_name": "sourceBytesDone"})
-    source_bytes_total: int | None = field(default=None, metadata={"wire_name": "sourceBytesTotal"})
-    summary_phase: str | None = field(default=None, metadata={"wire_name": "summaryPhase"})
+    operation_id: str = field(metadata={"wire_name": "operationId"})
+    chunk_index: int = field(metadata={"wire_name": "chunkIndex"})
+    reason: type[CompactionReason] = field(default=UnknownCompactionReason)
+    text: str = ""
+    source: CompactionSourceProgress | None = None
     usage: PiUsage | None = field(default=None, metadata={"wire_name": "usage"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -248,21 +247,13 @@ class CompactionProgress(PiEvent):
             yield events.ProviderUsage(
                 response_id=str(session.usage.response_index), usage=self.usage
             )
-        measured = (
-            self.source_bytes_done is not None
-            and self.source_bytes_total is not None
-            and 0 <= self.source_bytes_done <= self.source_bytes_total
-            and self.source_bytes_total > 0
+        yield events.CompactionProgress(
+            reason=self.reason.declared_name,
+            operation_id=self.operation_id,
+            text=self.text,
+            chunk_index=self.chunk_index,
+            source=self.source,
         )
-        if self.chunk_index is not None and (
-            self.chunk_index > 0 or (self.chunk_index == 0 and measured)
-        ):
-            yield events.CompactionProgress(
-                chunk_index=self.chunk_index,
-                source_bytes_done=self.source_bytes_done if measured else None,
-                source_bytes_total=self.source_bytes_total if measured else None,
-                summary_phase=self.summary_phase if self.summary_phase else None,
-            )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -709,6 +700,8 @@ class SummarizationRetryScheduled(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionEnd(PiEvent):
+    accepts_prompt = True
+
     is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})
     result: PiToolResult | None = field(default=None, metadata={"wire_name": "result"})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
@@ -734,6 +727,8 @@ class ToolExecutionEnd(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(PiEvent):
+    accepts_prompt = True
+
     args: dict[str, Any] | None = field(default=None, metadata={"wire_name": "args"})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
@@ -760,6 +755,8 @@ class ToolExecutionStart(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionUpdate(PiEvent):
+    accepts_prompt = True
+
     partial_result: PiToolResult | None = field(
         default=None, metadata={"wire_name": "partialResult"}
     )
@@ -786,7 +783,7 @@ class AgentCommsCompactionProgress(PiEvent):
     operation_id: str = field(metadata={"wire_name": "operationId"})
     sequence: int
     text: str
-    source: events.CompactionSourceProgress | None
+    source: CompactionSourceProgress | None
 
     def __post_init__(self):
         if type(self.sequence) is not int or self.sequence < 1:

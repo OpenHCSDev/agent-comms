@@ -21,6 +21,7 @@ from acp.schema import (
 )
 
 from .pi_vocabulary import ThinkingLevel
+from . import agent_events as events
 from .acp_extension import (
     ContextUsage,
     CoordinationChangedUpdate,
@@ -35,6 +36,7 @@ from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .transcript_updates import TranscriptReplay
+from .session_load import SessionLoadAdmission, ExistingSessionLoadAdmission, FailedSessionLoadAdmission
 
 
 class SessionLifecycle:
@@ -194,17 +196,23 @@ class SessionLifecycle:
         )
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
+        snapshot = self.comms.registry.snapshot()
+        binding = snapshot.owner_binding(thread.name)
+        failed_command = FailedSessionLoadAdmission(binding)
         proxy = self.effects._create_runtime_proxy(thread, session_id)
         try:
+            snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
             metadata = await proxy.subscribe()
-        except (OSError, RuntimeError) as error:
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
             await proxy.close()
             raise RequestError.invalid_params(
-                {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}"}
+                {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}",
+                 **failed_command.failure_metadata()}
             ) from error
         self.proxies[session_id] = proxy
         return LoadSessionResponse(
-            config_options=metadata.pop("configOptions", []), field_meta=metadata
+            config_options=metadata.pop("configOptions", []),
+            field_meta={**metadata, **ExistingSessionLoadAdmission(binding).metadata()},
         )
 
     async def sync_identity(self, session_id: str) -> str:
@@ -242,6 +250,15 @@ class SessionLifecycle:
             self.worktrees[session_id] = thread.worktree
         return name
 
+    async def observe_native_configuration(
+        self, session_id: str, thread_name: str, event: events.AgentInfo
+    ) -> None:
+        """Initialize only unset configuration from its actual native producer."""
+        self.comms.threads.initialize_native_configuration(
+            thread_name, model=event.model, thinking_level=event.thinking_level
+        )
+        await self.config.publish_configuration(session_id, thread_name)
+
     def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
         thread = self.comms.registry.require(thread_name)
         goal, execution = self.comms.goals.goal_snapshot(thread_name)
@@ -263,7 +280,8 @@ class SessionLifecycle:
                 usage,
             ),
             GoalChangedUpdate(goal, execution),
-            *self.effects._session_runtime_metadata(thread_name, session_id or thread_name),
+            self.effects.inputs.queue_state(session_id or thread_name),
+            *self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
         )
 
     async def close_proxies(self) -> None:
@@ -305,10 +323,11 @@ class AttachedSessionLifecycle(SessionLifecycle):
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = self.validated_thread(cwd, session_id)
-        owner = await asyncio.to_thread(
-            self.comms.owners.ensure_owner,
-            thread.name,
-            agent_bin=self.agent_bin,
-            agent_args=list(self.agent_args.argv),
-        )
+        try:
+            admission = SessionLoadAdmission.at_ingress(kwargs.get("agentCommsLoad"))
+            owner = await admission.resolve(self, thread)
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            raise RequestError.invalid_params(
+                {"reason": f"Session load not admitted for {thread.name!r}: {error}"}
+            ) from error
         return await self.attach_owner(owner, session_id)

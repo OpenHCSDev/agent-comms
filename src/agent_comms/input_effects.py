@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .cursor_publication import CursorPublication
     from .turn_runner import TurnRunner
 
 
 class InputEffects(ABC):
+    cursors: CursorPublication
     turns: TurnRunner
 
     @abstractmethod
@@ -18,9 +20,6 @@ class InputEffects(ABC):
 
     @abstractmethod
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int: ...
-
-    @abstractmethod
-    async def _refresh_private_cursor(self, session_id: str) -> None: ...
 
     @abstractmethod
     def _private_nk_marker(self) -> str: ...

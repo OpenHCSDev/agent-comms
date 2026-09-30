@@ -11,10 +11,10 @@ import types
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
-from typing import Any, ClassVar, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
 
@@ -228,14 +228,15 @@ class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
     """Native transport timing is display evidence, never input admission."""
 
     @classmethod
-    def normalize_wire(cls, value):
-        if type(value) is not str:
-            raise ValueError("Native transport phase must be a string")
+    def from_text(cls, value: str):
         try:
             member = cls.decode(value)
         except ValueError:
-            return {"kind": UnrecognizedTransportStage.declared_name, "reported_phase": value}
-        return {"kind": member.declared_name}
+            return UnrecognizedTransportStage(value)
+        return member()
+
+    def to_text(self) -> str:
+        return self.declared_name
 
     @property
     @abstractmethod
@@ -261,6 +262,9 @@ class UnreportedTransportStage(ProviderTransportStage):
 class UnrecognizedTransportStage(ProviderTransportStage):
     reported_phase: str
 
+    def to_text(self) -> str:
+        return self.reported_phase
+
     @property
     def description(self) -> str:
         return f"provider stage: {self.reported_phase}"
@@ -278,12 +282,26 @@ class ProviderDiagnosticError(PiPayload):
         return f"{name} (code {self.code})" if self.code is not None else name
 
 
+class TransportStageText(TextRepresentation):
+    """The native provider's scalar spelling, not a second record decoder."""
+
+    @classmethod
+    def encode(cls, value: ProviderTransportStage) -> str:
+        return value.to_text()
+
+    @classmethod
+    def from_text(cls, value: str) -> ProviderTransportStage:
+        return ProviderTransportStage.from_text(value)
+
+
 @dataclass(frozen=True)
 class ProviderTransportDetails(PiPayload):
     configured_transport: str | None = wire_field("configuredTransport")
     fallback_transport: str | None = wire_field("fallbackTransport")
     events_emitted: bool | None = wire_field("eventsEmitted")
-    phase: ProviderTransportStage = field(default_factory=UnreportedTransportStage)
+    phase: Annotated[ProviderTransportStage, TransportStageText] = field(
+        default_factory=UnreportedTransportStage
+    )
     request_bytes: int | None = wire_field("requestBytes")
 
     def __post_init__(self):
@@ -359,6 +377,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     opaque: ClassVar[bool] = False
     assistant: ClassVar[bool] = False
     user: ClassVar[bool] = False
+    final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
     usage: PiUsage | None = None
     input_id: str | None = wire_field("inputId")
@@ -432,6 +451,10 @@ class AbsentMessage(PiMessage):
 class AssistantMessage(PiMessage):
     assistant = True
 
+    @property
+    def final_reply(self):
+        return self.stop_reason.successful
+
     async def apply_start(self, session, event):
         session.output.start_message()
         if False:
@@ -503,7 +526,6 @@ class UserMessage(PiMessage):
         session.observe_input_during_abort(event)
 
     def transcript_events(self, context):
-        from .routing import TurnRouting
         from .transcript_events import ContextTranscript, UserTranscript
 
         routing, display = context.routing, context.input_display
@@ -514,11 +536,6 @@ class UserMessage(PiMessage):
                 routing = display.routing
             else:
                 routing = display = None
-        if routing is not None and routing.requests:
-            return [
-                UserTranscript(request.body, routing=TurnRouting((request,), None))
-                for request in routing.requests
-            ]
         parts = self.parts
         events = []
         if display is not None:
@@ -532,7 +549,7 @@ class UserMessage(PiMessage):
             )
         for part in parts:
             events.extend(part.user_transcript())
-        return [replace(event, routing=routing) for event in events]
+        return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
 
 
 @dataclass(frozen=True)
@@ -543,9 +560,8 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
     details: Any = None
 
     def transcript_events(self, context):
-        from .routing import MessageRoute, TurnRouting
         from .tool_results import ToolDiff
-        from .transcript_events import SentTranscript, ToolEndTranscript
+        from .transcript_events import ToolEndTranscript
 
         if not self.parts:
             return []
@@ -560,17 +576,6 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
                 diff=ToolDiff.from_result(self.tool_name, result, not self.is_error),
             )
         ]
-        sent = (
-            context.sent_tool_message(self.tool_name, output, not self.is_error)
-            if context.sent_tool_message
-            else None
-        )
-        if sent is not None:
-            events.append(
-                SentTranscript(
-                    sent.body, routing=TurnRouting(reply=MessageRoute(sent.sender, (sent.target,)))
-                )
-            )
         return events
 
 

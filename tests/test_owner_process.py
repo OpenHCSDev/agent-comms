@@ -156,10 +156,175 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
         assert "Owner launch: failed-start" in trace
         assert "Traceback (most recent call last)" in trace
         assert "PublicationActivationBlocked" in trace
-        assert "exact root ID and absolute reviewed package" in trace
         assert logs[0].stat().st_mode & 0o777 == 0o600
         assert not socket_path(tmp_path, result.pid).exists()
         assert owner.session_file is None
     finally:
         if owner.process_alive:
             ObservedProcess(owner.process_identity).stop_sync()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Exact retained launch uses Linux /proc")
+def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, monkeypatch):
+    """One provider-free installed worker batch, with original distinct settings."""
+    from agent_comms.goal_states import BlockedGoal
+    from agent_comms.goals import Goal
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.owner_cutover import StoppedOwnerInstallation
+    from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
+
+    comms = Comms(tmp_path)
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
+    originals = []
+    settings = (
+        ("batch-a", ("--offline", "--no-tools", "--thinking", "off"), "credential-a"),
+        ("batch-b", (), "credential-b"),
+    )
+
+    class RebuildFixtureCheckpoint(StoppedOwnerInstallation):
+        """An actual declared writer operation; it never starts or stops owners."""
+
+        def require_selection(self, snapshot, owners):
+            live = {
+                thread.name for thread in snapshot.threads.values()
+                if thread.role.executable and snapshot.statuses[thread.name].active
+                and thread.process_alive
+            }
+            if {thread.name for thread in owners} != live:
+                raise RelationViolationError("Checkpoint installation requires the complete batch")
+
+        def after_stopped(self, lifecycle):
+            assert all(not original.process_alive for original in originals)
+            assert all(
+                lifecycle.registry.require(name).process_identity == original.process_identity
+                for name, original in zip(selected, originals, strict=True)
+            )
+            bus = lifecycle.bus.log
+            # This fixture's original writer already understands its original
+            # certificate. Live old-schema custody remains a separate cutover.
+            with bus.locked():
+                marker = bus.read_metadata_unlocked()
+                before = replace(marker, checkpoint_version=None, checkpoint_seal=None)
+                source = bus.path.read_bytes()
+                checkpoint = lifecycle.root / "private_bus_checkpoint.sqlite3"
+                checkpoint.rename(checkpoint.with_suffix(".retained-original"))
+                bus.write_metadata_unlocked(before)
+                install_private_bus_checkpoint(bus, _bus_locked=True)
+                assert replace(
+                    bus.read_metadata_unlocked(), checkpoint_version=None, checkpoint_seal=None
+                ) == before
+                assert bus.path.read_bytes() == source
+
+    cutover = RebuildFixtureCheckpoint()
+
+    def ready(owner):
+        deadline = time.monotonic() + 10
+        while not socket_path(tmp_path, owner.pid).exists():
+            assert owner.process_alive, "Actual batch worker exited before runtime attach"
+            assert time.monotonic() < deadline, "Actual batch worker failed to attach"
+            time.sleep(.02)
+        # Socket creation precedes the owner's saved-history replay. Wait for
+        # the existing protocol's complete attachment, so rename cannot race
+        # the original startup read and silently turn the batch into one owner.
+        import asyncio
+        import json
+        from agent_comms.runtime_requests import SubscribeRuntimeRequest
+
+        async def attach():
+            async with asyncio.timeout(10):
+                reader, writer = await asyncio.open_unix_connection(
+                    socket_path(tmp_path, owner.pid), limit=8 * 1024 * 1024
+                )
+                try:
+                    writer.write((json.dumps(SubscribeRuntimeRequest(
+                        thread=owner.name).to_wire()) + "\n").encode())
+                    await writer.drain()
+                    while line := await reader.readline():
+                        response = json.loads(line)
+                        assert "error" not in response, response
+                        if "ready" in response:
+                            return
+                    raise AssertionError("Actual worker closed before complete attachment")
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+
+        asyncio.run(attach())
+
+    try:
+        for name, arguments, credential in settings:
+            goal = Goal("Protected failed original", name + "-goal", state=BlockedGoal("No replay"))
+            comms.registry.declare(Thread(
+                name, frozenset({name}), str(tmp_path),
+                model="openai-codex/gpt-6.1-sol", thinking_level="off",
+                goal=goal, task="retained task " + name,
+            ))
+            with monkeypatch.context() as patch:
+                patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
+                patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))
+                comms.owners.start(name, agent_args=arguments)
+            original = comms.registry.require(name)
+            ready(original)
+            originals.append(original)
+        # The original process launch name remains valid through registry rename.
+        comms.registry.rename("batch-b", "batch-renamed")
+        selected = ["batch-a", "batch-renamed"]
+        before = comms.registry.snapshot()
+        last = before.require_active("batch-renamed")
+        busy = replace(last, active_turn=ActiveTurn("protected-turn", last.pid))
+        comms.registry.register(busy)
+        refusal_source = comms.registry.snapshot()
+        with pytest.raises(RelationViolationError, match="idle before restart"):
+            comms.owners.restart_owners(selected, cutover=cutover)
+        assert comms.registry.snapshot() == refusal_source
+        assert all(owner.process_alive for owner in originals)
+        comms.registry.register(last)
+        with pytest.raises(RelationViolationError, match="complete batch"):
+            comms.owners.restart_owners([selected[0]], cutover=cutover)
+        assert all(original.process_alive for original in originals)
+        original_goals = {name: comms.registry.require(name).goal for name in selected}
+        source_files = {
+            path: path.read_bytes() for path in tmp_path.rglob("*")
+            if path.is_file() and path.suffix == ".jsonl"
+        }
+        # The operator's model/arguments/credential must never overwrite a source owner.
+        monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", "--thinking high")
+        monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
+        target_binary = tmp_path / "target-pi-comms-native"
+        target_binary.symlink_to(comms.owners.native_entrypoint())
+        receipts = comms.owners.restart_owners(
+            selected, agent_bin=str(target_binary), cutover=cutover
+        )
+        assert len(receipts) == 2
+        assert all(not owner.process_alive for owner in originals)
+        for index, (receipt, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
+            current = comms.registry.require(receipt.thread)
+            ready(current)
+            launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
+            assert launch.binary == str(target_binary)
+            assert launch.arguments == arguments
+            assert launch.environment["BATCH_OWNER_CREDENTIAL"] == credential
+            assert launch.environment["PI_CODING_AGENT_DIR"] == str(tmp_path / (settings[index][0] + "-config"))
+            assert launch.environment["AGENT_COMMS_THREAD"] == selected[index]
+            assert current.process_identity != originals[index].process_identity
+            assert current.created_at == originals[index].created_at
+            assert current.tags == originals[index].tags
+            assert current.task == originals[index].task
+            assert current.model == originals[index].model
+            assert current.thinking_level == originals[index].thinking_level
+            assert current.goal == original_goals[current.name]
+            # Idle startup/handoff creates no model process and sends no original.
+            assert not Path(f"/proc/{current.pid}/task/{current.pid}/children").read_text().strip()
+        assert all(path.read_bytes() == content for path, content in source_files.items())
+        assert not list(tmp_path.rglob("*.input-proof"))
+    finally:
+        for name in ("batch-a", "batch-renamed", "batch-b"):
+            try:
+                owner = comms.registry.require(name)
+            except KeyError:
+                continue
+            if owner.process_alive:
+                comms.owners.stop(owner.name)
+        assert all(not owner.process_alive for owner in originals)

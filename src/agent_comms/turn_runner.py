@@ -29,6 +29,7 @@ from .goal_actions import (
 from .goal_scheduler import GoalScheduler
 from .input_drain import InputDrain
 from .messages import Message
+from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
 from .runtime import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
@@ -38,9 +39,10 @@ from .runtime import (
 from .runtime_info import AgentRuntimeInfo
 from .session_lifecycle import SessionLifecycle
 from .threads import Thread
-from .transcript_updates import StartedTranscriptUpdate
+from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
-from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_phase import CancellingPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
@@ -61,6 +63,27 @@ REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
 REPLY_POLL = 0.25
 ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
 IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
+
+
+class CompactionObservation(MroDispatch):
+    """All selected/native compaction callers update the existing turn owner."""
+    def __init__(self, runner, session_id, lease, phase):
+        self.runner, self.session_id, self.lease, self.phase = runner, session_id, lease, phase
+
+    async def publish(self, phase):
+        await self.runner.transition_turn(self.session_id, self.lease, phase)
+
+    @handles(events.CompactionStart)
+    async def start(self, event):
+        await self.publish(self.phase.compacting())
+
+    @handles(events.CompactionSummaryProgress)
+    async def summary_progress(self, event):
+        await self.publish(self.phase.compacting().measured(event.operation_id, event.source))
+
+    @handles(events.CompactionEnd)
+    async def end(self, event):
+        await self.publish(self.phase.compaction_ended())
 
 
 class TurnRunner:
@@ -95,7 +118,6 @@ class TurnRunner:
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
         self.persistent_backends: dict[str, backend.PersistentPiSession] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
-        self.active_turns: dict[str, str] = {}
         self.emitted_errors: dict[str, ACPFailure] = {}
         self.goals = GoalScheduler(comms, effects, self.session_busy)
         self.reply_window = (
@@ -120,7 +142,32 @@ class TurnRunner:
         self.goals.bind(sessions, inputs)
 
     def session_busy(self, session_id: str) -> bool:
-        return session_id in self.turn_tasks or session_id in self.active_turns
+        return session_id in self.turn_tasks or self.turn_state(session_id).busy
+
+    def turn_state(self, session_id: str) -> TurnState:
+        name = self.sessions.bindings.get(session_id)
+        return self.comms.registry.require(name).turn_state if name is not None else TurnState()
+
+    def owns_turn(self, session_id: str, turn_id: str) -> bool:
+        state = self.turn_state(session_id)
+        return state.busy and state.managed_id == turn_id
+
+    async def transition_turn(self, session_id: str, lease: TurnLeaseFence, phase: TurnPhase) -> None:
+        current = self.turn_state(session_id)
+        if current.phase == phase:
+            return
+        if self.comms.agents.transition_turn(lease, phase):
+            await self.effects._emit_event(session_id, self.current_turn_update(session_id))
+
+    async def observe_compaction(self, session_id: str, event) -> None:
+        name = self.sessions.bindings.get(session_id)
+        if name is None:
+            return
+        thread = self.comms.registry.require(name)
+        lease = thread.turn_lease
+        if lease is None:
+            return
+        await CompactionObservation(self, session_id, lease, thread.turn_state.phase).dispatch(event)
 
     def native_arguments(self, thread: Thread) -> tuple[str, ...]:
         return self.agent_args.with_model(thread.model).with_thinking(ThinkingLevel.optional_name(thread.thinking_level)).argv
@@ -204,10 +251,9 @@ class TurnRunner:
                 turn_lease = self.comms.agents.begin_turn(
                     thread_name, turn_id, "Waiting for replies"
                 )
-                self.active_turns[session_id] = turn_id
                 try:
                     await self.effects._emit_event(
-                        session_id, self.started_event(thread_name, turn_id)
+                        session_id, self.current_turn_update(session_id)
                     )
                     await self.inputs.drain_inbox(session_id)
                     await self.collect_replies(session_id, thread_name, sent_seq)
@@ -217,7 +263,6 @@ class TurnRunner:
             return PromptResponse(stop_reason="end_turn")
         except asyncio.CancelledError:
             self.effects._debug_log("prompt:cancelled")
-            await backend.terminate_task_process(turn_task)
             return PromptResponse(stop_reason="cancelled")
         finally:
             if self.turn_tasks.get(session_id) is turn_task:
@@ -285,9 +330,11 @@ class TurnRunner:
             )
         task = self.turn_tasks.get(session_id)
         if task is not None:
+            lease = self.comms.registry.require(name).turn_lease if name is not None else None
+            if lease is not None:
+                await self.transition_turn(session_id, lease, CancellingPhase())
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-            await backend.terminate_task_process(task)
         thread_name = self.sessions.bindings.get(session_id)
         if thread_name:
             self.comms.messaging.acknowledge(thread_name)
@@ -304,7 +351,7 @@ class TurnRunner:
         No ACP response updates package configuration, launch trust or call grants.
         The backend revalidates this result before replying to the same Pi child.
         """
-        if self.active_turns.get(session_id) != turn_id or controller is None:
+        if not self.owns_turn(session_id, turn_id) or controller is None:
             return pi.CancelledUiChoice()
         permission = request.permission(turn_id)
         if permission is None:
@@ -342,7 +389,7 @@ class TurnRunner:
             # An ACP controller exception is denial, never a raw error in Pi
             # RPC/model output or a reason to resend an uncertain MCP call.
             return pi.CancelledUiChoice()
-        if self.active_turns.get(session_id) != turn_id:
+        if not self.owns_turn(session_id, turn_id):
             return pi.CancelledUiChoice()
         if isinstance(controller, SocketClient) and not self.runtime.is_controller(
             session_id, controller
@@ -361,10 +408,7 @@ class TurnRunner:
         lease: TurnLeaseFence,
     ) -> FinishedTurnFence | None:
         """Clear only this turn; waiter release follows committed terminal output."""
-        fence = self.comms.agents.finish_turn(lease)
-        if self.active_turns.get(session_id) == turn_id:
-            self.active_turns.pop(session_id, None)
-        return fence
+        return self.comms.agents.finish_turn(lease)
 
     async def settle_turn(
         self,
@@ -373,58 +417,34 @@ class TurnRunner:
         turn_id: str,
         lease: TurnLeaseFence,
         *,
-        stream_settled: bool = False,
-        terminal_fence: FinishedTurnFence | None = None,
         task: asyncio.Task[Any] | None = None,
     ) -> None:
         """Settle after terminal publication, releasing waiters even if the UI fails.
 
-        Native StreamSettled has already finished and published the stream. Its
-        fence is retained until Done and relay output are committed. Manual
-        compaction and relay turns take both phases here.
+        Native output completion is not lifecycle settlement. Keep the exact
+        lease until Done, durable input retirement and relay publication finish.
         """
         if task is not None and self.turn_tasks.get(session_id) is task:
             self.turn_tasks.pop(session_id, None)
-        if not stream_settled:
-            terminal_fence = self.finish_turn_stream(session_id, thread_name, turn_id, lease)
+        terminal_fence = self.finish_turn_stream(session_id, thread_name, turn_id, lease)
         try:
-            if not stream_settled:
-                await self.effects._emit_event(session_id, events.TurnSettled(turn_id))
+            await self.effects._emit_event(session_id, self.current_turn_update(session_id))
         finally:
             self.comms.goals.release_waits_after_terminal_turn(terminal_fence)
 
-    def started_event(self, thread_name: str, turn_id: str) -> StartedTranscriptUpdate:
-        """Project one owner-authored turn without inventing presentation timestamps."""
-        thread = self.comms.registry.require(thread_name)
-        active = thread.active_turn
-        activity = self.comms.agents.activity_of(thread.name)
-        return StartedTranscriptUpdate(
-            turn_id=turn_id,
-            started_at=active.started_at if active is not None and active.id == turn_id else None,
-            activity=activity.state.value,
-            activity_detail=activity.detail,
-        )
-
     def current_turn_update(self, session_id: str):
-        from .transcript_updates import SettledTranscriptUpdate
-        thread_name = self.sessions.require(session_id)
-        active = self.comms.registry.require(thread_name).active_turn
-        return (
-            self.started_event(thread_name, active.id)
-            if active is not None
-            else SettledTranscriptUpdate()
-        )
+        return TurnTranscriptUpdate(state=self.turn_state(session_id))
 
     async def replay_turn_state(self, session_id: str, client: Any = None) -> None:
         await self.effects._emit_event(session_id, self.current_turn_update(session_id), client=client)
 
     def active_backend_inbox(self, session_id: str) -> asyncio.Queue | None:
         return (
-            self.inputs.backend_inboxes.get(session_id) if session_id in self.active_turns else None
+            self.inputs.backend_inboxes.get(session_id) if self.turn_state(session_id).accepts_followup else None
         )
 
     async def close_idle_backend(self, session_id: str) -> None:
-        if session_id not in self.active_turns and (
+        if not self.session_busy(session_id) and (
             persistent := self.persistent_backends.get(session_id)
         ):
             await persistent.close_idle()

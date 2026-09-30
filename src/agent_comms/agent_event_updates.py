@@ -26,7 +26,6 @@ from .acp_extension import (
     PromptCancelledUpdate,
     RequestFailedUpdate,
     TextRouteUpdate,
-    TurnSettledUpdate,
     encode_updates,
 )
 from .acp_failure import ACPFailure
@@ -67,25 +66,6 @@ class AcpEventConsumer(MroDispatch):
     async def text(self, event: events.Chunk | events.Notice) -> None:
         if event.text:
             await self.agent._emit_text(self.session_id, event.text, self.client, self.route)
-
-    async def settled(self, turn_id: str | None) -> None:
-        await self.client.session_update(
-            session_id=self.session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(TurnSettledUpdate(turn_id)),
-            ),
-        )
-
-    @handles(events.StreamSettled)
-    async def stream_settled(self, event: events.StreamSettled) -> None:
-        assert self.turn_id is not None
-        await self.settled(self.turn_id)
-
-    @handles(events.TurnSettled)
-    async def turn_settled(self, event: events.TurnSettled) -> None:
-        await self.settled(event.turn_id)
 
     @handles(events.ToolStart)
     async def on_tool_start(self, event: events.ToolStart) -> None:
@@ -156,7 +136,7 @@ class AcpEventConsumer(MroDispatch):
         session_id = self.session_id
         client = self.client
         turn_id = self.turn_id
-        if not turn_id or self.agent.turns.active_turns.get(session_id) != turn_id:
+        if not turn_id or not self.agent.turns.owns_turn(session_id, turn_id):
             return
         await client.session_update(
             session_id=session_id,
@@ -183,10 +163,11 @@ class AcpEventConsumer(MroDispatch):
                 ),
             )
 
-    @handles(events.CompactionProgress, events.CompactionEvent)
+    @handles(events.CompactionEvent)
     async def on_compaction(
-        self, event: events.CompactionEvent | events.CompactionProgress
+        self, event: events.CompactionEvent
     ) -> None:
+        await self.agent.turns.observe_compaction(self.session_id, event)
         await self.client.session_update(
             session_id=self.session_id,
             update=AgentMessageChunk(

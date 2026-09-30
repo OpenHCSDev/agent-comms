@@ -1,0 +1,26 @@
+{
+  "manifest_sha256": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
+  "native_tree": "614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a",
+  "prepared_package": "/home/ts/wt/comms-native-compaction-progress-20260929/stack/.pi-native-b68dfdced9148b50/node_modules/@earendil-works/pi-coding-agent",
+  "baseline": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+  "compiled_delta": {
+    "dist/core/compaction/compaction.js": {
+      "deleted_lines": 5,
+      "added_lines": 14,
+      "baseline_sha256": "ac803d997a19a56afd2946cf9038cdb515b4924fd109a14123c158cdd630886a",
+      "candidate_sha256": "e8efa3d8f2ad36c2692d22ea15c45297060a5393b0c3af708529ab37f2bbe4a8"
+    },
+    "dist/core/agent-session.js": {
+      "deleted_lines": 1,
+      "added_lines": 2,
+      "baseline_sha256": "b00974709a1c2241fba67f093e4400234da8b9e40de814f0d1766860b3217b9d",
+      "candidate_sha256": "3ac3fdef20729789387e985a07c51a5a1027823d5c030f1a9f721cd5e83d6fa3"
+    },
+    "dist/modes/rpc/rpc-mode.js": {
+      "deleted_lines": 1,
+      "added_lines": 2,
+      "baseline_sha256": "94000a48d2a8e3c7b1874156ef6e7d4f5a44ad6785bedfd2544b95f210483ecc",
+      "candidate_sha256": "3043ce0f2673af47c11c467ab58973805a77c02e676fb629ac0a181a0450cacc"
+    }
+  }
+}

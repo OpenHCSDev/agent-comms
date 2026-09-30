@@ -12,8 +12,13 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
 from .routing import TurnRouting
-from .restart_refusals import OwnerBusyRefusal, OwnerChangedBeforeFenceRefusal, OwnerGenerationChangedRefusal
-from .thread_identity import GenerationCounter, OwnerIdentity
+from .restart_refusals import (
+    OwnerBusyRefusal,
+    OwnerChangedBeforeFenceRefusal,
+    OwnerGenerationChangedRefusal,
+)
+from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
+from .thread_presentation import ThreadOwnerBinding, LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
     RunningThreadStatus,
@@ -328,6 +333,15 @@ class RegistryDocument:
             admission_generation=lease.admission_generation,
         )
 
+    def transition_turn(self, lease: TurnLeaseFence, phase) -> bool:
+        """Only the existing exact lease can publish its observed phase."""
+        name = self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)
+        current = self.threads.get(name)
+        if current is None or current.turn_lease != lease.renamed(name):
+            return False
+        self.threads[name] = replace(current, active_turn=replace(current.active_turn, phase=phase))
+        return True
+
 
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot:
@@ -337,6 +351,13 @@ class RegistrySnapshot:
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
+
+    def require(self, name: str) -> Thread:
+        canonical = self.aliases.get(name, name)
+        try:
+            return self.threads[canonical]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
 
     def restorable_aliases(
         self, available: Mapping[str, Thread], retained: Mapping[str, str]
@@ -367,7 +388,19 @@ class RegistrySnapshot:
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.aliases.get(name, name)
-        return self.threads[canonical].owner_identity(self.owner_generations[canonical])
+        return OwnerIdentity(self.threads[canonical].incarnation, self.owner_generations[canonical])
+
+    def admission_identity(self, name: str) -> AdmissionIdentity:
+        canonical = self.aliases.get(name, name)
+        return AdmissionIdentity(self.threads[canonical].incarnation, self.admission_generations[canonical])
+
+    def owner_binding(self, name: str) -> ThreadOwnerBinding:
+        try:
+            thread = self.require_active(name)
+            process = thread.require_process()
+        except RelationViolationError:
+            return UnavailableThreadOwnerBinding()
+        return LiveThreadOwnerBinding(self.owner_identity(thread.name), process)
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
         """A read attachment retains its owner lease across startup, not across restart."""
@@ -377,3 +410,15 @@ class RegistrySnapshot:
         if self.owner_generations[thread.name] != owner.generation:
             raise RelationViolationError("Owner lease changed during attachment")
         thread.require_local_process(process)
+
+    def require_stopping_owner(self, expected: Thread, admission: int) -> None:
+        """A fenced stop may target a stopped owner, but never a later birth/lease."""
+        try:
+            current = self.threads[expected.name]
+        except KeyError as error:
+            raise RelationViolationError("Stopping owner was removed") from error
+        if current.incarnation != expected.incarnation:
+            raise RelationViolationError("Stopping owner incarnation changed")
+        current.require_local_process(expected.require_process())
+        if self.admission_generations[expected.name] != admission:
+            raise RelationViolationError("Stopping owner admission changed")

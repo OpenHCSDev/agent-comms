@@ -13,6 +13,7 @@ from .input_attempt import (
     MissingInput,
     ReservedInput,
     SentInput,
+    StartedInput,
     StoredInput,
 )
 from .locked_store import LockedStore
@@ -20,8 +21,10 @@ from .messages import Message
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
     from .selected_source import SelectedSource
     from .thread_identity import TurnId
+    from .turn_lease import TurnLeaseFence
 
 
 class FutureInputQueue(ABC):
@@ -90,6 +93,21 @@ class InputDocument:
         if any(key not in self.rows for key in keys):
             return None
         return tuple(self.rows[key].source_text for key in keys)
+
+    def started_for_native(
+        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
+        *, snapshot: RegistrySnapshot,
+    ) -> tuple[StartedInput, ...]:
+        """Original rows for one actual native user, including grouped inputs.
+
+        Corrections and followups may own the final assistant's closest user.
+        Look up that producer's exact native ID/text rather than choosing the
+        initial turn input, a public event or the first matching row.
+        """
+        return tuple(receipt for row in self.rows.values()
+                     if (receipt := row.started_for_native(
+                         lease, native_id, sent_text, snapshot=snapshot
+                     )) is not None)
 
     def shared_state(self, keys: tuple[str, ...]) -> type[InputAttempt] | None:
         """Project only a complete, homogeneous durable observation."""

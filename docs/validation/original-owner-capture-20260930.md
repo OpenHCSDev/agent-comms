@@ -1,0 +1,134 @@
+# Original typed capture for a private C3 fixture
+
+Builder: Arendt, PR442. Einstein owns the225 UI/CPU fixture consumer; Mendel owns
+the retired goal-report member semantics. Parent owns every public cutover.
+
+The421 installed goal fixture seeded fresh saved state and has no original720
+capture capability. This reusable outside-src operation closes the earlier read
+boundary instead of changing the public root or weakening current readers.
+
+## Consumer capability
+
+Put this worktree's `tools/cutover` directory on the FIXTURE process's import
+path, with the approved target Core installation unchanged. Do not copy the code
+or add a target registry reader for the original format.
+
+```python
+from pathlib import Path
+from original_owner_capture import OriginalTypedCapture
+
+capture = OriginalTypedCapture(
+    root=Path(source_root),
+    original_python=Path(original_python),
+).read(source_owner)
+source = capture.source
+retained = capture.retained
+# Existing SDK fork and private-root declaration remain the fixture's owners.
+# At the end, after checking the unchanged original native file:
+current = capture.require_current()
+```
+
+`read_original_owner.py` runs only under the authentic original installation.
+Registration validates its original document and guard under the existing shared
+registry lock. The lock is released immediately after the acquired observation;
+it is not held through the UI journey. Original OwnerRestartSelection owns birth,
+OWNER generation, ADMISSION and full ProcessIdentity, including revalidation.
+Target FieldCodec strictly decodes the projected RegistryDocument and selection.
+The target snapshot is derived by that document, rather than decoded through a
+new Mapping codec. Existing RetainedOwnerLaunch captures credentials and args
+from the exact process in RAM; credentials never cross the JSON pipe or receipt.
+A second fresh original read closes the capture-to-/proc acquisition race.
+The requested original interpreter must equal the source process's observed
+argv interpreter. A same-schema reader from a retired installation cannot
+silently replace this original launch relation.
+
+GoalReportMemberRetirement is the ONE outside-src member operation for both
+RegistryDocument.threads and OwnerReleaseReceipt.thread. A repeated operation
+on target-format input refuses. The private capture is an observation only:
+it does not copy goal scheduling/report authority into the new fixture owner,
+settle an original turn, signal a process, fence an owner or mutate a source.
+The public14C0 idle/report rule still gates the full stopped-batch operation.
+Original goal_history, goal_pause_events evidence and UNKNOWN inputs remain
+untouched. The41MB native context is forked through the existing SDK fixture.
+
+## Bounded proof
+
+The authentic720 installed runtime creates the original registry and nested
+release receipt, with two non-null retired member values. Its real process has
+distinct arguments and a private RAM-only credential. The current source target
+strictly admits both projected carriers. Registry/release bytes remain unchanged
+by capture. A same-process, same-OWNER-generation ADMISSION advance must refuse
+the retained read. No native/provider/UI path is substituted by this check.
+
+```sh
+env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src:tools/cutover \
+  AC_CAPTURE_FIXTURE_STAGE="$PWD/.capture-fixtures/run05" \
+  AC_CAPTURE_ORIGINAL_PYTHON=/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/bin/python \
+  timeout --signal=TERM --kill-after=3 25 \
+  /home/ts/wt/comms-original-turn-custody-20260929/.routing-carry-runtime/bin/python \
+  tools/cutover/original_owner_capture_installed_pilot.py
+```
+
+run04 passed the original fenced-owner refusal. run05 separates admission from
+owner generation. run01 failed before a process existed (missing parent),
+run02 refused an incorrectly typed seed report ID, and run03 found the original
+fence method spelling error after successful capture. Their small private roots
+remain under `.capture-fixtures` as traces; no live process or native input remains.
+These are provider-free original installed/target source boundary checks, not the
+225 installed UI/CPU acceptance or a public restart acceptance.
+
+The actual read-only nra-architecture capture also passed through the authentic
+`runtime-canonical-cursor-tool-20260930/bin/python`: retained source41270257bytes,
+full original process proof revalidated, credentials not serialized, public
+mutations0/native inputs0. Its sanitized receipt is in evidence/original-owner-capture.
+The225 consumer must still pass its current installed Core440/Toad22540s journey.
+
+First441 is now executed by parent: default Core000/Toad173/Text650/nativee36,
+13 replacement owners, original Thread schema retained. Future source capture
+must use `/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python`,
+the actual new producer, rather than the earlier720 interpreter. The earlier
+actual-source receipt is historical; source capture is acquired afresh without
+replaying an original input. Einstein owns that one updated fixture boundary.
+Private441 receipt/preimages and tools remain protected through the default
+entrypoint gate and source archival. No duplicate restart is performed here.
+
+## Remaining public lifecycle
+
+442 merged ea1c275 and parent completed the C3 public cutover through that acquired
+batch. Original admission, all-idle fencing, all-stop, both durable carrier
+retirement, guarded publication and target launch remain that single lifecycle.
+The helper does not authorize a public carry.
+
+## Current-format producer after C3 activation
+
+447 extends the SAME shared read and RetainedOwnerLaunch capture. For an authentic
+current-format producer, select the declared current projection explicitly:
+
+```python
+from original_owner_capture import CurrentTypedCapture
+
+capture = CurrentTypedCapture(
+    root=Path(source_root),
+    original_python=Path(
+        '/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/python'
+    ),
+).read(source_owner)
+```
+
+The inherited implementation still requires exact interpreter, OWNER generation,
+ADMISSION and process/birth, and repeats the shared read after credential capture.
+CurrentThreadProjection encodes the producer's already validated document;
+RetiredGoalReportProjection owns the original-format one-shot member removal.
+The child decodes the declared projection once. Neither probes missing fields,
+falls back, writes the public root, or introduces another registry reader.
+Selecting retirement for an already-current document refuses.
+
+Provider-free proof uses the genuine accepted run09 current registry: strict
+current roundtrip and wrong retirement member refusal, with original bytes
+unchanged. Receipt: ../../evidence/phased-owner-cutover/current-capture-receipt.json.
+This checks projection closure; the original acquisition/revalidation proof is
+unchanged and is not claimed as a new real-process gate. Heisenberg owns the236
+private A/B caller and already certified both SDK copies before releasing the
+original public process witness. After public retirement he may acquire new
+current launch credentials in RAM through this member, while reusing those
+certified copies. Do not recopy the original or reassert its retired PID.

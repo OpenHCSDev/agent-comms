@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass, replace
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp.schema import (
     AgentMessageChunk,
@@ -13,21 +13,22 @@ from acp.schema import (
 )
 
 from . import agent_events as events
-from .acp_extension import TranscriptChangedUpdate, encode_updates
-from .activity import ActivityState
+from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
+from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
 from .diagnostics import record_terminal_failure
 from .messages import MessageType
+from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
-from .routing import MessageRoute
-from .transcript_updates import AgentTextTranscriptUpdate
-from .turn_lease import FinishedTurnFence
+from .turn_phase import PublishingPhase
+from .transcript_updates import TurnTranscriptUpdate
 
 if TYPE_CHECKING:
     from .session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
     from .turn_goal_account import TurnGoalAccount
+    from .turn_input_source import OriginalTurnInput
 
 
 @dataclass(kw_only=True)
@@ -42,18 +43,7 @@ class TurnEventPublication(MroDispatch):
     async def sync_goals(self, event: events.InputStarted) -> None:
         await self.sync_goal_execution(self.session_id, self.sessions.bindings[self.session_id])
 
-    @handles(events.ToolEnd)
-    async def tool_result(self, event: events.ToolEnd) -> None:
-        sent = await asyncio.to_thread(
-            self.comms.messaging.sent_tool_message, event.name, event.output, bool(event.ok)
-        )
-        if sent is not None:
-            await self.effects._emit_event(
-                self.session_id,
-                AgentTextTranscriptUpdate(
-                    text=sent.body, route=MessageRoute(sent.sender, (sent.target,))
-                ),
-            )
+
 
 
 class TurnProgress(events.AgentEventConsumer):
@@ -68,36 +58,24 @@ class TurnProgress(events.AgentEventConsumer):
         emitted_errors,
         session_id,
         thread,
-        turn_id,
         turn_lease,
         routing,
+        original: OriginalTurnInput,
         checkpoint,
-        task,
-        original_keys,
-        accepted_input_id,
-        initial_display_text,
         finish_event,
         goals: TurnGoalAccount,
-        finish_stream,
         sync_goals,
     ):
         self._comms = comms
         self.sessions, self.inputs, self.effects = sessions, inputs, effects
         self.runtime, self.emitted_errors = runtime, emitted_errors
         self.session_id, self.thread = session_id, thread
-        self.turn_id, self.turn_lease = turn_id, turn_lease
-        self.routing, self.checkpoint, self.task = routing, checkpoint, task
-        self.original_keys = original_keys
-        self.accepted_input_id, self.initial_display_text = accepted_input_id, initial_display_text
-        self.finish_event, self.goals, self.finish_stream = finish_event, goals, finish_stream
+        self.turn_lease = turn_lease
+        self.routing, self.checkpoint = routing, checkpoint
+        self.original = original
+        self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
-        self.terminal_ok: bool | None = None
-        self.terminal_failure: dict[str, Any] = {}
-        self.settled = False
-        self.terminal_fence: FinishedTurnFence | None = None
-        self.cancelled = False
-        self.failure_reported = False
-        self.compaction_resume_activity: tuple[ActivityState, str] | None = None
+        self.result: events.Done | None = None
         self.publication = TurnEventPublication(
             comms=comms,
             sessions=sessions,
@@ -108,7 +86,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @property
     def origins(self):
-        return self.routing.requests
+        return self.original.origins
 
     @property
     def reply_targets(self):
@@ -122,27 +100,31 @@ class TurnProgress(events.AgentEventConsumer):
     def thread_name(self) -> str:
         return self.sessions.bindings[self.session_id]
 
-    @handles(events.Error)
-    async def error_observed(self, event: events.Error) -> None:
-        self.failure_reported = True
-
     async def report_failure(self, error: Exception) -> None:
         """Attempt existing ACP error publication once without hiding the original fault."""
         prior = self.emitted_errors.get(self.session_id)
-        if self.failure_reported and prior is None:
-            return
-        self.failure_reported = True
+        diagnostic = record_terminal_failure(
+            self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
+            event=asdict(self.result) if self.result is not None else {},
+            sequences=tuple(origin.seq for origin in self.routing.requests),
+            source_error=error,
+        )
+        detail = prior.detail if prior is not None else (
+            "Native turn failed; original input was not retried. "
+            f"[Open diagnostic]({diagnostic.as_uri()})"
+        )
         try:
             await self.effects._emit_event(
                 self.session_id,
-                events.Error(prior.detail if prior is not None else str(error) or type(error).__name__),
-                turn_id=self.turn_id,
+                events.Error(detail),
+                turn_id=self.turn_lease.turn_id,
                 route=self.routing.reply,
             )
         except Exception as delivery_error:
             self.effects._debug_log(
                 f"turn:error-publication failed: {delivery_error!r}; original: {error!r}"
             )
+
 
     @handles(events.SteeringInterrupted)
     async def steering_interrupted(self, event: events.SteeringInterrupted) -> None:
@@ -155,24 +137,6 @@ class TurnProgress(events.AgentEventConsumer):
     @handles(events.ProviderUsage)
     async def provider_usage(self, event: events.ProviderUsage) -> None:
         self.goals.provider_usage(event)
-
-    @handles(events.CompactionStart)
-    async def compaction_started(self, event: events.CompactionStart) -> None:
-        if self.compaction_resume_activity is None:
-            current_activity = self.comms.agents.activity_of(self.thread_name)
-            self.compaction_resume_activity = (
-                current_activity.state,
-                current_activity.detail,
-            )
-        self.comms.agents.set_activity(
-            self.thread_name, ActivityState.WORKING, "Compacting context"
-        )
-
-    @handles(events.CompactionEnd)
-    async def compaction_ended(self, event: events.CompactionEnd) -> None:
-        if self.compaction_resume_activity is not None:
-            self.comms.agents.set_activity(self.thread_name, *self.compaction_resume_activity)
-            self.compaction_resume_activity = None
 
     @handles(events.CompactionStart, events.CompactionEnd)
     async def invalidate_context(self, event: events.CompactionEvent) -> None:
@@ -204,7 +168,6 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
-        self.terminal_failure = asdict(event)
         unknown_attempts = not self.inputs.dispositions.read().all_started(
             self.inputs.turn_input_keys.get(self.session_id, set())
         )
@@ -218,24 +181,21 @@ class TurnProgress(events.AgentEventConsumer):
                 ok=False,
                 text=("An identified follow-up input was not started; inspect local diagnostics."),
             )
-        if self.terminal_ok is not None:
-            self.terminal_ok = False
-        elif event.ok is True:
-            self.terminal_ok = True
-        else:
-            self.terminal_ok = False
+        if self.result is not None:
+            event = replace(event, ok=False, text="Duplicate native terminal result")
+        self.result = event
         self.goals.done(event)
-        if not event.ok and event.text:
-            self.failure_reported = True
         return event
 
     @handles(events.InputStarted)
     async def input_started(self, event: events.InputStarted) -> None:
         await self.inputs.input_started(
             self.session_id,
-            event.id if event.id is not None else self.accepted_input_id,
-            self.original_keys,
-            self.initial_display_text,
+            event.id,
+            QueueScope(self.session_id, AdmissionIdentity(
+                self.turn_lease.identity.incarnation,
+                self.turn_lease.admission_generation,
+            ), self.thread.pid),
         )
 
     @handles(events.SettingChangeResult)
@@ -251,55 +211,64 @@ class TurnProgress(events.AgentEventConsumer):
             self.comms.threads.attach_session(self.thread_name, str(session_file))
 
     async def after_agent_info(self, event: events.AgentInfo) -> None:
-        await self.sessions.config.observe_agent_info(self.session_id, self.thread_name, event)
+        await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
 
     @handles(events.ToolEnd)
     async def tool_ended(self, event: events.ToolEnd) -> None:
         await self.sessions.sync_identity(self.session_id)
         self.goals.tool_ended(event)
-        self.update_activity(ActivityState.THINKING, self.task[:80])
+
+    @property
+    def phase(self):
+        return self.comms.registry.require(self.thread_name).turn_state.phase
+
+    async def transition(self, phase) -> None:
+        if self.phase == phase:
+            return
+        if self.comms.agents.transition_turn(self.turn_lease, phase):
+            state = self.comms.registry.require(self.thread_name).turn_state
+            await self.effects._emit_event(self.session_id, TurnTranscriptUpdate(state=state))
+
+    @handles(events.NativePhaseChanged)
+    async def native_phase(self, event: events.NativePhaseChanged) -> None:
+        await self.transition(self.phase.observed(event.phase))
 
     @handles(events.StreamSettled)
     async def stream_settled(self, event: events.StreamSettled) -> None:
-        self.compaction_resume_activity = None
-        self.terminal_fence = self.finish_stream(
-            self.session_id, self.thread_name, self.turn_id, self.turn_lease
-        )
-        self.settled = True
+        await self.transition(PublishingPhase())
         self.finish_event.set()
 
     async def consume(self, event: events.AgentEvent) -> None:
         event = await self.dispatch(event)
         await self.effects._emit_event(
-            self.session_id, event, turn_id=self.turn_id, route=self.routing.reply
+            self.session_id, event, turn_id=self.turn_lease.turn_id, route=self.routing.reply
         )
         await self.publication.dispatch(event)
 
-    def update_activity(self, state: ActivityState, detail: str) -> None:
-        if self.compaction_resume_activity is not None:
-            # Tool notifications may arrive while a summary is in flight.
-            # Retain the next activity without hiding active compaction.
-            self.compaction_resume_activity = (state, detail)
-        else:
-            self.comms.agents.set_activity(self.thread_name, state, detail)
+    def publish_success(self) -> None:
+        """Join each acquired original send before releasing the turn lease."""
+        published: list[MessageReference] = []
 
-    async def publish_result(self):
-        self.goals.settle(self.terminal_ok, self.terminal_failure)
-        if self.origins and self.settled and self.terminal_ok is True:
-            await asyncio.to_thread(
-                self.comms.transcripts.record_turn_routing,
-                self.thread_name,
-                self.checkpoint,
-                self.routing,
+        def record_publication() -> None:
+            self.comms.transcripts.record_turn_publication(
+                lease=self.turn_lease,
+                checkpoint=self.checkpoint,
+                routing=self.routing,
+                published=tuple(published),
             )
-        if self.terminal_ok is True:
+
+        with ExitStack() as publications:
+            publications.callback(record_publication)
             if self.reply_parts:
                 for target in self.reply_targets:
-                    self.comms.messaging.send(
-                        self.thread_name,
-                        target,
-                        "".join(self.reply_parts),
+                    message = self.comms.messaging.send_message(
+                        self.thread_name, target, "".join(self.reply_parts)
                     )
+                    published.append(message.reference)
+
+    async def publish_result(self):
+        if self.result is not None and self.result.ok:
+            self.publish_success()
         else:
             # Streamed chunks were provisional. A failed or missing terminal
             # result cannot turn them into a completed wire reply. Keep the
@@ -308,9 +277,9 @@ class TurnProgress(events.AgentEventConsumer):
             # unrelated session. Persist only structural facts for headless owners.
             diagnostic_path = record_terminal_failure(
                 self.comms.root,
-                turn_id=self.turn_id,
+                turn_id=self.turn_lease.turn_id,
                 thread=self.thread_name,
-                event=self.terminal_failure,
+                event=asdict(self.result) if self.result is not None else {},
                 sequences=tuple(origin.seq for origin in self.origins),
             )
             notice_targets = tuple(

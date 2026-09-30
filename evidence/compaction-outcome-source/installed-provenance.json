@@ -1,0 +1,32 @@
+{
+  "source": [
+    {
+      "package": "agent-comms",
+      "pin": {
+        "url": "https://github.com/OpenHCSDev/agent-comms.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "2ed2ee3f41292e2bb94b9c40b0a227a620bd1fa3",
+          "requested_revision": "2ed2ee3f41292e2bb94b9c40b0a227a620bd1fa3"
+        }
+      },
+      "equal_python_files": 290
+    },
+    {
+      "package": "batrachian-toad",
+      "pin": {
+        "url": "https://github.com/OpenHCSDev/toad.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "da3967557aa9a8c0fb23970b279ce418e12562f8",
+          "requested_revision": "da3967557aa9a8c0fb23970b279ce418e12562f8"
+        }
+      },
+      "equal_python_files": 273
+    }
+  ],
+  "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347",
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+  "full_native_trust": true
+}

@@ -1,0 +1,334 @@
+# Original turn resources and journal settlement continuation
+
+Current delivered checkpoint: Core436 original resource custody plus ordinary native
+publication merged at reviewed1f327fd01c6d46090113394c482136b8b49b4849 after the installed41MB lifecycle gate and fresh actual
+native Source/consumer gate recorded below. Main1e967af4 is integrated normally;
+production src is unchanged from the tested ordinary d6b5c706 source. The native
+gate used reviewed native614; main's later shared scheduling has its separate439
+receipt. Arendt owns the required quiet certified durable routing carry builder
+and its outside-src artifact in the retained-routing continuation; Mendel owns the routing semantic API.
+Parent alone owns quiet revalidation and live integration/activation. Remaining S14
+initial command custody and broader lifecycle closure stay with Arendt; those
+are not included in this useful checkpoint. No repeat of completed gates.
+
+## Separate failure consumer checkpoint
+
+Core436 `f955ee52fa702d95192cc297e926caa9e9ccba28` consumes the original exception rethrown by Einstein434. TurnProgress writes its private traceback to the existing turn diagnostic before attempting a safe public Error. OwnedTurn joins the original native child even if diagnostic or public failure delivery raises. Production changes: 3 lines deleted, 16 added; the existing real-owner fixture verifies private cause retention after transport disconnect, no private error text in public events, and no replay.
+
+Exact committed source, detached proof worktree: one focused test passed in 0.97 seconds:
+
+```sh
+PYTHONPATH=src:/home/ts/.cache/agent-scratch/compaction-output-accounting-20260929/test-deps \
+  /home/ts/.local/share/agent-comms/runtime-canonical-native-checkpoint-20260929/bin/python \
+  -m pytest -o addopts= -q \
+  tests/test_s1_event_behavior.py::test_failure_publication_preserves_private_cause_after_transport_disconnect
+```
+
+The changed-source debt ratchet against `42c225aa` exited zero with no positive deltas. This is source verification, not an installed native gate. Sch215 received this consumer checkpoint for its independent sender journey; Arendt owns the separately authorized third real lifecycle lane, now passed below. No provider call, live interruption, replay, installation or owner restart was performed here.
+
+The rejected nullable-handle reconstruction and nested retirement finally blocks are absent from this commit. Remaining resource acquisition must register cleanup at acquisition with existing scope/callback conventions; goal settlement precedes lease idle publication, and failure joins remain mandatory. IMPL-14, IDEN-3 and IMPL-10 require the original native result to own continuation capability instead of a consumer boolean-plus-terminal chain. The goal journal cleanup and initial UI command custody below remain unfinished and are not included in the separate checkpoint.
+
+Arendt continues full T4/S14 after Ready435 original retained restart batch. This continuation owns OwnedTurn acquisition/retirement, TurnGoalAccount original journal settlement and its ToolEnd witness, TurnProgress original terminal publication, and initial UI command custody. No new lifecycle authority or copied status. Mendel owns GoalActions/GoalStates and Transcripts original outbound source join; Einstein owns native TurnSession/event decoding and native writer434; Heisenberg217 owns retained session restoration/navigation. Request existing public capabilities across those boundaries instead of probing private fields or storing mirrors.
+
+## Acquired resource continuation, still Draft
+
+The working resource checkpoint uses ExitStack and AsyncExitStack callbacks registered immediately when the original launch permit, registry lease and input inbox are acquired. After stream binding, `pop_all()` transfers the acquired permit scope above inbox retirement. Every native run registers child joining above that transferred scope. A lease custody scope publishes project continuation immediately before its exact idle settlement. Retirement order is child join, goal account settlement and claim discharge, project child close, inbox retirement, successful original Done continuation, then lease idle publication. Callback exceptions do not skip lower acquired resources; no nullable handle discovery or nested retirement finally blocks remain.
+
+Deleted semantic copies are TurnGoalAccount.resolved, VerifiedGoalSettlement.recorded, successful_tool_observed, TurnProgress.outcome/native_terminal, OwnedTurn.goal/turn_admission/current_project, and the old monolithic finish. Productive work keeps the actual successful ToolEnd; verified settlement rereads the original attempt journal through LaunchPermit.has_verified_progress, including after a successor generation advances. StreamSettled still publishes the native output/statistics boundary without becoming stored completion proof. The actual Done owns project_continuation; InputDrain applies its own live queue/project eligibility. Thread.active_goal and continuation_goal derive original Goal declarations and original captured project/goal, replacing repeated current-thread activity predicates in OwnedTurn, TurnGoalAccount, scheduler, standby and contact readers. Mendel granted these declaration and consumer edits; mutation still uses original Thread.goal.
+
+Bounded source verification: 10 passed, 1 skipped in 2.34 seconds before the final reader-only migration. Four original claim/lease/inbox/goal-retirement fault points use actual registry, goal journal and input owners and show blocked journal admission, no leaked lease/inbox/source, no new scheduled work and refusal of a new ready grant. An inherited PausedGoal case verifies that the original journal settlement needs no new consumer roster. These checks inject failures at owned acquisition methods; they are not an installed native/ACP/UI acceptance claim.
+
+Remaining mandatory closure: integrate current main normally; consume Mendel's pending Transcripts.record_turn_publication with original StartedInput and returned MessageReference receipts; repair obsolete S1 fixture expectations through existing actual producer APIs; transfer initial UI command custody; the independently authorized actual installed resource journey has now passed below. The broad resource checkpoint stays Draft. Separate f955 failure publication is already in Sch's real failed02 trace and exposed its actual pre-byte Busy/native_unknown cause. That original remains failed and is not replayed. Core438 independently owns the typed batch cutover seam; its default and authorized maintenance operation must remain member behavior, with no raw callback policy or same-wire-lock reentry.
+
+Implement a resource envelope spanning original goal launch claim, registry lease, input batch/native inbox, preparation/admission, stream, cancel, publication and retirement. Delete TurnGoalAccount.resolved and VerifiedGoalSettlement.recorded and all readers; derive settled outcome from original goal attempt journal once. Retain actual ToolEnd proof instead of successful_tool_observed. Future project continuation derives from actual terminal result and original source, not running-stream followup permission. Initial command capture must transfer the original resource once rather than snapshot/copy pending text across widgets.
+
+Mendel430 identified ordinary routed TurnProgress.publish_result drops original wire send receipts. Close that caller through the existing transcript/provenance owner; no equal-body dedup, independent seen list or new outbound registry. Original actor/source/goal/input identities remain distinct.
+
+Use bounded original-journal and startup/cancel resource checks for the independently authorized third native lane, now completed below. Preserve all uncertain input/native journals/failed traces. No new provider or live replay/interrupt/restart. Existing merged425/211/433/219 and Ready435 acceptance is not repeated. Parent owns merge/live cutover; remaining lifecycle scope is not claimed complete.
+
+Persistent source /home/ts/wt/comms-original-turn-custody-20260929. Disposable output /home/ts/.cache/agent-scratch/original-turn-custody-20260929. Successful435 owned overlays/wheels/test roots removed9,807,460bytes after exact owned process scan returned none; source/committed evidence and live originals preserved.
+
+### Current original SendReceipt boundary
+
+Producer1db38fcd publishes `InputDocument.started_for_native(lease:TurnLeaseFence,
+native_id,sent_text)` returning the actual original `StartedInput` row group.
+Native batches may bind several original inputs to one actual native user;
+correction/followup inputs may be the final assistant's closest ancestor.
+The declaration-owned InputAttempt/StartedInput methods select only recorded
+name/admission/turn/native-ID/sent-text facts. No first-row choice, public
+InputStarted reconstruction or invented historical birth/process proof.
+Mendel430 owns the final native ancestry/full-lease/frozen-certified-source join
+and its `record_turn_publication` API. TurnProgress returned-publication receipt
+consumption follows that complete API; the producer alone is not a Ready
+ordinary-message checkpoint. Group/correction and foreign native/text/turn/
+admission/name source negatives passed2focused checks; changed-source ratchet
+has zero positive measures. Parent owns the single combined Core432 next stage.
+
+### Actual retained native third lane
+
+Toad223 owns the existing pilot's actual installed fixture-only continuation.
+Core82ba/Toade213/native4ab opened the original43,194,077-byte SDK fork with
+configured Sol/high credentials held only in RAM. It proved the first typed
+pre-native failure: adaptive compaction's whole-Thread comparison rejected its
+own published progress. Einstein437's complete identity/attestation relation
+checkpoint854 was integrated independently asb65626e7. The next real fork
+entered native multi-segment summary preparation and displayed source-owned
+22percent plus1:50elapsed together across7,248private frames.
+
+The fixture's120-second tool-start deadline then interrupted the still-running
+summary. Selected summary attempt remains UNKNOWN with no commit; original
+input was UNKNOWN at receipt and later unbound cleanup Not sent. Raw journal,
+original selected attempt and failed trace are preserved; all children retired.
+No replay or native tool-cancel/next-input/goal acceptance is claimed. The test
+bound was corrected for large-context preparation; subsequent independent
+acceptance must use the parent's one reviewed cohort, never replay this attempt.
+
+
+### Completed installed resource acceptance
+
+The exact shared Core432 cohort `94152909d34a099afc70232f922ba78e0d9af7cd`
+passed the real continuous lifecycle journey, exit0 in89.168seconds. This
+worktree's production src/stack are unchanged from that cohort. Installed pair:
+Toad e21363c8, Toad223 fixture2150bb20, Textual
+412b5a2b5da8875dc2f3dc5be2365abddce0537b, native614 manifest
+b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba / tree
+614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a.
+
+An independent actual SDK fork of the approved below-window nra original
+session retained41,270,257bytes and its Sol/high configuration. The actual Toad
+pilot opened saved history, physically submitted fresh input, interrupted a
+real Bash tool with EscEsc, observed authoritative idle and painted the next
+real reply in the same open conversation. Actual comms_set_goal/comms_edit_goal
+then ran before another real Bash cancellation. The public OwnerPaused goal
+and original private Blocked attempt both remained unchanged while a fresh
+ordinary input received its real visible reply. Four inputs Started, zero
+original input replays, no later Bash completion markers, all children retired.
+
+Toad223 publishes the sanitized receipt at
+`evidence/original-turn-resource-native/receipt.json` and the exact completed
+command in `docs/validation/original-turn-resource-native-20260929.md`.
+Private frames/journals stay in the owned persistent fixture root; the earlier
+run03 UNKNOWN summary is retained without commit or retry. Run04's incorrect
+public Blocked expectation was corrected to the existing owner-pause contract;
+run05 independently completed all phases.
+
+This closes installed resource acceptance and does not close the pending
+ordinary SendReceipt provenance/publication join, initial UI command custody,
+or the whole remaining S14 ledger. No public owner or default runtime changed.
+Do not repeat this completed paid gate.
+
+
+### Ordinary publication consumer preparation
+
+At current mainb71b0ef7 the existing successful TurnProgress consumer discards
+Messaging.send's string result. It therefore cannot join the final native
+reply to the original committed wire envelope. The prepared consumer uses the
+existing send_message operation and its actual Message.reference. A bounded
+local list holds only acquired send resources; it is not a lifecycle, identity,
+input or delivery authority. An ExitStack callback acquired at publication scope
+entry flushes those references before lease retirement, including when
+a later target send fails. Chained source-join errors retain the earlier send
+failure. No resend or rollback follows either failure.
+
+Mendel owns the one Transcripts.record_turn_publication relation with original
+TurnLeaseFence, TranscriptCursor, TurnRouting and MessageReference tuple. That
+source derives the actual successful final's nearest native user, requests the
+original StartedInput group, and verifies the full original incarnation and
+certified references independently. The stored input rows did not record birth
+or process; they cannot manufacture that proof. Existing request route
+annotations stay with record_turn_routing. Partial progress notices do not gain
+a final-reply claim. No new store, event, reader fallback or seen list is added.
+
+Crossing experiments: grouped channel inputs and a correction/followup remain
+selected by their actual native ID and text; a renamed following input resolves
+through the existing registry-owned original incarnation relation, preserving
+admission/turn/process checks. A later failed target cannot erase an earlier
+committed wire reference. These are source-owner and acquired-resource closure,
+not per-target status copies. The missing API is named and owned by Mendel;
+consumer preparation is not yet a runnable or Ready messaging checkpoint.
+
+
+### Original input group rename relation
+
+The public started_for_native family now requires one captured RegistrySnapshot
+keyword throughout InputDocument, InputAttempt and StartedInput. The existing
+ThreadIncarnation owns matches_recorded_name, deriving membership from the
+original registry aliases and original birth. Stored names are never upgraded
+to invented birth/process witnesses. Native ID/text, admission and turn still
+match the recorded original input fields; source publication separately owns
+complete live lease/process and certified-wire validation.
+
+One focused original-store/real-registry check passed in0.10seconds. It retains
+the two original grouped bus rows, renames the busy registry owner, records a
+correction under the new name, and retrieves each original row group under the
+original or canonical lease name without changing stored bytes. Foreign
+name/birth, native ID/text, turn/admission and deletion/recreation controls deny
+membership. No fallback reader, optional snapshot or caller alias loop remains.
+
+Mendel's subsequent routing closure replaces persisted full request Message
+copies with original MessageReference values in the existing TurnRouting JSON.
+It requires one quiet certified durable carry, preserving all old annotations;
+no SQL reset, body/time reconstruction or legacy reader. Arendt owns OwnedTurn,
+OwnedSendAdmission and TurnProgress constructor/consumer migration; Mendel owns
+the routing/source relation and Sch owns its two frontend consumers. This is a
+paired source dependency, not a separate installed cohort.
+
+
+### Native-start receipt and original ingress test migration
+
+Mendel reproduced two unchanged baseline failures on installed8691: the generic
+StartedInput.proves_started test expected valid channel and bus inputs to be
+refused. Its sole producer consumer, SelectedAdmissionSource.original_has_started,
+owns exact ingress lookup; the generic receipt owns recorded native-start facts,
+not a direct-only routing policy. No production predicate was widened or changed.
+
+Nine focused cases passed in0.14seconds. Existing owner/admission/turn/original
+and sent-digest negatives remain. Actual record/bind/started transitions now
+cover owner, channel and bus delivery. The selected source refuses another
+ingress, and first durable acceptance refuses rewriting the original target;
+original store bytes remain unchanged. The two incorrect generic exclusions
+were removed rather than restored as compatibility booleans. This is test
+contract repair, not a native/installed acceptance claim.
+
+### Actual ordinary publication boundary
+
+Consumer5d612968 and Source4f84338f are integrated normally at2b4b9c85. The
+consumer obtains each final Messaging.send_message reference and passes the
+original lease, checkpoint and reference-only routing to
+Transcripts.record_turn_publication before retirement. TurnProgress derives
+origins from the original reserved input and turn identity from the original
+lease; its duplicate task and turn-ID fields are deleted. The three production
+consumer files delete27lines and add38. The increase registers acquired send
+custody and closes the original source relation. Two fake success tests
+delete59lines; the existing real native fixture now runs the actual OwnedTurn.
+
+The first bounded controlled-provider/native614 run exited1 in32.68seconds:
+final and real-Bash-progress/final both committed their native response and
+actual wire send, then failed at the new Source input digest comparison. The
+503 provider refusal passed and published no completed reply. Native614's
+AgentSession._claimNativeInput hashes the domain-prefixed full request envelope;
+StartedInput.sent_digest hashes the delivered text. Their differing digests are
+different identities, not evidence of changed text. The actual native text and
+original StartedInput text have the same digest. IDEN-1 and BOUND-2 require the
+existing native proof owner here, not another request decoder or reconstruction.
+
+Mendel owns the source correction through the original NativeContextJournal
+point proof and existing tracked native ancestry. Original input ID/text/lease,
+certified original request references and committed publication references remain
+mandatory. Einstein owns the native contract. This checkpoint remains Draft
+until a fresh independent controlled-provider run passes that complete relation.
+
+The first run's original native journals, disposition rows, committed wire
+references and private diagnostics remain under this worktree's
+.native-publication-fixtures/run01. They are not retried or replayed. Its native
+processes have exited. The actual retained41MB lifecycle acceptance above stays
+complete; no repeated paid gate or public/default runtime change occurred.
+
+The corrected ordinary source/consumer checkpoint is now verified atd6b5c706.
+Normal merge0b5f4fc5 supplies the original NativeContextJournal point proof;
+the wrong-domain digest check and redundant session-header helper are deleted.
+Fresh actual OwnedTurn/native614/localhost run02 passed3cases in33.42seconds:
+final, real Bash progress/final, and provider503 without a false final send.
+Original Started inputs, final native-to-wire references and idle retirement
+are asserted through actual producers. All fixture native processes exited.
+
+The exact command and evidence limits are in
+`docs/validation/ordinary-turn-publication-native-20260930.md`; sanitized
+receipt `evidence/ordinary-turn-publication/run02.json` retains source heads
+and actual original references. Six joined production files have zero positive
+debt measures, including StringDispatch/TypeSwitch and their arm counts.
+This closes the ordinary native publication relation, not the whole messaging
+or default install. Arendt's quiet certified durable annotation carry remains
+an installation dependency. Initial command custody and remaining S14 are
+tracked outside this useful checkpoint; no local mirror or fallback substitutes
+for them. The earlier failed originals remain preserved without replay.
+
+### Receiving reassignment: quiet durable routing carry
+
+Arendt owns the carry builder and all outside-src operation/fixture files in
+`tools/cutover/`; parent alone owns execution and paired activation. Mendel owns
+the Source/Transcripts semantic API, not a competing carry implementation. The
+source-only436 checkpoint has merged independently; the carry still blocks
+activation of reference-only routing, not that proven source merge.
+
+Parent's authentic old720 typed readonly capture observed13 live executable
+owners,0 active turns and0 stored active_turns across ALL registry records.
+There is no present old active-routing decode crossing. Execution must recheck
+quiet custody through the existing central batch before any signal. The
+provider-free fixture also retains an expired reply-only active-turn routing
+control; it does not introduce a new production registry decoder.
+
+The operation derives both annotation tables and their primary keys from the
+existing RouteAnnotationTable declarations. The original installed720 decoder
+resolves embedded requests only against exact certified original wire seq/id
+and frozen sender/audience. New436 validates the entire reference plan before
+any mutation. Existing publications are preserved, never invented. The same
+typed OwnerCutover runs after ALL captured original processes stop and before
+ANY replacement launches, under the original writer descriptor and registry/
+annotation locks. Per-owner arguments and credentials remain retained in RAM
+by OwnerLifecycle. No new stop/start path or Source mirror exists.
+
+SQLite uses BEGIN IMMEDIATE and synchronous FULL; registry changes use its
+existing guarded commit owner. Private durable preimages are retained before
+mutation in the fresh receipt's `.originals` directory. SQLite failure rolls
+back the transaction; a committed registry replacement is restored through the
+same guard owner if possible. A pending guard or failure after SQL commit
+leaves the batch stopped for explicit review using those preimages. There is
+no automatic operation retry, restart or original-input replay.
+
+Production source and frozen41/e59 stage remain untouched. Failed private
+fixture roots `.routing-carry-fixtures/run01` through run05 and their logs are
+preserved. The first seed used the wrong old public API, the next native614
+package mismatched current439's pin, then the registry control exposed a raw
+write bypass of its guard. The carry now uses the existing guarded writer.
+Installed1f Source reads the carried original references; the old e213/223
+Toad fixture ignores IncomingTranscript and is not the matching consumer.
+The matching reviewed e59 consumer with Textual650 passed actual TUI run06:
+one original request and one native answer painted,3 routing cells carried,
+one reply-only registry control carried, wire/native/UNKNOWN bytes unchanged.
+refusal01 corrupted the last genuine old annotation after earlier valid cells;
+the entire operation refused before mutation, with every original file's bytes,
+inode and mode unchanged and no recovery resources or receipt created.
+Both exit0; provider calls and input replays0. No native execution or public
+owner replacement is claimed by this carry fixture. Existing435/438 owns the
+accepted real retained two-worker all-stop/busy-refusal/settings gate.
+
+Exact command and source pair: `docs/validation/retained-routing-carry-20260930.md`.
+Sanitized persistent receipts: `evidence/retained-routing-carry/run06.json` and
+`evidence/retained-routing-carry/refusal01.json`. Original private receipts,
+certificates and recovery preimages remain under the owned persistent fixture
+roots. No production old reader or changed renderer was added.
+
+Remaining S14: initial UI command custody and the initial/forwarded input send
+resource capability currently exposed as `_maintenance_wire_locked`, plus
+broader lifecycle consumers. These remain with Arendt, coordinated with Mendel;
+no C3 backend/goal source edits are included in the carry checkpoint.
+
+### Later C3 format crossing, separate activation dependency
+
+Parent's readonly actual720 registry reproduction on C3/Core20079652 refuses
+`Thread.last_goal_report_turn` on114 retired records. Zero live active turns
+does not make that Thread format admissible. This crossing is excluded from
+the current old720-to-merged436 routing carry and must not delay the first436/
+215 release. C3 source421/216 can merge independently of activation.
+
+Arendt owns the required lifecycle relation: one canonical batch must admit
+original typed records, capture original process/launch proof, fence and stop
+ALL originals, then carry removed members once and launch target-format owners.
+Full field closure includes nested Thread containers such as
+OwnerReleaseReceipts, not only top-level registry entries. Mendel owns the C3
+removed-member semantics and supplies that closure. No new production legacy
+decoder, FieldCodec adapter, silent field drop or separate operator stop loop
+is authorized. Parent's original reproduction made no mutation or signal;
+the crossing remains tracked for that later typed cutover capability.
+
+Mendel's full declaration closure confirms ONLY `last_goal_report_turn` was
+removed from Thread. Durable carriers are RegistryDocument.threads and
+`owner_release_receipts.json` values' OwnerReleaseReceipt.thread. The future
+same-batch carry must cover BOTH and preserve every receipt's before/after
+admission, birth/incarnation and process relation. Operator preimages remain
+historical resources, not runtime readers. Presentation/transcript/admission/
+selected runtime Thread carriers rebuild through their existing owners.
+Original goal_history owns report state; no report journal may be fabricated
+from an old field-only active report. The historical goal_pause_events file is
+preserved. This full relation belongs to later S14, not the current first carry.

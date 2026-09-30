@@ -1,0 +1,14 @@
+{
+  "entrypoint": "toad-comms refactor-r1",
+  "candidate": "7b86e8381f1066d983ed67a11f234ee418625ee3",
+  "core": "72062939239b0f07707406309305a056a23f925f",
+  "loaded": true,
+  "errors": [],
+  "saved_events": 40,
+  "prompts": 0,
+  "owner_pid": 2085975,
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "wire_id": "e206f3766e60451a989ca34df0e2a94b",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+  "log": "/home/ts/.local/state/toad/logs/Agent_Comms_2026-09-29T21_44_31_861589.txt"
+}

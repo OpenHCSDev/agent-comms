@@ -336,6 +336,11 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
 class LaunchPermit:
     reservation: Reservation
 
+    def retire_unverified(self, store: GoalAttemptStore) -> None:
+        """Release this acquired claim; settled or superseded attempts stay intact."""
+        with suppress(StaleAttemptError):
+            self.reservation.fail(store, "Launch claim retired without verified terminal progress.")
+
     def is_claimed(self, store: GoalAttemptStore) -> bool:
         attempt = self.reservation
         return attempt.readback(
@@ -348,6 +353,14 @@ class LaunchPermit:
                 attempt.attempt_id,
             ),
         )
+
+    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
+        """Read the original attempt, even after its successor generation advances."""
+        with closing(store._connect()) as conn:
+            original = AttemptRecord.read_in(conn, self.reservation.attempt_id)
+        if original is None or original.reservation != self.reservation:
+            raise StaleAttemptError("Original launch attempt changed or is unavailable.")
+        return original.phase.verified_progress
 
     def record_verified_progress(
         self, store: GoalAttemptStore, progress_witness: str

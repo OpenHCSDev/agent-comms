@@ -148,7 +148,7 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             and thread.created_at == target.created_at
             and status is not None
             and status.running
-            and thread.active_turn is not None
+            and thread.executing
         )
 
     @staticmethod
@@ -173,8 +173,8 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            goal = thread.goal
-            wait = rows.get(goal.id) if goal is not None and goal.state.active else None
+            goal = thread.active_goal
+            wait = rows.get(goal.id) if goal is not None else None
             if wait is not None and (
                 goal is None
                 or wait.owner_created_at != thread.created_at
@@ -190,10 +190,10 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_goal = peer.goal
+                peer_goal = peer.active_goal
                 peer_wait = (
                     rows.get(peer_goal.id)
-                    if peer_goal is not None and peer_goal.state.active
+                    if peer_goal is not None
                     else None
                 )
                 if peer_wait is not None and (
@@ -206,12 +206,12 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before
                     # its turn finishes; only the reporting turn belongs here.
-                    current_turn = peer.active_turn
+                    current_turn = peer.turn_lease
                     if (
                         peer_wait is None
                         or current_turn is None
-                        or peer_wait.report_turn_id != current_turn.id
-                        or peer_wait.report_turn_generation != peer.turn_generation
+                        or peer_wait.report_turn_id != current_turn.turn_id
+                        or peer_wait.report_turn_generation != current_turn.identity.generation
                     ):
                         return ()
                 if peer_wait is not None:
@@ -252,10 +252,16 @@ class GoalReplyScope(MessageDisplayScope):
 
     @property
     def index_targets(self) -> frozenset[str]:
-        return frozenset({self.owner, *(alias for alias, target in self.snapshot.aliases.items()
-                                      if target == self.owner)})
+        return frozenset(
+            {
+                self.owner,
+                *(alias for alias, target in self.snapshot.aliases.items() if target == self.owner),
+            }
+        )
 
     def includes(self, message: Message) -> bool:
-        return (message.target in self.index_targets
-                and message.starts_turn_for(self.owner, aliases=self.snapshot.aliases)
-                and self.wait.matches(message, self.snapshot))
+        return (
+            message.target in self.index_targets
+            and message.starts_turn_for(self.owner, aliases=self.snapshot.aliases)
+            and self.wait.matches(message, self.snapshot)
+        )

@@ -8,6 +8,7 @@ import re
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
+from traceback import TracebackException
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -72,6 +73,7 @@ def record_terminal_failure(
     event: dict,
     sequences: tuple[int, ...],
     native_response: Response | None = None,
+    source_error: BaseException | None = None,
 ) -> Path:
     """Persist before publishing the failure notice; this record grants no retry authority."""
     if not re.fullmatch(r"[0-9a-f]{32}", turn_id):
@@ -102,6 +104,14 @@ def record_terminal_failure(
     }
     if native_response is not None:
         document["native_response"] = native_response.rejection_details()
+    if source_error is not None:
+        document["source_error"] = "".join(
+            TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
+        )
+        from .native_pi import NativePiUnavailable
+
+        if isinstance(source_error, NativePiUnavailable):
+            document["native"] = source_error.diagnostic_evidence
     directory = root / "diagnostics"
     directory.mkdir(mode=0o700, exist_ok=True)
     if os.name == "posix":

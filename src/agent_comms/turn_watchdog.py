@@ -94,7 +94,7 @@ class ProgressWatchdog:
     def read_timeout(self, session: TurnSession) -> float | None:
         if session.stats.requested:
             timeout: float | None = 5.0
-        elif session.require_input_id and session.native.attestation.state is None:
+        elif session.awaiting_native_attestation:
             timeout = max(0.0, self.preflight_deadline - self.clock())
         elif session.active_tools or self.model_wait_timeout is None:
             timeout = None
@@ -102,7 +102,7 @@ class ProgressWatchdog:
             timeout = max(0.0, self.last_model_progress + self.model_wait_timeout - self.clock())
         if (
             self.prompt_start_deadline is not None
-            and not session.admission.started
+            and not session.started_input
             and not self.phase.pauses_input_clock
         ):
             start_wait = max(0.0, self.prompt_start_deadline - self.clock())
@@ -120,7 +120,7 @@ class ProgressWatchdog:
         attempt: tuple[int | None, int | None] | None = None,
     ) -> events.TurnState:
         replay_safe = not (
-            session.prompt_dispatched
+            session.admission.dispatched
             or self.tool_ever_started
             or self.output_started
             or session.inputs.started
@@ -133,7 +133,7 @@ class ProgressWatchdog:
             phase=event_phase or self.phase.declared_name,
             retryable=replay_safe,
             replay_safe=replay_safe,
-            side_effects_possible=session.prompt_dispatched
+            side_effects_possible=session.admission.dispatched
             or self.tool_ever_started
             or session.inputs.started
             or self.compaction_started,
@@ -165,13 +165,13 @@ class ProgressWatchdog:
                 await asyncio.sleep(0)
                 done = {task for task in tasks if task.done()}
             if not done:
-                raise TimeoutError
+                raise self.expired_wait(session)
             if read_task in done:
                 return read_task.result()
             if finish_task is not None and finish_task in done:
                 read_task.cancel()
                 await asyncio.gather(read_task, return_exceptions=True)
-                if session.require_input_id and (session.native.attestation.state is None):
+                if session.awaiting_native_attestation:
                     return b""
                 await session.stats.request(session)
             return b"\n"
@@ -181,8 +181,28 @@ class ProgressWatchdog:
                     pending.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    def expired_wait(self, session: TurnSession) -> TimeoutError:
+        """Describe the expired operation using the existing lifecycle clocks."""
+        if session.awaiting_native_attestation:
+            reason, phase = "native_preflight_timeout", "await_get_state"
+            started = self.preflight_wait_started_at
+        elif (
+            self.prompt_start_deadline is not None
+            and not session.started_input
+            and not self.phase.pauses_input_clock
+        ):
+            reason, phase = "input_start_timeout", "await_input"
+            started = self.prompt_start_deadline - self.input_timeout
+        else:
+            reason, phase = self.phase.stalled(self.prompt_accepted)
+            started = self.last_model_progress
+        return TimeoutError(
+            f"{reason}: phase={phase}; no progress for "
+            f"{self.clock() - started:.3f}s; input_started={session.started_input}"
+        )
+
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if session.require_input_id and (session.native.attestation.state is None):
+        if session.awaiting_native_attestation:
             elapsed_ms = round((self.clock() - self.launch_started_at) * 1000)
             wait_ms = round((self.clock() - self.preflight_wait_started_at) * 1000)
             session.output.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
@@ -208,7 +228,7 @@ class ProgressWatchdog:
             return
         if (
             self.prompt_start_deadline is not None
-            and (not session.admission.started)
+            and (not session.started_input)
             and (not self.phase.pauses_input_clock)
         ):
             session.output.record_failure(

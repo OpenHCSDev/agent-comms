@@ -27,8 +27,7 @@ from agent_comms.acp_extension import (
     TextRouteUpdate,
     TranscriptChangedUpdate,
     TranscriptSnapshotUpdate,
-    TurnSettledUpdate,
-    TurnStartedUpdate,
+    TurnChangedUpdate,
     UnavailableCursorObservation,
     decode_updates,
     encode_updates,
@@ -37,8 +36,9 @@ from agent_comms.acp_failure import BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
 from agent_comms.compaction_states import CompactionPublishedMetadata
 from agent_comms.pi_payloads import McpLiveReceipt
-from agent_comms.thread_identity import OwnerIdentity, ThreadIncarnation
+from agent_comms.thread_identity import AdmissionIdentity, ThreadIncarnation
 from agent_comms.transcripts import TranscriptCursor, TranscriptPage
+from agent_comms.turn_lease import ActiveTurn, TurnState
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
@@ -47,7 +47,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("pilot", frozenset(), str(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
-    owner = OwnerIdentity(ThreadIncarnation("pilot", 1.0), 1)
+    owner = AdmissionIdentity(ThreadIncarnation("pilot", 1.0), 1)
     queue_scope = QueueScope("pilot", owner, 123)
     samples = (
         RequestFailedUpdate(ACPFailure.from_error(-32603, "The usage limit has been reached")),
@@ -59,7 +59,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             )
         ),
         QueueChangedUpdate(queue_scope, 1, AvailableQueueProjection((QueueItem("input", "text"),))),
-        InputStartedUpdate("input", "text", queue_scope, 2),
+        InputStartedUpdate("input", "text", queue_scope, 2, "b" * 32),
         CoordinationChangedUpdate(
             owner.incarnation,
             "/home/ts/wt/pilot",
@@ -83,8 +83,8 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         McpClientReceiptUpdate(
             "turn", McpLiveReceipt(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
         ),
-        TurnStartedUpdate("turn", 1.0, "thinking", None),
-        TurnSettledUpdate("turn"),
+        TurnChangedUpdate(TurnState(ActiveTurn("turn", 123, started_at=1.0))),
+        TurnChangedUpdate(TurnState(finished_turn_id="turn")),
         TextRouteUpdate(None),
         TranscriptChangedUpdate(TranscriptCursor("session.jsonl", 42)),
         InputFailedUpdate("prompt", BackendDeliveryFailure("provider refused")),

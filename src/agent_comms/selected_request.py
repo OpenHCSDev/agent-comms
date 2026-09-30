@@ -42,13 +42,15 @@ class SelectedRequest:
         except NativePiTerminalFailure as error:
             # The existing admission has already corroborated the live failure
             # and settled this stage after raw writer, child and tool cleanup.
-            publish_native_failure(self.participant, error.context.input_id, error.public_message)
+            publish_native_failure(
+                self.participant, error.context.input_id, error.public_message, source_error=error
+            )
             raise
         except NativePiUnavailable as error:
-            self._uncertain_failure(error)
+            self._native_failure(error)
             raise
 
-    def _uncertain_failure(self, error):
+    def _native_failure(self, error):
         try:
             self.admission.stage.fail_unknown(
                 self.participant.bus,
@@ -63,6 +65,7 @@ class SelectedRequest:
         publish_native_failure(
             self.participant,
             self.admission.input_id,
-            f"{error}; the input is uncertain.",
+            error.public_failure,
             native_response=error.rejected_response,
+            source_error=error,
         )

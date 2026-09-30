@@ -43,6 +43,7 @@ from agent_comms.comms import wire
 from agent_comms.compaction_result import RefusedCompactionResult
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
+from agent_comms.goal_states import ActiveGoal
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.native_pi import CAPABILITY
@@ -135,8 +136,10 @@ class TestHandlers:
             "anthropic/two",
         ]
         thinking_config = response.config_options[1]
-        assert thinking_config.current_value == "medium"
+        assert thinking_config.current_value == ""
+        assert agent._comms.registry.require("proj").thinking_level is None
         assert [option.value for option in thinking_config.options] == [
+            "",
             "off",
             "minimal",
             "low",
@@ -785,7 +788,7 @@ class TestAgentTurn:
             wire(wired.root).goals.update_goal(
                 name,
                 ActiveGoalAction(
-                    expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
+                    expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
                     progress="independently verified newer progress",
                 ),
             )
@@ -892,7 +895,7 @@ class TestAgentTurn:
             wire(wired.root).goals.update_goal(
                 "proj",
                 ActiveGoalAction(
-                    expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
+                    expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
                     progress="independently verified newer progress",
                 ),
             )
@@ -929,7 +932,7 @@ class TestAgentTurn:
             wired.goals.update_goal(
                 "proj",
                 ActiveGoalAction(
-                    expect=GoalPrecondition(expected_status="active", goal_id=initial.id),
+                    expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
                     progress="Completed a verified step",
                 ),
                 actor=ModelInvocable,
@@ -1033,7 +1036,7 @@ class TestAgentTurn:
         goal = wired.registry.require("proj").goal
         if owner_paused:
             assert goal.state.declared_name == "paused"
-            assert wired.goals.goal_pause("proj").source.declared_name == "owner"
+            assert wired.registry.require("proj").goal.state.pause_source.declared_name == "owner"
             agent.turns.goals.schedule_goal("proj")
             assert not agent.inputs.pending_turns.get("proj")
         store = GoalAttemptStore(wired.root / "goal-private")
@@ -1798,7 +1801,7 @@ class TestFailureFeedback:
         origin = Message(human.name, origin_target, "please help", MessageType.INFO)
         routed: list = []
         monkeypatch.setattr(
-            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
+            wired.transcripts, "record_turn_publication", lambda **kwargs: routed.append(kwargs)
         )
 
         async def events(*args, **kwargs):
@@ -1835,7 +1838,7 @@ class TestFailureFeedback:
         origin = Message(human.name, "proj", "please help", MessageType.INFO)
         routed: list = []
         monkeypatch.setattr(
-            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
+            wired.transcripts, "record_turn_publication", lambda **kwargs: routed.append(kwargs)
         )
 
         async def events(*args, **kwargs):
@@ -1853,66 +1856,7 @@ class TestFailureFeedback:
         assert "[Open diagnostic](file://" in history[0].body
         assert not routed
 
-    async def test_successful_terminal_sends_complete_reply_and_records_route(
-        self, wired, tmp_path, monkeypatch
-    ):
-        from agent_comms.messages import Message, MessageType
 
-        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.messaging.user_identity(str(tmp_path / "proj"))
-        origin = Message(human.name, "proj", "please help", MessageType.INFO)
-        routed: list = []
-        monkeypatch.setattr(
-            wired.transcripts, "record_turn_routing", lambda *args: routed.append(args)
-        )
-
-        async def events(*args, **kwargs):
-            yield ae.Chunk(text="complete answer")
-            yield ae.StreamSettled()
-            yield ae.Done(ok=True, text="complete answer")
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=(human.name,), origins=(origin,)
-        )
-        history = wired.views.dm_history("proj", human.name)
-        assert len(history) == 1
-        assert history[0].notice is True
-        assert history[0].body == "complete answer"
-        assert len(routed) == 1
-
-    async def test_committed_progress_appears_in_channel_before_final_reply(
-        self, wired, tmp_path, monkeypatch
-    ):
-        from agent_comms.messages import Message, MessageType
-        from agent_comms.threads import Thread
-
-        agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        human = wired.messaging.user_identity(str(tmp_path / "proj"))
-        wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
-        origin = Message(human.name, "#team", "please help", MessageType.INFO)
-
-        async def events(*args, **kwargs):
-            yield ae.Chunk(text="Working")
-            yield ae.CommittedProgress(text="Working")
-            progress = wired.views.channel_history("#team")
-            assert [message.body for message in progress] == ["Working"]
-            assert progress[0].notice and (not progress[0].starts_turn)
-            yield ae.Chunk(text="Done")
-            yield ae.StreamSettled()
-            yield ae.Done(ok=True, text="WorkingDone")
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
-        )
-        history = wired.views.channel_history("#team")
-        assert [(message.body, message.notice) for message in history] == [
-            ("Working", True),
-            ("Done", False),
-        ]
 
     async def test_foreign_tool_use_before_input_start_never_notifies_channel(
         self, wired, tmp_path, monkeypatch

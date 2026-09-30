@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from contextlib import AsyncExitStack, ExitStack
 from abc import abstractmethod
 from pathlib import Path
 
@@ -47,14 +48,14 @@ class ToolCase(EffectCase):
 
     async def assert_effect(self, execution, progress):
         await super().assert_effect(execution, progress)
-        assert progress.goals.successful_tool_observed
+        assert progress.goals.productive_tool == self.body()[2]
 
 
 class CompactionCase(EffectCase):
     def body(self):
         return (
             ae.CompactionStart("test"),
-            ae.CompactionProgress(1),
+            ae.CompactionProgress(chunk_index=1),
             ae.ToolStart("tool", "read", "Read after summary"),
             ae.CompactionEnd(summary="summary"),
             ae.AgentInfo(model="model", session_name="saved", context_used=20, context_size=1000),
@@ -126,18 +127,16 @@ async def owner_turn(comms, tmp_path):
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", reply_targets=("#comms",))
-    assert execution.admit()
-    execution.begin()
-    execution.prepare_prompt()
-    execution.open_stream()
-    progress = execution.progress
     try:
-        yield execution, progress
+        async with AsyncExitStack() as resources:
+            with ExitStack() as permits:
+                assert execution.admit(permits)
+                execution.begin(resources)
+                execution.prepare_prompt()
+                execution.open_stream(resources, permits)
+                resources.enter_context(permits.pop_all())
+                yield execution, execution.progress
     finally:
-        if comms.registry.require(name).active_turn is not None:
-            await owner.turns.settle_turn(
-                session.session_id, name, execution.turn_id, execution.turn_lease
-            )
         await owner.shutdown()
 
 
@@ -275,55 +274,80 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
     assert comms.registry.require("waiting").goal == goal
 
 
-@pytest.mark.parametrize("provider_status", [200, 503])
+@pytest.mark.parametrize(
+    ("provider_status", "committed_progress"),
+    [(200, False), (200, True), (503, False)],
+    ids=["final", "tool-progress-final", "failed-provider"],
+)
 async def test_actual_native_stream_reaches_current_consumer_and_settlement(
-    native_backend, monkeypatch, provider_status
+    native_backend, monkeypatch, provider_status, committed_progress
 ):
+    from acp import RequestError
+
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.transcript_events import SentTranscript, TextTranscript
+
     native = native_backend
     native.provider.status = provider_status
+    if committed_progress:
+        native.provider.tool_call = ("bash", {"command": "printf ordinary-publication-tool"})
+        chunks = native.provider.response_chunks
+
+        def with_progress():
+            if native.provider.tool_call is not None:
+                yield {"content": "Working"}, None
+            yield from chunks()
+
+        monkeypatch.setattr(native.provider, "response_chunks", with_progress)
     comms = Comms(native.root)
     owner = CommsAgent(
         comms,
         agent_bin="pi",
+        agent_args=[
+            "--provider", "response-local", "--model", "fixture", "--thinking", "off",
+            "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+            "--no-prompt-templates",
+        ],
         private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
         private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
     )
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
+    comms.threads.attach_session(name, str(native.session))
     execution = OwnedTurn(
-        owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
+        owner.turns, session.session_id, name, "native acceptance",
+        reply_targets=("#comms",),
     )
-    assert execution.admit()
-    execution.begin()
-    execution.prepare_prompt()
-    execution.open_stream()
-    progress = execution.progress
-    waiting_owner(execution)
     try:
-        records = await native.run("native acceptance")
-        for event in records:
-            await progress.consume(event)
-        assert progress.terminal_ok is (provider_status == 200)
-        assert progress.settled
-        assert comms.goals.goal_wait("waiting") is not None
-        await progress.publish_result()
-        await owner.turns.settle_turn(
-            session.session_id,
-            name,
-            execution.turn_id,
-            execution.turn_lease,
-            stream_settled=progress.settled,
-            terminal_fence=progress.terminal_fence,
-        )
-        assert comms.goals.goal_wait("waiting") is None
-        assert native.provider.posts == 1
-        assert len(native.starts) == 1
-        rows = comms.bus.log.full_history()
         if provider_status == 200:
-            assert any(row.body == "Native response lifecycle." for row in rows)
+            await execution.run()
         else:
-            assert any(row.notice and "[Open diagnostic]" in row.body for row in rows)
-            assert not any(row.body == "Native response lifecycle." for row in rows)
+            with pytest.raises(RequestError):
+                await execution.run()
+        assert comms.registry.require(name).active_turn is None
+        assert session.session_id not in owner.inputs.backend_inboxes
+        assert native.provider.posts == (2 if committed_progress else 1)
+        inputs = InputDispositions(comms.root / InputDispositions.filename).read().rows
+        assert len(inputs) == 1 and all(row.has_started for row in inputs.values())
+        rows = comms.bus.log.full_history()
+        replies = [row for row in rows if row.sender == name]
+        if provider_status == 200:
+            assert [(row.body, row.notice) for row in replies] == (
+                [("Working", True), ("Native response lifecycle.", False)]
+                if committed_progress else [("Native response lifecycle.", False)]
+            )
+            page = comms.transcripts.capture_page_read(name).read()
+            final = [
+                event for event in page.events
+                if isinstance(event, TextTranscript) and event.text == "Native response lifecycle."
+            ]
+            assert len(final) == 1 and isinstance(final[0], SentTranscript)
+            assert final[0].source == replies[-1].reference
+            assert final[0].routing.reply.targets == ("#comms",)
+        else:
+            assert len(replies) == 1 and replies[0].notice
+            assert "[Open diagnostic]" in replies[0].body
+            assert not any(row.body == "Native response lifecycle." for row in replies)
     finally:
         await owner.shutdown()
 
@@ -409,9 +433,11 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
         await owner.shutdown()
 
 
-async def test_recovery_failure_report_preserves_original_and_does_not_duplicate(
+async def test_failure_publication_preserves_private_cause_after_transport_disconnect(
     owner_turn, monkeypatch
 ):
+    import json
+
     execution, progress = owner_turn
     emitted = []
     emit = execution.runner.effects._emit_event
@@ -423,11 +449,15 @@ async def test_recovery_failure_report_preserves_original_and_does_not_duplicate
             raise ConnectionError("error notification transport closed")
 
     monkeypatch.setattr(execution.runner.effects, "_emit_event", disconnect_after_error)
-    original = ValueError("original failure")
+    original = ValueError("private original failure")
     await progress.report_failure(original)
-    await progress.report_failure(original)
-    assert [event.text for event in emitted] == ["original failure"]
-    assert progress.failure_reported
+    record = execution.runner.comms.root / "diagnostics" / (execution.turn_id + ".json")
+    diagnostic = json.loads(record.read_text())
+    assert "ValueError: private original failure" in diagnostic["source_error"]
+    assert len(emitted) == 1
+    assert "private original failure" not in emitted[0].text
+    assert record.as_uri() in emitted[0].text
+    assert diagnostic["outcome"] == "failed; inputs must not be replayed automatically"
 
 
 async def test_relay_entrypoint_terminal_publication_releases_real_wait(

@@ -17,10 +17,9 @@ from typing import TYPE_CHECKING, Literal
 from .diagnostics import FailureReason
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
-from .goal_pauses import GoalPauseEvent
 from .goals import Goal
 from .recovery_projection import _preflight
-from .thread_identity import OwnerIdentity, ThreadIncarnation, TurnIdentity
+from .thread_identity import AdmissionIdentity, ThreadIncarnation, TurnIdentity
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .turn_lease import TurnFence, TurnLeaseFence
@@ -71,8 +70,8 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
         return ThreadIncarnation(self.owner, self.owner_created_at)
 
     @property
-    def owner_identity(self) -> OwnerIdentity:
-        return OwnerIdentity(self.incarnation, self.admission)
+    def admission_identity(self) -> AdmissionIdentity:
+        return AdmissionIdentity(self.incarnation, self.admission)
 
     @property
     def turn(self) -> TurnFence:
@@ -81,7 +80,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
     def matches_owner(self, owner: Thread, admission: int | None) -> bool:
         if admission is None:
             return False
-        if self.owner_identity != owner.owner_identity(admission):
+        if self.admission_identity != AdmissionIdentity(owner.incarnation, admission):
             return False
         if self.worktree != owner.worktree:
             return False
@@ -178,11 +177,10 @@ def read_failed_turn_projection(
     owner: Thread,
     owner_status: ThreadStatus,
     admission: int,
-    pause: GoalPauseEvent | None,
 ) -> FailedTurnProjection:
     """Read the existing private goal ledger, never initialize/migrate/repair it.
 
-    Caller supplies trusted canonical registry/pause snapshots, not a viewer's
+    Caller supplies trusted canonical registry snapshots, not a viewer's
     claimed identity. Samples are not an atomic cross-store revision and must
     never be used for dispatch or as evidence of absence of an owner pause.
     """

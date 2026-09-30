@@ -52,6 +52,15 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     active: ClassVar[bool] = False
     terminal: ClassVar[bool] = False
 
+    def after_failed_turn(self, diagnostic: str) -> GoalState:
+        return self
+
+    def after_unverified_completion(self, diagnostic: str) -> GoalState:
+        return self
+
+    def require_model_resume(self) -> None:
+        raise ValueError("This goal cannot be resumed; refresh its state.")
+
     def require_active(self) -> None:
         from .errors import RelationViolationError
 
@@ -108,7 +117,16 @@ class FromOpenGoal:
     """A state explicitly eligible as the target of an active/paused transition."""
 
 
-class OpenGoal(GoalState):
+class BlockingOnFailure:
+    """An eligible state owns the failed-turn transition and reason validation."""
+
+    def after_failed_turn(self, diagnostic: str) -> GoalState:
+        from .goal_actions import required_block_reason
+
+        return BlockedGoal(required_block_reason(diagnostic))
+
+
+class OpenGoal(BlockingOnFailure, GoalState):
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:
         return GoalState.members_with(FromOpenGoal)
@@ -138,6 +156,11 @@ class ActiveGoal(OpenGoal, FromOpenGoal):
 class PausedGoal(OpenGoal, FromOpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
 
+    def after_failed_turn(self, diagnostic: str) -> GoalState:
+        if self.protected:
+            return self
+        return super().after_failed_turn(diagnostic)
+
     def failure_projection(self, reason: str) -> tuple[str, str]:
         return self.source.failure_projection()
 
@@ -165,6 +188,10 @@ class PausedGoal(OpenGoal, FromOpenGoal):
     @property
     def protected(self) -> bool:
         return self.source.protects_pause
+
+    def require_model_resume(self) -> None:
+        if instruction := self.source.instruction():
+            raise ValueError(instruction)
 
     def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
         super().check_transition(nxt, owner=owner)
@@ -237,8 +264,11 @@ class UnrecordedBlockGoal(BlockedState):
 
 
 @dataclass(frozen=True)
-class CompletedGoal(GoalState, FromOpenGoal):
+class CompletedGoal(BlockingOnFailure, GoalState, FromOpenGoal):
     terminal = True
+
+    def after_unverified_completion(self, diagnostic: str) -> GoalState:
+        return self.after_failed_turn(diagnostic)
 
     @property
     def toggle(self) -> None:
