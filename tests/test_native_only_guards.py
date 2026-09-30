@@ -50,3 +50,10 @@ def test_managed_execution_has_one_native_owner():
             assert ast.unparse(node.func) != "self.proc.stdout.read"
     project = root.parents[1] / "pyproject.toml"
     assert 'agent-comms-agent = "agent_comms.worker:main"' in project.read_text()
+    worker = ast.parse((root / 'worker.py').read_text())
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {'declare', 'register'}
+        for node in ast.walk(worker)
+    ), 'The headless launcher must consume original owner registration, not mint one'

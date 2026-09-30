@@ -6,7 +6,7 @@ import secrets
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from .activity import ActivityState
+from .agent_events import NativePhaseChanged
 from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
@@ -18,13 +18,15 @@ from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
+from .mro_dispatch import MroDispatch, handles
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .wake import WakeDecision
+from .turn_phase import PreparingPhase, TurnPhase
 
 
 @dataclass(frozen=True)
-class SelectedParticipant:
+class SelectedParticipant(MroDispatch):
     comms: Comms
     bus: MessageBus
     store: Coordination
@@ -43,8 +45,15 @@ class SelectedParticipant:
             thread=self.owner.thread, admission_generation=self.owner.admission_generation
         )
 
-    def activity(self, state: ActivityState, description: str) -> None:
-        self.comms.agents.set_activity(self.owner.thread.name, state, description[:200])
+    def transition(self, phase: TurnPhase) -> None:
+        lease = self.owner.thread.turn_lease
+        assert lease is not None
+        self.comms.agents.transition_turn(lease, phase)
+
+    @handles(NativePhaseChanged)
+    async def native_phase(self, event: NativePhaseChanged) -> None:
+        current = self.comms.registry.require(self.owner.thread.name).turn_state.phase
+        self.transition(current.observed(event.phase))
 
     @classmethod
     @contextmanager
@@ -97,7 +106,7 @@ class SelectedParticipant:
                 provider,
                 model,
             )
-            selected.activity(ActivityState.WORKING, f"Preparing {initial.message.target} message")
+            selected.transition(PreparingPhase(f"Preparing {initial.message.target} message"))
             yield selected
 
     @staticmethod

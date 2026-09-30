@@ -8,7 +8,6 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
-from .activity import ActivityState
 from .attempt_start import AttemptStart
 from .channel_coding_tools import CodingToolOwner
 from .coordination_errors import IdentityConflict, StaleFence
@@ -30,6 +29,7 @@ from .selected_triage import SelectedTriage
 from .wake import derive_exact_reply_target
 from .wake_candidate_index import WakeCandidateIndex
 from .wake_injection import render_selected_wake_frame
+from .turn_phase import PreparingPhase, PromptAcceptancePhase, PublishingPhase
 
 _MAX_PROMPT_BYTES = 32 * 1024
 
@@ -161,8 +161,8 @@ class SelectedAttempt:
         ]
         if len(selected) != 1:
             raise IdentityConflict("full wake lost its selected assignment")
-        participant.activity(
-            ActivityState.THINKING, f"Responding in {participant.initial.message.target}"
+        participant.transition(
+            PreparingPhase(f"Preparing response in {participant.initial.message.target}")
         )
         return cls(
             participant, FullNativeSend(selected[0], progress), token, started.snapshot.obligation
@@ -226,14 +226,16 @@ class SelectedAttempt:
         self.stage.progress.input_id = request.admission.input_id
         with request.native_failures():
             tools = self.tool_owner(session, request.admission.input_id, action)
+            participant.transition(PromptAcceptancePhase())
             result = await request.admission.execute(
                 package,
                 provider=participant.provider,
                 model=participant.model,
-                observe_event=self.stage.progress.dispatch,
+                observe_event=self.observe_event,
                 selected_tool_mode=action.mode(tools),
             )
             result.require_publishable()
+            participant.transition(PublishingPhase())
             action.apply(tools)
             request.admission.commit(participant.store, result.context)
             self.stage.progress.finish()
@@ -255,6 +257,10 @@ class SelectedAttempt:
                 participant, session, request.admission.input_id, published
             )
 
+    async def observe_event(self, event):
+        await self.stage.progress.dispatch(event)
+        await self.participant.dispatch(event)
+
 
 @dataclass(frozen=True)
 class SelectedConsideration:
@@ -265,8 +271,8 @@ class SelectedConsideration:
         assignment = participant.assignment
         if not assignment.lifecycle.requires_selected_triage():
             return session, None
-        participant.activity(
-            ActivityState.THINKING, f"Checking {participant.initial.message.target} message"
+        participant.transition(
+            PreparingPhase(f"Preparing triage for {participant.initial.message.target}")
         )
         stage = TriageNativeSend(assignment)
         request = SelectedRequest.reserve(
@@ -277,11 +283,14 @@ class SelectedConsideration:
             SelectedPrompt(participant).triage(),
         )
         with request.native_failures():
+            participant.transition(PromptAcceptancePhase())
             result = await request.admission.execute(
                 package,
                 provider=participant.provider,
                 model=participant.model,
+                observe_event=participant.dispatch,
             )
+            participant.transition(PublishingPhase())
             decision = SelectedTriage.parse(result.text)
             stage.commit(
                 participant.store,

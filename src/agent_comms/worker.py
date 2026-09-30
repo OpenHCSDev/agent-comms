@@ -1,6 +1,7 @@
 """Persistent owner for a forked thread; idle turns consume no model process."""
 
 import asyncio
+import argparse
 import os
 import signal
 from contextlib import suppress
@@ -70,27 +71,27 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
 
 
 def main() -> int:
-    """Join the configured native wire through the canonical persistent owner.
+    """Run the explicitly selected, already declared persistent owner.
 
-    An existing identity retains its own project. A newly registered headless
-    owner uses the invoking directory; senders never select its tool worktree.
+    Catalog and tool commands belong to agent-comms, not this launcher. Parse
+    before consulting a route or wire so discovery cannot admit an owner.
+    Registration belongs to the original thread management operation.
     """
-    from pathlib import Path
-
-    from .threads import Thread
+    argparse.ArgumentParser(
+        prog="agent-comms-agent", description=__doc__,
+        epilog="Select an existing owner with AGENT_COMMS_THREAD. Use agent-comms for commands.",
+    ).parse_args()
+    name = os.environ.get("AGENT_COMMS_THREAD")
+    if not name:
+        raise ValueError("Headless execution requires an explicit AGENT_COMMS_THREAD")
 
     launch = private_nk_from_environment()
     if launch is None:
         raise ValueError("Headless execution requires a configured native route")
     comms = wire(launch.validated_root)
-    name = os.environ.get("AGENT_COMMS_THREAD") or os.environ.get("PI_AGENT_ID") or "participant"
-    if name not in comms.registry:
-        tags = frozenset(filter(None, os.environ.get("PI_AGENT_TAGS", "bot").split(",")))
-        comms.registry.declare(Thread(name, tags, str(Path.cwd()), task=os.environ.get("PI_TASK")))
     thread = comms.registry.require(name)
     if thread.process_identity is not None and thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")
-    os.environ["AGENT_COMMS_THREAD"] = thread.name
     with suppress(KeyboardInterrupt):
         asyncio.run(run())
     return 0
