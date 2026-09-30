@@ -178,14 +178,19 @@ class NativeEvidenceRead:
         self.entries = ()
 
     def observe(self):
-        from .native_pi import NativePiUnavailable
+        from .native_pi import NativePiUnavailable, _private_session_dir
 
         try:
+            _private_session_dir(self.source.path.parent)
             appended = tuple(NativeEntry.from_evidence(row) for row in self.source.rows())
             entries = self.entries + appended
             if not entries or not isinstance(entries[0], SessionEntry):
                 raise ValueError("Native Pi session header is invalid")
             entries[0].require_header()
+            _private_session_dir(self.source.path.parent)
+        except NativePiUnavailable:
+            self.close()
+            raise
         except (ValueError, TypeError, KeyError) as error:
             self.close()
             raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
