@@ -154,7 +154,9 @@ class AttachmentRelation:
 
     @property
     def current(self):
-        return not (self.foreign or self.ambiguous or self.newer or self.older)
+        return (self.same_incarnation
+                and self.original.admission_generation == self.received.admission_generation
+                and self.original.owner_pid == self.received.owner_pid)
 
 
 @dataclass(frozen=True)

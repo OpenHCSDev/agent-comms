@@ -65,6 +65,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return phase
 
+    def following_compaction(self, previous: CompactionPhase) -> TurnPhase:
+        return self
+
     def on(self, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
         for member in TurnPhase.members_with(TurnPhase):
             if member.starts(event):
@@ -166,10 +169,11 @@ class CompactionPhase(StallExempt, Excursion):
                        source=source if source is not None else self.source)
 
     def observed(self, phase: TurnPhase) -> TurnPhase:
-        if isinstance(phase, CompactionPhase):
-            return replace(phase, operation_id=self.operation_id, started_at=self.started_at,
-                           source=phase.source if phase.source is not None else self.source)
-        return phase
+        return phase.following_compaction(self)
+
+    def following_compaction(self, previous: CompactionPhase) -> TurnPhase:
+        return replace(self, operation_id=previous.operation_id, started_at=previous.started_at,
+                       source=self.source if self.source is not None else previous.source)
     @classmethod
     def starts(cls, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
