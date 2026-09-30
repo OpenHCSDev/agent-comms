@@ -37,6 +37,7 @@ from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import ThinkingLevel
+from .private_path import FileRevision
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .store_files import _store_lock
 
@@ -55,7 +56,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         prompt_send_boundary,
         maintenance_root,
         fresh_selected,
-        selected_revision,
+        selected_revision: FileRevision | None,
         selected_tool_mode,
         observe_event,
     ):
@@ -70,7 +71,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.provider, self.model = provider, model
         self.prompt_send_boundary = prompt_send_boundary
         self.maintenance_root = maintenance_root
-        self.fresh_selected, self.selected_revision = fresh_selected, selected_revision
+        self.fresh_selected = fresh_selected
+        self.selected_revision: FileRevision | None = selected_revision
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
         self.tool_socket: OwnerToolSocket | None = None
         self.input_event: pi.InputCommitted | None = None
@@ -270,7 +272,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         selected = self.fresh_selected
         selected.require_runtime(state)
         revision = _fresh_selected_revision(selected, started=True)
-        if revision[:2] != self.selected_revision[:2]:
+        if revision.identity != self.selected_revision.identity:
             raise NativePiUnavailable("Selected startup changed enrolled inode")
         self.selected_revision = revision
 
