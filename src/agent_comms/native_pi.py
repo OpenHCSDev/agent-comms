@@ -528,14 +528,13 @@ class NativePiRpcLaunch:
         only establishes the executable and its settings; native input, context,
         and model-delivery proofs remain separate per-attempt observations.
         """
-        if any(
-            not isinstance(value, str)
-            or not value.strip()
-            or value.startswith("-")
-            or any(character.isspace() for character in value)
-            for value in (provider, model)
-        ):
-            raise NativePiUnavailable("Native Pi requires an explicit provider and model")
+        try:
+            for value in (provider, model):
+                FieldCodec.decode(str, value)
+                if re.fullmatch(r"[^\s-]\S*", value) is None:
+                    raise ValueError("Provider/model must be single non-option tokens")
+        except (TypeError, ValueError) as error:
+            raise NativePiUnavailable("Native Pi requires an explicit provider and model") from error
         if selected_thinking_level is not None and (
             type(selected_thinking_level) is not str
             or not ThinkingLevel.supports_selected(selected_thinking_level)

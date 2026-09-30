@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import secrets
-import stat
 from contextlib import suppress
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -144,11 +143,7 @@ class SelectedWritePlans:
             info = self.directory.lstat()
         except FileNotFoundError:
             return False
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-        ):
+        if PrivateDirectoryRole.violation(info) is not None:
             raise IdentityConflict("Selected write plan directory is not private")
         return True
 
@@ -161,13 +156,9 @@ class SelectedWritePlans:
             return None
         try:
             info = os.fstat(fd)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_nlink != 1
-                or info.st_uid != os.geteuid()
-                or stat.S_IMODE(info.st_mode) != 0o600
-                or info.st_size > 2 * _MAX_BYTES
-            ):
+            if PrivateFileRole.violation(info) is not None:
+                raise IdentityConflict("Selected write intent is not private")
+            if info.st_nlink != 1 or info.st_size > 2 * _MAX_BYTES:
                 raise IdentityConflict("Selected write intent has unsafe identity")
             with os.fdopen(fd, "rb") as stream:
                 fd = -1
