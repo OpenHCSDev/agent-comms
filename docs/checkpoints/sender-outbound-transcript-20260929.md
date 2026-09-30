@@ -125,3 +125,21 @@ retained native/tool/official ACP journey own its replacement contract. The latt
 is explicitly named for original source and cold ACP replay; it does not claim
 target execution or mounted UI handling acceptance. No compatibility reader was
 restored to satisfy retired tests.
+
+Normally integrated merged426 d306d0df at0200f543. Packet conflict resolution
+retains426's original registry ThreadOwnerBinding alongside430's canonical read
+identity; neither replaces the other with queue admission or status copies.
+Built an offline720-KiB wheel and installed only this package into private
+candidate-site-d306 (6.8MiB), using existing Python3.14 dependency runtime.
+Installed package import and the six affected packet/source controls pass2.38s.
+installed-candidate-d306.json records exact source0200f543, wheel SHA256 and
+explicit reviewed native4ab910061590d1e0 pairing. Native acceptance remains
+unreviewed; global packages/default route are unchanged. The native test preserves
+the caller's explicit installed CLI PATH instead of overriding it with another
+runtime's bin directory.
+
+Schrodinger215 owns the existing publication checkpoint lifetime during a busy
+turn. Core capture/page reads have no busy-state rejection; their canonical
+identity still revokes a read if native or source bytes change. Immediate hot
+original wire publication must pass through that existing frontend lifetime,
+without a second backend projector or synthetic live append.

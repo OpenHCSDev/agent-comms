@@ -3,7 +3,6 @@
 import asyncio
 import json
 import os
-import sys
 from pathlib import Path
 
 import acp
@@ -26,7 +25,6 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
     original_native = native.session.read_bytes()
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
     comms = Comms(native.root)
     owner = canonical_agent(
         comms,
