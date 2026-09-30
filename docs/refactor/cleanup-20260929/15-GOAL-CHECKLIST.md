@@ -1,3 +1,34 @@
+## 2026-09-30 structural cleanup dispatch and concrete progress
+
+| Requested item | PR and integration owner | Current evidence and next action |
+| --- | --- | --- |
+| Standing prompt replacement | Core464, parent | Merged674abadf;3linesdeleted/16added. Exact reviewed file is now present in live .pi/APPEND_SYSTEM.md, preserving old file/mode. Receipt:evidence/standing-live-verification-rules-20260930/live-file-replacement.json. Existing processes are not claimed to have reread it. |
+| Typed external ACP error payload | Core463, Arendt; parent shared FieldCodec builder | Parent contribution88c9e03f normally merged into463. One shared untagged JSON shape capability, no alternate codec; typed error rewrite and installed SDK/ACP error journey underway. Full deletion count follows published rewrite. |
+| Builtin MroDispatch ratchet | NRA14, Kepler | Extend original measure owner, prove growth on421 historical specimen, rebuild same skill archive and notify actual OpenHCS consumer of exact pin. Existing per-function StringDispatch/TypeSwitch admission also reviewed. |
+| SessionRevision value | New PR after456/458/459/462 merge, parent | Deferred dependency as requested. Convert compaction_outcomes first and all13module positional/None/private-import consumers in one PR; no implementation competing with active stack. |
+| No new None-as-state in stack | Each original source owner; parent integration | Parent4595743a8c5 replaces nullable revision/exact_size policy fields with explicit check types,13production linesdeleted/36added.48checks pass2.62s including real pinned native SessionManager. Einstein owns next affected installed journey and458 payload state review; Arendt reviews456 resource/domain distinction; Mendel reviews457/462. Review remains open until published receiving receipts/fixes. |
+
+Actual staged native/ACP/UI gates passed first-fork open/first answer, physical
+queued SendNow and cancellation. Original failed observer assertion is retained;
+Kepler is correcting emitted-frame/resource geometry ownership using that same
+recording, without more prompts. Schrodinger's hot DM/IRC and31second idle check
+passed, but the tab-return reply reached native saved history and timed out in
+the UI. Schrodinger and Heisenberg own the original source/cursor publication
+relation. No full-bus or live-ready claim is made.
+
+Mendel462 c53449cb has actual noneditable native/retained-history/tool-reply/
+queuedACP journey PASS11.19s; evidence publication and item5 review precede
+merge. Heisenberg25335083ded publishes scoped body-readiness checkpoint,
+10production linesdeleted/12added. Actual83.714s recording and16checks passed;
+parent is reconciling the physical A-return tab/footer identity using original
+raw state. Neither whole CPU improvement nor correct all-view state is inferred
+from those checks. No second competing test run is authorized by this note.
+
+Runtime packages/defaults remain sidebar-native-custody Core6feb/Toad98bab.
+Prompt replacement is delivered separately; the new paired candidate is not
+live. Send Tristan the requested persistent question only after actual installed
+user-entrypoint acceptance. Original inputs/history/UNKNOWNs remain intact.
+
 ## Next paired install: native read latency, input and answer custody
 
 Accepted Arendt456 retained-history native completion/cancel checkpoint reduces

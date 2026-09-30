@@ -1,3 +1,23 @@
+## Current structural extension owners
+
+Core464 prompt is merged and exact authorized live project file replaced,
+old preimage retained. Core463 Arendt owns typed provider-error root/children
+and render behavior; parent88c9 owns the common FieldCodec JSON-shape capability.
+NRA14 Kepler owns builtin handler ratchet/historical specimen/per-function
+admission/archive/consumer pin closure. Parent owns deferred SessionRevision
+after456/458/459/462 merges. No other agent edits adaptive/manual compaction
+for that deferred task.
+
+Parent4595743a8c5 closes new nullable check-policy state with named inherited
+checks;48source/native controls pass, next installed crossing remains Einstein.
+Each stack owner reviews newly introduced None-based state before their merge.
+Heisenberg252 and Schrodinger460 share critical source/cursor publication root
+trace after hot/idle bus success and saved-native tab-return reply UI timeout.
+Kepler/Einstein settle the physical queue observer using original raw recording,
+not another provider run. Heisenberg253 full performance remains active; parent
+reviewed physical frames and flagged A-return tab/footer identity discrepancy
+for original capture-timing/binding proof, no broad readiness inference.
+
 # Current S14/T9 ownership and remaining original plan closure
 
 Audited Core6feb634b (291 Python files) and Toad8a924e1d (273). Whole-source AST parsing found36 Core and3 Toad BoolOp expressions with at least six direct terms. This is an exact syntactic lead inventory, not36 proven domain defects. Full site artifact: evidence/cleanup-live-integration/current-six-term-sites.json. Owner decisions must distinguish boundary checks from missing identities/states and trace every related consumer. Original S14/T9 requires zero six-plus chains; reducing a count through relocation does not close ownership.

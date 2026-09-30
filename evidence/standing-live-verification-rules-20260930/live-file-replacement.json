@@ -1,0 +1,12 @@
+{
+  "pr": 464,
+  "source_commit": "f0a93b140172540f0b34c5769642cd9ebdf5b8e9",
+  "source": "/home/ts/wt/comms-standing-live-verification-rules-20260930/.pi/APPEND_SYSTEM.md",
+  "target": "/home/ts/.agent-comms/.pi/APPEND_SYSTEM.md",
+  "preimage": "/home/ts/wt/comms-standing-live-verification-rules-20260930/evidence/standing-live-verification-rules-20260930/live-prompt-before.md",
+  "original_sha256": "886449c770adaab9d78a958af478457abbaf0061aca5e036d616f3ef2d7b1a3c",
+  "installed_sha256": "9f955e26f07db700a444b7faf7b4eafc9926d8ebbb17bf61234157acac745c68",
+  "mode": "0o644",
+  "result": "reviewed prompt present in live project file; package runtime unchanged; existing process prompt reload not claimed",
+  "timestamp": 1790804043.6665432
+}
