@@ -93,3 +93,90 @@ shared dependency is required before its reader controls. Parent459 owns common
 POSIX observations; Arendt will consume that original FileRevision and path-role
 contract rather than retain tuple revision or socket validators. Selected
 compaction acquisition and the actual installed whole journey remain in progress.
+
+## Functional source candidate ab5ba4ae
+
+The candidate normally integrates parent459 `9890c75e`, Einstein458 `6fabde90`,
+Mendel457 `51631c9b` and Schrodinger460 `4b54a8d2`. Fresh enrollment stores its
+original `FileIdentity`; the prewrite/startup helper and tracked consumer use
+`FileRevision`. Native files, package/session ancestors, selected-write/tool
+resources and the recovery socket consume the one declared POSIX role family.
+These observations cannot mint enrollment, input admission or a terminal receipt.
+
+Adaptive and manual compaction acquire the existing `RegistryOwner` from one
+original registry snapshot, require its active turn and saved session, and
+consume `SelectedModel` projected from the original runtime observation. The
+settings probe takes that value instead of three independently compared scalars;
+all production and native-fixture callers were changed. Response envelope
+correlation belongs to `Response.require_request`; its declared data member owns
+settings-source or summary-operation matching. Unknown/nonresponse cases refuse
+through their inherited declaration, without a switch or a response mirror.
+
+Historical lookup/root spelling belongs to Schrodinger's original
+`StableLookupText` and the existing `WireRootIdText`; the reader no longer repeats
+the grammar or checks a trusted store's concrete class. Cursor and reservation
+joins still require original proof and committed rows, not spelling validation.
+
+Source controls completed on this closure: 33 history/cursor/recovery-reader
+controls (9.58s), 17 selected-tool/write controls (10.15s), 27 selected-summary
+custody controls (1.39s), and 34 response/envelope/source controls (0.66s).
+Optional native cases skipped when no native package was configured are not
+counted as passes. Installed whole-workflow acceptance remains pending the
+parent's correctly pinned shared candidate; the immutable prior `6fabde90`
+candidate does not cover the additional selected-compaction APIs here.
+
+### State and format classification
+
+- Native journals, SQLite native-input/context proofs, reservation and UNKNOWN
+  receipts, wire identity/certificates, registry and selected-write file keys are
+  durable originals. This checkpoint does not reset, convert or replay them.
+- Original SQL identities, emitted context values and registry captures are
+  immutable observations of those originals, not additional admission stores.
+- The acquired released-owner grant is valid only inside its original exclusion
+  scope. Its active flag is resource custody, not copied turn status.
+- `FileRevision` is a POSIX resource observation. The fresh-startup type changes
+  only internal Python producer/consumer calls; native event fields and wire
+  ABI remain unchanged. No current checkpoint runtime reset is required.
+- The existing compound `SelectedSource.SessionRevision` / backend resource
+  tuple representation remains an explicitly tracked S14 ownership gap. Its
+  serialized compaction reservation consumers require one separately classified
+  closure; this checkpoint does not disguise that representation with an alias.
+
+### Actual timing evidence and limits
+
+Sanitized receipts in `evidence/native-input-custody/live-request-timing-20260930.json`
+and `live-tool-timing-20260930.json` come from bounded read-only current comms428
+ACP/native evidence. One original request took 42.319s, with 74.046ms of the
+native request observer's declared callbacks and a 5.066ms maximum callback.
+Its original dispatch-to-first-event interval was 255.299ms and
+ dispatch-to-first-delta interval 3663.753ms, all measured by the same native
+request producer. These counters do not measure arbitrary extension or UI work.
+
+A native assistant message's timestamp is established at model-request creation,
+not tool execution start. Subtracting it from a saved tool result would combine
+provider generation with tool dispatch/execution/publication. Original native
+tool-start/end payloads lack producer timestamps, so these public records cannot
+allocate that combined interval further. The controlled installed journey will
+record tool consumer/callback timing in one Python process separately from the
+original native request clock. The historical 129.898s interval remains
+unattributed; no provider queue, deadlock or CPU diagnosis is claimed.
+
+## Critical basic-tool latency followthrough
+
+Arendt owns the measured `tool_started → context_proof → _verify_context → NativeContextProof.read_evidence` delay. The original 44,661,933-byte source copy contains 10,147 entries. Full historical entry decoding cost 2.051/1.966 seconds on every proof check. Acquired source checks cost 0.0415/0.0411/0.0397 seconds after one initial 2.100-second decode. These are same-process measurements, not subtraction of producer and ACP clocks.
+
+`NativeEntry.open_evidence` owns an acquired reader inside the existing tracked-turn ExitStack. The original input commitment acquires it; each later tool/terminal context check verifies the complete original byte prefix, strict append decoding, opened/named revision and private permissions, and reads the current SQLite proof. No context proof or disposition is cached, no seen-input list or parallel index is introduced. Replaced, truncated, altered, ambiguous and damaged sources still refuse. The decoded source resource ends with its turn.
+
+Fifteen focused controls pass. Actual installed/native retained-history tool acceptance remains pending. The separate 120.935-second model request had a high prompt cache hit rate; the 36.423-second first delta and remaining stream duration are native request phases, with no provider-capacity attribution. This source fix does not claim to explain them.
+
+Sanitized measurement: `evidence/native-input-custody/context-proof-latency-20260930.json`. No durable format or native ABI change, no public writes/restarts/provider calls, no UNKNOWN replay.
+
+### Actual retained native latency checkpoint
+
+The initial implementation refused a legitimate native append during initial decoding. The acquired original file owner now captures a byte snapshot under the exact descriptor/named revision, decodes it, then revalidates the captured original prefix against the current source under a stable short read. Native appends during decoding are admitted as later snapshot bytes; altered captured bytes, replaced/truncated files and changed private permissions still refuse. Cold evidence readers use this same owner. Every refusal closes the acquired reader and decoded source resource. No proof is cached and no second historical-input list/index/store exists. This addresses IDEN-7 (whole revision spanning unrelated appends) and BOUND-1 (decoding historical payload repeatedly at each use), without splitting the original proof authority (IDEN-5).
+
+Installed noneditable Core wheel, actual native593b, retained44.7MB source and fast localhost provider: two cases passed in45.87s. Ordinary completion exercised three real read tools followed by one canonical published response. Initial source snapshot44,664,180 bytes grew to44,664,949 while its2.187s decode ran, proving the native append race was exercised without provider delay. Tool context checks38–43ms; same-Python native-event consumption start→end115–231ms. These intervals include tool admission/policy and transport/journal work, not pure filesystem reads.
+
+Accepted cancellation after the same three real reads preserved unresolved original input and issued no provider replay. Both outcomes prove original source revision/hash unchanged, native children retired and all acquired readers closed. Protected native fixture journals/proofs are retained privately under `.observations/context-latency/native-artifacts`; no private source content or credentials are published. Seventeen focused controls passed, including append versus prefix alteration during decoding and refusal/closed-reader invalidation.
+
+Sanitized receipts: `evidence/native-input-custody/retained-native-tool-complete-20260930.json` and `retained-native-tool-cancel-20260930.json`. Broader correctly paired UI fork/compaction acceptance remains a separate tracked scope; this gate covers installed Core/native tool custody and cancellation. The separate cached121s model request remains provider/model phase evidence, not diagnosed capacity or file I/O. No public action, paid call, native event/durable format change or reset/replay requirement.

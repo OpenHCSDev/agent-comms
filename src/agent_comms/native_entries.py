@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import contextmanager
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
@@ -71,18 +72,22 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     @classmethod
     def read_evidence(cls, session_file):
         """Decode once behind the existing strict private-file trust boundary."""
-        from .native_pi import NativePiUnavailable, _private_session_dir, _read_private_file
+        with cls.open_evidence(session_file) as evidence:
+            return evidence.observe()
+
+    @classmethod
+    @contextmanager
+    def open_evidence(cls, session_file):
+        """Acquire a source reader, never input acceptance or replay authority."""
+        from .native_pi import PrivateEvidenceRead, _private_session_dir
 
         _private_session_dir(session_file.parent)
-        raw = _read_private_file(session_file)
-        try:
-            entries = tuple(cls.from_evidence(row) for row in raw)
-            if not entries or not isinstance(entries[0], SessionEntry):
-                raise ValueError("Native Pi session header is invalid")
-            entries[0].require_header()
-        except (ValueError, TypeError, KeyError) as error:
-            raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
-        return entries[0], entries
+        with PrivateEvidenceRead.open(session_file) as source:
+            evidence = NativeEvidenceRead(source)
+            try:
+                yield evidence
+            finally:
+                evidence.close()
 
     @staticmethod
     def tracked_users(entries):
@@ -149,6 +154,43 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     @property
     def unread_reply(self) -> bool:
         return False
+
+
+class NativeEvidenceRead:
+    """Decoded original entries live only inside the acquired file resource.
+
+    Every observation verifies all previously read bytes before decoding the
+    append. No context proof, disposition or owner authority is retained here.
+    """
+
+    def __init__(self, source):
+        self.source = source
+        self.entries: tuple[NativeEntry, ...] = ()
+
+    def require_path(self, session_file):
+        from .native_pi import NativePiUnavailable
+
+        if self.source.path != session_file:
+            raise NativePiUnavailable("Native evidence reader belongs to another source")
+
+    def close(self):
+        self.source.close()
+        self.entries = ()
+
+    def observe(self):
+        from .native_pi import NativePiUnavailable
+
+        try:
+            appended = tuple(NativeEntry.from_evidence(row) for row in self.source.rows())
+            entries = self.entries + appended
+            if not entries or not isinstance(entries[0], SessionEntry):
+                raise ValueError("Native Pi session header is invalid")
+            entries[0].require_header()
+        except (ValueError, TypeError, KeyError) as error:
+            self.close()
+            raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
+        self.entries = entries
+        return entries[0], entries
 
 
 @dataclass(frozen=True)
