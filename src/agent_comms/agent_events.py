@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
+from .compaction_progress import CompactionSourceProgress
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goal_presentation import GoalExecution
     from .goals import Goal
+    from .turn_phase import TurnPhase
 
 
 class AgentEvent(ABC):
@@ -65,6 +67,12 @@ class InputRefused(InputDisposition):
 @dataclass(frozen=True)
 class PromptCancelled(AgentEvent):
     input_state: type[InputAttempt] | None
+
+
+@dataclass(frozen=True)
+class NativePhaseChanged(AgentEvent):
+    """Actual native observer phase; never reconstructed from visible chunks."""
+    phase: TurnPhase
 
 
 @dataclass(frozen=True)
@@ -165,17 +173,6 @@ class CompactionStart(CompactionEvent):
 
 
 @dataclass(frozen=True)
-class CompactionSourceProgress:
-    source_bytes_done: int = field(metadata={"wire_name": "sourceBytesDone"})
-    source_bytes_total: int = field(metadata={"wire_name": "sourceBytesTotal"})
-    summary_phase: str = field(metadata={"wire_name": "summaryPhase"})
-
-    def __post_init__(self):
-        if not 0 <= self.source_bytes_done <= self.source_bytes_total:
-            raise ValueError("Invalid compaction source progress")
-
-
-@dataclass(frozen=True)
 class CompactionSummaryProgress(CompactionEvent):
     """Provisional provider text and source work, never a committed summary."""
 
@@ -246,6 +243,13 @@ class CompactionProgress(AgentEvent):
     source_bytes_done: int | None = None
     source_bytes_total: int | None = None
     summary_phase: str | None = None
+
+    @property
+    def source(self) -> CompactionSourceProgress | None:
+        if self.source_bytes_done is None or self.source_bytes_total is None:
+            return None
+        return CompactionSourceProgress(self.source_bytes_done, self.source_bytes_total,
+                                        self.summary_phase or "unknown")
 
 
 @dataclass(frozen=True)
@@ -348,10 +352,6 @@ class AgentEventConsumer(MroDispatch, ABC):
     def thread_name(self) -> str:
         pass
 
-    @abstractmethod
-    def update_activity(self, state: ActivityState, detail: str) -> None:
-        pass
-
     async def before_agent_info(self, event: AgentInfo) -> None:
         pass
 
@@ -369,7 +369,3 @@ class AgentEventConsumer(MroDispatch, ABC):
             context_size=event.context_size,
         )
         await self.after_agent_info(event)
-
-    @handles(ActivityEvent)
-    async def activity(self, event: ActivityEvent) -> None:
-        self.update_activity(event.activity_state, event.activity_detail)
