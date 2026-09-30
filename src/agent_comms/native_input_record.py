@@ -7,8 +7,11 @@ OwnerGenerations is the existing authority for that identity domain.
 from abc import ABC
 from dataclasses import dataclass, field, fields
 import re
+from typing import Annotated, Literal
 
 from .field_codec import FieldCodec, TextRepresentation
+from .declared_family import DeclaredFamily
+from .coordination_errors import IdentityConflict
 
 from .coordination_tables.participants import OwnerGenerations
 
@@ -55,15 +58,46 @@ class NativeInputIdentity:
     attempt_ordinal: int | None
 
 
-@dataclass(frozen=True, slots=True)
-class NativeInputReference:
+class NativeContextReference(DeclaredFamily, affix="Reference"):
+    """Recorded context or an original row with no recorded context."""
+
+    def require_recorded_input(self, owner, db) -> None:
+        """An unrecorded context grants no committed-input identity."""
+
+
+@dataclass(frozen=True)
+class UnrecordedNativeInputReference(NativeContextReference):
+    pass
+
+
+@dataclass(frozen=True)
+class NativeInputReference(NativeContextReference):
     """A cursor's bounded reference to original recorded native context."""
 
-    input_id: str
+    input_id: Annotated[str, NativeInputIdText]
     assignment_id: str
-    stage: str
+    stage: Literal["triage", "full"]
     session_id: str
     request_generation: int
+
+    @classmethod
+    def acquire(cls, row) -> NativeInputReference:
+        """Decode the complete original SQL reference, never a partial projection."""
+        try:
+            result = FieldCodec.decode(cls, {
+                cls.family_discriminator: cls.declared_name,
+                **{item.name: getattr(row, item.name) for item in fields(cls)},
+            })
+            if not 0 < result.request_generation <= 2**53 - 1:
+                raise ValueError("Native reference generation is outside its native range")
+            if not result.assignment_id or not result.session_id:
+                raise ValueError("Native reference lacks recorded identity")
+            return result
+        except (TypeError, ValueError) as error:
+            raise IdentityConflict("Native recorded context reference is incomplete") from error
+
+    def require_recorded_input(self, owner, db) -> None:
+        owner.require_recorded_reference(db, self)
 
 
 class NativeInputRecord(ABC):
@@ -102,7 +136,7 @@ class NativeInputRecord(ABC):
 
 
 class NativeInputContext:
-    """Rows with the original optional context group share its bounded reference."""
+    """Decode the declared nullable SQL context group into its original state."""
 
     input_id: str | None
     assignment_id: str | None
@@ -111,10 +145,23 @@ class NativeInputContext:
     request_generation: int | None
 
     @property
-    def reference(self) -> NativeInputReference | None:
-        if self.input_id is None or self.session_id is None:
-            return None
-        return NativeInputReference(
-            self.input_id, self.assignment_id, self.stage,
-            self.session_id, self.request_generation,
-        )
+    def reference(self) -> NativeContextReference:
+        # SQL NULL is classified at this original storage boundary only. An
+        # absent session must have the entire declared context group absent;
+        # a partial group is corruption, never an unrecorded reference.
+        if self.session_id is None:
+            try:
+                for item in fields(self):
+                    if item.metadata.get("native_context"):
+                        FieldCodec.decode(type(None), getattr(self, item.name))
+            except (TypeError, ValueError) as error:
+                raise IdentityConflict("Native unrecorded context group is partial") from error
+            return UnrecordedNativeInputReference()
+        try:
+            for item in fields(self):
+                annotation = item.metadata.get("native_context")
+                if annotation is not None:
+                    FieldCodec.decode(annotation, getattr(self, item.name))
+        except (TypeError, ValueError) as error:
+            raise IdentityConflict("Native recorded context group is partial") from error
+        return NativeInputReference.acquire(self)

@@ -17,6 +17,7 @@ from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .historical_native_inputs import HistoricalNativeInput
+from .native_input_record import UnrecordedNativeInputReference
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import CurrentNativeCursor
@@ -211,7 +212,7 @@ class NativeSourceCursor:
             if not owner.matches_prefix(self.store.session._connection, evidence):
                 raise IdentityConflict("current cursor borrows historical owner source proof")
         proof = sources.last_proof(cursor.injected_seq)
-        expected = proof.reference if proof is not None else None
+        expected = proof.reference if proof is not None else UnrecordedNativeInputReference()
         if cursor.reference != expected:
             raise IdentityConflict("current native cursor proof differs from journal")
         if proof is not None and proof.owner_identity != owner.participant_identity:

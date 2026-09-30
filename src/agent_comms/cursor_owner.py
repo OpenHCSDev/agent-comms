@@ -74,14 +74,15 @@ class CursorOwner(RegistryOwner):
         )
 
     def require_recorded_input(self, db: sqlite3.Connection, cursor: CurrentNativeCursor) -> None:
-        if cursor.input_id is None:
-            return
-        row = NativeRuntimeInput.one(db, input_id=cursor.input_id)
+        cursor.reference.require_recorded_input(self, db)
+
+    def require_recorded_reference(self, db: sqlite3.Connection, reference: NativeInputReference) -> None:
+        row = NativeRuntimeInput.one(db, input_id=reference.input_id)
         if row is None or row.sent_owner_admission_generation != self.admission_generation:
             raise IdentityConflict("current cursor input admission differs")
         if not self._matches_input(
             row,
-            cursor.reference,
+            reference,
         ):
             raise IdentityConflict("current cursor proof differs from journal")
 
