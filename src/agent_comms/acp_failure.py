@@ -8,15 +8,14 @@ from __future__ import annotations
 import json
 import re
 from abc import abstractmethod
-from dataclasses import dataclass
-from typing import Any, ClassVar
+from dataclasses import dataclass, replace
+from typing import ClassVar
 
 from .declared_family import DeclaredFamily
 from .delivery_presentation import DeliveryPresentation
 from .input_attempt import InputAttempt
 from .pi_payloads import PiDiagnostic
-from .field_codec import FieldCodec
-from .mro_dispatch import MroDispatch, handles
+from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 
 
 class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):
@@ -95,14 +94,12 @@ class ACPFailure(DeliveryFailure):
         *,
         diagnostics: tuple[PiDiagnostic, ...] = (),
     ) -> ACPFailure:
-        return cls.from_payload(
-            code, message, ExternalFailureData.decode(data), diagnostics=diagnostics
+        return FieldCodec.decode(ErrorValue, data).original_root().failure(
+            code, message, diagnostics=diagnostics
         )
 
     @classmethod
-    def from_payload(cls, code, message, payload, *, diagnostics=()):
-        detail = payload.detail or message or "ACP request failed"
-        diagnostics = payload.diagnostics if payload.has_diagnostics else diagnostics
+    def from_detail(cls, code, detail, *, diagnostics=()):
         owner = next(
             member
             for member in sorted(
@@ -112,7 +109,7 @@ class ACPFailure(DeliveryFailure):
             )
             if member.matches(code, detail, diagnostics)
         )
-        return owner(code, detail, payload.input_state, diagnostics)
+        return owner(code, detail, diagnostics=diagnostics)
 
 
 @dataclass(frozen=True)
@@ -134,7 +131,7 @@ class PromptFailureReceipt:
 
     @classmethod
     def from_error(cls, code, message, data):
-        return ExternalFailureData.decode(data).failure_receipt(code, message)
+        return FieldCodec.decode(ErrorValue, data).original_root().failure_receipt(code, message)
 
 
 class RequestACPFailure(ACPFailure):
@@ -202,119 +199,215 @@ class ProviderConnectionFailure(ACPFailure):
         )
 
 
-class StructuredErrorValue(MroDispatch):
-    """Only external JSON containers continue the existing traversal."""
+class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):
+    """Provider JSON presentation, never input admission or retry authority."""
 
-    def __init__(self, payload):
-        self.payload = payload
+    @property
+    @abstractmethod
+    def detail(self) -> str: ...
 
-    @handles(dict, list)
-    def container(self, value):
-        self.payload.pending.append(value)
+    def original_root(self) -> ErrorValue:
+        """Only an original object may interpret root receipt/disposition facts."""
+        return self.reason()
+
+    def reason(self) -> ErrorValue:
+        return self
+
+    def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
+        return ACPFailure.from_detail(
+            code, self.detail or message or "ACP request failed", diagnostics=diagnostics
+        )
+
+    def failure_receipt(self, code, message) -> PromptFailureReceipt:
+        return PromptFailureReceipt(self.failure(code, message), False)
+
+    def encoded_reason(self, original: str) -> ErrorValue:
+        # JSON scalars inside provider text remain the original plain text.
+        return TextErrorValue(original)
+
+    def declared_input(self, body: ErrorValue) -> ErrorValue:
+        return body
+
+    def native_diagnostics(self) -> tuple[PiDiagnostic, ...]:
+        raise ValueError("Provider diagnostics must be an array")
 
 
-class ErrorReasonField(StructuredErrorValue):
-    """A provider reason field owns text priority and encoded JSON handling."""
+class EmptyErrorValue(ErrorValue):
+    @property
+    def detail(self) -> str:
+        return ""
 
-    @handles(str)
-    def reason(self, value):
-        text = value.strip()
-        if not text or text.casefold() in {"internal error", "internal server error"}:
-            return
+
+@dataclass(frozen=True)
+class NullErrorValue(EmptyErrorValue, JsonShapeMember):
+    value: None
+
+
+@dataclass(frozen=True)
+class BooleanErrorValue(EmptyErrorValue, JsonShapeMember):
+    value: bool
+
+
+@dataclass(frozen=True)
+class IntegerErrorValue(EmptyErrorValue, JsonShapeMember):
+    value: int
+
+
+@dataclass(frozen=True)
+class NumberErrorValue(EmptyErrorValue, JsonShapeMember):
+    value: float
+
+
+@dataclass(frozen=True)
+class TextErrorValue(ErrorValue, JsonShapeMember):
+    value: str
+
+    def reason(self) -> ErrorValue:
         try:
-            nested = json.loads(text)
+            nested = json.loads(self.value)
         except ValueError:
-            self.payload.detail = text
-            return
-        containers = StructuredErrorValue(self.payload)
-        if tuple(containers.handlers_for(nested)):
-            containers.dispatch_sync(nested)
+            return self
+        return FieldCodec.decode(ErrorValue, nested).reason().encoded_reason(self.value)
+
+    @property
+    def detail(self) -> str:
+        text = self.value.strip()
+        return "" if text.casefold() in {"internal error", "internal server error"} else text
+
+    def declared_input(self, body: ErrorValue) -> ErrorValue:
+        try:
+            attempt = InputAttempt.decode(self.value)
+        except ValueError:
+            # An external public status may be unambiguous; redacted UNKNOWN
+            # cannot distinguish reserved from bound input and grants nothing.
+            matches = tuple(member for member in InputAttempt.members_with(InputAttempt)
+                            if member.public_status == self.value)
+            if len(matches) != 1:
+                return body
+            (attempt,) = matches
+        return DeclaredInputErrorValue(body, attempt)
+
+
+class NestedErrorValue(ErrorValue):
+    def encoded_reason(self, original: str) -> ErrorValue:
+        return EncodedErrorValue(self) if self.detail else TextErrorValue(original)
+
+
+@dataclass(frozen=True)
+class ArrayErrorValue(NestedErrorValue, JsonShapeMember):
+    value: tuple[ErrorValue, ...]
+
+    @property
+    def detail(self) -> str:
+        return next((detail for child in self.value if (detail := child.detail)), "")
+
+    def reason(self) -> ErrorValue:
+        return ArrayErrorValue(tuple(child.reason() for child in self.value))
+
+    def native_diagnostics(self) -> tuple[PiDiagnostic, ...]:
+        return tuple(PiDiagnostic.from_wire(FieldCodec.encode(child)) for child in self.value)
+
+
+@dataclass(frozen=True)
+class ObjectErrorValue(NestedErrorValue, JsonShapeMember):
+    value: dict[str, ErrorValue]
+    reason_fields: ClassVar[tuple[str, ...]] = ("details", "reason", "detail", "error", "data", "message")
+
+    @property
+    def detail(self) -> str:
+        # These are the external provider's ordered reason fields, not
+        # application state names or a nominal-family membership roster.
+        for name in self.reason_fields:
+            if name in self.value:
+                detail = self.value[name].detail
+                if detail:
+                    return detail
+        return ""
+
+    def reason(self) -> ErrorValue:
+        return ObjectErrorValue({name: child.reason() if name in self.reason_fields else child
+                                 for name, child in self.value.items()})
+
+    def original_root(self) -> ErrorValue:
+        values = dict(self.value)
+        if "agentCommsFailure" in values:
+            receipt = FieldCodec.decode(
+                PromptFailureReceipt, FieldCodec.encode(values.pop("agentCommsFailure"))
+            )
+            # The canonical receipt owns ALL its presentation facts. Do not
+            # retain a second generic tree of its fields or reclassify it.
+            return PublishedErrorValue(receipt)
+        status = values.pop("inputStatus", NullErrorValue(None))
+        if "diagnostics" in values:
+            diagnostics = values.pop("diagnostics").native_diagnostics()
+            body = DiagnosticErrorValue(ObjectErrorValue(values).reason(), diagnostics)
         else:
-            self.payload.detail = text
+            body = ObjectErrorValue(values).reason()
+        return status.declared_input(body)
 
 
-class ExternalFailureData(MroDispatch):
-    """Decode external JSON nesting once; no result grants retry authority.
+@dataclass(frozen=True)
+class EncodedErrorValue(ErrorValue):
+    value: ErrorValue
 
-    The key ordering is the provider/JSON-RPC presentation boundary. It is not
-    a roster of application states. Diagnostics and input state keep their
-    existing declaration owners; a published receipt uses the canonical codec.
-    """
+    @property
+    def detail(self) -> str:
+        return self.value.detail
 
-    def __init__(self, root):
-        self.root = root
-        self.pending = [root]
-        self.seen = set()
-        self.detail = self.fallback = None
-        self.input_state = None
-        self.diagnostics = ()
-        self.has_diagnostics = False
-        self.receipt = None
+    def encoded_reason(self, original: str) -> ErrorValue:
+        return EncodedErrorValue(self)
 
-    @classmethod
-    def decode(cls, root):
-        result = cls(root)
-        result.read()
-        return result
+    def to_wire(self):
+        return json.dumps(FieldCodec.encode(self.value))
 
-    def read(self):
-        while self.pending and self.detail is None:
-            self.dispatch_sync(self.pending.pop())
-        self.detail = self.detail or self.fallback
 
-    def failure_receipt(self, code, message):
-        if self.receipt is not None:
-            return self.receipt
-        return PromptFailureReceipt(ACPFailure.from_payload(code, message, self), False)
+@dataclass(frozen=True)
+class DeclaredInputErrorValue(ErrorValue):
+    value: ErrorValue
+    attempt: type[InputAttempt]
 
-    def first_visit(self, value):
-        identity = id(value)
-        if identity in self.seen:
-            return False
-        self.seen.add(identity)
-        return True
+    @property
+    def detail(self) -> str:
+        return self.value.detail
 
-    def root_metadata(self, value):
-        if "agentCommsFailure" in value:
-            self.receipt = FieldCodec.decode(PromptFailureReceipt, value["agentCommsFailure"])
-        if "diagnostics" in value:
-            self.has_diagnostics = True
-            try:
-                records = FieldCodec.decode(list[Any], value["diagnostics"])
-            except (TypeError, ValueError) as error:
-                raise ValueError("Provider diagnostics must be an array") from error
-            self.diagnostics = tuple(PiDiagnostic.from_wire(record) for record in records)
-        status = value.get("inputStatus")
-        if isinstance(status, str):
-            try:
-                self.input_state = InputAttempt.decode(status)
-            except ValueError:
-                # Redacted UNKNOWN cannot distinguish reserved from bound input.
-                matches = tuple(
-                    member
-                    for member in InputAttempt.members_with(InputAttempt)
-                    if member.public_status == status
-                )
-                if len(matches) == 1:
-                    self.input_state = matches[0]
+    def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
+        return replace(self.value.failure(code, message, diagnostics=diagnostics),
+                       input_state=self.attempt)
 
-    @handles(dict)
-    def object(self, value):
-        if not self.first_visit(value):
-            return
-        if value is self.root:
-            self.root_metadata(value)
-        for key in ("details", "reason", "detail", "error", "data", "message"):
-            ErrorReasonField(self).dispatch_sync(value.get(key))
-            if self.detail is not None:
-                return
+    def to_wire(self):
+        return {**FieldCodec.encode(self.value), "inputStatus": self.attempt.declared_name}
 
-    @handles(list)
-    def array(self, value):
-        if self.first_visit(value):
-            self.pending.extend(reversed(value))
 
-    @handles(str)
-    def text(self, value):
-        if value.strip():
-            self.fallback = value.strip()
+@dataclass(frozen=True)
+class DiagnosticErrorValue(ErrorValue):
+    value: ErrorValue
+    diagnostics: tuple[PiDiagnostic, ...]
+
+    @property
+    def detail(self) -> str:
+        return self.value.detail
+
+    def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
+        return self.value.failure(code, message, diagnostics=self.diagnostics)
+
+    def to_wire(self):
+        return {**FieldCodec.encode(self.value),
+                "diagnostics": [item.to_wire() for item in self.diagnostics]}
+
+
+@dataclass(frozen=True)
+class PublishedErrorValue(ErrorValue):
+    receipt: PromptFailureReceipt
+
+    @property
+    def detail(self) -> str:
+        return self.receipt.failure.detail
+
+    def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
+        return self.receipt.failure
+
+    def failure_receipt(self, code, message) -> PromptFailureReceipt:
+        return self.receipt
+
+    def to_wire(self):
+        return self.receipt.error_data()

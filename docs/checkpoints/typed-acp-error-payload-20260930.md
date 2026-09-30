@@ -39,4 +39,25 @@ semantic state. Existing nominal model/input/proof owners remain authoritative;
 legitimate optional external fields are classified separately. Do not edit the
 frozen456 production candidate or create local status mirrors.
 
-Status: draft opened before implementation; source/installed acceptance pending.
+## Source checkpoint
+
+Normally merged the sole FieldCodec contribution88c9e03f. ErrorValue derives
+from DeclaredFamily and JsonShapeFamily in that order. Seven concrete external
+JSON shapes each declare one typed value field and opt into JsonShapeMember;
+semantic receipt/disposition/diagnostic members do not enter shape selection.
+The original codec alone classifies JSON primitive shapes. No codec subclass or
+raw builtin keyed handler remains in the error boundary.
+
+Deleted113 production lines including all three traversal/dispatch owners and
+their consumers. Added206 production lines for typed shape rendering and
+canonical metadata ownership. BOUND-1/2/3 and IMPL-3/4: decode external children
+once; reason precedence belongs to the external object; encoded provider text
+cannot grant original-root disposition. Original receipt detail and diagnostic
+text bypass provider reason interpretation. Canonical metadata replaces its
+generic decoded subtree; it is not retained alongside the original owner.
+
+Focused59 controls pass in0.31s: failure rendering, typed transport diagnostics,
+existing FieldCodec contracts and the shared JSON shape controls. The existing
+new display declaration experiment needs one member declaration and no factory
+case. Explicit JSON null is an external shape; no nullable semantic field was
+introduced. Installed SDK/ACP/native failure/history acceptance is pending.
