@@ -5,7 +5,12 @@ import json
 import pytest
 
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
-from agent_comms.acp_failure import ACPFailure, ProviderQuotaFailure, RequestACPFailure
+from agent_comms.acp_failure import (
+    ACPFailure,
+    PromptFailureReceipt,
+    ProviderQuotaFailure,
+    RequestACPFailure,
+)
 from agent_comms.input_attempt import InputAttempt
 
 
@@ -70,3 +75,60 @@ def test_new_display_case_needs_only_its_declaration():
     assert isinstance(failure, FixtureDisplayFailure)
     assert failure.input_disposition == "Unconfirmed — input not retried"
     assert decode_updates(encode_updates(RequestFailedUpdate(failure)))[0].failure == failure
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "The provider usage limit has been reached",
+        [None, 400, {"error": {"details": "The provider usage limit has been reached"}}],
+        {"error": {"data": [False, {"reason": "The provider usage limit has been reached"}]}},
+        {"reason": json.dumps([{"details": "The provider usage limit has been reached"}])},
+    ],
+)
+def test_provider_shapes_preserve_reason_without_granting_input_authority(payload):
+    failure = ACPFailure.from_error(-32603, "Internal error", payload)
+    assert isinstance(failure, ProviderQuotaFailure)
+    assert failure.detail == "The provider usage limit has been reached"
+    assert failure.input_disposition == "Unconfirmed — input not retried"
+
+
+def test_only_original_root_metadata_owns_disposition_and_published_receipt():
+    from agent_comms.input_attempt import NotSentInput
+
+    nested = {"error": {"reason": "Provider refused", "inputStatus": "not_sent"}}
+    assert ACPFailure.from_error(-32603, "Internal error", nested).input_state is None
+    original = PromptFailureReceipt(
+        RequestACPFailure(-32603, "Original preflight refusal", NotSentInput), True
+    )
+    data = {**original.error_data(), "error": {"reason": "Unrelated nested provider detail"}}
+    assert PromptFailureReceipt.from_error(-32603, "Internal error", data) == original
+
+
+@pytest.mark.parametrize("payload", [None, False, 37, [], {}, {"details": "Internal error"}])
+def test_empty_or_nontext_provider_payload_retains_rpc_message(payload):
+    failure = ACPFailure.from_error(-32603, "Original RPC refusal", payload)
+    assert failure.detail == "Original RPC refusal"
+    assert failure.input_disposition == "Unconfirmed — input not retried"
+
+
+def test_encoded_provider_text_cannot_supply_original_root_disposition():
+    data = json.dumps({"reason": "Provider refused", "inputStatus": "not_sent"})
+    failure = ACPFailure.from_error(-32603, "Internal error", data)
+    assert "Provider refused" in failure.detail
+    assert failure.input_state is None
+
+
+def test_canonical_receipt_detail_is_not_reinterpreted_as_provider_json():
+    from agent_comms.input_attempt import StartedInput
+
+    detail = '{"message" : "Internal error", "details" : [ "verbatim receipt" ]}'
+    receipt = PromptFailureReceipt(RequestACPFailure(-32603, detail, StartedInput), True)
+    assert PromptFailureReceipt.from_error(-32603, "Internal error", receipt.error_data()) == receipt
+
+
+def test_provider_array_order_and_unknown_json_text_survive():
+    payload = [{"details": "First provider reason"}, {"details": "Second provider reason"}]
+    assert ACPFailure.from_error(-32603, "Internal error", payload).detail == "First provider reason"
+    unknown = '{"vendorDiagnostic" : {"future" : 17}}'
+    assert ACPFailure.from_error(-32603, "RPC refused", unknown).detail == unknown
