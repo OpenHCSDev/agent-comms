@@ -1,0 +1,31 @@
+{
+  "owner": "Schrodinger",
+  "timestamp": 1790799949.227654,
+  "removed": [
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-provider-login-candidate-20260930",
+      "allocated_file_bytes": 80850944,
+      "reclaimable_bytes_at_removal": 22802432,
+      "files": 3877,
+      "provenance_archive": "/home/ts/.cache/agent-scratch/retired-login-stage-cleanup-20260930/retired-runtime-provenance/runtime-provider-login-candidate-20260930",
+      "staging_owner": "Schrodinger243stage"
+    }
+  ],
+  "protected_prefixes": [
+    "runtime-sidebar-native-custody-20260930",
+    "runtime-viewport-native-residency-20260930",
+    "runtime-native-custody-integrated-20260930",
+    "runtime-all-merged-20260930",
+    "runtime-native-budget-request-progress-20260930"
+  ],
+  "native_packages_preserved": true,
+  "source_worktrees_preserved": true,
+  "original_proofs_and_unknown_inputs_preserved": true,
+  "reference_census_sha256": "82740b6b7ac40797d019315536a8a52d324bb25686a7f7471cd53931d19b11d6",
+  "free_before_bytes": 16758726656,
+  "free_after_bytes": 16781492224,
+  "observed_net_free_increase_bytes": 22765568,
+  "reclaimed_allocated_bytes": 22802432,
+  "measurement_limit": "Observed filesystem net includes concurrent writes; reclaimable allocation excludes surviving hardlinks.",
+  "state": "completed"
+}

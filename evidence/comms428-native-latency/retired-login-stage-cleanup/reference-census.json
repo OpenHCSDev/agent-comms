@@ -1,0 +1,44 @@
+{
+  "timestamp": 1790799942.4810627,
+  "owner": "Schrodinger",
+  "candidates": [
+    "/home/ts/.local/share/agent-comms/runtime-provider-login-candidate-20260930"
+  ],
+  "processes": {
+    "references": [],
+    "inaccessible_same_user_processes": []
+  },
+  "configuration": {
+    "references": [],
+    "errors": [],
+    "files_scanned": 25563,
+    "launchers": [
+      {
+        "path": "/home/ts/.local/bin/toad",
+        "target": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/toad"
+      },
+      {
+        "path": "/home/ts/.local/bin/agent-comms-agent",
+        "target": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-agent"
+      },
+      {
+        "path": "/home/ts/.local/bin/agent-comms-nk-foreground",
+        "target": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-nk-foreground"
+      },
+      {
+        "path": "/home/ts/.local/bin/agent-comms",
+        "target": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms"
+      },
+      {
+        "path": "/home/ts/.local/bin/agent-comms-acp",
+        "target": "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930/bin/agent-comms-acp"
+      }
+    ],
+    "active_route": {
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+      "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+      "version": 1,
+      "wire_root_id": "e206f3766e60451a989ca34df0e2a94b"
+    }
+  }
+}

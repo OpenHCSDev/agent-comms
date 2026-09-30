@@ -1,0 +1,12 @@
+{
+  "stage": "/home/ts/.local/share/agent-comms/runtime-provider-login-candidate-20260930",
+  "pins": {
+    "agent-comms": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+    "batrachian-toad": "82f454cd5a1e5fa82483f37e802c598eba84efe0",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "state": "verified-immutable-cohort",
+  "staging_receipt_sha256": "859a5c1192467624343037620370d32ded948d8975888c01f6ad694f07bf1149"
+}
