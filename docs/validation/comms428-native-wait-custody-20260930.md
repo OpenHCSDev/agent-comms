@@ -112,3 +112,18 @@ this branch at 02f9ca40, and main #445 was integrated normally. They are preserv
 under evidence/r1-preparing-input-custody and are not new latency acceptance.
 Scratch, wheel, private fixture and profiles remain owned by Mendel under the
 named scratch directory; borrowed runtime/native package resources are protected.
+
+Published source checkpoint: 56d362f2cd3393b70a60c53b7af964e21f461aad.
+Required changed-source ratchet against normal main 4295d680 passes with zero
+positive deltas. Exact deletion accounting: 40 production lines replaced / 44
+added; native snapshot declaration changes another two lines each way. This
+counts the moved environment decoder honestly, not as 37 deleted semantics.
+
+The next native package build is resource constrained: current headroom assert
+exits 2 (swap 14.1GiB, available RAM 17.2GiB, home free 20.1GiB). No owned native
+worker remains to stop. Defer the package duplication/large native build under
+this guard; preserve the original/current reviewed native package and dependency
+resources. The lightweight installed CLI stage and retained receipts remain.
+Whole managed native acceptance has not been claimed or replaced by an inline
+extension-only fake gate. Backend source checkpoint is independently reviewable;
+UI/viewport work is not its dependency.
