@@ -4,6 +4,12 @@ Receiving owner: Mendel. Source baseline: Core6feb634b (merged453/454). Parent43
 
 Whole source files assigned by Tristan: assignment_store.py, coordination_snapshot.py, envelope_claim_transitions.py, goals.py, input_attempt.py, wake_injection.py, plus all affected callers and existing lifecycle/identity declarations. Original witnesses: assignment acceptance35, retry authority33/271, envelope verdict174/279, goal mention139, stored input112, selected wake48. A Boolean-chain count is an ownership lead, not proof.
 
+Receiving correction: whole `todos.py` assignment/transfer/release/state decisions
+also belong here. Original line280 is a six-term exact uncertain-reply transfer
+retry relation, **not** repository path grammar. Parent records this receiving
+claim in ledger16. `_repo` remains a separate genuine external owner/repo spelling
+boundary, not an exemption for the operation workflow.
+
 Original C3 five-family audit: the current error boundary, mention resolutions, maintenance lifecycle, relationship edits, and command availability all have declared owners; source/caller closure must be documented against this actual head, not old421 tests. C1/C2 rows and six original C3 consumer files are included in the bounded relation census. Old pause-event/report mirrors and public cutover operators stay deleted; original histories/UNKNOWN/native proofs remain protected.
 
 Concrete additional C3 relation: GoalWait.matches currently derives original message sender incarnation from today's registry. Active GoalReplyScope and CapturedInputDependency consumers must join original certified sender identity. Any necessary certified-query/public source extension is coordinated with Sch, not implemented as a second projector/index/cache. Existing InputAttempt proof/native binding extensions are coordinated with Arendt as one builder.
