@@ -117,3 +117,11 @@ checks passed36 in14.89s before the reference-window extension. The prepared
 native journey is still awaiting the coordinated serial slot (Arendt425, then
 Schrodinger426, then430); its checkpoint is not a native acceptance claim. Both-open
 actual Toad hot publication is Schrodinger's paired215 followthrough.
+
+Deleted the obsolete78-line, two-target fake sender fixture from
+tests/test_reply_routing.py. It forged backend events/native history and asserted
+the removed synthetic receipt reader. The canonical source controls and prepared
+retained native/tool/official ACP journey own its replacement contract. The latter
+is explicitly named for original source and cold ACP replay; it does not claim
+target execution or mounted UI handling acceptance. No compatibility reader was
+restored to satisfy retired tests.
