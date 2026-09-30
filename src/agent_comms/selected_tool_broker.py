@@ -296,7 +296,7 @@ def verify_sent_full_input(
         row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
         expected = NativeInputIdentity(
             input_id, admission.wake_assignment_id, "full",
-            OwnerGenerations(admission.recipient_lookup, owner_name, admission.participant_generation),
+            OwnerGenerations(owner_lookup=admission.recipient_lookup, owner_thread=owner_name, generation=admission.participant_generation),
             admission.execution_id, admission.attempt_ordinal,
         )
         if row is None or row.identity != expected:
