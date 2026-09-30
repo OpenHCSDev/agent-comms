@@ -1111,3 +1111,22 @@ call settle. Never interrupt the originalR1 owner/native process or clear its
 lease/goal, send a new input, or extend a whole-turn timeout. Arendt448's options
 read/explicit-mutation closure is disjoint; physical236 and cancellation445/237
 continue concurrently.
+
+### Current goal disposition and viewport priorities
+
+The latest authoritative goal read reports BLOCKED, updated1790772920. The
+earlier ACTIVE entry is historical. Direct authorized fixes continue without
+resuming that goal or replaying an uncertain input.
+
+The owner requests a double/triple message-area viewport buffer and reports a
+severe tab-switch hang during compaction. Heisenberg236 owns a configurable
+three-viewport baseline through the existing presentation/preparation budget,
+including source-page prefetch and body retention, while preserving adaptive
+velocity/direction and bounded memory. Schrodinger445/237 coordinates the
+canonical compaction/source-read boundary; Kepler owns the physical driver and
+video/profile correlation. Neither new fix is installed or live-verified.
+
+The physical236 capture completed but did not exercise B or held history
+scrolling: after editor interaction its driver consulted a missing visible map
+despite a valid committed full map. Preserve that failed recording; correct the
+existing driver before making warm-tab or scrolling acceptance claims.
