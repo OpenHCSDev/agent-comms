@@ -15,7 +15,6 @@ from .pi_vocabulary import ThinkingLevel
 from .goals import Goal, GoalRevision
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
-    OwnerIdentity,
     ThreadIncarnation,
     ThreadPublicationIdentity,
     ThreadRole,
@@ -261,9 +260,6 @@ class Thread:
     @property
     def incarnation(self) -> ThreadIncarnation:
         return ThreadIncarnation(self.name, self.created_at)
-
-    def owner_identity(self, generation: int) -> OwnerIdentity:
-        return OwnerIdentity(self.incarnation, generation)
 
     @property
     def turn_identity(self) -> TurnIdentity | None:

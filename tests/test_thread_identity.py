@@ -12,7 +12,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import Conversation
 from agent_comms.registration import Registration
-from agent_comms.thread_identity import GenerationCounter, ThreadIncarnation, TurnIdentity
+from agent_comms.thread_identity import AdmissionIdentity, GenerationCounter, ThreadIncarnation, TurnIdentity
 from agent_comms.thread_status import IdleThreadStatus
 from agent_comms.threads import Thread
 
@@ -144,6 +144,41 @@ def test_identity_codec_and_counter_domain_are_not_parallel_registries():
     assert counter.advance("another") == 2
     with pytest.raises(ValueError):
         FieldCodec.decode(GenerationCounter, {"counter": 1, "generations": {"x": True}})
+
+
+def test_admission_scope_cannot_decode_a_registry_process_owner(tmp_path):
+    from agent_comms.acp_extension import CursorScope, QueueScope
+    from agent_comms.queued_input import QueuedInputContext
+
+    registry = registry_with_owner(tmp_path)
+    snapshot = registry.snapshot()
+    owner = snapshot.threads["owner"]
+    admission = snapshot.admission_identity("owner")
+    registry_owner = snapshot.owner_identity("owner")
+    assert admission.admission_generation == registry_owner.generation
+    assert admission != registry_owner
+    context = QueuedInputContext.capture(owner, admission, None)
+    assert context.owns(admission)
+    assert not context.owns(registry_owner)
+    # Repeated revocation advances admission without a second owner replacement.
+    registry.unregister("owner")
+    registry.unregister("owner")
+    registry.heartbeat("owner")
+    snapshot = registry.snapshot()
+    owner = snapshot.threads["owner"]
+    admission = snapshot.admission_identity("owner")
+    registry_owner = snapshot.owner_identity("owner")
+    assert admission.admission_generation != registry_owner.generation
+    original_binding = snapshot.owner_binding("owner")
+    assert not original_binding.superseded_by(snapshot.owner_binding("owner"))
+    for scope in (QueueScope("official-session", admission, owner.pid),
+                  CursorScope("official-session", "a" * 32, admission, owner.pid)):
+        encoded = FieldCodec.encode(scope)
+        assert FieldCodec.decode(type(scope), encoded) == scope
+        encoded["admission"] = FieldCodec.encode(registry_owner)
+        with pytest.raises(ValueError):
+            FieldCodec.decode(type(scope), encoded)
+    assert FieldCodec.decode(AdmissionIdentity, FieldCodec.encode(admission)) == admission
 
 
 def test_coordination_assignment_generation_is_independent_of_registry_process(tmp_path):
