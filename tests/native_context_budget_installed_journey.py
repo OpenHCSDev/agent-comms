@@ -19,7 +19,7 @@ import threading
 
 from acp.schema import TextContentBlock
 from agent_comms.acp import CommsClient
-from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
+from agent_comms.acp_extension import RequestFailedUpdate, PromptCancelledUpdate, decode_updates
 from agent_comms.comms import Comms
 from agent_comms.native_package import verify_native_package
 from agent_comms.threads import Thread
@@ -28,14 +28,17 @@ from agent_comms.threads import Thread
 class ReceiptSubscriber:
     def __init__(self):
         self.failures = []
+        self.cancellations = []
 
     async def session_update(self, **kwargs):
         for update in decode_updates(kwargs["update"].model_dump(by_alias=True, exclude_none=True).get("_meta")):
             if isinstance(update, RequestFailedUpdate):
                 self.failures.append(update.failure.feedback)
+            if isinstance(update, PromptCancelledUpdate):
+                self.cancellations.append(update.input_state)
 
 
-async def main(package: Path, evidence: Path, source: Path):
+async def main(package: Path, evidence: Path, source: Path, *, cancel_only=False):
     verify_native_package(package)
     evidence.mkdir(parents=True, exist_ok=False)
     requests, server_errors = [], []
@@ -55,8 +58,8 @@ async def main(package: Path, evidence: Path, source: Path):
                                  "body_sha256": hashlib.sha256(raw).hexdigest(),
                                  "messages": payload["messages"], "tools": payload.get("tools"),
                                  "monotonic": time.monotonic()})
-                number = len(requests)
-                assert number <= 5, "Unexpected replay or provider call"
+                number = 5 if cancel_only else len(requests)
+                assert len(requests) <= (1 if cancel_only else 5), "Unexpected replay or provider call"
                 if number in (1, 2, 4, 5):
                     assert allowance is None, "Capability was manufactured into generation intent"
                 if number == 2:
@@ -155,28 +158,30 @@ async def main(package: Path, evidence: Path, source: Path):
                                                env=environment, cwd=project) as (client, process):
                     await client.initialize(protocol_version=1, client_capabilities={})
                     await client.load_session(cwd=str(project), session_id="budget-native", mcp_servers=[])
-                    for text in ("NEW_PRIVATE_DESIRED_ABSENCE", "NEW_PRIVATE_SECONDARY_REJECTION"):
+                    for text in (() if cancel_only else ("NEW_PRIVATE_DESIRED_ABSENCE", "NEW_PRIVATE_SECONDARY_REJECTION")):
                         async with asyncio.timeout(45):
                             await client.prompt(session_id="budget-native", prompt=[TextContentBlock(type="text", text=text)])
-                    assert len(requests) == 3 and not subscriber.failures, (len(requests), subscriber.failures)
-                    try:
-                        async with asyncio.timeout(30):
-                            await client.prompt(session_id="budget-native", prompt=[TextContentBlock(type="text", text="NEW_PRIVATE_UNRELATED_REJECTION")])
-                    except RequestError as error:
-                        assert "Unsupported fixture parameter" in str(error.data)
-                    else:
-                        raise AssertionError("Unrelated rejection did not preserve RequestError")
-                    assert len(requests) == 4 and len(subscriber.failures) == 1
-                    assert "Unsupported fixture parameter" in subscriber.failures[0]
+                    if not cancel_only:
+                        assert len(requests) == 3 and not subscriber.failures, (len(requests), subscriber.failures)
+                        try:
+                            async with asyncio.timeout(30):
+                                await client.prompt(session_id="budget-native", prompt=[TextContentBlock(type="text", text="NEW_PRIVATE_UNRELATED_REJECTION")])
+                        except RequestError as error:
+                            assert "Unsupported fixture parameter" in str(error.data)
+                        else:
+                            raise AssertionError("Unrelated rejection did not preserve RequestError")
+                        assert len(requests) == 4 and len(subscriber.failures) == 1
+                        assert "Unsupported fixture parameter" in subscriber.failures[0]
                     cancellation = asyncio.create_task(client.prompt(session_id="budget-native",
                         prompt=[TextContentBlock(type="text", text="NEW_PRIVATE_ACCEPTED_CANCEL")]))
                     async with asyncio.timeout(30):
                         while not accepted.is_set():
                             await asyncio.sleep(.025)
                         await client.cancel(session_id="budget-native")
+                        cancel_result = await cancellation
                         release.set()
-                        await cancellation
-                    assert len(requests) == 5, "Accepted stream/cancel was replayed"
+                        assert len(subscriber.cancellations) == 1, "Original canonical cancellation was not observed"
+                    assert len(requests) == (1 if cancel_only else 5), "Accepted stream/cancel was replayed"
                 assert not server_errors, server_errors
                 owner = comms.registry.require("budget-native")
                 native = Path(owner.session_file)
@@ -185,7 +190,11 @@ async def main(package: Path, evidence: Path, source: Path):
                 before_ids = {row["id"] for row in before_records if "id" in row}
                 new = [row for row in records if row.get("id") not in before_ids]
                 users = [row for row in new if row.get("type") == "message" and row.get("message", {}).get("role") == "user"]
-                assert len(users) == 4, "A new private input was replayed"
+                assert len(users) == (1 if cancel_only else 4), "A new private input was replayed"
+                terminal = [row["message"] for row in new if row.get("type") == "message" and row.get("message", {}).get("role") == "assistant"]
+                # Core cancellation retires the scoped native child. It can settle before
+                # native persistence of an assistant message; do not invent such a message.
+                assert len(subscriber.cancellations) == 1
                 assert not any(row.get("type") == "compaction" for row in new)
                 assert owner.active_turn is None, "Canonical lease did not settle"
                 assert source.stat().st_size == source_stat.st_size
@@ -193,8 +202,11 @@ async def main(package: Path, evidence: Path, source: Path):
                 report = {"requests": [{key: value for key, value in request.items() if key not in ("messages", "tools")} for request in requests],
                           "source": str(source), "source_bytes": source_stat.st_size, "source_sha256": source_digest,
                           "fork": str(retained), "private_root": str(comms.root), "new_native_users": len(users), "new_compactions": 0,
-                          "desired_absence": True, "secondary_same_payload_recovery": True,
-                          "unrelated400_calls": 1, "accepted_cancel_calls": 1,
+                          "desired_absence": True, "secondary_same_payload_recovery": not cancel_only,
+                          "native_cancel_update": str(subscriber.cancellations[0]),
+                          "acp_cancel_stop_reason": cancel_result.stop_reason,
+                          "native_cancel_terminal_assistant": terminal[-1]["stopReason"] if terminal else None,
+                          "unrelated400_calls": 0 if cancel_only else 1, "accepted_cancel_calls": 1,
                           "production_stdio_acp": True, "public_replays": 0, "paid_calls": 0}
                 (evidence / "receipt.json").write_text(json.dumps(report, indent=2))
                 print("ACTUAL_RETAINED_NATIVE_STDIO_ACP_BUDGET_JOURNEY_PASS", report, flush=True)
@@ -215,5 +227,6 @@ if __name__ == "__main__":
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--source", type=Path, required=True)
+    parser.add_argument("--cancel-only", action="store_true")
     args = parser.parse_args()
-    asyncio.run(main(args.package, args.evidence, args.source))
+    asyncio.run(main(args.package, args.evidence, args.source, cancel_only=args.cancel_only))
