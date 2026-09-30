@@ -83,6 +83,11 @@ export default function (pi: ExtensionAPI) {
 				]);
 			}
 		});
+	}
+
+	// Managed turns publish their fenced native phase through OwnedTurn. Only
+	// standalone participants need this adapter's activity and release hooks.
+	if (forkThread && !managed) {
 		pi.on("agent_start", async () => activity("thinking", task));
 		pi.on("tool_call", async (event) => {
 			const input = JSON.stringify(event.input ?? {});
@@ -92,7 +97,6 @@ export default function (pi: ExtensionAPI) {
 		pi.on("agent_settled", async () => activity("idle"));
 		pi.on("session_shutdown", async () => {
 			activity("idle");
-			if (managed) return;
 			try {
 				run(["release", "--name", forkThread]);
 			} catch {
