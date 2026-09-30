@@ -22,5 +22,24 @@
   "production_changed": false,
   "timeout_changed": false,
   "oracle_weakened": false,
-  "runner": "Einstein fresh fixture, original product immutable; independent Schrodinger bus fixture"
+  "runner": "Einstein fresh fixture, original product immutable; independent Schrodinger bus fixture",
+  "second_original_run": {
+    "run": "/home/ts/wt/g458g/u02",
+    "driver": "e1d9ba540ef1cc6eb4c331e0d65fbcf90d9945ff",
+    "terminal_exit": 1,
+    "elapsed_seconds": 45.3522841919912,
+    "first_input": "cec584c2d7eb4dc588adaf20b5b6471d",
+    "proved_scope": "actual LinuxDriver physical pending before native Started, once chat transfer, native saved user+assistant, ACP end_turn and registry idle; original379-frame offline review",
+    "remaining_failure": "actual right-click menu did not open; no fork or remaining4input attempts",
+    "next_owner": "Kepler original click/geometry/row visibility; Einstein original proof/census"
+  },
+  "independent_bus_run": {
+    "run": "/home/ts/wt/g460b/u04",
+    "terminal_exit": 1,
+    "elapsed_seconds": 62.123,
+    "proved_scope": "hot original/reply rows and Responded titles in all3 open views; canonical original native reply proof",
+    "remaining_failure": "generic recipient executing wait20s after5 deliberate real ambient inputs; exact active-input/lifecycle attribution still required",
+    "next_owner": "Schrodinger original captures and bus flow; Arendt/Einstein canonical native turn settlement",
+    "unfinished": "actual reply paint,31s idle,A-B-A,cold reattach"
+  }
 }
