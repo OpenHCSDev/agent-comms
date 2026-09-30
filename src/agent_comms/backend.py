@@ -52,6 +52,7 @@ from .turn_admission import UnacknowledgedPrompt
 from .turn_inputs import InputForwarding
 from .extension_ui import ExtensionUiSession
 from .turn_output import TurnOutput
+from .turn_phase import TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import ProgressWatchdog
@@ -367,9 +368,33 @@ class TurnSession:
     def notify_input_started(self, public_id, native_id, text):
         return self.native_start is None or self.native_start(public_id, native_id, text)
 
+    def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
+        """Publish the actual observer phase without storing another phase copy."""
+        if self.watchdog.phase != previous:
+            yield events.NativePhaseChanged(self.watchdog.phase)
+
     @property
     def started_input(self):
         return self.admission.started and self.inputs.permits_admission
+
+    @property
+    def awaiting_native_attestation(self):
+        return self.require_input_id and self.native.attestation.state is None
+
+    async def consume_native_event(self, event):
+        """Observe one decoded event through the shared native lifecycle owner."""
+        previous = self.watchdog.phase
+        async for update in self.watchdog.observe(event, self):
+            yield update
+        async for update in self.apply_native_event(event):
+            yield update
+        self.watchdog.transition(event, self.active_tools)
+        for update in self.native_phase_changes(previous):
+            yield update
+
+    async def apply_native_event(self, event):
+        async for update in event.apply(self):
+            yield update
 
     @property
     def accepts_output(self):

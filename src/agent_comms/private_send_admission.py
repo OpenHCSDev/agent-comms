@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .pi_vocabulary import ThinkingLevel
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
@@ -25,14 +24,16 @@ from .fresh_private_session import FreshPrivateSession
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
+from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
+from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptAdmissionBusy
 from .native_runtime_input import NativeRuntimeInput
-from .native_prompt_binding import bind_expected_prompt
-from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
+from .pi_vocabulary import ThinkingLevel
 from .text_digest import TextDigest
 from .tracked_turn import TrackedTurnSession
 
 if TYPE_CHECKING:
+    from .agent_events import AgentEvent
     from .pi_events import PiEvent
     from .selected_tool_broker import NativeToolMode
 from .private_registry_guard import _require_no_private_owner_rename
@@ -132,7 +133,7 @@ class PrivateSendAdmission:
         provider: str,
         model: str,
         selected_tool_mode: NativeToolMode | None = None,
-        observe_event: Callable[[PiEvent], Awaitable[None]] | None = None,
+        observe_event: Callable[[PiEvent | AgentEvent], Awaitable[None]] | None = None,
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
 
