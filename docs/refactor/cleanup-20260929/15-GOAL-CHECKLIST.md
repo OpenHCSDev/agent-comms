@@ -39,7 +39,7 @@ Receipts: `evidence/cleanup-live-integration/paired-activation.json`,
 `paired-owner-processes.json` and `paired-default-attachment.json`.
 The disposal-only222 update changed the five matching default launchers without
 another owner restart, schema reset, native-package or active-route change.
-Its first actual default physical close/reopen/shutdown check is pending.
+Its actual default physical close/reopen/shutdown check passed31.803s.
 Existing Toad windows must be restarted to consume new UI code.
 This activation does not close the still-open full performance, messaging or
 refactoring scopes below.
@@ -235,7 +235,7 @@ canonical automatic/manual compaction progress and the remaining native latency
 investigation; the controlled429 scheduling receipt does not close the user's
 six-minute compaction observation.
 
-## Disposal-only checkpoint installed, default verification pending
+## Disposal-only checkpoint installed and default verified
 
 Toad222 merged e21363c8 from ready aebb8aa1. The installed noneditable6660cb68
 has identical production and packaging source to that reviewed head. Relative
@@ -246,11 +246,20 @@ The obsolete unmount finalizer and final-disposal editor capture are deleted.
 
 The actual installed887 close and shutdown receipt passed20.861s without
 NoMatches, and the three lifetime methods are identical to222. The first exact
-default222 physical two-existing-tab close/reopen/shutdown run remains assigned
-to Heisenberg. No source test substitutes for that postactivation check. Default
+default222 physical two-existing-tab close/reopen/shutdown run passed31.803s
+under Heisenberg. Both original owners and native journals remained unchanged;
+the saved history was visibly loaded after reopening. Native input was not sent.
+The terminal exited normally and owned-process cleanup was empty. The recorder's
+255 exit belongs to ffmpeg after its explicit SIGINT, not to Toad. Full metadata
+JSON and physical frames remain valid; the separate diagnostic pickle failure
+is retained and its Region serialization has been corrected in the tool.
+No source test substitutes for this postactivation check. Default
 is runtime-ordered-view-disposal-20260929; the one-use operator and activation
 receipt are under evidence/cleanup-live-integration. Broader scrolling remains
 failed in217/221 and is not included in this disposal-only release.
+The scoped actual receipt is ordered-view-disposal-default-verification.json,
+retained from Toad217/96c2a4b2. Original source, failed scrolling evidence and
+uncertain native attempts remain protected.
 
 The second real215 channel journey used original41MB native forks and the actual
 configured Sol/high provider. Original outgoing/incoming publication appeared
