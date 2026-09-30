@@ -82,11 +82,11 @@ class TranscriptCursor:
         return self.session_file == parent.session_file and self.offset <= parent.offset
 
     def outcomes_within(self, parent: TranscriptCursor) -> bool:
-        if self.outcomes is None:
-            return parent.outcomes is None
         return parent.includes_outcomes(self.outcomes)
 
-    def includes_outcomes(self, outcomes: CompactionOutcomeCursor) -> bool:
+    def includes_outcomes(self, outcomes: CompactionOutcomeCursor | None) -> bool:
+        if outcomes is None:
+            return self.outcomes is None
         return self.outcomes is not None and self.outcomes.contains(outcomes)
 
     def receipts_within(self, parent: TranscriptCursor) -> bool:
