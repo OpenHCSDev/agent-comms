@@ -58,7 +58,10 @@ The first contextual command specified only `src/agent_comms` as an explicit
 context root. NRA raised CacheCheckoutPathError for a selected report file inside
 the same checkout. `nra-architecture` received the source/command/error receipt
 for tool ownership. Declaring the selected files as context roots admitted them.
-No tool implementation was patched here.
+No tool implementation was patched here. `nra-architecture` accepted ownership
+and confirmed the source defect is still open; its investigation reported
+`database is locked` tool errors and no edits/tests. The explicit-root invocation
+is a scoped workaround, not a fix or permission to silently broaden analysis.
 
 The next command hit the tool's default 20-second deadline at
 `contextual_global_prepare:closed_parameter_conveyor`, with `complete: false` and
