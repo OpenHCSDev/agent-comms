@@ -76,12 +76,15 @@ async def maybe_compact_owner_turn(
     # Preserve source-file invalidation across the later native reopen. These
     # paths come from the original prepared child's launch, not display metadata
     # or a detached settings decision. Effective values are still read from Pi.
-    environment = persistent.custody.idle().child.key[0].env
-    global_dir = Path(environment.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent").expanduser()
-    native_config = Path(environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR") or global_dir).expanduser()
+    launch = persistent.custody.idle().child.key[0]
+    environment = launch.env
+    global_dir = Path(environment.get("PI_CODING_AGENT_DIR") or Path(environment["HOME"]) / ".pi" / "agent")
+    if global_dir.parts and global_dir.parts[0] == "~":
+        global_dir = Path(environment["HOME"]).joinpath(*global_dir.parts[1:])
+    native_config = Path(environment["AGENT_COMMS_NATIVE_CONFIG_DIR"])
     if not global_dir.is_absolute() or not native_config.is_absolute():
         raise PiSettingsEvidenceError("Prepared native configuration directories must be absolute")
-    project_settings = Path(owner.worktree) / ".pi" / "settings.json"
+    project_settings = launch.cwd / ".pi" / "settings.json"
     settings_paths = tuple(dict.fromkeys(map(str, (
         global_dir / "settings.json", project_settings,
         global_dir / "models.json", native_config / "models.json",

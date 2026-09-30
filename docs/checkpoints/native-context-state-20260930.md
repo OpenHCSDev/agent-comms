@@ -113,3 +113,48 @@ prepared child's launch environment, while effective model/context/settings
 remain owned by native StateData and the selected child. The corrected triggered
 control passes9.76s; disabled effective-native policy also passes. No input was
 sent or provider invoked by the failed control.
+
+## Installed affected acceptance complete
+
+`evidence/native-context-state/installed-prepared-model-compaction.json` records
+the actual noneditable Core wheel/SDK0.12.1/native593b paths. Existing real ACP
+compact/prompt calls drive TurnRunner.prepare_selected_session through original
+NativeSessionPreparation.open; both callers receive original StateData and use
+its model.for_compaction capability. No product GetState fixture helper remains.
+
+Manual:44,661,933-byte source,185,067 tokens, five localhost calls, native commit,
+strict reopen, zero new user inputs, owner idle. Adaptive: same original copy,
+declared180k fixture window, nine localhost calls, native commit, strict reopen,
+exactly one new user input, owner idle;1pass27.68s. Both preserve the protected
+original source SHA c344245441ddbccefd56f679a7d7c8d472abed1cdf4c79e007f7df2514f078b3
+and proof SHA b0a6a0f7c8d25533660a1d323a23969c3250bd073f81e53070acc47895d81b29.
+No paid/public provider calls, public effects, UNKNOWN replay or store/schema
+reset occurred. This is installed native/ACP acceptance, not a new TUI gate or
+public activation claim. Einstein owns the next coherent paired TUI gate.
+
+Final source review removes ambient Path.home/expanduser from invalidation:
+SDK tilde expansion uses original captured child HOME; native model config is
+the normalized original launch value; project files use original launch cwd.
+The tested explicit-directory path is unchanged. This reviewed source delta
+does not repeat either accepted installed native journey.
+
+Prepared-model/startup final production delta:150 lines deleted,120 added in
+eight existing production files, separate from fixture/docs changes and the
+complete-reference checkpoint27 deleted/76 added. No other OwnedTurn method
+changes. Original triage/full execution and unrecorded send-epoch release remain
+named further S14 scope; this checkpoint does not claim their completion.
+
+Exact reusable adaptive command (controlled provider, persistent private root):
+
+```sh
+PYTHONPATH=.observations/prepared-final-installed:/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/lib/python3.14/site-packages \
+PI_COMPACTION_TEST_PACKAGE=/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent \
+AC_NATIVE_STACK_BIN=/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent/dist/cli.js \
+RETAINED_COMPACTION_SOURCE=/home/ts/wt/comms-native-input-custody-s14-20260930/.observations/context-latency/original-copy/retained.jsonl \
+RETAINED_COMPACTION_CONTEXT_WINDOW=180000 \
+python -m pytest -q -s 'tests/test_retained_manual_compaction.py::test_actual_cold_retained_commit_and_reopen[adaptive]' \
+  --basetemp=.observations/installed-adaptive -o addopts=''
+```
+
+The exact completed run remains preserved; do not run this command against its
+existing basetemp. Any later authorized fixture run needs a fresh private path.
