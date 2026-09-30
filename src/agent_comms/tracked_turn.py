@@ -6,8 +6,10 @@ import asyncio
 import math
 import os
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager, AsyncExitStack
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import pi_commands as commands
@@ -43,6 +45,94 @@ from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .store_files import _store_lock
 
 
+class NativeCommitObservation[T](ABC):
+    """Observed original native receipts, without granting admission or replay."""
+
+    observed = False
+
+    @abstractmethod
+    def require(self) -> T: ...
+
+    def capture(self, event: T) -> NativeCommitObservation[T]:
+        raise NativePiUnavailable("Native Pi repeated the input commitment")
+
+
+class PendingNativeCommit[T](NativeCommitObservation[T]):
+    def require(self) -> T:
+        raise NativePiUnavailable("Native Pi did not commit a tracked model context")
+
+    def capture(self, event: T) -> NativeCommitObservation[T]:
+        return ObservedNativeCommit(event)
+
+
+@dataclass(frozen=True)
+class ObservedNativeCommit[T](NativeCommitObservation[T]):
+    event: T
+    observed = True
+
+    def require(self) -> T:
+        return self.event
+
+
+class TrackedTerminal(ABC):
+    """Terminal data owns failure, missing, unique and ambiguous observations."""
+
+    def append(self, text: str) -> TrackedTerminal:
+        return CompletedTrackedTerminal(text)
+
+    def fail(self, text: str) -> TrackedTerminal:
+        return FailedTrackedTerminal(text)
+
+    def tool_round(self) -> TrackedTerminal:
+        return PendingTrackedTerminal()
+
+    def raise_failure(self, proof, provider, model) -> None:
+        pass
+
+    @abstractmethod
+    def require_response(self, parts: list[str]) -> str: ...
+
+
+class PendingTrackedTerminal(TrackedTerminal):
+    def require_response(self, parts):
+        raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
+
+
+@dataclass(frozen=True)
+class CompletedTrackedTerminal(TrackedTerminal):
+    text: str
+
+    def append(self, text):
+        return AmbiguousTrackedTerminal()
+
+    def require_response(self, parts):
+        if not self.text or "".join(parts) != self.text:
+            raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
+        return self.text
+
+
+class AmbiguousTrackedTerminal(PendingTrackedTerminal):
+    def append(self, text):
+        return self
+
+
+@dataclass(frozen=True)
+class FailedTrackedTerminal(TrackedTerminal):
+    text: str
+
+    def append(self, text):
+        return self
+
+    def tool_round(self):
+        return self
+
+    def raise_failure(self, proof, provider, model):
+        raise NativePiTerminalFailure(self.text, proof, provider, model)
+
+    def require_response(self, parts):
+        raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
+
+
 class TrackedTurnSession(TurnSession, MroDispatch):
     """Own one strict input/proof exchange; never grant publication or retry authority."""
 
@@ -76,11 +166,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.selected_revision: FileRevision | None = selected_revision
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
         self.tool_socket: OwnerToolSocket | None = None
-        self.input_event: pi.InputCommitted | None = None
-        self.context_event: pi.ContextCommitted | None = None
+        self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
+        self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.text_parts: list[str] = []
-        self.final_messages: list[str] = []
-        self.terminal_error: str | None = None
+        self.terminal: TrackedTerminal = PendingTrackedTerminal()
         self.finished = False
 
     @classmethod
@@ -202,7 +291,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @property
     def started_input(self):
-        return self.input_event is not None
+        return self.input_commit.observed
 
     @property
     def active_tools(self):
@@ -311,9 +400,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     @handles(pi.InputCommitted)
     async def committed_input(self, event: pi.InputCommitted) -> None:
         if event.input_id == self.command.input_id:
-            if self.input_event is not None:
-                raise NativePiUnavailable("Native Pi repeated the input commitment")
-            self.input_event = event
+            self.input_commit = self.input_commit.capture(event)
             self.evidence = self.custody.enter_context(
                 NativeEntry.open_evidence(self.active_session_file)
             )
@@ -322,7 +409,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:
         if event.input_id == self.command.input_id:
-            self.context_event = event
+            self.context_commit = ObservedNativeCommit(event)
 
     @handles(pi.MessageUpdate)
     async def message_update(self, event: pi.MessageUpdate) -> None:
@@ -342,27 +429,26 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             return False
         self.tool_socket.announce(message.content)
         self.text_parts.clear()
-        self.final_messages.clear()
+        self.terminal = self.terminal.tool_round()
         return True
 
     def accept_final_message(self, message):
         if self.tool_socket is not None:
             self.tool_socket.assert_complete()
-        self.final_messages.append(message.authoritative_text)
+        self.terminal = self.terminal.append(message.authoritative_text)
+
+    def fail_terminal(self, text: str):
+        self.terminal = self.terminal.fail(text)
 
     def context_proof(self) -> NativeContextProof:
-        if (
-            not self.admission.acknowledged
-            or self.input_event is None
-            or self.context_event is None
-        ):
+        if not self.admission.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
         return _verify_context(
             self.active_session_file,
             self.command.input_id,
             self.native.attestation.identity.session_id,
-            self.input_event,
-            self.context_event,
+            self.input_commit.require(),
+            self.context_commit.require(),
             evidence=self.evidence,
         )
 
@@ -385,20 +471,14 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     def result(self) -> NativeTurnResult:
         proof = self.context_proof()
-        if self.terminal_error is not None:
-            raise NativePiTerminalFailure(self.terminal_error, proof, self.provider, self.model)
+        self.terminal.raise_failure(proof, self.provider, self.model)
         if self.tool_socket is not None:
             self.tool_socket.assert_complete()
-        if (
-            len(self.final_messages) != 1
-            or not self.final_messages[0]
-            or "".join(self.text_parts) != self.final_messages[0]
-        ):
-            raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
+        response = self.terminal.require_response(self.text_parts)
         if self.selected_tool_mode is not None:
             self.selected_tool_mode.finish()
         return NativeTurnResult(
-            self.final_messages[0].strip(),
+            response.strip(),
             proof,
             self.tool_socket.selected_call_id if self.tool_socket else None,
         )

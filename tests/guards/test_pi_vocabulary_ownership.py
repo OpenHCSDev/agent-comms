@@ -39,6 +39,16 @@ def test_pi_spellings_are_not_compared_by_consumers():
     assert not violations, violations
 
 
+def test_tracked_receipt_and_terminal_data_do_not_restore_nullable_slots():
+    source = ast.parse((SOURCE / "tracked_turn.py").read_text())
+    replaced = {"input_event", "context_event", "terminal_error", "final_messages"}
+    assert not [
+        f"{node.attr}:{node.lineno}"
+        for node in ast.walk(source)
+        if isinstance(node, ast.Attribute) and node.attr in replaced
+    ]
+
+
 def test_summary_members_own_the_response_contract():
     assert SelectedSummaryData.__abstractmethods__ == frozenset({"response"})
     members = SelectedSummaryData.members_with(SelectedSummaryData)

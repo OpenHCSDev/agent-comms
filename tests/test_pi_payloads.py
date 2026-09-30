@@ -117,9 +117,51 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
         "type": "message_end",
         "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
     })
-    session = SimpleNamespace(terminal_error=None)
+    failures = []
+    session = SimpleNamespace(fail_terminal=failures.append)
     event.message.tracked_end(session)
-    assert session.terminal_error == "original provider rejection"
+    assert failures == ["original provider rejection"]
+
+
+def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
+    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.tracked_turn import ObservedNativeCommit, PendingNativeCommit
+
+    event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry"})
+    pending = PendingNativeCommit()
+    assert not pending.observed
+    with pytest.raises(NativePiUnavailable, match="tracked model context"):
+        pending.require()
+    observed = pending.capture(event)
+    assert isinstance(observed, ObservedNativeCommit) and observed.observed
+    assert observed.require() is event
+    with pytest.raises(NativePiUnavailable, match="repeated the input commitment"):
+        observed.capture(event)
+
+
+def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
+    from pathlib import Path
+    from agent_comms.native_pi import NativeContextProof, NativePiTerminalFailure, NativePiUnavailable
+    from agent_comms.tracked_turn import AmbiguousTrackedTerminal, PendingTrackedTerminal
+
+    pending = PendingTrackedTerminal()
+    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
+        pending.require_response([])
+    completed = pending.append("actual response")
+    assert completed.require_response(["actual ", "response"]) == "actual response"
+    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
+        completed.require_response(["different stream"])
+    ambiguous = completed.append("second terminal")
+    assert isinstance(ambiguous, AmbiguousTrackedTerminal)
+    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
+        ambiguous.require_response(["actual response"])
+    assert isinstance(completed.tool_round(), PendingTrackedTerminal)
+    failed = completed.fail("original provider rejection")
+    assert failed.tool_round() is failed and failed.append("later text") is failed
+    proof = NativeContextProof("a" * 32, "session", "entry", 1, "b" * 64, Path("original-session.jsonl"))
+    with pytest.raises(NativePiTerminalFailure, match="original provider rejection") as failure:
+        failed.raise_failure(proof, "configured", "model")
+    assert failure.value.context is proof
 
 
 @pytest.mark.parametrize(
