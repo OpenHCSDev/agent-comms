@@ -24,6 +24,12 @@ def main(package):
     try {
     // Apply context transform""", 1)
     function = function.replace("...config,\n        apiKey:", "...request.options(config),\n        apiKey:", 1)
+    function = function.replace("    for await (const event of response) {", """    let firstDelta = true;
+    for await (const event of response) {
+        if (firstDelta && event.type.endsWith("_delta")) {
+            firstDelta = false;
+            request.observe({ stage: "first_delta_consumed", detail: "Receiving model response" });
+        }""", 1)
     function = function.replace("await emit(", "await publish(")
     # Even a failed provider/callback closes the same acquired diagnostic scope.
     ending = "    return finalMessage;\n}\n"
@@ -36,6 +42,9 @@ def main(package):
     loop.write_text('import { NativeRequestObservation } from "../../pi-ai/dist/utils/agent-comms-request-observation.js";\n'
                     + source[:start] + function + source[end:])
     agent = core / "agent.js"
+    replace_once(agent, "    onResponse;", "    onResponse;\n    onRequestProgress;")
+    replace_once(agent, "        this.onResponse = runtimeOptions.onResponse;",
+                 "        this.onResponse = runtimeOptions.onResponse;\n        this.onRequestProgress = runtimeOptions.onRequestProgress;")
     replace_once(agent, "            onContextReady: this.onContextReady,",
                  "            onContextReady: this.onContextReady,\n            onRequestProgress: this.onRequestProgress,")
     session = package / "dist/core/agent-session.js"
@@ -45,6 +54,18 @@ def main(package):
             type: "model_request_progress", progress });""")
     helper = package / "node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js"
     helper.write_bytes(Path(__file__).with_name("native-request-observation.mjs").read_bytes())
+    helper.with_suffix(".d.ts").write_bytes(Path(__file__).with_name("native-request-observation.d.ts").read_bytes())
+    declaration = '    onRequestProgress?: (progress: import("../../pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress) => void;\n'
+    for name in ("agent.d.ts", "types.d.ts"):
+        path = core / name
+        source = path.read_text()
+        anchor = '    onContextReady?: (assembledContext: import("@earendil-works/pi-ai").Context) => Promise<void>;\n'
+        if anchor not in source:
+            raise ValueError(f"Native context declaration changed: {name}")
+        path.write_text(source.replace(anchor, anchor + declaration))
+    path = package / "dist/core/agent-session.d.ts"
+    replace_once(path, '    type: "context_committed";',
+        '    type: "model_request_progress";\n    progress: import("../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress;\n} | {\n    type: "context_committed";')
 
 
 if __name__ == "__main__":

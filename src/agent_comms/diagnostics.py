@@ -7,6 +7,7 @@ import os
 import re
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from traceback import TracebackException
@@ -55,7 +56,31 @@ class FailureReason(StrEnum):
     QUEUED_INPUT_MISSING = "queued_input_start_missing"
 
 
-def record_request_progress(root, lease, progress, *, publication_started_ns=None):
+@dataclass
+class PublicationMeasurements:
+    """Bounded transport timing counters, not a message or phase authority."""
+    count: int = 0
+    total_ns: int = 0
+    maximum_ns: int = 0
+    maximum_started_ns: int = 0
+    maximum_finished_ns: int = 0
+
+    @contextmanager
+    def measuring(self):
+        started = time.monotonic_ns()
+        try:
+            yield
+        finally:
+            finished = time.monotonic_ns()
+            duration = finished - started
+            self.count += 1
+            self.total_ns += duration
+            if duration > self.maximum_ns:
+                self.maximum_ns = duration
+                self.maximum_started_ns, self.maximum_finished_ns = started, finished
+
+
+def record_request_progress(root, lease, progress, *, publication=None):
     """Append original measurements with the exact existing turn/owner fence.
 
     This private diagnostic does not contain prompt bodies, headers or credentials,
@@ -67,9 +92,8 @@ def record_request_progress(root, lease, progress, *, publication_started_ns=Non
     now = time.monotonic_ns()
     record = {"turn": FieldCodec.encode(lease), "native": FieldCodec.encode(progress),
               "received_monotonic_ns": now}
-    if publication_started_ns is not None:
-        record["publication_started_monotonic_ns"] = publication_started_ns
-        record["publication_elapsed_ns"] = now - publication_started_ns
+    if publication is not None:
+        record["publication"] = FieldCodec.encode(publication)
     path = directory / f"{lease.turn_id}.requests.jsonl"
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(descriptor, "w") as output:

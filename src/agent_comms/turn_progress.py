@@ -6,7 +6,6 @@ from collections.abc import Awaitable, Callable
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING
-import time
 
 from acp.schema import (
     AgentMessageChunk,
@@ -18,7 +17,7 @@ from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
 from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
-from .diagnostics import record_terminal_failure, record_request_progress
+from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
 from .messages import MessageType
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
@@ -77,6 +76,7 @@ class TurnProgress(events.AgentEventConsumer):
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
         self.result: events.Done | None = None
+        self.publication_measurements = PublicationMeasurements()
         self.publication = TurnEventPublication(
             comms=comms,
             sessions=sessions,
@@ -228,19 +228,15 @@ class TurnProgress(events.AgentEventConsumer):
             return
         if self.comms.agents.transition_turn(self.turn_lease, phase):
             state = self.comms.registry.require(self.thread_name).turn_state
-            await self.effects._emit_event(self.session_id, TurnTranscriptUpdate(state=state))
+            with self.publication_measurements.measuring():
+                await self.effects._emit_event(self.session_id, TurnTranscriptUpdate(state=state))
 
     @handles(events.NativePhaseChanged)
     async def native_phase(self, event: events.NativePhaseChanged) -> None:
         for observation in event.phase.request_observations:
-            record_request_progress(self.comms.root, self.turn_lease, observation)
-        started = time.monotonic_ns()
-        try:
-            await self.transition(self.phase.observed(event.phase))
-        finally:
-            for observation in event.phase.request_observations:
-                record_request_progress(self.comms.root, self.turn_lease, observation,
-                                        publication_started_ns=started)
+            record_request_progress(self.comms.root, self.turn_lease, observation,
+                                    publication=self.publication_measurements)
+        await self.transition(self.phase.observed(event.phase))
 
     @handles(events.StreamSettled)
     async def stream_settled(self, event: events.StreamSettled) -> None:
@@ -249,9 +245,10 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def consume(self, event: events.AgentEvent) -> None:
         event = await self.dispatch(event)
-        await self.effects._emit_event(
-            self.session_id, event, turn_id=self.turn_lease.turn_id, route=self.routing.reply
-        )
+        with self.publication_measurements.measuring():
+            await self.effects._emit_event(
+                self.session_id, event, turn_id=self.turn_lease.turn_id, route=self.routing.reply
+            )
         await self.publication.dispatch(event)
 
     def publish_success(self) -> None:

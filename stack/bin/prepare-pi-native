@@ -66,6 +66,8 @@ cp -- "$stack_root/native-context-budget.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$completion_api/agent-comms-context-budget.js"
 python3 "$stack_root/patch-native-context-budget.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$completion_api/openai-completions.js"
+python3 "$stack_root/patch-native-request-observation.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
 rpc=dist/modes/rpc/rpc-mode.js
 python3 "$stack_root/patch-native-selected-compaction-summary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
