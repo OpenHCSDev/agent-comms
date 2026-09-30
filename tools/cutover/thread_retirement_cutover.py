@@ -80,7 +80,8 @@ class ThreadRetirementCutover(OwnerCutover):
             _atomic_write_text(self.receipt, json.dumps(proof, indent=2), fsync_parent=True)
             try:
                 lifecycle.registry.store._write_unlocked(json.dumps(projected['registry']))
-                lifecycle.releases._write_unlocked(json.dumps(projected['releases']))
+                if originals['owner_release_receipts.json'] is not None:
+                    lifecycle.releases._write_unlocked(json.dumps(projected['releases']))
             except BaseException:
                 # A failed guarded write may deliberately forbid rollback.
                 # Preserve its private preimages and stopped batch for review.

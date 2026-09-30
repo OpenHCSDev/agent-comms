@@ -34,6 +34,24 @@ class OwnerRestartRequest:
     runtime: RestartEnvironment | None = None
     source_interpreter: str | None = None
 
+    def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
+        if self.names is None:
+            return [thread for thread in snapshot.threads.values()
+                    if thread.role.executable and snapshot.statuses[thread.name].active
+                    and thread.process_alive]
+        return list({snapshot.require_active(name).name: snapshot.require_active(name)
+                     for name in self.names}.values())
+
+    def require_selection(self, snapshot: RegistrySnapshot, threads: list[Thread]) -> None:
+        if self.expected is not None:
+            if len(threads) != 1 or threads[0].name != self.expected.name:
+                raise OwnerSelectionChangedRefusal()
+            self.expected.require_current(snapshot)
+
+    def environment(self, lifecycle: OwnerLifecycle) -> RestartEnvironment:
+        return RestartEnvironment.inherit(lifecycle.restart_environment(
+            os.environ if self.runtime is None else self.runtime.encode()))
+
 
 @dataclass(frozen=True)
 class RetiredOwnerLaunch:
@@ -55,8 +73,7 @@ class RetiredOwnerLaunch:
         thread = snapshot.threads[self.name]
         thread.require_local_process(self.launch.process)
         thread.require_idle()
-        if not snapshot.statuses[self.name].stopped:
-            raise RelationViolationError('Retired owner is no longer stopped')
+        snapshot.statuses[self.name].require_stopped()
         if thread.process_alive:
             raise RelationViolationError('Original owner survived retirement')
         return thread
@@ -157,31 +174,22 @@ class AdmittedOwnerBatch:
         with _store_lock(lifecycle.root / 'wire'):
             lifecycle.maintenance.assert_open_unlocked()
             snapshot = lifecycle.registry.snapshot()
-            threads = ([thread for thread in snapshot.threads.values()
-                        if thread.role.executable and snapshot.statuses[thread.name].active
-                        and thread.process_alive]
-                       if request.names is None else list({
-                           snapshot.require_active(name).name: snapshot.require_active(name)
-                           for name in request.names}.values()))
-            if request.expected is not None:
-                if len(threads) != 1 or threads[0].name != request.expected.name:
-                    raise OwnerSelectionChangedRefusal()
-                request.expected.require_current(snapshot)
+            threads = request.threads(snapshot)
+            request.require_selection(snapshot, threads)
             cutover.require_selection(snapshot, threads)
             captured = []
             for thread in threads:
                 generation = snapshot.admission_generations[thread.name]
-                if not thread.role.executable or not snapshot.statuses[thread.name].active:
-                    raise RelationViolationError('Restart requires a running agent')
-                if not thread.process_alive or thread.pid == os.getpid():
+                thread.role.require_executable()
+                snapshot.statuses[thread.name].require_active()
+                if thread.require_process().pid == os.getpid():
                     raise RelationViolationError('Restart requires another live owner')
                 try:
                     thread.require_idle()
                 except RelationViolationError as error:
                     raise OwnerBusyRefusal() from error
                 captured.append((thread, generation))
-            runtime = RestartEnvironment.inherit(lifecycle.restart_environment(
-                os.environ if request.runtime is None else request.runtime.encode()))
+            runtime = request.environment(lifecycle)
             launches = tuple(RetainedOwnerLaunch.capture(
                 thread, snapshot, interpreter=request.source_interpreter,
             ) for thread, _ in captured)
