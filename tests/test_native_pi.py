@@ -529,7 +529,7 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(
             prompt="no output",
             worktree=tmp_path,
             session_dir=tmp_path / "sessions",
-            timeout=20,
+            model_wait_timeout=20,
         )
     )
     for _ in range(100):
@@ -607,7 +607,7 @@ send({'type':'agent_settled'})
         prompt="Decide IGNORE",
         worktree=tmp_path,
         session_dir=tmp_path / "sessions",
-        timeout=3,
+        model_wait_timeout=3,
     )
     if stop_reason == "stop":
         result = await operation
@@ -1175,7 +1175,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             prompt="Respond with X, fixture only",
             worktree=worktree,
             session_dir=sessions,
-            timeout=15,
+            model_wait_timeout=15,
             provider=provider,
             model=model,
         )

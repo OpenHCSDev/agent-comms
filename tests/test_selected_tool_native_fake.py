@@ -109,7 +109,7 @@ send({'type':'agent_settled'})
         worktree=tmp_path,
         session_dir=tmp_path / "sessions",
         selected_tool_mode=SelectedToolMode(owner_action),
-        timeout=15,
+        model_wait_timeout=15,
     )
     if variant == "success":
         result = await operation

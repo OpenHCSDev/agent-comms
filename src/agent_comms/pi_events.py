@@ -54,14 +54,8 @@ class PiEvent(PiPayload, DeclaredFamily):
 
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         """Apply shared progress and phase behavior around this event's meaning."""
-        previous = session.watchdog.phase
-        async for update in session.watchdog.observe(self, session):
-            yield update
-        async for event in self.apply(session):
+        async for event in session.consume_native_event(self):
             yield event
-        session.watchdog.transition(self, session.active_tools)
-        for update in session.native_phase_changes(previous):
-            yield update
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if False:
@@ -713,6 +707,8 @@ class SummarizationRetryScheduled(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionEnd(PiEvent):
+    accepts_prompt = True
+
     is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})
     result: PiToolResult | None = field(default=None, metadata={"wire_name": "result"})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
@@ -738,6 +734,8 @@ class ToolExecutionEnd(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(PiEvent):
+    accepts_prompt = True
+
     args: dict[str, Any] | None = field(default=None, metadata={"wire_name": "args"})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
@@ -764,6 +762,8 @@ class ToolExecutionStart(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionUpdate(PiEvent):
+    accepts_prompt = True
+
     partial_result: PiToolResult | None = field(
         default=None, metadata={"wire_name": "partialResult"}
     )

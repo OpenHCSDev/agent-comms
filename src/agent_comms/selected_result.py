@@ -82,7 +82,9 @@ class CoordinatedTurn:
         return "proven" if cursor is not None and cursor.input_id == input_id else "blocked_gap"
 
 
-def publish_native_failure(participant, input_id, description, *, native_response=None):
+def publish_native_failure(
+    participant, input_id, description, *, native_response=None, source_error=None
+):
     """Existing durable alert, never another wake or retry authorization."""
     diagnostic = record_terminal_failure(
         participant.comms.root,
@@ -91,6 +93,7 @@ def publish_native_failure(participant, input_id, description, *, native_respons
         event={},
         sequences=(participant.initial.message.seq,),
         native_response=native_response,
+        source_error=source_error,
     )
     target = derive_exact_reply_target(participant.initial.message)
     assert target is not None

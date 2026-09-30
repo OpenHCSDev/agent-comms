@@ -19,6 +19,8 @@ class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcom
 
 
 class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
+    executing = False
+
     def announce(self, call: NativeToolCall) -> None:
         raise SelectedToolDenied("Native tool call announcement was repeated or invalid")
 
@@ -47,6 +49,8 @@ class AnnouncedCall(CallObservation):
 
 
 class ExecutingCall(CallObservation):
+    executing = True
+
     def require_executing(self) -> None:
         pass
 
