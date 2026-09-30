@@ -13,7 +13,8 @@ import hashlib
 from acp import spawn_agent_process
 from acp.exceptions import RequestError
 from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
-import tempfile
+from contextlib import nullcontext
+from uuid import uuid4
 import threading
 
 from acp.schema import TextContentBlock
@@ -108,7 +109,9 @@ async def main(package: Path, evidence: Path, source: Path):
     server = ThreadingHTTPServer(("127.0.0.1", 0), Provider)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
-        with tempfile.TemporaryDirectory(prefix="ac453-", dir="/home/ts/wt") as bus:
+        bus = Path("/home/ts/wt") / ("ac453-" + uuid4().hex[:8])
+        bus.mkdir(mode=0o700)
+        with nullcontext(bus):
             project = evidence / "project"
             project.mkdir()
             config = evidence / "pi"
@@ -189,7 +192,7 @@ async def main(package: Path, evidence: Path, source: Path):
                 assert hashlib.sha256(source.read_bytes()).hexdigest() == source_digest
                 report = {"requests": [{key: value for key, value in request.items() if key not in ("messages", "tools")} for request in requests],
                           "source": str(source), "source_bytes": source_stat.st_size, "source_sha256": source_digest,
-                          "fork": str(retained), "new_native_users": len(users), "new_compactions": 0,
+                          "fork": str(retained), "private_root": str(comms.root), "new_native_users": len(users), "new_compactions": 0,
                           "desired_absence": True, "secondary_same_payload_recovery": True,
                           "unrelated400_calls": 1, "accepted_cancel_calls": 1,
                           "production_stdio_acp": True, "public_replays": 0, "paid_calls": 0}

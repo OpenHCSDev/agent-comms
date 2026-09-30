@@ -1,0 +1,48 @@
+{
+  "requests": [
+    {
+      "allowance": null,
+      "bytes": 1809855,
+      "body_sha256": "e3f51cf15689963d4a5392d06fd7275c30f29e4aeb6a457d9c793f9f6c15e18a",
+      "monotonic": 261837.217135067
+    },
+    {
+      "allowance": null,
+      "bytes": 1810950,
+      "body_sha256": "32621d8ff8d80ccc89e5d98992ad34a4c6e022109b6633bc18b4ab0ca5eb091b",
+      "monotonic": 261842.654744451
+    },
+    {
+      "allowance": 615684,
+      "bytes": 1810970,
+      "body_sha256": "7f473a91e04f6c04dacb0afc04d0d03152fce99c04fe336587399cf437565d1e",
+      "monotonic": 261842.689062721
+    },
+    {
+      "allowance": null,
+      "bytes": 1812045,
+      "body_sha256": "c1a06fb04843b5ff0eef300885042336f2c479b2f61105fcfa4773cec2c6a68c",
+      "monotonic": 261848.031344104
+    },
+    {
+      "allowance": null,
+      "bytes": 1813077,
+      "body_sha256": "39bf9d8114b1a93f39d2ebe7f1f7b9231ff70bc50275678b17651b279bfbceaa",
+      "monotonic": 261855.214819579
+    }
+  ],
+  "source": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T20-27-32-549Z_01a0eed9-e545-72c7-a2fa-d3870585abee.jsonl",
+  "source_bytes": 42825480,
+  "source_sha256": "38abc4669316d9e07b78460e9d7b37e2cee2a4f7d98961cb67c8e31372f31b31",
+  "fork": "/home/ts/.cache/agent-scratch/comms-native-generation-policy-20260930/native-retained02/pi/sessions/--home-ts-.cache-agent-scratch-comms-native-generation-policy-20260930-native-retained02-project--/2026-09-30T16-36-26-184Z_01a0f32c-abc8-741e-a740-5c952b19b98a.jsonl",
+  "private_root": "/home/ts/wt/ac453-f347f717/wire",
+  "new_native_users": 4,
+  "new_compactions": 0,
+  "desired_absence": true,
+  "secondary_same_payload_recovery": true,
+  "unrelated400_calls": 1,
+  "accepted_cancel_calls": 1,
+  "production_stdio_acp": true,
+  "public_replays": 0,
+  "paid_calls": 0
+}
