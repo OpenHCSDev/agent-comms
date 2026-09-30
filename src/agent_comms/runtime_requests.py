@@ -31,8 +31,7 @@ class RuntimeRequestContext:
     name: str
 
     async def send(self, payload: dict[str, Any]) -> None:
-        self.client.writer.write((json.dumps(payload) + "\n").encode())
-        await self.client.writer.drain()
+        await self.client.send(payload)
 
 
 @dataclass(frozen=True, kw_only=True)

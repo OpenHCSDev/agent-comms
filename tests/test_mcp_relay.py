@@ -284,24 +284,27 @@ send({{"type":"extension_ui_request","id":"late","method":"setStatus",
 
 
 async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission():
-    class Writer:
-        def write(self, data):
-            pass
-
-        async def drain(self):
-            pass
-
-    subscriber = SocketClient(Writer())
-    pending = asyncio.create_task(subscriber.permission({"toolCall": {}, "options": []}))
-    for _ in range(10):
-        if subscriber.pending:
-            break
-        await asyncio.sleep(0)
-    assert subscriber.pending
-    pending.cancel()  # Also exercise cancellation before the fast drain await settles.
-    with pytest.raises(asyncio.CancelledError):
-        await pending
-    assert not subscriber.pending
+    attached = asyncio.get_running_loop().create_future()
+    server = await asyncio.start_server(lambda reader, writer: attached.set_result(writer), "127.0.0.1", 0)
+    reader, writer = await asyncio.open_connection(*server.sockets[0].getsockname())
+    server_writer = await attached
+    subscriber = SocketClient(server_writer)
+    try:
+        pending = asyncio.create_task(subscriber.permission({"toolCall": {}, "options": []}))
+        for _ in range(10):
+            if subscriber.pending:
+                break
+            await asyncio.sleep(0)
+        assert subscriber.pending
+        pending.cancel()  # Cancellation can precede the socket handoff's yield.
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        assert not subscriber.pending
+        assert "permissionRequest" in json.loads(await reader.readline())
+    finally:
+        writer.close(); server_writer.close()
+        await writer.wait_closed(); await server_writer.wait_closed()
+        server.close(); await server.wait_closed()
 
 
 async def test_private_subscriber_token_routes_only_active_prompt_permission(tmp_path, monkeypatch):

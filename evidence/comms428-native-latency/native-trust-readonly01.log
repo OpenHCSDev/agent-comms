@@ -1,0 +1,23 @@
+         1754728 function calls (1733439 primitive calls) in 1.249 seconds
+
+   Ordered by: cumulative time
+   List reduced from 82 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    1.249    1.249 native_pi.py:686(_trusted_package)
+        1    0.000    0.000    1.248    1.248 native_package.py:115(verify_native_package)
+        1    0.000    0.000    1.248    1.248 native_package.py:43(package_tree_digest)
+  21269/1    0.229    0.000    1.248    1.248 native_package.py:62(visit)
+    42548    0.012    0.000    0.477    0.000 __init__.py:656(lstat)
+    42548    0.146    0.000    0.465    0.000 {built-in method posix.lstat}
+    63820    0.026    0.000    0.330    0.000 __init__.py:190(__fspath__)
+    63820    0.045    0.000    0.304    0.000 __init__.py:251(__str__)
+    21276    0.027    0.000    0.239    0.000 __init__.py:341(drive)
+    21270    0.016    0.000    0.163    0.000 __init__.py:330(_raw_path)
+    21269    0.087    0.000    0.144    0.000 <frozen posixpath>:72(join)
+    21269    0.009    0.000    0.093    0.000 __init__.py:185(dumps)
+    21269    0.008    0.000    0.087    0.000 __init__.py:172(__truediv__)
+    21269    0.025    0.000    0.084    0.000 encoder.py:185(encode)
+    19183    0.073    0.000    0.082    0.000 {built-in method posix.open}
+
+

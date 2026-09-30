@@ -47,9 +47,9 @@ class LocalRoute(CommsRoute):
     """Explicit/environment roots and the unconfigured historical default."""
 
     def bind_owners(self, owners: OwnerLifecycle) -> None:
-        from .private_nk_entrypoint import private_nk_launch
+        from .private_nk_entrypoint import PrivateNkLaunch
 
-        launch = private_nk_launch(self.root, os.environ)
+        launch = PrivateNkLaunch.from_environment(self.root, os.environ)
         if launch is not None:
             owners.pin_private_nk_launch(
                 launch.validated_root, launch.wire_root_id, launch.native_package

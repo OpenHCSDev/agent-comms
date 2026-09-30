@@ -1,0 +1,26 @@
+{
+  "interpreter": "/home/ts/wt/comms-shared-bus-admission-custody-20260930/.contention/candidate-runtime/bin/python",
+  "source_sha256": "63f70aa04779dda4509b44e2bed21b14335f234436e34712a1efcc03a9250a07",
+  "source_bytes": 718710,
+  "measurements": [
+    {
+      "sequence": 224,
+      "total_lock_ms": 25.130355003057048,
+      "barrier_ms": 16.811061999760568,
+      "receipt_inside_lock_ms": 8.248167985584587
+    },
+    {
+      "sequence": 225,
+      "total_lock_ms": 4.738557996461168,
+      "barrier_ms": 1.727803988615051,
+      "receipt_inside_lock_ms": 2.9565120057668537
+    },
+    {
+      "sequence": 226,
+      "total_lock_ms": 3.6402570258360356,
+      "barrier_ms": 1.8063320021610707,
+      "receipt_inside_lock_ms": 1.801243022782728
+    }
+  ],
+  "source_marker_index_unchanged": true
+}

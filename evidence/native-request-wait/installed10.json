@@ -1,0 +1,328 @@
+{
+  "complete": true,
+  "posts": [
+    {
+      "request": 0,
+      "dispatch_received_ns": 265050594911150,
+      "input_bytes": 7081,
+      "kind": "delayed_headers",
+      "headers_written_ns": 265052595503916,
+      "stream_written_ns": 265052596343355
+    },
+    {
+      "request": 1,
+      "dispatch_received_ns": 265061484870337,
+      "input_bytes": 11689,
+      "kind": "blocked_subscriber",
+      "headers_written_ns": 265061485052863,
+      "stream_written_ns": 265061493953918
+    }
+  ],
+  "public_mutations": 0,
+  "paid_calls": 0,
+  "completed_with_nonreading_observer": true,
+  "nonreading_observer_retired": true,
+  "original_dispositions": [
+    "started",
+    "started"
+  ],
+  "native_delayed_headers_ms": 2023.300454,
+  "native_originals": 2,
+  "visible_wait_frames": 550,
+  "provider_calls": 2,
+  "fast_reader": {
+    "packets": 1391,
+    "reply_observed": true
+  },
+  "temporarily_busy_reader": {
+    "packets": 1391,
+    "reply_observed": true
+  },
+  "recovered_attachment_packets": 5,
+  "recovered_snapshot_bytes": 619196,
+  "cleanup": "fixture-owned children retired",
+  "scope": "Installed private Toad/ACP/worker/native; localhost provider only; no public action",
+  "original_receipt_sha256": "3a26a7c001e83c2163757b5832c5ce2a4bfccee4f58e93b6a80df055729b9d29",
+  "original_receipt_path": "/home/ts/wt/aw454-10/receipt.json",
+  "request_measurements": {
+    "7dd3c004-4b66-40eb-8d11-ad74a20e5f64": {
+      "native_process": {
+        "pid": 3653719,
+        "start_time": 26505721
+      },
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "wait-native",
+            "created_at": 1790789400.3808389
+          },
+          "generation": 2
+        },
+        "turn_id": "0b021edcafa049f39826ffbf810fa7b9",
+        "admission_generation": 3
+      },
+      "input_id": "dc75856b080bd8890e06b1d43940d5fd",
+      "native_session_id": "01a0f35d-e13c-70d2-958a-458754e67989",
+      "max_callback_ms": 1316.961964,
+      "max_publication_ms": 204.156321,
+      "stages": [
+        {
+          "stage": "preparing",
+          "native_elapsed_ms": 0.049083,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback",
+          "native_elapsed_ms": 109.717006,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback_end",
+          "native_elapsed_ms": 109.827876,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "dispatch",
+          "native_elapsed_ms": 110.301272,
+          "transport": "http",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "headers",
+          "native_elapsed_ms": 143.072516,
+          "transport": "http",
+          "status": 200,
+          "attempt": 0
+        },
+        {
+          "stage": "callback",
+          "native_elapsed_ms": 143.22742,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback_end",
+          "native_elapsed_ms": 143.359159,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback",
+          "native_elapsed_ms": 144.176186,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback_end",
+          "native_elapsed_ms": 144.319117,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "first_event",
+          "native_elapsed_ms": 145.638164,
+          "transport": "http",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "first_delta_consumed",
+          "native_elapsed_ms": 148.879392,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "stream_end",
+          "native_elapsed_ms": 193.110246,
+          "transport": "http",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback",
+          "native_elapsed_ms": 7935.375241,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback_end",
+          "native_elapsed_ms": 7992.107767,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "finished",
+          "native_elapsed_ms": 7992.333755,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        }
+      ]
+    },
+    "2a4401da-98c2-40fe-8dce-39ae9df78c33": {
+      "native_process": {
+        "pid": 3653393,
+        "start_time": 26504914
+      },
+      "turn": {
+        "identity": {
+          "incarnation": {
+            "name": "wait-native",
+            "created_at": 1790789400.3808389
+          },
+          "generation": 1
+        },
+        "turn_id": "6538afa7410a46d380316e01e04bb587",
+        "admission_generation": 3
+      },
+      "input_id": "0d9b585b7a21c999d6d75ccd2c5fed78",
+      "native_session_id": "01a0f35d-e13c-70d2-958a-458754e67989",
+      "max_callback_ms": 3.304227,
+      "max_publication_ms": 8.972199,
+      "stages": [
+        {
+          "stage": "preparing",
+          "native_elapsed_ms": 0.050576,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback",
+          "native_elapsed_ms": 132.06878,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback_end",
+          "native_elapsed_ms": 132.184238,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "dispatch",
+          "native_elapsed_ms": 132.690166,
+          "transport": "http",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "headers",
+          "native_elapsed_ms": 2155.99062,
+          "transport": "http",
+          "status": 200,
+          "attempt": 0
+        },
+        {
+          "stage": "callback",
+          "native_elapsed_ms": 2156.115847,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback_end",
+          "native_elapsed_ms": 2156.239251,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback",
+          "native_elapsed_ms": 2156.99904,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback_end",
+          "native_elapsed_ms": 2157.26353,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "first_event",
+          "native_elapsed_ms": 2158.473161,
+          "transport": "http",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "first_delta_consumed",
+          "native_elapsed_ms": 2160.823341,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "stream_end",
+          "native_elapsed_ms": 2166.977614,
+          "transport": "http",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback",
+          "native_elapsed_ms": 2167.479916,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "callback_end",
+          "native_elapsed_ms": 2170.788701,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        },
+        {
+          "stage": "finished",
+          "native_elapsed_ms": 2170.841912,
+          "transport": "",
+          "status": null,
+          "attempt": 0
+        }
+      ]
+    }
+  },
+  "native_selector": "593b978a717ae8f6",
+  "native_tree_tested": "b7b2dc5693227740a91a09ac9aa9189519ca084e8fd9dfc71a9698aa65d76eda",
+  "native_build": "Original normal stock recipe, zero-fuzz patches, original offline locked import boundary, exact full-tree verification passed",
+  "installed_toad": "b2006bfe50ae50a262b049074258f7f0281791ac",
+  "installed_textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347",
+  "package_check": "68 compatible installed packages",
+  "clock_contract": "Native intervals within each original ProcessIdentity; Python publication spans within Python monotonic clock. Completed cumulative publications are previous spans, not current request causal allocation.",
+  "historical_129s": "Unattributed: no original transport boundary timestamps",
+  "original_source_frontier": {
+    "root": "/home/ts/wt/aw454-10/wire",
+    "recipient": {
+      "name": "wait-native",
+      "created_at": 1790789400.3808389
+    },
+    "sequence": 0
+  },
+  "original_native_revision": [
+    10641153,
+    624224,
+    1790789430112654852,
+    1790789430112654852
+  ],
+  "old_failed_attempts": "06 failed oversized snapshot;08 failed genuinely busy reader;09 resumed observer before native publication completed. Their original private receipts remain preserved, not acceptance."
+}
