@@ -1,0 +1,26 @@
+{
+  "state": "FINAL-PAIRED-INSTALLED-GATE-PASS-PUBLICATION-PENDING",
+  "owner": "parent",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "8a924e1d6c4a32098876f7885cc06c7173d499fa",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "candidate_gate": {
+    "seconds": 41.78260389500065,
+    "actual_native_acp_toad": true,
+    "controlled_provider_posts": 2,
+    "fresh_protocol_errors": 0,
+    "model_wait_source_observations": 30,
+    "raw": "/home/ts/wt/g454e/u01/proof",
+    "remaining_owned_processes": []
+  },
+  "original_owners_readonly_observed_idle": 13,
+  "cutover": "Existing StoppedOwnerInstallation; reviewable one-use operator prepared byArendt, execution parent. Fresh selection required.",
+  "paid_calls": 0,
+  "original_input_replays": 0,
+  "remaining_scope": "Publication+fresh ordinarydefault acceptance pending. Full CPU/cache/focus/growing-End inToad245 continues separately; wholeproviderlatency/all11API proof not claimed."
+}
