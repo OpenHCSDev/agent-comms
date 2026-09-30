@@ -329,3 +329,36 @@ original source supplies its actual input membership; no speculative native
 scan, new membership index, counter or mirror was substituted. Ordinary
 StartedInput-to-original-publication closure is still coordinated with Arendt.
 Full 41MB installed blanking/CPU/original handling acceptance is UNREVIEWED.
+
+## One original presentation read and public witness handoff
+
+The actual read-only original-history profile contains70469 samples and no
+provider input. Independent sample accounting attributes10.63 cross-thread
+sample seconds to _saved certificate work, including notification rows and
+frontier reads. These weights do not establish wall latency or continuous
+lock custody. Sch215 retains the profile, source root and empty cleanup proof.
+
+The source regression at77b6 performs two real certified barriers for one
+thread presentation. The new AssignedTranscriptSource.window returns the
+original bounded rows and their frontier together. HistoryViews consumes that
+single window for both notification projection and read identity. All wire
+locks close before notification metadata, native preparation or UI awaits.
+No stored proof, independent revision, index or semantic mirror was added.
+The same original notification projection serves standalone and shared reads
+(IDEN-5, IDEN-7, BOUND-2).
+
+Transcripts.bind_page_read accepts the original published identity without
+recapturing its source. It validates the root, page bounds and registry-owned
+original incarnation, including retained rename aliases. Another thread,
+foreign root, different page window or recreated same-name owner is rejected.
+Later content admission remains owned by TranscriptRead. Sch215 consumes this
+public API in its existing publication/page reader; cold page capture retains
+its existing intent. No frontend identity comparison or second witness owner
+is required.
+
+17 focused source, notification, read-identity and ownership controls pass in
+3.50s. The regression fails at77b6 with two barriers and passes with one.
+Read admission still rechecks the source around page projection; those remaining
+barriers are not claimed eliminated. Original41MB installed/native/ACP/physical
+UI acceptance remains UNREVIEWED. Parent432 integrates this source with434/436/437
+and Sch215's matching content_identity/public-witness consumer in one cohort.
