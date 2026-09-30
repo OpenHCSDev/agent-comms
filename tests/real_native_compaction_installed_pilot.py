@@ -28,6 +28,7 @@ from agent_comms.turn_phase import CompactionPhase
 from toad.agent_schema import AgentDefinition
 from toad.app import ToadApp
 from toad.widgets.agent_response import AgentResponse
+from toad.widgets.transcript_history import TranscriptHistory
 
 from l0a_native_installed_pilot import until
 from runtime_fixture import stop_test_children
@@ -135,6 +136,9 @@ async def main():
                 view = app.selected_session.conversation
                 await until(pilot, lambda: view.agent is not None and view.agent_ready, 90)
                 assert view.agent.session.connected
+                await until(pilot, lambda: bool(view.contents.query(TranscriptHistory)), 90)
+                if app._exception is not None:
+                    raise app._exception
                 token = "REAL_COMPACTION_ONCE_ONLY_437"
                 command = (
                     "Bounded acceptance only. Do not resume inherited work or use tools. "
