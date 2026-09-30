@@ -127,3 +127,75 @@ resources. The lightweight installed CLI stage and retained receipts remain.
 Whole managed native acceptance has not been claimed or replaced by an inline
 extension-only fake gate. Backend source checkpoint is independently reviewable;
 UI/viewport work is not its dependency.
+
+## Bounded compiled snapshot/native SDK gate
+
+Parent explicitly clarified that the swap warning does not block one
+proportional bounded gate. Ran a 3.734s kernel-network-denied source snapshot
+gate against unchanged current e36, with the installed source wheel. No clone,
+new package tree, installed file mutation, public input or paid call occurred.
+The manifest's source SHA256 and byte count were checked before esbuild.
+
+Used native DefaultResourceLoader.extensionFactories, createAgentSession,
+SessionManager and the actual installed beforeToolCall/afterToolCall callbacks
+and built-in tools. No fake ExtensionAPI or alternate tool implementation.
+A native-generated saved header was reopened; this is header-only saved state,
+not retained-history, ACP, owner-turn or provider-stream acceptance. The current
+project-sync factory remained enabled. The candidate comms factory registered
+32 tools and only session_start; no managed activity/release hooks. Actual
+read -> edit -> read changed the fixture file and returned its new contents.
+No activity.jsonl was emitted. No fixture process remains.
+
+Measured candidate before-hook/tool/after-hook milliseconds respectively:
+
+| Native tool | Project hook | Built-in work | Result hook |
+| --- | ---: | ---: | ---: |
+| read | 565.444 | 3.869 | 0.388 |
+| edit | 541.731 | 7.084 | 0.054 |
+| read | 556.282 | 1.200 | 0.040 |
+
+These are actual SDK component timings. They do not claim a before/after full
+provider turn or allocation of the original 129.898s gap. First probe used
+noncanonical edit arguments without native prepareArguments, so validation
+rejected the fixture's edit before mutation; its original failure log is
+preserved. Corrected probe uses the declared edits[] and native preparation.
+See managed-snapshot-gate.json and the exact probe sources in the evidence dir.
+
+### Production bundle integration requirement
+
+The native production loader admits only deployment-manifest compiled modules
+inside the reviewed package. Explicit SDK extensionFactories can exercise this
+snapshot, but do not replace production discovery. A future bundle must carry
+both the newly compiled global-agent-comms module and the updated
+stack/native-import-manifest.json as dist/agent-comms-imports.json. The source
+snapshot declaration is already updated. stack/pi-native.sha256 still selects
+e36, so the existing builder must not reuse that target as a new candidate.
+
+Parent's existing fresh-package preparation command, after reviewing/publishing
+new per-file and complete tree pins from the ordinary native build recipe:
+
+```sh
+cd /home/ts/wt/comms428-native-wait-custody-20260930
+mkdir -m 700 /home/ts/.cache/agent-scratch/comms450-native-package-build-20260930
+TMPDIR=/home/ts/.cache/agent-scratch/comms450-native-package-build-20260930 \
+  stack/bin/prepare-pi-native
+```
+
+Canonical preparation already runs prepare-native-import-boundary.py, which
+runs prepare-native-global-extensions.mjs and checks declared source bytes
+without importing mutable user sources. It verifies selected files and the
+complete package tree before publishing a new .pi-native-<pin> directory.
+Changing snapshots alone does not change the directory selector; old pins can
+return the unchanged existing package or reject a changed fresh build. Review
+and update the new compiled module/import manifest checks and complete tree pin
+in stack/pi-native.sha256 first using the existing reviewed build/pin procedure,
+then require canonical verification and automatic extension discovery against
+that new package. Do not edit or repair existing e36 or bypass its commitment.
+Rebuild the wheel with those matching native resources before paired activation.
+
+The lightweight requested snapshot/managed-tool gate is complete. Whole
+production bundle activation is parent-owned. Sch/Heisenberg UI work is not a
+backend checkpoint dependency. Arendt now owns the separately reproduced
+seq247 pre-byte BUS contention/UNKNOWN admission workflow; #450 leaves
+OwnerLifecycle.pin, BUS admission and lock lifetimes unchanged, and transferred
+its exact route/trust/multi-CLI timing evidence directly. Preserve UNKNOWN.
