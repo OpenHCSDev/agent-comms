@@ -83,22 +83,7 @@ def _read_settings_response(
     if not raw.endswith(b"\n") or len(raw) > 16384:
         raise SelectedPiProbeUnknownError("Incomplete selected settings response")
     response = PiRpcChannel.decode_record(raw, strict=True, max_bytes=16384)
-    if (
-        not isinstance(response, Response)
-        or response.id != request.id
-        or response.command is not type(request)
-        or response.success is not True
-    ):
-        raise SelectedPiProbeUnknownError("Unmatched selected settings response")
-    data = response.data
-    if (
-        data is None
-        or data.session_id != request.session_id
-        or data.session_file != request.session_file
-        or data.selected != request.selected
-    ):
-        raise SelectedPiProbeUnknownError("Selected settings source changed")
-    return data.decision
+    return response.require_request(request).require_request(request)
 
 
 async def read_selected_compaction_decision(
@@ -106,27 +91,17 @@ async def read_selected_compaction_decision(
     *,
     session_file: str,
     expected_package: Path,
-    provider: str,
-    model_id: str,
-    context_window: int,
+    selected: SelectedModel,
     timeout: float = 3.0,
 ) -> PiCompactionDecision:
     """Observe actual selected settings/model without auth, provider or input writes."""
     session_id = persistent.custody.idle().identity.session_id
-    if (
-        not session_id
-        or not session_file
-        or not provider
-        or not model_id
-        or type(context_window) is not int
-        or not 0 < context_window <= 2**53 - 1
-    ):
-        raise ValueError("Exact selected settings source required")
+    source = NativeSessionIdentity(session_id, session_file)
     request = AgentCommsCompactionSettings(
         id=secrets.token_hex(16),
-        session_id=session_id,
-        session_file=session_file,
-        selected=SelectedModel(provider, model_id, context_window),
+        session_id=source.session_id,
+        session_file=source.session_file,
+        selected=selected,
     )
     return await _exchange_observation(
         persistent,

@@ -13,7 +13,6 @@ import hashlib
 import json
 import os
 import secrets
-import stat
 from contextlib import suppress
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -34,6 +33,8 @@ from .store_files import _store_lock
 from .threads import Thread
 from .field_codec import FieldCodec
 from .declared_family import DeclaredFamily
+from .private_path import PrivateDirectoryRole, PrivateFileRole
+from .pi_rpc import unique_fields
 from .message_reference import MessageReference
 from .thread_identity import AdmissionIdentity, ThreadIncarnation
 
@@ -142,11 +143,7 @@ class SelectedWritePlans:
             info = self.directory.lstat()
         except FileNotFoundError:
             return False
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-        ):
+        if PrivateDirectoryRole.violation(info) is not None:
             raise IdentityConflict("Selected write plan directory is not private")
         return True
 
@@ -159,18 +156,14 @@ class SelectedWritePlans:
             return None
         try:
             info = os.fstat(fd)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_nlink != 1
-                or info.st_uid != os.geteuid()
-                or stat.S_IMODE(info.st_mode) != 0o600
-                or info.st_size > 2 * _MAX_BYTES
-            ):
+            if PrivateFileRole.violation(info) is not None:
+                raise IdentityConflict("Selected write intent is not private")
+            if info.st_nlink != 1 or info.st_size > 2 * _MAX_BYTES:
                 raise IdentityConflict("Selected write intent has unsafe identity")
             with os.fdopen(fd, "rb") as stream:
                 fd = -1
                 try:
-                    return FieldCodec.decode(SelectedWriteIntent, json.loads(stream.read()))
+                    return FieldCodec.decode(SelectedWriteIntent, json.loads(stream.read(), object_pairs_hook=unique_fields))
                 except (ValueError, TypeError) as error:
                     raise IdentityConflict("Selected write intent is malformed") from error
         finally:
@@ -187,14 +180,14 @@ class SelectedWritePlans:
         contents: str,
     ) -> SelectedWriteAcceptedUpdate:
         """Persist exactly one predispatch operator intent; no native/model call."""
-        if (
-            type(source_message_id) is not str
-            or not source_message_id
-            or type(resource) is not str
-            or not resource
-            or type(contents) is not str
-        ):
-            raise IdentityConflict("Selected write request is not typed")
+        try:
+            FieldCodec.decode(str, source_message_id)
+            FieldCodec.decode(str, resource)
+            FieldCodec.decode(str, contents)
+        except (TypeError, ValueError) as error:
+            raise IdentityConflict("Selected write request is not typed") from error
+        if not source_message_id or not resource:
+            raise IdentityConflict("Selected write request requires its source and resource")
         raw = contents.encode("utf-8")
         if not raw or len(raw) > _MAX_BYTES:
             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
@@ -215,8 +208,7 @@ class SelectedWritePlans:
                 selected = [
                     assignment
                     for assignment in assignments
-                    if assignment.wire_seq == source_seq
-                    and assignment.message_id == source_message_id
+                    if assignment.source == MessageReference(source_seq, source_message_id)
                     and assignment.recipient == owner.name
                     and assignment.lifecycle.full_pending
                 ]

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from acp.agent.router import build_agent_router
 
+from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     CompactionCommittedUpdate,
@@ -185,9 +186,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             persistent,
             session_file=str(session),
             expected_package=package,
-            provider="retained-local",
-            model_id="fixture",
-            context_window=272000,
+            selected=SelectedModel("retained-local", "fixture", 272000),
         )
         assert not decision.trigger, "Committed context must be usable on a fresh native reopen"
         identity = await asyncio.to_thread(

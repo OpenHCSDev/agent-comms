@@ -80,6 +80,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def observed_phase(self, phase):
         return phase
 
+    def require_request(self, request: PiCommand) -> PiResponseData:
+        raise ValueError("Native event is not a request response")
+
 
 @dataclass(frozen=True)
 class UnknownPiEvent(PiEvent):
@@ -596,6 +599,16 @@ class Response(PiEvent):
     error: str | None = field(default=None, metadata={"wire_name": "error"})
     id: str | None = field(default=None, metadata={"wire_name": "id"})
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
+
+    def require_request(self, request: PiCommand) -> PiResponseData:
+        """Correlate this original response; correlation grants no input authority."""
+        if self.id != request.id or self.command is not type(request):
+            raise ValueError("Native response does not match the original request")
+        if self.success is not True:
+            raise ValueError("Native request did not succeed")
+        if self.data is None:
+            raise ValueError("Native response has no data")
+        return self.data
 
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.command.invalidates_identity(self, session):

@@ -35,6 +35,7 @@ from .coordination_tables.participants import OwnerGenerations
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
+from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .pi_rpc import unique_fields
 from .selected_actions import SelectedAction
 
@@ -207,22 +208,13 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
         raise SelectedToolDenied("Selected tool call identity is invalid")
     directory = Path(directory).absolute()
     info = directory.lstat()
-    if (
-        not stat.S_ISDIR(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o700
-        or directory.resolve() != directory
-    ):
+    if PrivateDirectoryRole.violation(info) is not None or directory.resolve() != directory:
         raise SelectedToolDenied("Selected tool session directory is not private")
     ledger = directory / "selected-tool-ledger"
     try:
         ledger.mkdir(mode=0o700, exist_ok=True)
         info = ledger.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-        ):
+        if PrivateDirectoryRole.violation(info) is not None:
             raise SelectedToolDenied("Selected tool ledger is not private")
         _sync_dir(directory)
         fd = os.open(ledger / input_id, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -316,12 +308,9 @@ def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
         raise SelectedToolDenied("Selected input identity is invalid") from error
     receipt = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
     info = receipt.lstat()
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o600
-        or receipt.read_bytes() != (call_id + "\n").encode("ascii")
-    ):
+    if PrivateFileRole.violation(info) is not None:
+        raise SelectedToolDenied("Selected tool receipt is not private")
+    if receipt.read_bytes() != (call_id + "\n").encode("ascii"):
         raise SelectedToolDenied("Selected tool has no matching terminal receipt")
 
 
@@ -438,12 +427,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
         if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
             raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
         info = self.path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-            or self.path.parent.resolve() != self.path.parent
-        ):
+        if PrivateDirectoryRole.violation(info) is not None or self.path.parent.resolve() != self.path.parent:
             raise SelectedToolDenied("Selected tool socket parent is not private")
         if self.path.exists() or self.path.is_symlink():
             raise SelectedToolDenied("Selected tool socket already exists")
