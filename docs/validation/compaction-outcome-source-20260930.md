@@ -57,5 +57,31 @@ the provisional resource and request canonical source publication; the retained
 notice comes from the original journal/native record, not another UI response.
 This leaves232 capture and229 retirement ownership unchanged.
 
-Status: source checkpoint awaiting Core446 integration and the one changed
-installed cancellation/source-refresh/reconnect journey. No readiness claim.
+## Ready paired installed checkpoint
+
+Core446 final e309f2a3 is integrated.16 affected source/decoder/paging tests
+passed; required debt ratchet has zero positive changes. Core production delta
+against ea1c275a deletes67 lines and adds421, including existing traversal moved
+into its declaration owner. Toad237 deletes20 synthetic-history lines/adds6.
+No new history store or UI outcome authority was introduced.
+
+The one changed native cancellation23701 passed canonical UNKNOWN outcome,
+older snapshot and physical tab return, then failed fresh ACP decoding because
+the journal lazily declared the outcome event. Core2ed2ee3f places that declaration
+in transcript_events and deletes the old declaration/import surface. A fresh
+process can decode without importing compaction_outcomes.
+
+Normal installed pair Core2ed2ee3f / Toadda396755 / Textual2e49cb / SDK0.12.1 /
+nativee36 passed full source-byte and native trust validation. Only the missing
+read/reconnect continuation was rerun on the preserved original707507-byte
+source and UNKNOWN journal. Actual cold load, source read, physical tab return
+and ACP reconnect each exposed/painted one original operation. Exit0. Native and
+journal bytes stayed unchanged; ACP client sent only initialize/load, no new
+input/compaction/provider request. Owned process references were empty at exit.
+See `evidence/compaction-outcome-source/` for exact receipt/provenance/custody.
+
+READY for paired review and activation by parent. Durable journal format is
+unchanged; TranscriptReadIdentity/cursor runtime fields require coherent paired
+producer/consumer activation. Do not default missing fields or replay UNKNOWN.
+Public defaults are unchanged. Mid-compaction UI switch hang remains separately
+owned236 with445 source interaction; no claim that this receipt resolves it.

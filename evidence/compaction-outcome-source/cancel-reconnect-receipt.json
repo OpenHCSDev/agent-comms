@@ -1,0 +1,28 @@
+{
+  "complete": true,
+  "operation_id": "027a6ed8dc3c48ffbfe3cd3cff054a77",
+  "source_bytes": 707507,
+  "source_sha256": "d5eb8ce053c8e6c6067994c4bf98650d137d39fbda77c9a9ed28467b138ad764",
+  "source_unchanged": true,
+  "journal_unchanged": true,
+  "summary_state": "unknown",
+  "prompt_requests": 0,
+  "new_provider_or_compaction_requests": 0,
+  "phases": [
+    {
+      "phase": "cold-load",
+      "original_outcomes": 1,
+      "painted_resources": 1
+    },
+    {
+      "phase": "tab-return",
+      "original_outcomes": 1,
+      "painted_resources": 1
+    },
+    {
+      "phase": "acp-reconnect",
+      "original_outcomes": 1,
+      "painted_resources": 1
+    }
+  ]
+}
