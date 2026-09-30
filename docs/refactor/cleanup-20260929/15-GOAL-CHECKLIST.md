@@ -28,16 +28,19 @@ retained under213/214; a median improvement alone does not close them.
 
 ## Current default activation
 
-The default paired checkpoint is now Core72062939, Toad540bc85c,
+The default paired checkpoint is now Core72062939, Toad6660cb68,
 Textual412b5a2b and reviewed native4ab91006. All11 live executable owners
-were idle at preflight and were restarted through the existing lifecycle;
+were idle at the earlier paired preflight and were restarted through the existing lifecycle;
 each retained session, model, thinking level, tags and goal. Stopped or dead
 registrations were left alone. Their exact interpreter/native pins were checked.
 The actual default `toad-comms comms428` launcher completed saved-history
 attachment with27 events, no ACP error, no prompt request and exit0.
 Receipts: `evidence/cleanup-live-integration/paired-activation.json`,
 `paired-owner-processes.json` and `paired-default-attachment.json`.
-Existing Toad windows must be restarted to consume the new public lifecycle ABI.
+The disposal-only222 update changed the five matching default launchers without
+another owner restart, schema reset, native-package or active-route change.
+Its first actual default physical close/reopen/shutdown check is pending.
+Existing Toad windows must be restarted to consume new UI code.
 This activation does not close the still-open full performance, messaging or
 refactoring scopes below.
 
@@ -231,3 +234,30 @@ the remaining whole-turn resource work stays with Arendt436. Core437 now owns
 canonical automatic/manual compaction progress and the remaining native latency
 investigation; the controlled429 scheduling receipt does not close the user's
 six-minute compaction observation.
+
+## Disposal-only checkpoint installed, default verification pending
+
+Toad222 merged e21363c8 from ready aebb8aa1. The installed noneditable6660cb68
+has identical production and packaging source to that reviewed head. Relative
+to the prior default540bc85c, only three production lifetime files changed:
+seven lines deleted and13 added. Final disposal releases the native tree before
+widget pruning, while retained eviction continues to capture a live editor.
+The obsolete unmount finalizer and final-disposal editor capture are deleted.
+
+The actual installed887 close and shutdown receipt passed20.861s without
+NoMatches, and the three lifetime methods are identical to222. The first exact
+default222 physical two-existing-tab close/reopen/shutdown run remains assigned
+to Heisenberg. No source test substitutes for that postactivation check. Default
+is runtime-ordered-view-disposal-20260929; the one-use operator and activation
+receipt are under evidence/cleanup-live-integration. Broader scrolling remains
+failed in217/221 and is not included in this disposal-only release.
+
+The second real215 channel journey used original41MB native forks and the actual
+configured Sol/high provider. Original outgoing/incoming publication appeared
+in already-open views, but the expected recipient reply did not complete.
+The original diagnostic identifies PrivateSendAdmission._exclusion waiting
+for the wire lock, then PromptSendUnknown before writing bytes. The fixture's
+reply wait is a secondary failure, not evidence to increase a turn timeout.
+Schrodinger/Einstein/Mendel own the shared read/admission custody correction;
+the original attempt, full wire, native journals and dispositions are retained.
+No original input is replayed, and the whole messaging gate is not ready.
