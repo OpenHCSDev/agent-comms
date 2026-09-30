@@ -27,7 +27,7 @@ from .coordinator import Coordination
 from .message_bus import MessageBus
 from .native_source_cursor import NativeSourceCursor
 from .runtime import RuntimeServer
-from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .thread_identity import AdmissionIdentity
 
 
 @dataclass
@@ -75,7 +75,7 @@ class CursorPublication:
         return CursorScope(
             session_id,
             self.root_id,
-            OwnerIdentity(ThreadIncarnation(owner.name, owner.created_at), generation),
+            AdmissionIdentity(owner.incarnation, generation),
             owner.pid,
         )
 
