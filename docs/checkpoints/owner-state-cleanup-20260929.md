@@ -37,7 +37,8 @@ FieldCodec-on-self adapters. Scalar FieldRepresentation remains canonical.
 
 Parent owns sealed.py and FieldCodec/PendingRequests/ReadLedger/PiRpcChannel/
 ChildProcess seals, typed_table A13 review and C4. Einstein Core417 owns C1 Pi
-vocabulary; threads.py and pi_events.py are excluded. Kepler owns TC2 ACP SDK.
+vocabulary; pi_events.py remains excluded. Arendt explicitly approved the later
+disjoint Thread report-field deletion; its identity builder remains his. Kepler owns TC2 ACP SDK.
 Arendt Core416 owns large-context native accounting and usage acceptance.
 Mendel's C2 registry_document refusal guard extension is already in Core419.
 

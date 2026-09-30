@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from .owner_compaction_prepare import NativeWitness
 
 
+
 class _GeneratedCreationTime(float):
     """Transient marker for default timestamps; never persisted as claim authority."""
 
@@ -116,9 +117,8 @@ class Thread:
         if self.model is not None and not self.model.strip():
             raise ValueError("Thread model cannot be empty.")
         if self.thinking_level is not None:
-            object.__setattr__(
-                self, "thinking_level", ThinkingLevel.field_value(self.thinking_level)
-            )
+            object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
+
 
     @property
     def pid(self) -> int:
@@ -145,9 +145,7 @@ class Thread:
             raise RelationViolationError(f"Thread {self.name!r} has no owner process")
         return self.process_identity
 
-    def compaction_attestation(
-        self, owner_generation: int, witness: NativeWitness
-    ) -> OwnerCompactionAttestation:
+    def compaction_attestation(self, owner_generation: int, witness: NativeWitness) -> OwnerCompactionAttestation:
         """Project this captured owner; registry and native CAS still recheck it."""
         from pathlib import Path
 
@@ -158,15 +156,10 @@ class Thread:
         session = str(Path(self.session_file).resolve(strict=True))
         witness.require_session(session)
         return OwnerCompactionAttestation(
-            self.name,
-            owner_generation,
-            self.active_turn.id,
+            self.name, owner_generation, self.active_turn.id,
             self.goal.id if self.goal is not None else None,
             self.goal.revision if self.goal is not None else None,
-            session,
-            witness.leaf_id,
-            witness.revision,
-            None,
+            session, witness.leaf_id, witness.revision, None,
         )
 
     def require_saved_session(self) -> str:
@@ -233,23 +226,17 @@ class Thread:
         result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
         if self.turn_generation != previous.turn_generation:
             result = replace(
-                result,
-                turn_generation=previous.turn_generation,
+                result, turn_generation=previous.turn_generation,
                 last_finished_turn_id=(
                     previous.last_finished_turn_id
-                    if self.active_turn == previous.active_turn
-                    else None
+                    if self.active_turn == previous.active_turn else None
                 ),
             )
         return result
 
     def for_claim(self, name: str) -> Thread:
         """Assign an allocated name without turning a generated clock into caller identity."""
-        created = (
-            _GeneratedCreationTime(self.created_at)
-            if self._generated_created_at
-            else self.created_at
-        )
+        created = _GeneratedCreationTime(self.created_at) if self._generated_created_at else self.created_at
         return replace(self, name=name, created_at=created)
 
     def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:
@@ -301,9 +288,7 @@ class Thread:
 
     def observed_turn(self, admission: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
-        turn_id = (
-            self.active_turn.id if self.active_turn is not None else self.last_finished_turn_id
-        )
+        turn_id = self.active_turn.id if self.active_turn is not None else self.last_finished_turn_id
         if turn_id is None:
             return None
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, admission)
@@ -317,9 +302,7 @@ class Thread:
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         """A declared turn already belongs to this executor (enforced at decode)."""
-        return (
-            self.active_turn is not None and self.active_turn.started_at * 1000 <= updated_at_ms + 1
-        )
+        return self.active_turn is not None and self.active_turn.started_at * 1000 <= updated_at_ms + 1
 
     @property
     def executing(self) -> bool:
