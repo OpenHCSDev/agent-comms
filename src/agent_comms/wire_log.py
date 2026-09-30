@@ -261,25 +261,27 @@ class WireLog:
 
         if type(wire_seq) is not int or not 0 < wire_seq <= MAX_WIRE_SEQ:
             raise ValueError("wire_seq must be a positive SQLite-range integer.")
-        with _store_lock(self.path):
-            metadata = self._private_marker_unlocked()
-            if wire_root_id != metadata.root_id:
+        with self.certified_read() as source:
+            if wire_root_id != source.witness.root_id:
                 raise RelationViolationError("Initial wire root does not match the bus marker.")
-            matched: CommittedDelivery | None = None
-            for record in self.verified_records_unlocked(metadata):
-                for delivery in record.deliveries():
-                    if delivery.message.seq == wire_seq:
-                        matched = delivery
-            if matched is None:
-                raise RelationViolationError(
-                    "No committed initial sideband for this wire sequence."
-                )
-            return matched
+            return source.delivery(wire_seq)
+
+    def delivery_cohorts_unlocked(self, wire_root_id: str, sequences):
+        """Borrow canonical checkpoint resources under the caller's bus custody."""
+        from .private_bus_checkpoint import opened_private_checkpoint_unlocked
+
+        marker = self._private_marker_unlocked()
+        if marker.root_id != wire_root_id:
+            raise RelationViolationError("Initial wire root does not match the bus marker.")
+        with opened_private_checkpoint_unlocked(self, marker) as source:
+            originals = tuple(source.delivery(seq) for seq in sequences)
+            source.require_current()
+            return originals
 
     def _keyed_receipt_unlocked(
         self, intent: PublicationIntents
     ) -> tuple[Message | None, int, WireMetadata]:
-        """Read the whole owner-only bus before trusting an exact keyed receipt.
+        """Resolve the original receipt through the canonical sealed prefix.
 
         Caller holds the bus file lock. Absence is NOT authorization to append.
         """
@@ -287,18 +289,12 @@ class WireLog:
         if type(intent) is not PublicationIntents:
             raise TypeError("Keyed response requires a validated PublicationIntents.")
         metadata = self._private_marker_unlocked()
-        matched: Message | None = None
-        previous_sequence = 0
-        for record in self.verified_records_unlocked(metadata):
-            existing, receipt = record.message, record.receipt
-            previous_sequence = existing.seq
-            if receipt is not None and receipt.publication_key == intent.publication_key:
-                if receipt.execution_id != intent.execution_id:
-                    raise RelationViolationError("Response publication identity conflicts.")
-                matched = existing
-        if matched is not None and not intent.matches_publication(matched):
-            raise RelationViolationError("Response publication intent conflicts.")
-        return matched, previous_sequence, metadata
+        from .private_bus_checkpoint import opened_private_checkpoint_unlocked
+
+        with opened_private_checkpoint_unlocked(self, metadata) as source:
+            matched = source.keyed_receipt(intent)
+            source.require_current()
+            return matched, source.witness.through_seq, metadata
 
     def read_keyed_response(self, intent: PublicationIntents) -> Message | None:
         """Read-only exact receipt resolution; never append or repair an absent row."""

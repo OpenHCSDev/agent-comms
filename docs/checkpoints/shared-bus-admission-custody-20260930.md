@@ -24,5 +24,37 @@ fixtures. Record admission lock acquisition/hold time and original prompt
 counts, settlement/cleanup and changed/stale authority refusals. No original
 public input is reused. Source checks alone are not actual delivery acceptance.
 
-Checkpoint: draft before implementation; actual contention trace verified,
-holder/cost cause not yet proven. Production changes zero at this checkpoint.
+## Published production checkpoint
+
+The original `CertifiedSourceRead` now resolves exact delivery sequences,
+addressed unsealed originals and existing keyed publications. The caller closes
+its canonical lock/resource before accepting coordinator rows. Selected source,
+response conversation, final assignment and keyed replay consumers use these
+original pointers instead of each strictly decoding the entire history again.
+No index schema, independent proof cache, timeout or UNKNOWN disposition changes.
+The reverse original-pointer walk for an existing response key is still linear;
+this checkpoint makes no constant-time claim for that case.
+
+The actual public bus read-only profile contained 259 rows/871766 bytes and took
+871.558ms under cProfile (profiler overhead included), dominated by repeated
+frozen receipt decoding. This identifies redundant work; it does not prove the
+particular historical lock holder. Public original source/marker remained intact.
+
+Focused source check: 53 pass, including damaged prefix, sidecar mutation,
+missing derived index, canonical pending-writer recovery, keyed publication
+identity and frozen intent mismatch. The changed-source test now checks the
+earlier certified-prefix refusal, then independently cold-certifies its isolated
+changed row and still requires the exact frozen-publication-intent refusal.
+
+Actual private native acceptance remains pending. Interrupted baseline04 exited
+with all owned workers retired, zero provider calls and zero native user rows.
+Its fixture observation timeout is not a production admission failure receipt.
+No original from that failed observation is sent again. Next gate uses a fresh
+private root and new originals, actual retained all-owner restart, concurrent
+background drains, native receipts, subscription notifications and keyed replies.
+Public inputs, original UNKNOWN rows and parked451 restoration remain untouched.
+
+Production delta at this checkpoint: 44 replaced lines deleted across five files;
+new behavior is owned by the existing certified opened-source resource (IDEN-4,
+BOUND-2). Source tests and fixture code are reported separately from production.
+
