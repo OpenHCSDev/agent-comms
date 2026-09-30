@@ -371,6 +371,7 @@ class InputStartedUpdate(AgentCommsUpdate):
     text: str | None
     scope: QueueScope | None
     revision: int | None
+    native_id: str | None
 
     def for_session(self, session_id: str) -> InputStartedUpdate:
         return (

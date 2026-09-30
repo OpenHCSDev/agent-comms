@@ -151,6 +151,7 @@ class InputDrain(FutureInputQueue):
         input_id: str | None = None,
         source_scope: QueueScope | None = None,
         *,
+        native_id: str | None,
         client: Any = None,
     ) -> None:
         scope = self.queue_binding(session_id)
@@ -165,7 +166,7 @@ class InputDrain(FutureInputQueue):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(InputStartedUpdate(input_id, text, scope, revision)),
+                field_meta=encode_updates(InputStartedUpdate(input_id, text, scope, revision, native_id)),
             ),
         )
 
@@ -435,6 +436,7 @@ class InputDrain(FutureInputQueue):
                 await self.emit_input_disposition(session_id, row)
         item = self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
         text = item.text if item and item.echo else None
+        row = self.dispositions.read().lookup(started_keys[0] if len(started_keys) == 1 else None)
         if input_id is None and original.notice_keys:
             row = self.dispositions.read().lookup(original.notice_keys[0])
             if row.has_started and row.matches_admission(source_scope.admission_generation):
@@ -444,6 +446,7 @@ class InputDrain(FutureInputQueue):
             text,
             input_id,
             source_scope=source_scope,
+            native_id=row.native_id if row.has_started else None,
         )
         await self.emit_queue_state(session_id)
 
