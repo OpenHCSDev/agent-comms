@@ -39,14 +39,24 @@ Parallel outstanding owners and measured progress:
   lifetime controls passed and the required ratchet has no positive deltas.
   Toad238 merged629cca65 (reviewed productiondef49) at14:25:18Z; Einstein owns
   the UI-only immutable install stage, with backend4295/nativee36 unchanged.
+  Default executables now select runtime-goal-observation; original clients are
+  not stopped. The short actual default UI acceptance is pending. No backend
+  owner restart or state reset accompanied this UI-only activation.
   Actual mid-active-compaction latency remains follow-up, not a readiness claim.
   Capacity has not recurred.
 - Heisenberg, Toad236: configurable3-viewport baseline buffer, directional dynamic
   lookahead and retained preparation measurement are implemented. Physical
   attempt02 could navigate but correctly refused a stopped private fixture;
   it provides no physical buffer/scroll acceptance. Canonical private-owner
-  startup and one corrected capture remain pending. Kepler owns the recording
-  driver/CPU correlation and rejects captures without actual history movement.
+  startup and capture03 loaded actual41MB copied history. Source-cursor Up/Down/
+  reverse, readable physical frames, End15s idle, A return, draft/undo retention
+  and zero visible dormant bodies establish the useful buffer checkpoint.
+  Toad236 mergedddf180dd at14:41:14Z, reviewedaa0be31, with106 additions/29
+  deletions across six production files. Einstein owns next immutable UI stage.
+  Cold B first paint, high CPU, transient gaps, Strip reuse and the complete
+  growing-end/warm workflow remain in Heisenberg's main-based follow-up. Kepler
+  publishedaa83d98 using existing source-cursor comparisons; old failed captures
+  remain preserved and no new provider/input run was needed for observer repair.
 
 The actual normal default UI capture reads original41MB history and exposed
 NEW current native admission failures on NRA inbox drain. Diagnostic
