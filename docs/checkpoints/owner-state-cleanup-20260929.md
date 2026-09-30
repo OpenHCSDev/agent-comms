@@ -381,3 +381,42 @@ Merged436/430 with its current Thread schema may ship independently before
 this future C3 format activation. Parent owns live activation and single cutover
 custody; Arendt owns both the carry operator and actual old720 fixture. No
 public-root mutation or duplicate carry builder is introduced by this merge.
+
+## Receiving closure ledger after reviewed paired merge
+
+Parent verified merged Core421 at2519fb653d3dde780da729d8979b55df68026b95
+and Toad216 at4d239091240790fc95863a8e9b3edf009ca72e53. Exact reviewed source
+checkpoints remain Core0b3a965a9d3bfb531d0e7aa02878c0468429f23b and
+Toade2014d814bc6e4f41e5225640fb3fd06be13cd05. The default/backend remains720.
+Merged is not installed. Preserve both worktrees, installed acceptance wheels,
+original private journals, UNKNOWN records, frames and receipts until install.
+This receiving update changes documentation only; it does not repeat89 source,
+native615 or mounted menu gates or replace the recorded version of any proof.
+
+The five-family caller census at the reviewed source found no remaining disjoint
+retired dispatch caller in the assigned relation:
+
+| Family | Declaration and actual caller closure |
+| --- | --- |
+| GoalMentionBinding resolution | Existing FieldCodec decodes the declared family; Relationships iterates original source.bindings and calls binding.project. No seven-string validator or consumer resolution switch remains. bind_goal_mentions is the original text/registry authoring boundary, not a second stored-resolution owner. |
+| Both relationship edits | RelationshipDocument.edit string dispatch is absent. ToolRequest carries type[RelationshipEdit]; ThreadRelationships.edit creates that declared command and calls command.apply. Add/Update/Remove own their behavior through the shared context. |
+| Maintenance lifecycle | Marker/State decode once through FieldCodec; current_unlocked validates their original pairing. Registration/admission call the same barrier; phase.require_open owns policy. Shared send-boundary custody remains OPEN under Arendt, not closed by this census. |
+| ACP error shapes | ExternalFailureData/ErrorReasonField use existing MroDispatch at the external boundary; ACPFailure/PromptFailureReceipt consumers use that decoded result. The retired _error_detail helper is absent. External provider nesting is decoded here, not copied into callers. |
+| ThreadStatus control capability | All three allows_control methods and actual Toad callers are absent. Declared ToolRequest/OwnerLifecycleControl and status own availability; ThreadAction.available/menu and target command consumers derive it. No status or command-name roster was restored. |
+
+This is a source caller census, not full C3 runtime closure. There is no newly
+demonstrated disjoint family caller to patch or another family mechanism to add.
+The full six-file/five-family assignment stays in this receiving ledger.
+Arendt FULL owns the remaining shared initial/forwarded send-custody capability
+and S14 original initial admission/all-stop/nested Thread format closure/target
+launch. Both RegistryDocument.threads and OwnerReleaseReceipt.thread remain in
+that same future cutover, with original process/incarnation/admission proof and
+the unchanged14C0 goal-history rule. Parent alone owns activation/single cutover.
+No competing operator, live schema read/reset, legacy reader or replay here.
+
+Arendt reports separate carry441 checkpoint51c87fa7 provider-free old720 routing
+fixture acceptance, with unchanged-on-corrupt-last-annotation negative proof.
+That source-zero carry checkpoint excludes future421 Thread schema conversion;
+it does not close this S14 dependency or activate the default. Historical
+goal_pause_events.json and all original release/native/goal-history/UNKNOWN
+evidence remain protected.
