@@ -1,3 +1,19 @@
+## 2026-09-30 next live build includes every merged fork head
+
+User explicitly requested all merged changes in the next live build. Parent owns
+publication; Schrodinger owns one immutable paired stage and Einstein the actual
+installed candidate/default UI checks. Toad244 merged b932042f pins Core main
+29bbe95d while including Toad239 and241. Textual main remains2e49cb83 and SDK
+0.12.1. Core29b versus livea80 changes only restoration documentation/evidence;
+nativececa, production code and runtime formats are unchanged, so this build
+does not require a backend owner restart or runtime-store reset.
+
+Toad243 login source82f454cd has a separate inactive normal68-package candidate
+and actual provider chooser/native terminal/cancel verification in progress.
+Include243 in the next merged-head stage only after its gate passes and it is
+merged. Do not wait for unfinished242/453/454; those continue in parallel. The
+next build is not yet published or live-verified.
+
 ## 2026-09-30 login crash and provider-wait active ownership
 
 - New actual user login crash: Terminal_crash_2026-09-30T12_15_29_613337.txt,
