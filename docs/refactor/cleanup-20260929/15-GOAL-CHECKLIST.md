@@ -1,3 +1,23 @@
+## 2026-09-30 all merged changes installed and actual default accepted
+
+Five public defaults now resolve runtime-all-merged-20260930: exactToad3625ce9e
+(239/241/243/244), Core29bbe95d, Textual2e49cb83, SDK0.12.1 and nativececa.
+Kepler's real scripted candidate86.132s passed all16 saved-history/A-B-A/held
+scroll/reverse/End/idle/reader/draft/Undo/resource checks; original41MB/13MB
+sources and owner births unchanged, cleanup0. Parent reviewed actual A-return.
+Einstein's actual ordinary default toad-comms (no overrides)16.610s passed fresh
+initialize/load, readable saved history and canonical idle/available empty queue,
+goalNone; no new protocol errors, original history/owner unchanged, cleanup0.
+Parent personally reviewed its startup frame. No backend restart, route/schema
+change or uncertain-input replay. Activation evidence: all-merged-ui-activation.json.
+
+Restarting Toad loads this build. Whole UI CPU remains high and the broader goal
+is active. 242/453/454 remain separate unmerged scopes; the accepted source freeze
+is not a readiness claim for them. The clean completed parent dependency-pin
+worktree was removed normally after no process or registry reference; committed
+branch/history retained. Schrodinger's other cleanup netted0.88GiB after concurrent
+build writes, preserving unreviewed source, original journals and proofs.
+
 ## 2026-09-30 merged-head source freeze and parallel results
 
 Toad243 merged3625ce9e includes244/239/241. Its actual31.8866s provider chooser

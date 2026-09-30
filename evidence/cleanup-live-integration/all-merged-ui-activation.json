@@ -47,6 +47,10 @@
   "root_changes": 0,
   "runtime_store_resets": 0,
   "inputs_replayed": 0,
-  "default_ui_verification": "pending",
-  "remaining": "Whole UI CPU, final foreground performance and unmerged 242/453/454 remain in progress."
+  "default_ui_verification": "PASS: ordinary toad-comms without overrides; fresh initialize/load, saved history readable, canonical idle/empty queue facts, no new protocol errors; original source and owners unchanged.",
+  "remaining": "Whole UI CPU, final foreground performance and unmerged 242/453/454 remain in progress.",
+  "default_gate": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence/default-all-merged-startup-20260930/joint-ready-receipt.json",
+  "default_gate_duration_seconds": 16.610364597989246,
+  "default_gate_cleanup_remaining": [],
+  "completed_pin_worktree": "Clean merged dependency-pin worktree removed normally after no process/registry references; branch and remote commit retained."
 }
