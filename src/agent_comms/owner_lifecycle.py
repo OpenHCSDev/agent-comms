@@ -17,6 +17,7 @@ from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -202,10 +203,11 @@ class OwnerLifecycle:
         self,
         names: Sequence[str] | None = None,
         *,
-        agent_bin: str = "pi",
+        agent_bin: str | None = None,
         agent_args: Sequence[str] | None = None,
         expected: OwnerRestartSelection | None = None,
-        environment: Mapping[str, str] | None = None,
+        runtime: RestartEnvironment | None = None,
+        source_interpreter: str | None = None,
     ) -> tuple[OwnerRestartResult, ...]:
         """Preflight every idle owner before stopping any exact process identity."""
         with _store_lock(self._wire_lock_path):
@@ -222,7 +224,7 @@ class OwnerLifecycle:
                 if names is None
                 else list(
                     {
-                        self.registry.require(name).name: self.registry.require(name)
+                        snapshot.require_active(name).name: snapshot.require_active(name)
                         for name in names
                     }.values()
                 )
@@ -243,18 +245,16 @@ class OwnerLifecycle:
                 except RelationViolationError as error:
                     raise OwnerBusyRefusal() from error
                 captured.append((thread, generation))
+            target_runtime = RestartEnvironment.inherit(self.restart_environment(
+                os.environ if runtime is None else runtime.encode()
+            ))
+            launches = tuple(
+                RetainedOwnerLaunch.capture(thread, snapshot, interpreter=source_interpreter)
+                for thread, _ in captured
+            )
             # Fence before the first signal, so a concurrent channel wake cannot
             # start a turn while shutdown is pending. No replay is scheduled.
-            captured = [
-                (
-                    thread,
-                    self.registry.fence_idle_owner(
-                        thread,
-                        expected_admission_generation=generation,
-                    ),
-                )
-                for thread, generation in captured
-            ]
+            captured = self.registry.fence_idle_owners(captured)
         for thread, generation in captured:
             self._stop_process(thread, generation)
         with _store_lock(self._wire_lock_path):
@@ -268,12 +268,12 @@ class OwnerLifecycle:
                     thread.pid,
                     self._launch_owner_unlocked(
                         self.registry.require(thread.name),
-                        agent_bin,
-                        agent_args,
-                        environment=environment,
+                        agent_bin or self.restart_entrypoint(launch.binary),
+                        agent_args if agent_args is not None else launch.arguments,
+                        environment=target_runtime.apply_runtime(launch.environment),
                     ).pid,
                 )
-                for thread, _ in captured
+                for (thread, _), launch in zip(captured, launches, strict=True)
             )
 
     @contextmanager

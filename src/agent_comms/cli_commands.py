@@ -504,13 +504,10 @@ class RestartCliCommand(CliCommand):
         default=False,
         wire_name="all",
     )
-    agent_bin: str = option(
-        "--agent-bin", default_factory=lambda: os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
-    )
+    agent_bin: str | None = option("--agent-bin", default=None)
     agent_args: list[str] | None = option(
         "--agent-args",
         default=None,
-        parser_default_factory=lambda: os.environ.get("AGENT_COMMS_AGENT_ARGS"),
         normalize=_shell_words,
     )
 

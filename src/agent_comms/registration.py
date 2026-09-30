@@ -112,13 +112,19 @@ class Registration:
             edit.commit()
             return result
 
-    def fence_idle_owner(self, expected: Thread, *, expected_admission_generation: int) -> int:
+    def fence_idle_owners(
+        self, selected: Sequence[tuple[Thread, int]]
+    ) -> tuple[tuple[Thread, int], ...]:
+        """Commit all original idle owner fences together, or change none."""
         with self.store.editing() as edit:
-            result = edit.document.fence_idle_owner(
-                expected, expected_admission_generation=expected_admission_generation
+            fenced = tuple(
+                (thread, edit.document.fence_idle_owner(
+                    thread, expected_admission_generation=generation
+                ))
+                for thread, generation in selected
             )
             edit.commit()
-            return result
+            return fenced
 
     def unregister(self, name: str) -> None:
         with (

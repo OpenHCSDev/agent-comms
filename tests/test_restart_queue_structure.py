@@ -3,12 +3,12 @@
 import ast
 import inspect
 
-from agent_comms import restart_queue
+from agent_comms import restart_queue, owner_launch
 from agent_comms.restart_refusals import RestartRefusal, WaitForIdle
 
 
 def test_queue_uses_declared_records_environment_and_refusal_behavior():
-    tree = ast.parse(inspect.getsource(restart_queue))
+    tree = ast.parse(inspect.getsource(owner_launch) + "\n" + inspect.getsource(restart_queue))
     policy = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                   and node.name == "RestartEnvironment")
     policy_nodes = {id(node) for node in ast.walk(policy)}
