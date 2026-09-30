@@ -119,3 +119,85 @@ with `OwnerGenerations.__init__` receiving positional arguments. This is Arendt'
 published correction2b5918, not a framing or provider regression. Original
 failed fixture/journal and source-hash/installed receipts are protected under
 `native-selected-original`; no input from it will be retried.
+
+## Installed backend checkpoint 7f64d7ac
+
+The native-ID competing parser is deleted; Arendt's NativeInputIdText and the
+corrected OwnerGenerations callers are normally integrated. Sch's reviewed
+StableLookupText and corrected CoveragePage/source query checkpoint73c8ffcb
+are normally integrated. This does not claim Sch460's complete UI acceptance.
+
+The new successful-send visibility relation uses the existing PromptRequest,
+live QueuedInput and durable InputAttempt owners. The original request mints
+one ACP input ID, distinct from its later native input ID. The same ID is used
+by initial and follow-up capture, the original durable reservation, complete
+live queue projection and native-start handoff. The consumer retains the same
+request and received typed native receipt on its outstanding request resource.
+There is no correlation registry, text matching or independent seen/status list.
+
+The original InitialInput is now held in the existing live queue during dispatch.
+Immediate follow-ups also appear; deferred-display choice no longer controls
+whether actual accepted work is visible. Clearing follow-ups cannot discard the
+original dispatch. UNKNOWN alone never creates this live capability. The
+original StartedInput owns admission validation and yields its native proof;
+the producer retains the queue item throughout awaited InputStarted publication,
+then removes it and publishes the queue. Failed/cancelled initial work loses its
+live capability without being reconstructed or reclassified from disk.
+
+Private installed source hashes match every current package Python file at
+7f64d7ac. Two existing serial controlled-localhost native drivers passed:
+
+- `native02`: installed selected triage/full read/edit/write/Bash, one original
+  response and lease retirement, **11.53s**. All four actual native tool results
+  are successful. Bash output proves canonical ToolRunningPhase and actual
+  installed CLI help/unknown-argument entrypoint behavior.
+- `queue-native01`: actual retained native history, selected summary, initial
+  and queued follow-up, **11.38s**. Original request/queue/started IDs agree;
+  each corresponding native user occurs once; both durable rows are Started.
+  Assertions observe the original queue item still present during the awaited
+  native publication. The unrelated original fixture reservation is preserved.
+
+Original native journals, input proofs, complete source-hash/direct_url receipts
+and logs are retained in owned scratch `native02` and `queue-native01`.
+Three exact native ProcessIdentity witnesses from their existing diagnostics
+are no longer alive. No owner/native signal, public mutation or paid call occurred.
+The existing fixture teardown owns its remaining children. The failed native01
+originals remain protected. Checked evidence is summarized in
+`INSTALLED-CHECKPOINT.json`; this is backend acceptance, not physical UI proof.
+Kepler owns Toad251 continuous send-click/queue/native-paint/UNKNOWN/cancel
+acceptance and its matching consumer. Einstein458 owns coherent Core integration.
+
+The installed TodoStore also reopened a real baseline6feb database created via
+the original TodoStore and registered private participants. Exact old transfer
+reply recovery leaves the original row unchanged; new generation and replacement
+incarnation are rejected. Block/unblock, release/exact release recovery, cold
+reopen and completion preserve the original goal. DDL remains unchanged.
+This continuous installed store journey took 0.021s and spawned no worker.
+
+Deletion accounting: Todo checkpoint84a76b18 replaces **158 deleted/340 added**
+production lines in todos.py. Queue/shared-identity checkpoint7f64d7ac replaces
+**27 deleted/93 added** across its seven production files. Existing bounded
+ratchet over 21 claimed production files has **zero increases**, including
+StringDispatch/TypeSwitch and their arms; LongBooleanChain falls13 and Todo
+BooleanChainTerms falls15. No optional broad or completed gate repeat is needed.
+
+Owned formats require no schema reset for the state/Todo/request change.
+Borrowed Sch460 derived indexes retain his explicit reset/rebuild dependency;
+native proof/journal/UNKNOWN carry remains Arendt's sole custody. Neither is
+an activation claim from these fresh private fixtures.
+
+## Named remaining source work
+
+GoalWait original certified sender/recipient joins and all input-review consumers
+remain assigned here. Sch has supplied existing certified_read.delivery(seq);
+this will not delay publication of the useful input/Todo checkpoint.
+
+Receiving runtime-observation follow-up from parent: RuntimeInfoStore._decode
+injects missing ts=0, while AgentRuntimeInfo.timestamp default_factory fabricates
+freshness if only that reader is deleted. Replace both with one required recorded
+timestamp and producer-owned capture in AgentActivity.set_agent_info and
+TurnRunner.prepare_selected_session. Preserve dated serialization, rename,
+reopen and failed-publication semantics; reject missing dates. Runtime-only
+runtime_info.json must reset at the next declared quiet Core cutover, with
+durable history unchanged. Coordinate the TurnRunner method with Arendt.
+This follow-up is not in 7f64d7ac and does not block the queue checkpoint.
