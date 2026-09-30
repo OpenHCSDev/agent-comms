@@ -12,6 +12,7 @@ from agent_comms.input_attempt import StartedInput
 from agent_comms.pi_events import MessageEnd
 from agent_comms.pi_payloads import AfterMessageStreamStartStage, UnrecognizedTransportStage
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.pi_vocabulary import ErrorStopReason
 
 FIXTURE = Path(__file__).with_name("fixtures") / "native_provider_transport_1011.json"
 
@@ -24,7 +25,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     event = PiRpcChannel.decode_record(FIXTURE.read_bytes(), strict=True)
     assert isinstance(event, MessageEnd)
     assert event.message.content == ()
-    assert event.message.stop_reason == "error"
+    assert event.message.stop_reason is ErrorStopReason
     assert event.message.usage.total_tokens == 0
     (diagnostic,) = event.message.diagnostics
     assert diagnostic.error.name == "WebSocketCloseError"
@@ -85,3 +86,28 @@ def test_unrecognized_phase_is_a_typed_observation_not_a_send_decision():
     )
     assert "provider stage: future_native_stage" in failure.description
     assert failure.input_state is None
+
+
+def test_native_1012_with_empty_thinking_reaches_provider_feedback():
+    """The observed comms428 terminal must survive RPC and ACP publication."""
+    record = observed()
+    message = record["message"]
+    message["content"] = [{"type": "thinking", "thinking": ""}]
+    message["errorMessage"] = "WebSocket closed 1012"
+    diagnostic = message["diagnostics"][0]
+    diagnostic["error"]["code"] = 1012
+    diagnostic["error"]["message"] = message["errorMessage"]
+    diagnostic["details"]["requestBytes"] = 1565058
+    event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+    assert event.message.stop_reason is ErrorStopReason
+    failure = ACPFailure.from_error(
+        -32603,
+        event.message.error_message,
+        {"inputStatus": "started"},
+        diagnostics=event.message.diagnostics,
+    )
+    assert isinstance(failure, ProviderConnectionFailure)
+    assert failure.input_state is StartedInput
+    assert "code 1012" in failure.description
+    assert "request: 1,565,058 bytes" in failure.description
+    assert decode_updates(encode_updates(RequestFailedUpdate(failure)))[0].failure == failure

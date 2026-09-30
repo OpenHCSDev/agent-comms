@@ -18,6 +18,7 @@ from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -208,8 +209,14 @@ class OwnerLifecycle:
         expected: OwnerRestartSelection | None = None,
         runtime: RestartEnvironment | None = None,
         source_interpreter: str | None = None,
+        cutover: OwnerCutover = PreserveOwnerRuntime(),
     ) -> tuple[OwnerRestartResult, ...]:
-        """Preflight every idle owner before stopping any exact process identity."""
+        """Retain one batch through stop, optional quiet maintenance and launch.
+
+        The declared cutover runs under the wire admission lock after every
+        original exits and before any replacement launches. It owns its writer
+        proof and operation; failure leaves the fenced batch stopped for review.
+        """
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
             snapshot = self.registry.snapshot()
@@ -233,6 +240,7 @@ class OwnerLifecycle:
                 if len(threads) != 1 or threads[0].name != expected.name:
                     raise OwnerSelectionChangedRefusal()
                 expected.require_current(snapshot)
+            cutover.require_selection(snapshot, threads)
             captured = []
             for thread in threads:
                 generation = snapshot.admission_generations[thread.name]
@@ -262,6 +270,11 @@ class OwnerLifecycle:
                 self._require_same_stop_owner(thread, generation)
                 if thread.process_alive:
                     raise RelationViolationError("Owner survived retirement.")
+            cutover.after_stopped(self)
+            # The operation cannot replace the captured audience's registry or
+            # process proof before the batch resumes its existing launch path.
+            for thread, generation in captured:
+                self._require_same_stop_owner(thread, generation)
             return tuple(
                 OwnerRestartResult(
                     thread.name,

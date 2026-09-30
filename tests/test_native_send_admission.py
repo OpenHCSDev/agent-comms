@@ -424,8 +424,10 @@ def test_busy_admission_obeys_writer_deadline_and_cancellation_without_bytes(can
             timer.start()
         start = time.monotonic()
         deadline = start + (2 if cancel else 0.04)
-        with pytest.raises(native_prompt_send.PromptSendUnknown, match="before writing"):
+        with pytest.raises(native_prompt_send.PromptSendUnknown, match="before writing") as caught:
             native_prompt_send._write_fenced(write_fd, b"prompt\n", busy, cancelled, deadline)
+        assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
+        assert str(caught.value.__cause__) == "held by another owner"
         assert time.monotonic() - start < 1
         assert len(calls) > 1
         with pytest.raises(BlockingIOError):

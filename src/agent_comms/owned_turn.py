@@ -463,8 +463,10 @@ class OwnedTurn:
         except Exception as error:
             with _store_lock(self.runner.comms._wire_lock_path):
                 self.runner.inputs.dispositions.settle_unbound(self.original_keys)
-            await self.progress.report_failure(error)
-            await backend.terminate_task_process(self.owner_task)
+            try:
+                await self.progress.report_failure(error)
+            finally:
+                await backend.terminate_task_process(self.owner_task)
             failure = self.runner.emitted_errors.get(self.session_id)
             if failure is not None:
                 raise PromptFailureReceipt(failure, True).request_error() from error
