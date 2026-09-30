@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,11 +14,64 @@ from .compaction_operations import NativeOperations
 from .compaction_private_inputs import PrivateInputs
 from .compaction_publications import CompactionPublications
 from .compaction_records import JournalMode, JournalSchemaObject, JournalTable, SyncMode
+from .compaction_identity import JournalCustody
 from .compaction_summaries import SelectedSummaries
 from .typed_table import TypedTable
+from .thread_identity import ThreadIncarnation
+from .registry_document import RegistrySnapshot
 
 
 class CompactionJournal:
+    @classmethod
+    def snapshot(cls, path: Path, session_file: str, incarnation: ThreadIncarnation,
+                 registry: RegistrySnapshot):
+        """Observe the original journal without the writer's creation/durability path.
+
+        mode=ro respects commits; immutable=1 would conceal genuine transitions.
+        This current journal uses rollback mode. Reject WAL before SQLite opens
+        it so even a read cannot create a shared-memory sidecar. No absent file
+        or schema is initialized, and no admission/durability receipt is minted.
+        """
+        from .compaction_outcomes import CompactionOutcomeSnapshot
+
+        try:
+            initial = path.lstat()
+        except FileNotFoundError:
+            return CompactionOutcomeSnapshot(())
+        if not stat.S_ISREG(initial.st_mode) or initial.st_nlink != 1:
+            raise CompactionJournalError("Journal must be a regular private file")
+        try:
+            with path.open("rb") as stream:
+                info = os.fstat(stream.fileno())
+                if path.is_symlink() or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                    raise CompactionJournalError("Journal must be a regular private file")
+                header = stream.read(100)
+        except FileNotFoundError as error:
+            raise CompactionJournalError("Journal removed before read") from error
+        if header[:16] != b"SQLite format 3\0" or header[18:20] != b"\x01\x01":
+            raise CompactionJournalError("Read-only journal requires current rollback format")
+        custody = JournalCustody.capture(path)
+        if (custody.device, custody.inode) != (info.st_dev, info.st_ino) or (
+            info.st_dev, info.st_ino
+        ) != (initial.st_dev, initial.st_ino):
+            raise CompactionJournalError("Journal replaced before read")
+        db = sqlite3.connect(path.absolute().as_uri() + "?mode=ro", uri=True,
+                             isolation_level=None, timeout=0.25)
+        try:
+            db.execute("PRAGMA query_only=ON")
+            if JournalMode.read(db.execute("PRAGMA journal_mode")) != [JournalMode("delete")]:
+                raise CompactionJournalError("Read-only journal requires current rollback mode")
+            db.execute("BEGIN")
+            try:
+                result = CompactionOutcomeSnapshot.read(db, session_file, incarnation, registry)
+                if JournalCustody.capture(path) != custody:
+                    raise CompactionJournalError("Journal replaced during read")
+                return result
+            finally:
+                db.execute("ROLLBACK")
+        finally:
+            db.close()
+
     def __init__(self, path: Path):
         self.path = path
         self.operations = NativeOperations(self)
