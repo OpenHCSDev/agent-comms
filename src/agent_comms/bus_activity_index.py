@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision
+from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .channels import Channel
@@ -40,7 +41,7 @@ class BusActivityIndex(BusAppendIndex):
         self._retained: ActivityCheckpoint | None = None
 
     def snapshot(self, revision: tuple[int, int, int, int] | None,
-                 parse: Callable[[Mapping[str, Any]], ActivityFields]) -> ActivitySnapshot | None:
+                 parse: Callable[[Mapping[str, Any]], ActivityFields]) -> ActivitySnapshot:
         if revision is None:
             return {}, {}
         source = BusFileRevision(*revision)
@@ -49,11 +50,11 @@ class BusActivityIndex(BusAppendIndex):
             return retained.snapshot
         with self.bus_path.open("rb") as stream:
             if not source.opened_by(stream):
-                return None
+                raise RelationViolationError("Activity source changed before its captured read")
             if source.size:
                 stream.seek(source.size - 1)
                 if stream.read(1) != b"\n":
-                    return None
+                    raise RelationViolationError("Activity source has an incomplete original row")
             checkpoint = self.checkpoint(stream, source)
             if checkpoint is None:
                 channels, sent, offset = {}, {}, 0
@@ -69,7 +70,7 @@ class BusActivityIndex(BusAppendIndex):
             while stream.tell() < source.size:
                 raw = stream.readline(source.size - stream.tell())
                 if not raw.endswith(b"\n"):
-                    return None
+                    raise RelationViolationError("Activity source has an incomplete original row")
                 if not raw.strip():
                     continue
                 record = json.loads(raw)

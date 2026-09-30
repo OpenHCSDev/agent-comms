@@ -60,3 +60,11 @@ FieldCodec, original locked reads and source publication. These transition group
 are not CPU shares/calls/durations, and resource metadata lacks per-query source
 clocks. They establish a source-read investigation lead, not redundant-read or
 performance-improvement proof. No new capture/provider/public mutation occurred.
+
+Final activity boundary closure: MessageBus's duplicate raw activity rescan is
+deleted too. Malformed or lost original byte boundaries fail through the existing
+RelationViolationError; disposable index damage still rebuilds inside its single
+original index owner. CandidateQuery now uses the existing WireRootIdText and
+StableLookupText declarations rather than admitting arbitrary nonempty strings.
+The affected activity-original and selected-candidate/no-wake cases both pass.
+No scheduling/native input permission is introduced by this projection/query.

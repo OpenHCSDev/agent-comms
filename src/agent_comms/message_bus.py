@@ -104,17 +104,7 @@ class MessageBus:
     def _activity_clocks_unlocked(self) -> ActivitySnapshot:
         """The original index resource owns activity revision and reuse policy."""
         revision = file_revision(self.log.path)
-        projection = self._activity.snapshot(revision, self._bus_activity_fields)
-        if projection is not None:
-            return projection
-        channels: dict[str, ChannelActivity] = {}
-        sent: dict[str, float] = {}
-        for message in self.log._iter_log_unlocked():
-            channels[message.target] = channels.get(message.target, ChannelActivity()).observe(message)
-            if message.membership is None and not message.notice:
-                sent[message.sender] = max(sent.get(message.sender, 0.0), message.timestamp)
-        return ({name: (item.last_message, item.last_user_input)
-                 for name, item in channels.items()}, sent)
+        return self._activity.snapshot(revision, self._bus_activity_fields)
 
     def channel_activity(self) -> Mapping[str, ChannelActivity]:
         """Aggregate clocks from the single existing append-aware source cache."""
