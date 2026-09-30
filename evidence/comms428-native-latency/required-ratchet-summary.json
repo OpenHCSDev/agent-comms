@@ -1,0 +1,10 @@
+{
+  "base_revision": "4295d680a5e63885a3f338a299afc07dbb34bd85",
+  "head_revision": "56d362f2cd3393b70a60c53b7af964e21f461aad",
+  "paths": [
+    "src/agent_comms/active_route.py",
+    "src/agent_comms/private_nk_entrypoint.py"
+  ],
+  "positive_deltas": {},
+  "full_receipt": "/home/ts/.cache/agent-scratch/comms428-native-wait-custody-20260930/required-ratchet.json"
+}
