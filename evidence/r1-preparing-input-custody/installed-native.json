@@ -1,0 +1,30 @@
+{
+  "source_base": "ea1c275ae849c0bb7ac8b32f500096c820fc263a",
+  "installed_wheel": "/home/ts/.cache/agent-scratch/comms-r1-preparing-input-custody-20260930/wheel/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "bcedd02f075e231e16aec8c78ea7bd00a1e2cb5c44be2858def11c49edd6029b",
+  "installed_prefix": "/home/ts/.cache/agent-scratch/comms-r1-preparing-input-custody-20260930/installed",
+  "matching_python_files": 288,
+  "borrowed_dependencies": "runtime-c3-reviewed-pair-20260930 read-only via .pth; this is a bounded verification prefix, not an activation stage",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+  "actual_native_gate": "test_native_full_four_tools_publish_and_release[False-False-True]",
+  "actual_native_seconds": 9.37,
+  "paid_provider_calls": 0,
+  "provider": "existing loopback fixture, three requests: triage / FULL tools / FULL answer",
+  "asserted": [
+    "canonical ToolRunningPhase inside actual Bash",
+    "ModelWaitPhase after tool results; no Preparing provider posts",
+    "installed helper two --help variants and unknown tools argument return",
+    "no participant declaration",
+    "one response publication",
+    "same original native prompt/cursor/proof relation",
+    "lease retired",
+    "execution completed/backend_done/process_dead",
+    "second execution refused: no replay"
+  ],
+  "source_focused": "7 passed, 2 deselected in 3.64 seconds",
+  "limitations": [
+    "No TUI driver rerun; Einstein original installed sidebar DTO/frame retained",
+    "Public original seq161 still active: precise helper recovery is separately recorded",
+    "Standalone dependency installation and default activation are parent-owned"
+  ]
+}

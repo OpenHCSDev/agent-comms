@@ -56,6 +56,8 @@ class CodingSelectedAction(SelectedAction):
         "Bash is cooperative: respect other agents' claims, stay in your worktree, "
         "and do not bypass a denied edit through shell. "
         "Never retry a tool or input with UNKNOWN outcome; report the concrete failure. "
+        "Your final answer is published automatically to the original reply target. "
+        "Return the answer directly; do not launch another agent or send a duplicate reply. "
         "Finish with the actual result and tests, not a promise of later work. "
     )
 

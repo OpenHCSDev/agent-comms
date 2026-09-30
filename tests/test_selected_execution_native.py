@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import shlex
 import threading
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -54,6 +55,7 @@ async def test_native_full_four_tools_publish_and_release(
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
     requests = []
     failures = []
+    phases = []
     calls = [
         ("read", {"path": "input.txt"}),
         ("edit", {"path": "input.txt", "edits": [{"oldText": "BEFORE", "newText": "AFTER"}]}),
@@ -72,11 +74,30 @@ async def test_native_full_four_tools_publish_and_release(
     if selected_write:
         calls = [("selected_claimed_write", {"resource": "input.txt", "contents": "state=AFTER\n"})]
 
+    if entrypoint := os.environ.get('AC_HEADLESS_ENTRYPOINT'):
+        assert not selected_write
+        inspection = (
+            'from pathlib import Path; from agent_comms.comms import Comms; '
+            'from agent_comms.turn_phase import ToolRunningPhase; '
+            f'c=Comms(Path({str(root)!r}), private_initial_writes=False, private_claim_writes=False); '
+            'assert isinstance(c.registry.require("beta").turn_state.phase, ToolRunningPhase); '
+            'print("CANONICAL_TOOL_RUNNING")'
+        )
+        python = shlex.quote(str(Path(entrypoint).with_name('python')))
+        entrypoint = shlex.quote(entrypoint)
+        calls[-1][1]['command'] += (
+            f'; {python} -c {shlex.quote(inspection)}; '
+            f'{entrypoint} tools --help; {entrypoint} --help; '
+            f'{entrypoint} tools; test $? -eq 2'
+        )
+
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             try:
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 requests.append(request)
+                phase = comms.registry.require('beta').turn_state.phase
+                phases.append(phase.declared_name)
                 assert request["model"] == "fixture"
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
                 assert len(requests) <= 2 + triage
@@ -114,6 +135,10 @@ async def test_native_full_four_tools_publish_and_release(
                     if not selected_write:
                         assert (tmp_path / "nested/result.txt").read_text() == "state=AFTER\n"
                     assert not any("Error:" in str(t["content"]) for t in tools)
+                    if os.environ.get('AC_HEADLESS_ENTRYPOINT'):
+                        assert 'CANONICAL_TOOL_RUNNING' in str(tools[-1]['content'])
+                    assert phase.declared_name == 'model_wait'
+                    assert 'participant' not in comms.registry.snapshot().threads
                     delta = {"role": "assistant", "content": "CODING_TOOLS_OK"}
                     reason = "stop"
                 chunk = {
@@ -191,6 +216,7 @@ async def test_native_full_four_tools_publish_and_release(
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
         assert comms.registry.require("beta").active_turn is None
+        assert phases and 'preparing' not in phases
         if not selected_write:
             assert not comms.bus.log.claim_projection()
         with Coordination(str(root / "coordination.sqlite3")) as store:

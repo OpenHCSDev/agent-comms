@@ -1,0 +1,46 @@
+{
+  "authority": "owner-authorized accidental helper retirement only",
+  "helper": {
+    "name": "participant",
+    "tags": [
+      "bot"
+    ],
+    "worktree": "/home/ts/wt/nra-refactor2-r1-20260928",
+    "parent": null,
+    "task": "Round2 R1a/b/c raw-record projection and detectors; isolated worktree, draft PR, no live install",
+    "process_identity": {
+      "pid": 3200830,
+      "start_time": 24812906
+    },
+    "session_file": null,
+    "model": "openrouter/z-ai/glm-5.3-flash",
+    "thinking_level": "low",
+    "goal": null,
+    "created_at": 1790772493.8319154,
+    "previous_worktrees": [],
+    "auto_title_pending": false,
+    "title": null,
+    "role": "agent",
+    "active_turn": null,
+    "channel_scope_generation": 0,
+    "turn_generation": 0,
+    "last_finished_turn_id": null
+  },
+  "admission": 1006,
+  "original_turn": "e4a75845ce1143d5d1a71759c3a19594",
+  "original_native_before": {
+    "bytes": 53501,
+    "sha256": "203baceaaa64405f70558354546453fcd7b07f721abceb12828d1a0fd554a529"
+  },
+  "helper_native_inputs": 0,
+  "helper_dispositions": 0,
+  "helper_native_history": 0,
+  "helper_authored_wire": 0,
+  "helper_children": 0,
+  "signal": "SIGTERM exact pidfd witness; no process-group signal",
+  "state": "retired",
+  "helper_alive": false,
+  "retained_helper": true,
+  "helper_status": "stopped",
+  "r1_owner_alive": true
+}
