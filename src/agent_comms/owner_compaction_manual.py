@@ -17,10 +17,12 @@ from .compaction_records import SelectedSummaryAttempt
 from .compaction_result import CommittedCompactionResult
 from .compaction_states import ManualCommittedSummary
 from .field_codec import FieldCodec
+from .native_input_owner import RegistryOwner
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary
 from .owner_compaction_runtime import compact_owner_once
+from .pi_summary_payloads import SelectedModel
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
 from .selected_source import ManualSource, SelectedSource
@@ -51,12 +53,14 @@ async def compact_manual_owner(
         raise ValueError(
             "Canonical manual compaction requires the prepared selected native session"
         )
-    owner, generation = runner.comms.registry.live_owner_with_generation(thread_name)
-    if owner.session_file is None or owner.active_turn is None or not owner.model:
-        raise ValueError("Manual compaction requires the active owner and saved native session")
-    if info is None or info.context_size is None:
-        raise ValueError("Selected native context usage is unavailable")
-    provider, model = owner.model.split("/", 1)
+    snapshot = runner.comms.registry.snapshot()
+    captured = RegistryOwner.capture(snapshot, thread_name, "Manual compaction owner changed")
+    owner = captured.thread
+    turn = captured.require_active_turn()
+    session_file = owner.require_saved_session()
+    generation = snapshot.owner_generations[owner.name]
+    selected = SelectedModel.from_runtime(info, owner.model)
+    provider, model = selected.provider, selected.model_id
     package = runner.effects._private_nk_native_package
     if package is None:
         raise ValueError("Canonical native package is unavailable")
@@ -65,7 +69,7 @@ async def compact_manual_owner(
     )
 
     pending_input_key = None
-    refusals = bridge.journal.summaries.blocking(owner.session_file)
+    refusals = bridge.journal.summaries.blocking(session_file)
     for refusal in refusals:
         refusal.state.manual_recovery()
         prior = FieldCodec.decode(SelectedSource, json.loads(refusal.source_json)["source"])
@@ -85,11 +89,9 @@ async def compact_manual_owner(
     async def decision():
         return await read_selected_compaction_decision(
             persistent,
-            session_file=owner.session_file,
+            session_file=session_file,
             expected_package=Path(package),
-            provider=provider,
-            model_id=model,
-            context_window=info.context_size,
+            selected=selected,
         )
 
     settings = await decision()
@@ -107,14 +109,14 @@ async def compact_manual_owner(
                 ManualSource(
                     incarnation=owner.incarnation,
                     owner=owner.process_identity,
-                    turn=TurnId(owner.active_turn.id),
-                    reserved_revision=_session_revision(owner.session_file),
+                    turn=TurnId(turn.id),
+                    reserved_revision=_session_revision(session_file),
                 )
             ),
             "selected": {
                 "provider": provider,
                 "modelId": model,
-                "contextWindow": info.context_size,
+                "contextWindow": selected.context_window,
             },
             "settings": {
                 "reserveTokens": settings.reserve_tokens,
@@ -147,7 +149,7 @@ async def compact_manual_owner(
         persistent,
         summarize,
         settings=settings,
-        context_window=info.context_size,
+        context_window=selected.context_window,
         pending_input_key=pending_input_key,
     )
     if operation is None:

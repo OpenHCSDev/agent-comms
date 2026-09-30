@@ -106,27 +106,17 @@ async def read_selected_compaction_decision(
     *,
     session_file: str,
     expected_package: Path,
-    provider: str,
-    model_id: str,
-    context_window: int,
+    selected: SelectedModel,
     timeout: float = 3.0,
 ) -> PiCompactionDecision:
     """Observe actual selected settings/model without auth, provider or input writes."""
     session_id = persistent.custody.idle().identity.session_id
-    if (
-        not session_id
-        or not session_file
-        or not provider
-        or not model_id
-        or type(context_window) is not int
-        or not 0 < context_window <= 2**53 - 1
-    ):
-        raise ValueError("Exact selected settings source required")
+    source = NativeSessionIdentity(session_id, session_file)
     request = AgentCommsCompactionSettings(
         id=secrets.token_hex(16),
-        session_id=session_id,
-        session_file=session_file,
-        selected=SelectedModel(provider, model_id, context_window),
+        session_id=source.session_id,
+        session_file=source.session_file,
+        selected=selected,
     )
     return await _exchange_observation(
         persistent,

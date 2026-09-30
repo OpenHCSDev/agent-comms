@@ -16,6 +16,7 @@ from .agent_events import AgentEvent
 from .backend import PersistentPiSession, _session_revision
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue
+from .native_input_owner import RegistryOwner
 from .native_pi import NativePiRpcLaunch
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
@@ -26,6 +27,7 @@ from .owner_compaction_settings import (
     PiSettingsEvidenceError,
     read_compaction_decision,
 )
+from .pi_summary_payloads import SelectedModel
 from .registration import Registration
 from .runtime_info import AgentRuntimeInfo
 from .selected_pi_route import read_selected_compaction_decision
@@ -57,33 +59,28 @@ async def maybe_compact_owner_turn(
     original input is durable but provably unbound; the bridge permits only
     that one row and rechecks every ingress revision at native commit.
     """
-    owner, owner_generation = registry.live_owner_with_generation(thread_name)
     selected_native = summary_strategy is None
-    if (
-        owner.active_turn is None
-        or owner.active_turn.id != turn_id
-        or owner.session_file is None
-        or not owner.model
-        or runtime_info is None
-        or runtime_info.model != owner.model
-        or type(runtime_info.context_size) is not int
-        or not 0 < runtime_info.context_size <= 2**53 - 1
-        or "/" not in owner.model
-    ):
+    snapshot = registry.snapshot()
+    try:
+        captured = RegistryOwner.capture(snapshot, thread_name, "Selected compaction owner changed")
+        turn = captured.require_active_turn()
+        if TurnId(turn.id) != TurnId(turn_id):
+            raise ValueError("Selected compaction turn changed")
+        owner = captured.thread
+        session_file = owner.require_saved_session()
+        selected = SelectedModel.from_runtime(runtime_info, owner.model)
+    except ValueError as error:
         if selected_native:
-            raise PiSettingsEvidenceError("Selected native context must be prepared before input")
+            raise PiSettingsEvidenceError("Selected native context must be prepared before input") from error
         return False
-    assert runtime_info is not None
-    assert runtime_info.context_size is not None
+    owner_generation = snapshot.owner_generations[owner.name]
     context_used = runtime_info.context_used
     if not selected_native and (
         type(context_used) is not int or not 0 <= context_used <= 2**53 - 1
     ):
         return False
-    context_window = runtime_info.context_size
-    provider, model_id = owner.model.split("/", 1)
-    if not provider or not model_id:
-        return False
+    context_window = selected.context_window
+    provider, model_id = selected.provider, selected.model_id
     package = NativePiRpcLaunch.package_for_command(launcher)
     # A selected child owns effective settings including project trust and model
     # overrides. Detached injected strategies still need conservative file proof.
@@ -132,11 +129,9 @@ async def maybe_compact_owner_turn(
         if selected_native:
             return await read_selected_compaction_decision(
                 persistent,
-                session_file=owner.session_file,
+                session_file=session_file,
                 expected_package=package,
-                provider=provider,
-                model_id=model_id,
-                context_window=context_window,
+                selected=selected,
             )
         if configuration_unbound():
             raise PiSettingsEvidenceError("Adaptive project trust or custom model is not bound")
@@ -156,7 +151,7 @@ async def maybe_compact_owner_turn(
     )
     if summary_strategy is None:
         assert input_text is not None and on_admission is not None
-        revision = _session_revision(owner.session_file)
+        revision = _session_revision(session_file)
         original = bridge.inputs.read().rows.get(original_input_key)
         if revision is None or original is None:
             raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
@@ -167,8 +162,8 @@ async def maybe_compact_owner_turn(
                 owner=owner.process_identity,
                 turn=TurnId(turn_id),
                 ingress_key=original_input_key,
-                admission_generation=owner.active_turn.admission_generation,
-                correction_witness=f"{owner.active_turn.admission_generation}:{digest.value}",
+                admission_generation=turn.admission_generation,
+                correction_witness=f"{turn.admission_generation}:{digest.value}",
                 input_digest=digest,
                 original_digest=original.digest,
                 reserved_revision=revision,
