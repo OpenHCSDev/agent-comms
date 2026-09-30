@@ -1,0 +1,26 @@
+{
+  "state": "PREPARED-NOT-EXECUTED-ACTUAL-GATES-PENDING",
+  "operator_sha256": "74060d48042e679365605d02c12c93375b99e9cec47eb828f35dcb6ff64bcc51",
+  "source_interpreter": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/python",
+  "current_defaults": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
+  "target": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930",
+  "pins": {
+    "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "batrachian-toad": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "activation_sha256": "c354f5e5ad7faff5901b144bf5233ad305d589e0b1d073dc51223eb6f016daa3",
+  "staging_sha256": "f3302a072935ed902192143322bea92059677f0a50738436ce05047499f2f880",
+  "package_ready_sha256": "535179e7c82049900b9c5475dbc0251bed837e5e85910fe980202913fdcfde53",
+  "actual_acceptance": {
+    "joint": "pending",
+    "bus": "pending"
+  },
+  "compaction_journal": "declared runtime reset; old compatibility/read-identical revoked",
+  "input_dispositions": "protected original bytes/UNKNOWN; version1 fields/discriminators unchanged",
+  "scope": "artifact/link observations and exact installed --help/parse only; no public preflight or execution",
+  "public_signals": 0,
+  "public_writes": 0,
+  "native_inputs": 0,
+  "provider_calls": 0
+}
