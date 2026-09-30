@@ -58,3 +58,46 @@ Production delta at this checkpoint: 44 replaced lines deleted across five files
 new behavior is owned by the existing certified opened-source resource (IDEN-4,
 BOUND-2). Source tests and fixture code are reported separately from production.
 
+## Ready installed checkpoint
+
+Actual normal-wheel native gate passed in 25.112s. A single retained batch
+restarted three exact owners after their all-idle fence. Each automatic inbox
+drain admitted one newly published original, received one localhost native
+answer and published one keyed reply. The three native user entry IDs match
+their original coordinator reservations. Real ACP subscriptions observed 27
+notifications through the existing owner socket/transcript/phase publication.
+All fixture workers retired; zero public mutations, paid calls or replay.
+
+Sanitized persistent receipt: `evidence/shared-bus-admission/installed-native-restart05.json`.
+The original private fixture is `/home/ts/wt/ac452-05`, retained for review with
+its journals and reservations. The installed normal wheel equals all 290 Core
+Python source files at4b749e27; 68 packages pass the existing package check.
+No editable install/source fallback. Nativee36 is unchanged by452.
+
+Completed read-only keyed-original measurement on that same 718710-byte private
+bus: existing baseline held the canonical lock149.1–154.8ms per receipt; candidate
+3.6–25.1ms. The exact original source/marker/index SHA checks stayed unchanged.
+The present-key reverse-pointer walk remains linear; this is a measured finite
+case, not a constant-time guarantee or attribution of publicf392's exact holder.
+
+450/be39 integrated normally after this gate. All five452 production files are
+unchanged by that merge; native trust changes belong to450's reviewed bundle.
+No452 protocol ABI, durable format, store reset, owner/client restart requirement
+or migration. Parent alone owns combined450/452 installation and public action.
+Historicalf392/seq247 UNKNOWN and nine originalOFF settings remain protected.
+The unrelated451 restoration draft stays parked.
+
+Affected installed command (fresh stage required; never reuse old originals):
+
+```sh
+.contention/candidate-runtime/bin/python tests/shared_bus_restart_native.py \
+  --stage /home/ts/wt/ac452-05 \
+  --history 220 \
+  --package /home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent
+```
+
+The reusable fixture now additionally gates controlled provider responses until
+all three original native turns are concurrently active. This strengthens the
+observer without altering the already accepted production source. Its separate
+fresh-root receipt will be appended when it finishes; it does not hold this
+accepted checkpoint.
