@@ -171,6 +171,8 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     from agent_comms.goal_states import BlockedGoal
     from agent_comms.goals import Goal
     from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.owner_cutover import OwnerCutover
+    from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
     comms = Comms(tmp_path)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
@@ -182,12 +184,75 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         ("batch-b", (), "credential-b"),
     )
 
+    class RebuildFixtureCheckpoint(OwnerCutover):
+        """An actual declared writer operation; it never starts or stops owners."""
+
+        def require_selection(self, snapshot, owners):
+            live = {
+                thread.name for thread in snapshot.threads.values()
+                if thread.role.executable and snapshot.statuses[thread.name].active
+                and thread.process_alive
+            }
+            if {thread.name for thread in owners} != live:
+                raise RelationViolationError("Checkpoint installation requires the complete batch")
+
+        def after_stopped(self, lifecycle):
+            assert all(not original.process_alive for original in originals)
+            assert all(
+                lifecycle.registry.require(name).process_identity == original.process_identity
+                for name, original in zip(selected, originals, strict=True)
+            )
+            bus = lifecycle.bus.log
+            # This fixture's original writer already understands its original
+            # certificate. Live old-schema custody remains a separate cutover.
+            with bus.locked():
+                marker = bus.read_metadata_unlocked()
+                before = replace(marker, checkpoint_version=None, checkpoint_seal=None)
+                source = bus.path.read_bytes()
+                checkpoint = lifecycle.root / "private_bus_checkpoint.sqlite3"
+                checkpoint.rename(checkpoint.with_suffix(".retained-original"))
+                bus.write_metadata_unlocked(before)
+                install_private_bus_checkpoint(bus, _bus_locked=True)
+                assert replace(
+                    bus.read_metadata_unlocked(), checkpoint_version=None, checkpoint_seal=None
+                ) == before
+                assert bus.path.read_bytes() == source
+
+    cutover = RebuildFixtureCheckpoint()
+
     def ready(owner):
         deadline = time.monotonic() + 10
         while not socket_path(tmp_path, owner.pid).exists():
             assert owner.process_alive, "Actual batch worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual batch worker failed to attach"
             time.sleep(.02)
+        # Socket creation precedes the owner's saved-history replay. Wait for
+        # the existing protocol's complete attachment, so rename cannot race
+        # the original startup read and silently turn the batch into one owner.
+        import asyncio
+        import json
+        from agent_comms.runtime_requests import SubscribeRuntimeRequest
+
+        async def attach():
+            async with asyncio.timeout(10):
+                reader, writer = await asyncio.open_unix_connection(
+                    socket_path(tmp_path, owner.pid), limit=8 * 1024 * 1024
+                )
+                try:
+                    writer.write((json.dumps(SubscribeRuntimeRequest(
+                        thread=owner.name).to_wire()) + "\n").encode())
+                    await writer.drain()
+                    while line := await reader.readline():
+                        response = json.loads(line)
+                        assert "error" not in response, response
+                        if "ready" in response:
+                            return
+                    raise AssertionError("Actual worker closed before complete attachment")
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+
+        asyncio.run(attach())
 
     try:
         for name, arguments, credential in settings:
@@ -213,10 +278,13 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         comms.registry.register(busy)
         refusal_source = comms.registry.snapshot()
         with pytest.raises(RelationViolationError, match="idle before restart"):
-            comms.owners.restart_owners(selected)
+            comms.owners.restart_owners(selected, cutover=cutover)
         assert comms.registry.snapshot() == refusal_source
         assert all(owner.process_alive for owner in originals)
         comms.registry.register(last)
+        with pytest.raises(RelationViolationError, match="complete batch"):
+            comms.owners.restart_owners([selected[0]], cutover=cutover)
+        assert all(original.process_alive for original in originals)
         original_goals = {name: comms.registry.require(name).goal for name in selected}
         source_files = {
             path: path.read_bytes() for path in tmp_path.rglob("*")
@@ -227,7 +295,9 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
         target_binary = tmp_path / "target-pi-comms-native"
         target_binary.symlink_to(comms.owners.native_entrypoint())
-        receipts = comms.owners.restart_owners(selected, agent_bin=str(target_binary))
+        receipts = comms.owners.restart_owners(
+            selected, agent_bin=str(target_binary), cutover=cutover
+        )
         assert len(receipts) == 2
         assert all(not owner.process_alive for owner in originals)
         for index, (receipt, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
