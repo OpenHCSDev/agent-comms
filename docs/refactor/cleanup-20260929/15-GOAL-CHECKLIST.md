@@ -712,3 +712,14 @@ installs215 and the Core436/439 cohort, not future Core421/Toad216 C3 or
 Toad224/226. Heisenberg owns the final normal toad-comms nra-architecture
 isolated ST/Xvfb original-history/default-entrypoint gate. Installed is not
 yet default-UI-live-verified; the full goal remains active.
+
+The first final default gate refused before launching UI: the existing441
+operation's instance launch pin usede36, while ActiveRoute still published4ab.
+Attempt01 is preserved with unchanged original native journal and no prompts.
+Parent used the existing expected-route guarded publisher under directory EX
+to replace only the same root's native-package selection, with canonical
+preflight, atomic replacement/fsync and exact readback. No second owner restart
+or input replay occurred. Arendt442 owns the global receiving relation: target
+launch and default route publication must be one lifecycle cutover, never
+parallel pin copies. Heisenberg's justified attempt02 verifies the corrected
+normal launcher; no guard was weakened and no alternate runtime override used.
