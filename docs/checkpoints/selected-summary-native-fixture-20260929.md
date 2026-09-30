@@ -240,3 +240,42 @@ changed. This is test-fixture closure on the pinned actual source/native contrac
 not installed-current-native614 or whole-app readiness. Original positive proof,
 failed local attempts and UNKNOWN private journals are retained. Heisenberg keeps
 the sole original physical paint capture; Textual13/Toad221 review scope is intact.
+
+### Current-main affected workflow acceptance
+
+Normally integrated main b71b0ef7ed088b32bc8d19462d2f89c593d86c3d at merge
+04027e509b93baa56b413d100f678ce8251d867d. The one semantic conflict was the cursor
+scope's canonical identity: `scope.admission.incarnation.name` replaces the
+removed `scope.owner` access. Preserve the actual selected session ID assertion;
+no compatibility alias or second scope identity is introduced. Consumer review
+also restored the existing activate_empty_source import required by an untouched
+goal test. The four migrated standby cases do not use that old helper.
+
+The affected actual ACP/native journeys passed together: five cases in 16.96
+seconds. This covers original admission, reply coverage, cursor publication,
+reload and duplicate-drain no replay, optional read failure after terminal idle,
+delayed terminal callback, and dependency waits with and without direct reply.
+Exact package:
+`/home/ts/.local/share/agent-comms/native-current-b68dfdced9148b50/node_modules/@earendil-works/pi-coding-agent`.
+Reviewed tree SHA256:
+`614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a`.
+Its source is the parent's canonical-bus-resource-stage receipt; no package was
+built, substituted or mutated. Proof: owned scratch
+`current-native614-affected01.log`. The actual retained native producer, SDK
+saved history, private ACP/bus/journal path and localhost provider were used.
+Fixture teardown reaped owned children. No paid calls or public owner inputs.
+
+Acceptance is deliberately bounded: the 12 summary-negative family cases remain
+the recorded native4ab/Core720 proof above. The five affected admission/terminal
+cases are current main/native614 proof. The accepted positive summary AST is
+still identical to 24e710c and was not rerun. Documentation does not promote
+either result to whole-app readiness or current installed activation.
+
+Deletion against integrated current main: 286 lines removed from selected-summary
+tests, 112 from standby tests and 37 from the private cursor test, 435 test lines
+removed in total. Additions include actual native fixture/negative coverage;
+this is removal of a fake lifecycle authority, not a claim of net line reduction.
+The obsolete CHILD executable and selected facade have no retained consumers.
+The shared source-case helper retains live consumers outside this scope and is
+unchanged. Remaining production/source ownership and physical performance work
+stay with their named owners, outside this test-only PR.
