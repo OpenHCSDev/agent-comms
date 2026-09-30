@@ -197,10 +197,10 @@ class SessionLifecycle:
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
         snapshot = self.comms.registry.snapshot()
         binding = snapshot.owner_binding(thread.name)
-        snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
         failed_command = FailedSessionLoadAdmission(binding)
         proxy = self.effects._create_runtime_proxy(thread, session_id)
         try:
+            snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
             metadata = await proxy.subscribe()
         except (OSError, RuntimeError, TypeError, ValueError) as error:
             await proxy.close()
