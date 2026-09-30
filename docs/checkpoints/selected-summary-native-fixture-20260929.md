@@ -163,3 +163,22 @@ fixture gap; retain that obligation. Arendt granted this worker the four standby
 fake-stream migrations, excluding her production435/436 and common fixture
 builders. Her real cancel/next-reply acceptance does not cover dependency wait
 terminal-versus-settled or delayed stale callbacks; those contracts remain here.
+
+### Standby actual-producer closure
+
+The four formerly fake-stream cases in `test_goal_standby_liveness.py` now use
+the existing native_backend and canonical_agent with actual ACP session creation,
+SDK saved inputs and localhost provider replies. All four pass in 12.45 seconds
+at native4ab/Core720 source. No artificial InputStarted, fake native stream or
+legacy callback signature remains in those cases.
+
+The tests preserve optional reply-read failure after the actual idle publication,
+delayed old terminal callback after a newer lease finishes, and dependency waits
+through StreamSettled with or without a substantive direct reply. The current
+producer's StreamSettled is explicitly checked while the child lease is still
+active; only actual terminal idle publication marks lifecycle settlement. Each
+journey observes exactly one real saved native input and provider request. The
+callbacks observe and delegate to the actual publisher; they do not substitute
+native events. Proof: owned scratch `standby-native-run01.log`, private roots in
+`.standby-native-run01`. Setup fixture was renamed `retained_native_acp_owner`
+for reuse by the remaining original-injected/covered/reconnect contract.

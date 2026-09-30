@@ -25,7 +25,34 @@ from agent_comms.goal_waits import GoalWaits
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
-from goal_owner_fixture import activate_empty_source
+from agent_comms.transcript_updates import TurnTranscriptUpdate
+from delivery_owner_fixture import canonical_agent
+from test_backend_native_lifecycle import native_backend as native_backend
+
+
+@pytest.fixture
+async def retained_native_acp_owner(native_backend, monkeypatch):
+    """Actual ACP owner and native producer; only the localhost provider is controlled."""
+    native = native_backend
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
+    comms = Comms(native.root)
+    agent = canonical_agent(
+        comms, agent_bin="pi", runtime_enabled=True, auto_wake=False,
+        adaptive_compaction_enabled=False,
+        agent_args=["--provider=response-local", "--model=fixture", "--thinking=off",
+                    "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+                    "--no-prompt-templates", "--no-tools"],
+    )
+    try:
+        child = (await agent.new_session(str(native.project))).session_id
+        drain = agent.inputs.drain_tasks.pop(child)
+        drain.cancel()
+        await asyncio.gather(drain, return_exceptions=True)
+        comms.registry.register(replace(comms.registry.require(child), auto_title_pending=False))
+        comms.threads.attach_session(child, str(native.session))
+        yield native, comms, agent, child
+    finally:
+        await agent.shutdown()
 
 
 def _thread(comms, name, worktree):
@@ -399,39 +426,23 @@ def test_unbound_wait_is_rejected_without_replacing_current_wait(tmp_path):
 
 
 async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
-    tmp_path, monkeypatch
+    retained_native_acp_owner, monkeypatch
 ):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(
-        comms,
-        agent_bin="pi",
-        runtime_enabled=True,
-        auto_wake=False,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
-    )
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    child = (await agent.new_session(str(tmp_path / "child"))).session_id
-    activate_empty_source(agent)
-    _thread(comms, "owner", tmp_path)
+    native, comms, agent, child = retained_native_acp_owner
+    _thread(comms, "owner", native.project)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None
     terminal = []
     original_emit = agent._emit_event
 
-    async def capture_emit(session_id, event, **kwargs):
-        if isinstance(event, (ae.StreamSettled, ae.TurnSettled)):
+    async def capture_emit(session_id, event, client=None, **kwargs):
+        if isinstance(event, ae.InputStarted):
+            comms.goals.update_goal(
+                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+            )
+        if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
             terminal.append("settled")
-        await original_emit(session_id, event, **kwargs)
-
-    async def events(*_args, **_kwargs):
-        comms.goals.update_goal(
-            "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
-        )
-        yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="")
+        await original_emit(session_id, event, client, **kwargs)
 
     original_history_page = MessagePageRequest.read
 
@@ -443,16 +454,14 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
         raise OSError("injected optional direct-reply read failure")
 
     monkeypatch.setattr(agent, "_emit_event", capture_emit)
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     monkeypatch.setattr(MessagePageRequest, "read", unavailable)
-    try:
+    async with asyncio.timeout(20):
         await agent.turns.run_agent_turn(child, child, "Finish work")
-        assert terminal == ["settled"]
-        assert comms.registry.require("owner").goal.state.active
-        assert comms.goals.goal_wait("owner") is not None
-        assert comms.registry.require(child).active_turn is None
-    finally:
-        await agent.shutdown()
+    assert terminal == ["settled"]
+    assert comms.registry.require("owner").goal.state.active
+    assert comms.goals.goal_wait("owner") is not None
+    assert comms.registry.require(child).active_turn is None
+    assert native.provider.posts == len(native.saved_inputs()) == 1
 
 
 async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path, monkeypatch):
@@ -494,113 +503,87 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
         await agent.shutdown()
 
 
-async def test_acp_delayed_old_callback_after_new_finish_before_reply(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(
-        comms,
-        agent_bin="pi",
-        runtime_enabled=True,
-        auto_wake=False,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
-    )
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    child = (await agent.new_session(str(tmp_path / "child"))).session_id
-    activate_empty_source(agent)
-    _thread(comms, "owner", tmp_path)
+async def test_acp_delayed_old_callback_after_new_finish_before_reply(
+    retained_native_acp_owner, monkeypatch
+):
+    native, comms, agent, child = retained_native_acp_owner
+    _thread(comms, "owner", native.project)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None
-    old_settled = asyncio.Event()
-    release_old = asyncio.Event()
+    old_settled, release_old = asyncio.Event(), asyncio.Event()
     real_emit = agent._emit_event
 
-    async def delayed_emit(session_id, event, **kwargs):
-        if isinstance(event, (ae.StreamSettled, ae.TurnSettled)) and not old_settled.is_set():
+    async def delayed_emit(session_id, event, client=None, **kwargs):
+        if isinstance(event, ae.InputStarted):
+            comms.goals.update_goal(
+                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+            )
+        if isinstance(event, TurnTranscriptUpdate) and not event.state.busy and not old_settled.is_set():
             old_settled.set()
             await release_old.wait()
-        await real_emit(session_id, event, **kwargs)
-
-    async def events(*_args, **_kwargs):
-        comms.goals.update_goal(
-            "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
-        )
-        yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="")
+        await real_emit(session_id, event, client, **kwargs)
 
     monkeypatch.setattr(agent, "_emit_event", delayed_emit)
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     old_task = asyncio.create_task(agent.turns.run_agent_turn(child, child, "Finish work"))
     try:
-        await asyncio.wait_for(old_settled.wait(), 2)
+        await asyncio.wait_for(old_settled.wait(), 20)
         assert comms.registry.require(child).active_turn is None
         new_claim = comms.agents.begin_turn(child, "new-child-turn")
         new_fence = comms.agents.finish_turn(new_claim)
         release_old.set()
-        await asyncio.wait_for(old_task, 2)  # OLD callback sees idle NEW turn, no reply yet.
+        await asyncio.wait_for(old_task, 5)
         assert comms.registry.require("owner").goal.state.active
         assert comms.goals.goal_wait("owner") is not None
         comms.messaging.send_message(child, "owner", "New turn's result")
         assert comms.goals.release_waits_after_terminal_turn(new_fence) == ()
         assert comms.registry.require("owner").goal.state.active
+        assert native.provider.posts == len(native.saved_inputs()) == 1
     finally:
         release_old.set()
         if not old_task.done():
-            await asyncio.wait_for(old_task, 2)
-        await agent.shutdown()
+            old_task.cancel()
+        await asyncio.gather(old_task, return_exceptions=True)
 
 
 @pytest.mark.parametrize("reply", [False, True])
 async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
-    tmp_path, monkeypatch, reply
+    retained_native_acp_owner, monkeypatch, reply
 ):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(
-        comms,
-        agent_bin="pi",
-        runtime_enabled=True,
-        auto_wake=False,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
-    )
-    monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
-    child = (await agent.new_session(str(tmp_path / "child"))).session_id
-    activate_empty_source(agent)
-    _thread(comms, "owner", tmp_path)
+    native, comms, agent, child = retained_native_acp_owner
+    native.provider.text = "Reported" if reply else ""
+    _thread(comms, "owner", native.project)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None
-    streamed = []
+    observed = []
+    real_emit = agent._emit_event
 
-    async def events(*_args, **_kwargs):
-        streamed.append(child)
-        # The active child turn began before model events are streamed.
-        comms.goals.update_goal(
-            "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
-        )
-        if reply:
-            yield ae.Chunk(text="Reported")
-        yield ae.StreamSettled()
-        assert comms.registry.require("owner").goal.state.active
-        assert comms.goals.goal_wait("owner") is not None
-        yield ae.Done(ok=True, text="Reported" if reply else "")
+    async def observe(session_id, event, client=None, **kwargs):
+        if isinstance(event, ae.InputStarted):
+            observed.append("started")
+            comms.goals.update_goal(
+                "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(child,))
+            )
+        if isinstance(event, ae.StreamSettled):
+            observed.append("native-settled")
+            assert comms.registry.require(child).active_turn is not None
+            assert comms.registry.require("owner").goal.state.active
+            assert comms.goals.goal_wait("owner") is not None
+        await real_emit(session_id, event, client, **kwargs)
 
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    try:
+    monkeypatch.setattr(agent, "_emit_event", observe)
+    async with asyncio.timeout(20):
         await agent.turns.run_agent_turn(
             child, child, "Finish work", reply_targets=("owner",) if reply else ()
         )
-        assert streamed == [child]
-        assert not agent.inputs.pending_turns.get("owner")
-        assert not (comms.root / "goal-private").exists()
-        if reply:
-            assert comms.registry.require("owner").goal.state.active
-            assert comms.goals.goal_wait("owner") is not None
-            assert any(m.body == "Reported" for m in comms.bus.inbox("owner"))
-        else:
-            assert comms.registry.require("owner").goal.state.declared_name == "active"
-            assert comms.goals.goal_wait("owner") is None
-    finally:
-        await agent.shutdown()
+    assert observed == ["started", "native-settled"]
+    assert native.provider.posts == len(native.saved_inputs()) == 1
+    assert not agent.inputs.pending_turns.get("owner")
+    assert not (comms.root / "goal-private").exists()
+    assert comms.registry.require(child).active_turn is None
+    if reply:
+        assert comms.registry.require("owner").goal.state.active
+        assert comms.goals.goal_wait("owner") is not None
+        assert any(m.body == "Reported" for m in comms.bus.inbox("owner"))
+    else:
+        assert comms.registry.require("owner").goal.state.active
+        assert comms.goals.goal_wait("owner") is None
