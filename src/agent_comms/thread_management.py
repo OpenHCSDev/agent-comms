@@ -451,6 +451,19 @@ class ThreadManagement:
             self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
+    def initialize_native_configuration(
+        self, name: str, *, model: str | None, thinking_level: str | None
+    ) -> Thread:
+        """Persist one first-known producer observation through its declaration."""
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(name)
+            updated = thread.initialized_native_configuration(
+                model=model, thinking_level=thinking_level
+            )
+            if updated != thread:
+                self.registry.register(updated, self.registry.status(thread.name))
+            return updated
+
     def resolve_thread_model(self, name: str, default: str | None = None) -> str | None:
         """Prefer a saved selection, then the resumed session's last model."""
         thread = self.registry.require(name)

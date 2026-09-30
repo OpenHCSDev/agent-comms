@@ -3,6 +3,15 @@
 Run from the target runtime. The authentic original interpreter alone admits
 and retires original owners. Never run this against the public root without the
 parent's release authorization. No credential is written or passed in argv.
+
+Admission requirement: the release owner must first select the target default
+launchers and gracefully retire ALL original UI/ACP registry writers. Keep
+original-client ingress excluded until this operation returns. Maintenance
+admission fences executable owners; it does not revoke already imported client
+code or prevent its metadata/history calls from rewriting retired Thread fields.
+This operator does not discover or retire that external client audience. See
+docs/checkpoints/old-thread-client-exclusion-20260930.md and its actual writer
+proof. An executable-owner batch alone is not sufficient release admission.
 """
 import argparse
 from dataclasses import replace

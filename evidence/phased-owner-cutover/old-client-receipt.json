@@ -1,0 +1,15 @@
+{
+  "client_operation": "HistoryViews.dm_display_page",
+  "history_read_returned": true,
+  "maintenance_phase": "paused",
+  "ingress_refused": true,
+  "user_identity_created": true,
+  "metadata_operation": "ThinkingLevelConfigOption.persist",
+  "metadata_write_while_paused": true,
+  "retired_field_reintroduced_records": 5,
+  "original_private_guard_accepts_write": true,
+  "provider_calls": 0,
+  "prompt_count": 0,
+  "target_strict_reader_refuses": "Invalid registry document: Unknown fields for Thread: ['last_goal_report_turn']",
+  "public_activation_requires_old_client_retirement": true
+}

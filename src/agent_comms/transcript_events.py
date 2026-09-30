@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .declared_family import DeclaredFamily
+from .compaction_identity import SummaryOperationIdentity
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import ToolDiff
@@ -122,6 +123,13 @@ class AssistantTranscript(AgentTextTranscript):
 
 class NoticeTranscript(AgentTextTranscript):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompactionOutcomeTranscript(NoticeTranscript):
+    """Original journal outcome; available at the transcript decoding boundary."""
+
+    identity: SummaryOperationIdentity
 
 
 class SentTranscript(OutgoingRoute, WireTextTranscript):
