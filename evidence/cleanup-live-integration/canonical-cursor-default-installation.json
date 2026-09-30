@@ -1,0 +1,37 @@
+{
+  "state": "installed-actual-default-entrypoint-check-pending",
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930",
+  "previous_runtime": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929",
+  "pins": {
+    "agent-comms": "72062939239b0f07707406309305a056a23f925f",
+    "batrachian-toad": "f92fc54bd62c328aeb1bb12460347379fd694fff",
+    "textual": "65053c5a2df12249ef1c4193beeff7023c1f75d7"
+  },
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
+  "eligible_scope": "Toad217 scoped cursor/tool/paint plus Textual13; Core720/native4ab unchanged",
+  "owner_restarts": 0,
+  "runtime_store_resets": 0,
+  "remaining": "33ms fast-PageDown gap/highCPU/fullwarm/resource scope stays in followup",
+  "launchers": {
+    "agent-comms": {
+      "old": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms",
+      "new": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/agent-comms"
+    },
+    "agent-comms-acp": {
+      "old": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-acp",
+      "new": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/agent-comms-acp"
+    },
+    "agent-comms-agent": {
+      "old": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-agent",
+      "new": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/agent-comms-agent"
+    },
+    "agent-comms-nk-foreground": {
+      "old": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-nk-foreground",
+      "new": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/agent-comms-nk-foreground"
+    },
+    "toad": {
+      "old": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/toad",
+      "new": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/toad"
+    }
+  }
+}

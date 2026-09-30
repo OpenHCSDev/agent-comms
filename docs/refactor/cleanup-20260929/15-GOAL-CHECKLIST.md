@@ -28,8 +28,17 @@ retained under213/214; a median improvement alone does not close them.
 
 ## Current default activation
 
-The default paired checkpoint is now Core72062939, Toad6660cb68,
-Textual412b5a2b and reviewed native4ab91006. All11 live executable owners
+The default UI checkpoint is now Core72062939, Toadf92fc54b,
+Textual65053c5a and reviewed native4ab91006. The September30 UI-only switch
+changed the five matching executable launchers without restarting owners or
+resetting stores. Its exact installed-stage physical acceptance passed57.0837s;
+the final actual default-launcher check is assigned to Einstein and remains
+pending. Existing Toad windows require restart. This fixes the retired cursor
+consumer crash and stationary End blanking; a33ms fast-PageDown body gap and
+high CPU remain open in draft224. Receipt:
+`evidence/cleanup-live-integration/canonical-cursor-default-installation.json`.
+
+At the previous backend activation, all11 live executable owners
 were idle at the earlier paired preflight and were restarted through the existing lifecycle;
 each retained session, model, thinking level, tags and goal. Stopped or dead
 registrations were left alone. Their exact interpreter/native pins were checked.
@@ -95,9 +104,11 @@ refactoring scopes below.
 
 ## Current fleet and resource constraint
 
-Six Codex workers carry active work: Heisenberg217, Arendt436, Schrodinger215,
-Mendel430/421/422, Kepler221 and Einstein434/437. Einstein now owns actual native
-admission contention and the malformed provider-error boundary. The owner now
+Six Codex workers retain assigned work: Heisenberg224, Arendt436, Schrodinger215,
+Mendel430/421, Kepler221 and Einstein439/default-entrypoint verification.
+Core422 fixture closure is merged;434/437/438 are merged checkpoints. A worker
+claim is not proof of a running turn. Kepler's latest capacity failure has a
+resume submission; Heisenberg remains the integration owner for224. The owner now
 explicitly authorizes three independent real native journeys in parallel,
 superseding the earlier serial fixture policy. Current lanes are Schrodinger's
 messaging/three-view gate, Einstein's437 compaction, and Arendt's436 actual
@@ -427,3 +438,38 @@ closure in his own persistent worktree; the completed5.45s positive is preserved
 not rerun. Einstein's compaction scheduling followup is tracked before long work
 in draft439, reusing the existing policy/provider admission rather than adding
 another pool or progress store.
+
+## September30 cursor checkpoint and source integration
+
+Toad217 merged53154c7d and Textual13 merged151d9c1d. Installed source
+f92fc54b/65053c5a is byte-identical to the reviewed scoped heads. Actual
+original41MB history capture finished57.0837s,985 GIL samples and zero sample
+errors; saved ToolCall expansion, End and15s stationary retained readable
+history. Original native owner identity was unchanged and owned cleanup empty.
+Parent individually inspected the physical idle PNG and the two-frame PageDown
+body gap. This does not close high CPU, transient blanking, warm return or the
+full116 resource scope. Those remain in draft224 with Heisenberg integration
+and Kepler preparation contributions. The actual default launcher gate remains
+assigned to Einstein; installation alone is not that gate.
+
+Core422 merged6fed7b05:435 obsolete test lines deleted, actual native negative
+family and affected current614 ACP/cursor/standby journeys retained. No product
+implementation changed. Core439 merged1e967af4:73 runtime JavaScript lines,
+273 obsolete builder lines and two shell lines deleted; one bounded existing
+scheduler overlaps independent sources. Controlled provider span improved30.5%;
+external model latency remains unmeasured. Parent normally integrated both at
+41a83508 without source conflicts. Default backend remains720/native4ab.
+
+Critical Core430cf48759d and Toad215517f2ea3 replace the overlapping native/wire
+text inheritance with an exclusive original WireText family. This follows the
+actual8691/4e composition failure: one wire row projected twice because both
+MRO handlers painted it. No body-text deduplication, alternate dispatcher or
+seen-ID cache is used. Sch215 owns the installed one-row/one-body/one-header
+control at exact immutableCore700/Toad517/Text412/native614, without replaying
+the original real05 input. Future durable routing-reference closure remains
+Mendel430/Arendt436 and is excluded from that critical checkpoint.
+
+Merged439's nativee36 artifact is assigned to Einstein for standalone full-tree
+trust verification. The614 messaging gate remains immutable; no mid-run native
+pin switch or default owner restart is authorized by a source merge. The next
+coherent paired stage and quiet cutover remain parent432's delivery work.

@@ -1,23 +1,29 @@
 {
-  "state": "source-integrated-checkpoints-merged-next-bus-resource-source-not-native-accepted",
+  "state": "source-integrated-critical-wire-family-and-merged-scheduler-not-default-activated",
   "pins": {
-    "integration": "f510f0daaaeb58daac37e95e7659f22f6ed226c8",
-    "main": "b71b0ef7ed088b32bc8d19462d2f89c593d86c3d",
-    "430": "9149d5ad38940a3537e1efcf08c422e490d43f17",
+    "integration": "41a83508e579be6c1adf3be28c582da24c865bbe",
+    "main": "1e967af485c65c138cc86bf26190dcc55c1a75d2",
+    "430": "cf48759df4c024be1eccb2bc5e3cf02637124ff7",
     "434": "bd18e9c3af02291d10fcc6b116a9d95b83001c6e",
     "436": "1db38fcd63ac313ceb5f7b481d7fd3824511c7a6",
     "437": "accfd57233d0d46965edbf3aa35a0397c6fd61b0",
-    "438": "97b1a03943b6d7b29bc856fc0cdab087b3b98a56"
+    "438": "97b1a03943b6d7b29bc856fc0cdab087b3b98a56",
+    "436_getter": "f554139a35da610a1a52b397c9d2f422f924c0f2",
+    "439": "79c379ca87ced2aa63ddbf1fa7e52eeefac7f21d",
+    "422": "d4ec93d4ed7d936bb75595d265a4f91766cfb213"
   },
   "conflict_resolution": "Retain newest437 original saved-history readiness before any input; no producer implementation conflict.",
   "source_intersection_check": "10 affected custody/progress/provider cases passed in1.50s before receipt-only1db getter merge",
   "native_manifest_sha256": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
   "native_tree_sha256": "614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a",
-  "pending": "Latest430 opened certificate resource still needs CompactionBoundary inherited descriptor consumer migration, original SendReceipt consumer closure and whole installed messaging acceptance. Default remains222; no uncertain input replay.",
+  "pending": "Exact critical700/Toad517/Text412/native614 installed one-original-row/one-body composition gate assigned Sch215; later merged439 nativee36 requires matching immutable stage and quiet activation. Future430 durable reference carry is not included. Default backend remainsCore720/native4ab; no uncertain input replay.",
   "accepted_fixture_cohort": "94152909d34a099afc70232f922ba78e0d9af7cd",
   "accepted_scope": {
     "compaction": "actual automatic400.918s/manual382.512s, real native and installed ACP/Toad widgets, no original replay",
     "lifecycle": "continuous actual installed UI/native cancel-next input-goal edit-cancel-next input, exit0/89.168s",
-    "messaging": "FAILED real04 original response boundary bus lock before native bytes; UNKNOWN preserved"
-  }
+    "messaging": "real05 at8691/Toad4e admitted original FULL input and published original reply; actual provider-free same-pair composition showed one wire row but two rendered body/header instances through overlapping C3 handlers. Corrected exclusiveWireText family criticalcf/Core700 plus Toad517 pending installed acceptance.",
+    "439": "Controlled original43MB/native scheduling span893.717ms to621.071ms; installed native2cases15.93s and continuous ordinary/privateACP2cases28.30s passed. Not a real-model speed or default activation claim."
+  },
+  "next_native_manifest_sha256": "e36a1dde326b70179fa1c854a73fcad61948c90f5a93465a55ddd07d72936f07",
+  "next_native_tree_sha256": "5ea25e3f9e88d073e5506ce97ceeca4c763b6da19f986ab032880d45f020f35c"
 }
