@@ -62,7 +62,8 @@
     "last_emitted_screen": "last-emitted-terminal.txt",
     "observed_screen": "#any expanded with beta Ready; #team collapsed; original parent user/answer painted once; bottom left 40% slider and Float; no thread ContextMenuItem found",
     "actual_click_coordinates": "not recorded by original driver, so exact target attribution remains unresolved",
-    "scope": "No child created, no FIRST_FORK_NEW_INPUT, no busy/queued followup/cancel inputs attempted. First original parent only passed source/physical handoff. Do not claim five-input/fork/whole-queue regression closure."
+    "scope": "No child created, no FIRST_FORK_NEW_INPUT, no busy/queued followup/cancel inputs attempted. First original parent only passed source/physical handoff. Do not claim five-input/fork/whole-queue regression closure.",
+    "screen_qualifier": "Kepler original ANSI replay confirms 40% slider and Float already present at startup/frame0: these are not evidence of a rightclick mis-hit. Exact target attribution remains unresolved."
   },
   "effects": {
     "production_changes": 0,
