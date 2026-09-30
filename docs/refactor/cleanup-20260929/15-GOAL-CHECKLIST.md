@@ -1130,3 +1130,13 @@ The physical236 capture completed but did not exercise B or held history
 scrolling: after editor interaction its driver consulted a missing visible map
 despite a valid committed full map. Preserve that failed recording; correct the
 existing driver before making warm-tab or scrolling acceptance claims.
+
+Core448 merged f648e973 at13:29:03Z, reviewed bfc669e2. All five production
+files and callers reviewed; source bytes match the installed acceptance
+candidate. Real worker/socket/catalog journeys for both configured models
+preserve OFF across reads, reject unsupported explicit OFF, and persist explicit
+HIGH; actual installed Toad/ACP visibly paints retained OFF without another
+input. Zero prompt/provider/public writes, all fixture workers retired. Deletes
+48 production lines and adds51; no new store or ABI. Merged, not installed in
+the public default yet. Preserve the nine original configuration preimages for
+the next reviewed activation; do not silently clamp or claim they were restored.
