@@ -1,0 +1,16 @@
+{
+  "owner": "Schrodinger453stage",
+  "purpose": "ONE NEWprefix normal68 merged453+242+246 paired candidate; preserve currentpublic3625",
+  "core": "a4df958946a35d9b9f57c610764da8a559039f83",
+  "toad": "7da9c061ca69848a64620bac19a67cf58bfe918d",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba/node_modules/@earendil-works/pi-coding-agent",
+  "baseline": "/home/ts/.cache/agent-scratch/toad-all-merged-stage-20260930/paired-installed-freeze.txt",
+  "public_effects": 0,
+  "actual_paired_gate_owner": "Einstein231",
+  "activation_owner": "Parent",
+  "state": "FROZEN-PACKAGE-READY-ACTUAL-PAIRED-GATE-PENDING",
+  "private_root": "/home/ts/wt/g453e/meta/wire",
+  "private_root_id": "0e3fe558596c483688a663e6d27d1eb7",
+  "public_root_loaded": false,
+  "source_or_package_changes_after_handoff": false
+}

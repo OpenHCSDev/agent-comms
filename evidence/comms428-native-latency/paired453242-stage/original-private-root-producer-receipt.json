@@ -1,0 +1,11 @@
+{
+  "root": "/home/ts/wt/g453e/meta/wire",
+  "root_id": "0e3fe558596c483688a663e6d27d1eb7",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba/node_modules/@earendil-works/pi-coding-agent",
+  "python": "/home/ts/.local/share/agent-comms/runtime-native-budget-source-resume-20260930/bin/python",
+  "core_pin": "a4df958946a35d9b9f57c610764da8a559039f83",
+  "purpose": "Fresh owned private-root canonical producer witness for strict paired metadata preflight; no processes/providers",
+  "owner_starts": 0,
+  "provider_calls": 0,
+  "public_mutations": 0
+}

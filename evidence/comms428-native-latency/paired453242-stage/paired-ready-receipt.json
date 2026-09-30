@@ -1,0 +1,50 @@
+{
+  "state": "READY-IMMUTABLE-PAIRED-STAGE-AWAITING-PARENT-ACTIVATION",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-native-budget-source-resume-20260930",
+  "pins": {
+    "agent-comms": "a4df958946a35d9b9f57c610764da8a559039f83",
+    "batrachian-toad": "7da9c061ca69848a64620bac19a67cf58bfe918d",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-7616293d01862aba/node_modules/@earendil-works/pi-coding-agent",
+  "frozen_packages": 68,
+  "source_proof": {
+    "agent-comms": {
+      "pin": "a4df958946a35d9b9f57c610764da8a559039f83",
+      "python_files_equal": 290,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-native-budget-source-resume-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "7da9c061ca69848a64620bac19a67cf58bfe918d",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-native-budget-source-resume-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "native_full_trust": true,
+  "metadata_published_from_same_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3656820,
+        "start_ticks": 26516473,
+        "returncode": 0
+      }
+    ]
+  },
+  "builds": 1,
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "paid_calls": 0,
+  "native_inputs": 0,
+  "accepted_scope": "Packaging/source provenance/import/trust admission only; 453 actual retained native/ACP image/cancel/installedUI and242 continuous resources proofs reviewed independently. Einstein owns changed paired private native/ACP/UI acceptance; parent owns retained cutover/default acceptance.",
+  "remaining_scope": "No full eleven-API installed claim or whole latency/performance closure. Einstein actual paired private native/ACP/UI gate required; parent quiet retained-owner/global TS/ActiveRoute cutover and actual default acceptance required."
+}
