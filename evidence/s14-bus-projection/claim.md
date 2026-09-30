@@ -29,3 +29,18 @@ WireLog.certified_read(blocking=False), removing the standalone page opener and
 its duplicate certificate/connection/stream. Original historical acceptance scripts
 under evidence/existing-checkpoint and pf2-checkpoint-seals remain unchanged raw
 proofs; they target their frozen historical commits, not the current API.
+
+Correction checkpoint: CoveragePage owns the partial/exhaustive rule; SourceCoverage
+only asks that declared query to admit its result. The initial required ratchet's
+new ForeignAbsenceProbe is retained as failed evidence, not suppressed. Typed
+RelationViolationError propagates unchanged from addressed_page; low-level read/
+decode failures retain their cause as the existing unavailable-page disposition.
+
+Provider-free source gates: 12 selected existing coverage/cursor/admission tests
+passed; the affected replacement-during-page guard passed; a real two-original
+page rejects unqualified truncation and a boolean limit, while declared partial
+coverage remains blocked at its original unproven source. These do not prove
+installed UI readiness or performance. Earlier 74 focused cases passed excluding
+the now-corrected replacement hook. Four sidebar clock/equality assertions also
+fail against unmodified installed6feb; they are not reported as candidate passes.
+The continuous installed saved-history DM/channel journey remains required.
