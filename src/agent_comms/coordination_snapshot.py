@@ -10,6 +10,8 @@ from agent_comms.coordination_errors import (
     StaleFence,
     RecoveryBlocked,
     PublicationUncertain,
+    IdentityConflict,
+    ResponseAdmissionBlocked,
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
@@ -62,6 +64,56 @@ class RecoverySnapshot:
     pointer_revision: int
     is_current: bool
     snapshot_version: int = COORDINATION_SNAPSHOT_VERSION
+
+    def require_wire_response(self) -> ResponseObligation:
+        if not self.assignments or self.obligation is None:
+            raise IdentityConflict("wire response requires selected claims and obligation")
+        return self.obligation
+
+    def require_final_response(self, recipient_lookup: str) -> ResponseObligation:
+        if self.execution.owner_lookup != recipient_lookup:
+            raise StaleFence("response turn belongs to a different SQL recipient")
+        self.execution.lifecycle.require_final_response()
+        self.require_attempt().lifecycle.require_final_response()
+        if self.obligation is None:
+            raise ResponseAdmissionBlocked()
+        target = self.execution.require_response_target()
+        if self.obligation.exact_target != target:
+            raise ResponseAdmissionBlocked()
+        return self.obligation
+
+    def require_preparation(self) -> ResponseObligation:
+        obligation = self.require_wire_response()
+        obligation.lifecycle.require_preparation()
+        return obligation
+
+    def require_existing_preparation(self, candidate) -> None:
+        obligation = self.require_wire_response()
+        obligation.lifecycle.require_existing_preparation()
+        if self.publication_intent is None or not self.publication_intent.matches_request(
+            self.execution.execution_id, candidate
+        ):
+            raise IdentityConflict("prepared response envelope conflicts")
+
+    def require_publishing_intent(self) -> tuple[PublicationIntents, ResponseObligation]:
+        if self.publication_intent is None or self.obligation is None:
+            raise IdentityConflict("no frozen publishing intent for current owner")
+        self.obligation.lifecycle.require_publishing()
+        intent = self.publication_intent
+        if (intent.sender, intent.exact_target) != (
+            self.execution.owner_thread,
+            self.execution.exact_target,
+        ):
+            raise IdentityConflict("no frozen publishing intent for current owner")
+        return intent, self.obligation
+
+    def require_published_evidence(self):
+        if self.publication_intent is None or self.publication_receipt is None:
+            raise StaleFence("finished response has no frozen publication evidence")
+        return self.publication_intent, self.publication_receipt
+
+    def completed_response(self) -> bool:
+        return self.execution.lifecycle.completed
 
     def require_attempt(self) -> AttemptRecord:
         if self.attempt is None:

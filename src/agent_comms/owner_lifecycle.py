@@ -84,8 +84,21 @@ class OwnerReleaseReceipt:
     thread: Thread
 
     def __post_init__(self) -> None:
-        if self.before <= 0 or self.after <= self.before or self.thread.active_turn is not None:
+        if self.before <= 0 or self.after <= self.before:
             raise ValueError("Owner release requires an advanced admission and a closed turn")
+        self.thread.require_idle()
+
+    def current(self, snapshot: RegistrySnapshot, expected: Thread, admission: int) -> bool:
+        """The stored release proves this retired owner, never a replacement."""
+        if self.before != admission or self.thread.incarnation != expected.incarnation:
+            return False
+        if self.thread.process_identity != expected.process_identity:
+            return False
+        if self.after != snapshot.admission_generations.get(self.thread.name):
+            return False
+        if self.thread != snapshot.threads.get(self.thread.name):
+            return False
+        return snapshot.statuses[self.thread.name].stopped
 
 
 class OwnerReleaseStore(LockedStore[dict[str, OwnerReleaseReceipt]]):
@@ -296,9 +309,9 @@ class OwnerLifecycle:
             yield
 
     def _stop_process(self, thread: Thread, admission_generation: int) -> None:
-        assert thread.process_identity is not None
+        identity = thread.require_process()
         with suppress(ProcessLookupError):
-            ObservedProcess(thread.process_identity).stop_sync(
+            ObservedProcess(identity).stop_sync(
                 guard=lambda: self._signal_guard(thread, admission_generation),
             )
 
@@ -418,34 +431,21 @@ class OwnerLifecycle:
         # incarnation; it does not prove OS exit or authorize a replacement PID.
         if self._released_same_owner(snapshot, thread, admission_generation):
             return
-        current = snapshot.threads.get(thread.name)
-        if (
-            current is None
-            or (current.name, current.process_identity, current.created_at)
-            != (thread.name, thread.process_identity, thread.created_at)
-            or snapshot.admission_generations.get(thread.name) != admission_generation
-        ):
+        try:
+            snapshot.require_stopping_owner(thread, admission_generation)
+        except RelationViolationError as error:
             raise RelationViolationError(
                 f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
-            )
+            ) from error
 
     def _released_same_owner(
         self, snapshot: RegistrySnapshot, thread: Thread, admission_generation: int
     ) -> bool:
-        current = snapshot.threads.get(thread.name)
-        if (
-            current is None
-            or snapshot.admission_generations[thread.name] <= admission_generation
-            or not snapshot.statuses[thread.name].stopped
-            or current.active_turn is not None
-            or (current.name, current.process_identity, current.created_at)
-            != (thread.name, thread.process_identity, thread.created_at)
-        ):
-            return False
-        return self.releases.read().get(thread.name) == OwnerReleaseReceipt(
-            admission_generation,
-            snapshot.admission_generations[thread.name],
-            current,
+        receipt = self.releases.read().get(thread.name)
+        return (
+            receipt.current(snapshot, thread, admission_generation)
+            if receipt is not None
+            else False
         )
 
     def _finish_stopped_owner(self, thread: Thread, admission_generation: int) -> None:

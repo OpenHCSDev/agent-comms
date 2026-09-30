@@ -83,7 +83,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         assert paused is not None
         assert wired.registry.require("project").goal == paused
         assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
-        assert wired.goals.goal_pause("project").owner_instruction is not None
+        assert wired.registry.require("project").goal.state.pause_source.instruction() is not None
         assert agent.inputs.dispositions.path.read_bytes() == ledger_before
         assert (
             agent.inputs.dispositions.read().rows["acp:earlier-uncertain"].declared_name

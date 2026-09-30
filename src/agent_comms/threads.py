@@ -66,7 +66,6 @@ class Thread:
     title: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     role: ThreadRole = ThreadRole.AGENT
     active_turn: ActiveTurn | None = None
-    last_goal_report_turn: str | None = None
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
@@ -90,10 +89,6 @@ class Thread:
                 or self.active_turn.turn_generation != self.turn_generation
             ):
                 raise RelationViolationError("Active turn generation differs from its owner.")
-        if self.last_goal_report_turn is not None and not isinstance(
-            self.last_goal_report_turn, str
-        ):
-            raise ValueError("Last goal report turn must be a string or null.")
         if (
             type(self.channel_scope_generation) is not int
             or not 0 <= self.channel_scope_generation < 1 << 63

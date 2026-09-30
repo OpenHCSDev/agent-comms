@@ -371,7 +371,7 @@ class TurnSession:
 
     @property
     def awaiting_native_attestation(self):
-        return self.require_input_id and self.native.attestation.state is None
+        return self.require_input_id and not self.native.attestation.observed
 
     async def consume_native_event(self, event):
         """Observe one decoded event through the shared native lifecycle owner."""
@@ -547,7 +547,7 @@ class TurnSession:
                     break
                 if self.skip:
                     continue
-                if self.require_input_id and self.native.attestation.state is None:
+                if self.awaiting_native_attestation:
                     try:
                         self.native.attestation = self.native.attestation.accept(self.payload)
                     except AttestationError as error:
@@ -594,7 +594,7 @@ class TurnSession:
                 yield event
             return
         if not self.line:
-            if self.require_input_id and (self.native.attestation.state is None):
+            if self.awaiting_native_attestation:
                 self.output.preflight_failure = FailureReason.PREFLIGHT_EXIT
                 self.output.diagnostic = {
                     "elapsed_ms": round(
@@ -621,7 +621,7 @@ class TurnSession:
             self.skip = True
             return
         except (ValueError, TypeError) as error:
-            if self.require_input_id and self.native.attestation.state is None:
+            if self.awaiting_native_attestation:
                 self.output.record_failure(
                     failures.InputIdUnavailable(
                         f"Invalid Pi capability preflight response: {error}"

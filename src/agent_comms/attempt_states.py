@@ -13,6 +13,7 @@ from typing import ClassVar
 from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .coordination_errors import ResponseAdmissionBlocked
 
 
 @dataclass(frozen=True)
@@ -56,6 +57,9 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     @property
     def tool_admission_open(self) -> bool:
         return self.allows_tool_admission and not (self.backend_done or self.process_dead)
+
+    def require_final_response(self) -> None:
+        raise ResponseAdmissionBlocked()
 
     @property
     def publication_ready(self) -> bool:
@@ -194,6 +198,10 @@ class SettlingAttempt(ContextualAttempt):
     @property
     def publication_ready(self) -> bool:
         return self.backend_done and self.process_dead
+
+    def require_final_response(self) -> None:
+        if not self.publication_ready:
+            raise ResponseAdmissionBlocked()
 
     @classmethod
     def successors(cls):

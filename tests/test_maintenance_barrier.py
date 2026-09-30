@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.maintenance_barrier import MaintenancePhase
 from agent_comms.backend import _maintenance_send_boundary, stream_agent_events
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
@@ -87,7 +88,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
     control = FixtureMaintenanceControl(gate)
     first = control.begin("operator-one")
-    assert first.phase == "draining" and first.generation == 1
+    assert first.phase == MaintenancePhase.decode("draining") and first.generation == 1
     assert MaintenanceBarrier(comms.registry.store.path).read() == first
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.agents.begin_turn("owner", "after")
@@ -99,19 +100,21 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
         )
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.owners.start("owner")
-    second = control.advance(first, "paused")
+    second = control.advance(first, MaintenancePhase.decode("paused"))
     assert second.generation == 2
-    with pytest.raises(RelationViolationError, match="epoch/operator"):
-        control.advance(first, "paused")
+    with pytest.raises(RelationViolationError, match="generation/operator"):
+        control.advance(first, MaintenancePhase.decode("paused"))
     with pytest.raises(ValueError, match="closed expected"):
-        control.advance(second, "ready")
+        control.advance(second, MaintenancePhase.decode("ready"))
     with pytest.raises(RelationViolationError, match="Maintenance"):
         Registration(comms.registry.store.path).lease_local_turn("owner", "cold")
-    assert control.advance(second, "installing").phase == "installing"
+    assert control.advance(
+        second, MaintenancePhase.decode("installing")
+    ).phase == MaintenancePhase.decode("installing")
 
 
 @pytest.mark.parametrize("generation", [True, 1.0, "1", -1, 0, 1, 2])
-def test_legacy_state_generation_requires_exact_matching_positive_int(
+def test_state_generation_requires_exact_matching_positive_int(
     tmp_path: Path, generation: object
 ) -> None:
     gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
@@ -122,14 +125,14 @@ def test_legacy_state_generation_requires_exact_matching_positive_int(
     state["generation"] = generation
     gate.state_path.write_text(json.dumps(state))
     if type(generation) is int and generation == 1:
-        assert gate.read().phase == "ready"
+        assert gate.read().phase == MaintenancePhase.decode("ready")
         with gate.admit_ingress() as receipt:
-            assert receipt is not None and receipt.phase == "ready"
+            assert receipt is not None and receipt.phase == MaintenancePhase.decode("ready")
     else:
-        with pytest.raises(RelationViolationError, match="Maintenance witness inconsistent"):
+        with pytest.raises(RelationViolationError, match="Maintenance witness"):
             gate.read()
         with (
-            pytest.raises(RelationViolationError, match="Maintenance witness inconsistent"),
+            pytest.raises(RelationViolationError, match="Maintenance witness"),
             gate.admit_ingress(),
         ):
             pytest.fail("Malformed generation must never admit ingress")
@@ -214,7 +217,9 @@ def test_unknown_parent_fsync_does_not_reopen_admission(
         with pytest.raises(RelationViolationError, match="Maintenance"):
             gate.read()
     else:
-        assert gate.read().phase == "draining"  # Visible state is not an ACK.
+        assert gate.read().phase == MaintenancePhase.decode(
+            "draining"
+        )  # Visible state is not an ACK.
 
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:

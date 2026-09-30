@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import native_pi
+from agent_comms.maintenance_barrier import MaintenancePhase
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -28,14 +29,14 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
     program.write_text(
         "import json, os, sys\n"
         "from pathlib import Path\n"
-        "from agent_comms.maintenance_barrier import MaintenanceBarrier\n"
+        "from agent_comms.maintenance_barrier import MaintenanceBarrier, PausedPhase\n"
         "from maintenance_control_fixture import FixtureMaintenanceControl\n"
         f"Path({str(child_pid)!r}).write_text(str(os.getpid()))\n"
         "request = json.loads(sys.stdin.readline())\n"
         f"with open({str(received)!r}, 'a') as log: log.write(json.dumps(request) + '\\n')\n"
         f"control = FixtureMaintenanceControl(MaintenanceBarrier(Path({str(root / 'registry.json')!r})))\n"
         "first = control.begin('disposable-operator')\n"
-        "assert control.advance(first, 'paused').phase == 'paused'\n"
+        "assert control.advance(first, PausedPhase).phase is PausedPhase\n"
         "file = sys.argv[1]\n"
         f"reply = {{'type':'response','id':request['id'],'command':'get_state','success':True,"
         f"'data':{{'nativeInputProofCapability':{native_pi.CAPABILITY!r},"
@@ -73,7 +74,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
-    assert comms.owners.maintenance.read().phase == "paused"
+    assert comms.owners.maintenance.read().phase == MaintenancePhase.decode("paused")
     writes = [json.loads(line) for line in received.read_text().splitlines()]
     assert [item["type"] for item in writes] == ["get_state"]
     with pytest.raises(ProcessLookupError):

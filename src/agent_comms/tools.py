@@ -25,12 +25,14 @@ from .goal_actions import (
     ModelInvocable,
     SetGoalAction,
 )
-from .goal_states import ActiveGoal, PausedGoal
+from .goal_states import ActiveGoal
 from .messages import MessageType
+from .relationships import RelationshipEdit
 from .restart_queue import cancel as cancel_restart
 from .restart_queue import enqueue as enqueue_restart
 from .restart_queue import status as restart_status
 from .thread_management import ForkSpec
+from .thread_status import ThreadStatus
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
@@ -86,6 +88,10 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
     action_order: ClassVar[int] = 0
+
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return True
 
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
@@ -472,7 +478,7 @@ class CommsGoalTool(ToolRequest):
         )
         command = replace(
             command,
-            expect=GoalPrecondition(goal_id=self.goal_id, expected_status=ActiveGoal.declared_name),
+            expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
         goal, execution = comms.goals.goal_snapshot(name)
@@ -496,22 +502,15 @@ class CommsResumeGoalTool(ToolRequest):
         name = _executing_thread()
         goal_id = self.goal_id
         current = comms.registry.require(name).goal
-        if current is None or current.id != goal_id or (not isinstance(current.state, PausedGoal)):
+        if current is None or current.id != goal_id:
             raise ValueError("This goal cannot be resumed; refresh its state.")
-        pause = comms.goals.goal_pause(name)
-        if pause is None:
-            raise ValueError(
-                "Pause source is unavailable; the owner must resume through the goal controls."
-            )
-        if pause.owner_instruction is not None:
-            raise ValueError(pause.owner_instruction)
+        current.state.require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
             name,
             ActiveGoalAction(
                 expect=GoalPrecondition(
                     expected_goal=current,
-                    expected_status=current.state.declared_name,
                     goal_id=goal_id,
                 ),
                 progress=progress,
@@ -578,7 +577,7 @@ class CommsCollaborationTool(ToolRequest):
         "collaboration lists. This persistent metadata does not message, wake or fork "
         "either agent."
     )
-    action: Literal["add", "update", "remove"] = tool_field("Relationship change")
+    action: type[RelationshipEdit] = tool_field("Relationship change")
     peer: str = tool_field("Collaborating agent thread name or alias")
     note: str = tool_field("Short description of ongoing work", default="")
 
@@ -724,8 +723,16 @@ class CommsForkTool(ToolRequest):
         return {"forked": child.name, "pid": child.pid}
 
 
+class OwnerLifecycleControl:
+    """Commands that act on the owner lifecycle share its eligibility query."""
+
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return status.allows_owner_control()
+
+
 @dataclass(frozen=True, kw_only=True)
-class CommsStopTool(ToolRequest):
+class CommsStopTool(OwnerLifecycleControl, ToolRequest):
     label = "Stop Comms Thread"
     description = "Stop a thread after verifying that its process owns the registered identity."
     context = "thread"
@@ -738,7 +745,7 @@ class CommsStopTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStartTool(ToolRequest):
+class CommsStartTool(OwnerLifecycleControl, ToolRequest):
     label = "Start Comms Thread"
     description = (
         "Start a stopped agent thread with its saved conversation and configuration. "
@@ -750,12 +757,16 @@ class CommsStartTool(ToolRequest):
     action_order = 21
     name: str = tool_field("Thread to start", binding=SubjectBinding)
 
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return status.allows_owner_start(owner_pid=owner_pid)
+
     def apply(self, comms: Comms) -> JsonObject:
         return asdict(comms.owners.start(self.name))
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsQueueRestartTool(ToolRequest):
+class CommsQueueRestartTool(OwnerLifecycleControl, ToolRequest):
     label = "Queue Idle Owner Restart"
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
@@ -796,7 +807,7 @@ class CommsCancelRestartTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsArchiveTool(ToolRequest):
+class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
     context = "thread"

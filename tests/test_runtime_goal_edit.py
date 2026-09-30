@@ -51,7 +51,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
         assert changed.text == result["goal"]["text"]
         assert changed.revision == paused.revision + 1
         assert changed.progress == paused.progress
-        assert comms.goals.goal_pause(session).source.declared_name == "owner"
+        assert comms.registry.require(session).goal.state.pause_source.declared_name == "owner"
         assert result["goalExecution"]["state"] == "paused"
         async with asyncio.timeout(2):
             while not any(

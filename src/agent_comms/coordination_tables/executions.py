@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.coordination_errors import ResponseAdmissionBlocked
+
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
@@ -154,6 +156,11 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             "sql": Column(check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256")
         },
     )
+
+    def require_response_target(self) -> str:
+        if self.exact_target is None:
+            raise ResponseAdmissionBlocked()
+        return self.exact_target
 
     @projected(view="snapshot", name="status")
     def snapshot_status(self):

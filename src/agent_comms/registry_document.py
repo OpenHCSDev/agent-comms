@@ -12,7 +12,11 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .registration_change import InitialRegistration, RegistrationChange, UpdatedRegistration
 from .routing import TurnRouting
-from .restart_refusals import OwnerBusyRefusal, OwnerChangedBeforeFenceRefusal, OwnerGenerationChangedRefusal
+from .restart_refusals import (
+    OwnerBusyRefusal,
+    OwnerChangedBeforeFenceRefusal,
+    OwnerGenerationChangedRefusal,
+)
 from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
 from .thread_presentation import ThreadOwnerBinding, LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import (
@@ -399,3 +403,15 @@ class RegistrySnapshot:
         if self.owner_generations[thread.name] != owner.generation:
             raise RelationViolationError("Owner lease changed during attachment")
         thread.require_local_process(process)
+
+    def require_stopping_owner(self, expected: Thread, admission: int) -> None:
+        """A fenced stop may target a stopped owner, but never a later birth/lease."""
+        try:
+            current = self.threads[expected.name]
+        except KeyError as error:
+            raise RelationViolationError("Stopping owner was removed") from error
+        if current.incarnation != expected.incarnation:
+            raise RelationViolationError("Stopping owner incarnation changed")
+        current.require_local_process(expected.require_process())
+        if self.admission_generations[expected.name] != admission:
+            raise RelationViolationError("Stopping owner admission changed")

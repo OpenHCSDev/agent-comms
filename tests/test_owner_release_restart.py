@@ -18,6 +18,7 @@ from agent_comms.child_process import (
 )
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
+from agent_comms.owner_lifecycle import OwnerRestartSelection
 
 
 def wait_for(path: Path) -> None:
@@ -82,9 +83,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
     arguments = {}
     if mode == "guarded":
         snapshot = comms.registry.snapshot()
-        arguments["expected_incarnations"] = {
-            "worker": (original.pid, original.created_at, snapshot.admission_generations["worker"])
-        }
+        arguments["expected"] = OwnerRestartSelection.capture(snapshot, "worker")
     if mode == "stop":
         comms.owners.stop("worker")
     else:

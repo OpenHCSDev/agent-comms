@@ -13,11 +13,8 @@ import pytest
 
 from agent_comms import locked_store
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_pauses import GoalPauseEvent, GoalPauseEvents
 from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.goal_states import OwnerPause, PausedGoal, RuntimePause
 from agent_comms.goal_waits import GoalWait, GoalWaits
-from agent_comms.goals import Goal
 from agent_comms.locked_store import LockedStore
 from agent_comms.store_files import _store_lock
 
@@ -255,23 +252,3 @@ def test_wire_nesting_does_not_reacquire_goal_lock(tmp_path):
     done = event()
     with process(_record_under_wire, tmp_path / "goal_waits.json", done):
         assert done.wait(5)
-
-
-def test_pause_store_golden_and_shared_algorithm(tmp_path):
-    store = GoalPauseEvents(tmp_path / "goal_pause_events.json")
-    assert GoalPauseEvents.update is LockedStore.update
-    assert store.read() == {}
-    with _store_lock(tmp_path / "wire"):
-        store.record(GoalPauseEvent("goal", 3, OwnerPause()))
-        store.record(GoalPauseEvent("goal", 4, RuntimePause()))
-        rows = store.read()
-    assert store.path.read_text() == (
-        '{"goal:3": {"goal_id": "goal", "revision": 3, "source": "owner"}, '
-        '"goal:4": {"goal_id": "goal", "revision": 4, "source": "runtime"}}'
-    )
-    assert rows["goal:3"].source == OwnerPause()
-    assert GoalPauseEvents.for_goal(Goal("Work", "goal", revision=3, state=PausedGoal()))
-    assert (
-        GoalPauseEvents.for_goal(Goal("Work", "goal", revision=5, state=PausedGoal())).source
-        == OwnerPause()
-    )

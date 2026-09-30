@@ -9,12 +9,14 @@ import json
 import re
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .delivery_presentation import DeliveryPresentation
 from .input_attempt import InputAttempt
 from .pi_payloads import PiDiagnostic
+from .field_codec import FieldCodec
+from .mro_dispatch import MroDispatch, handles
 
 
 class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):
@@ -93,12 +95,14 @@ class ACPFailure(DeliveryFailure):
         *,
         diagnostics: tuple[PiDiagnostic, ...] = (),
     ) -> ACPFailure:
-        detail = _error_detail(data) or message or "ACP request failed"
-        if isinstance(data, dict) and "diagnostics" in data:
-            records = data["diagnostics"]
-            if not isinstance(records, list):
-                raise ValueError("Provider diagnostics must be an array")
-            diagnostics = tuple(PiDiagnostic.from_wire(record) for record in records)
+        return cls.from_payload(
+            code, message, ExternalFailureData.decode(data), diagnostics=diagnostics
+        )
+
+    @classmethod
+    def from_payload(cls, code, message, payload, *, diagnostics=()):
+        detail = payload.detail or message or "ACP request failed"
+        diagnostics = payload.diagnostics if payload.has_diagnostics else diagnostics
         owner = next(
             member
             for member in sorted(
@@ -108,29 +112,13 @@ class ACPFailure(DeliveryFailure):
             )
             if member.matches(code, detail, diagnostics)
         )
-        state = None
-        if isinstance(data, dict):
-            status = data.get("inputStatus")
-            if isinstance(status, str):
-                try:
-                    state = InputAttempt.decode(status)
-                except ValueError:
-                    # A redacted public status has no provenance. Resolve only
-                    # when its declaration is unique; unknown cannot distinguish
-                    # a reserved input from a bound uncertain input.
-                    matches = [
-                        member
-                        for member in InputAttempt.members_with(InputAttempt)
-                        if member.public_status == status
-                    ]
-                    if len(matches) == 1:
-                        state = matches[0]
-        return owner(code, detail, state, diagnostics)
+        return owner(code, detail, payload.input_state, diagnostics)
 
 
 @dataclass(frozen=True)
 class PromptFailureReceipt:
     """One request's failure and proof of its already published notification."""
+
     failure: ACPFailure
     notification_published: bool
 
@@ -146,11 +134,7 @@ class PromptFailureReceipt:
 
     @classmethod
     def from_error(cls, code, message, data):
-        from .field_codec import FieldCodec
-
-        if isinstance(data, dict) and "agentCommsFailure" in data:
-            return FieldCodec.decode(cls, data["agentCommsFailure"])
-        return cls(ACPFailure.from_error(code, message, data), False)
+        return ExternalFailureData.decode(data).failure_receipt(code, message)
 
 
 class RequestACPFailure(ACPFailure):
@@ -218,39 +202,119 @@ class ProviderConnectionFailure(ACPFailure):
         )
 
 
-def _error_detail(data: object) -> str | None:
-    # JSON-RPC errors and provider adapters wrap the same reason at different
-    # depths. Only this external decoder knows their keys; consumers use fields.
-    pending = [data]
-    seen: set[int] = set()
-    fallback = None
-    while pending:
-        value = pending.pop()
-        if isinstance(value, (dict, list)):
-            if id(value) in seen:
-                continue
-            seen.add(id(value))
-        if isinstance(value, dict):
-            # Prefer concrete reasons over an enclosing "Internal error".
-            for key in ("details", "reason", "detail", "error", "data", "message"):
-                item = value.get(key)
-                if (
-                    isinstance(item, str)
-                    and item.strip()
-                    and item.strip().casefold() not in {"internal error", "internal server error"}
-                ):
-                    try:
-                        nested = json.loads(item)
-                    except (ValueError, TypeError):
-                        return item.strip()
-                    if isinstance(nested, (dict, list)):
-                        pending.append(nested)
-                    else:
-                        return item.strip()
-                elif isinstance(item, (dict, list)):
-                    pending.append(item)
-        elif isinstance(value, list):
-            pending.extend(reversed(value))
-        elif isinstance(value, str) and value.strip():
-            fallback = value.strip()
-    return fallback
+class StructuredErrorValue(MroDispatch):
+    """Only external JSON containers continue the existing traversal."""
+
+    def __init__(self, payload):
+        self.payload = payload
+
+    @handles(dict, list)
+    def container(self, value):
+        self.payload.pending.append(value)
+
+
+class ErrorReasonField(StructuredErrorValue):
+    """A provider reason field owns text priority and encoded JSON handling."""
+
+    @handles(str)
+    def reason(self, value):
+        text = value.strip()
+        if not text or text.casefold() in {"internal error", "internal server error"}:
+            return
+        try:
+            nested = json.loads(text)
+        except ValueError:
+            self.payload.detail = text
+            return
+        containers = StructuredErrorValue(self.payload)
+        if tuple(containers.handlers_for(nested)):
+            containers.dispatch_sync(nested)
+        else:
+            self.payload.detail = text
+
+
+class ExternalFailureData(MroDispatch):
+    """Decode external JSON nesting once; no result grants retry authority.
+
+    The key ordering is the provider/JSON-RPC presentation boundary. It is not
+    a roster of application states. Diagnostics and input state keep their
+    existing declaration owners; a published receipt uses the canonical codec.
+    """
+
+    def __init__(self, root):
+        self.root = root
+        self.pending = [root]
+        self.seen = set()
+        self.detail = self.fallback = None
+        self.input_state = None
+        self.diagnostics = ()
+        self.has_diagnostics = False
+        self.receipt = None
+
+    @classmethod
+    def decode(cls, root):
+        result = cls(root)
+        result.read()
+        return result
+
+    def read(self):
+        while self.pending and self.detail is None:
+            self.dispatch_sync(self.pending.pop())
+        self.detail = self.detail or self.fallback
+
+    def failure_receipt(self, code, message):
+        if self.receipt is not None:
+            return self.receipt
+        return PromptFailureReceipt(ACPFailure.from_payload(code, message, self), False)
+
+    def first_visit(self, value):
+        identity = id(value)
+        if identity in self.seen:
+            return False
+        self.seen.add(identity)
+        return True
+
+    def root_metadata(self, value):
+        if "agentCommsFailure" in value:
+            self.receipt = FieldCodec.decode(PromptFailureReceipt, value["agentCommsFailure"])
+        if "diagnostics" in value:
+            self.has_diagnostics = True
+            try:
+                records = FieldCodec.decode(list[Any], value["diagnostics"])
+            except (TypeError, ValueError) as error:
+                raise ValueError("Provider diagnostics must be an array") from error
+            self.diagnostics = tuple(PiDiagnostic.from_wire(record) for record in records)
+        status = value.get("inputStatus")
+        if isinstance(status, str):
+            try:
+                self.input_state = InputAttempt.decode(status)
+            except ValueError:
+                # Redacted UNKNOWN cannot distinguish reserved from bound input.
+                matches = tuple(
+                    member
+                    for member in InputAttempt.members_with(InputAttempt)
+                    if member.public_status == status
+                )
+                if len(matches) == 1:
+                    self.input_state = matches[0]
+
+    @handles(dict)
+    def object(self, value):
+        if not self.first_visit(value):
+            return
+        if value is self.root:
+            self.root_metadata(value)
+        for key in ("details", "reason", "detail", "error", "data", "message"):
+            ErrorReasonField(self).dispatch_sync(value.get(key))
+            if self.detail is not None:
+                return
+
+    @handles(list)
+    def array(self, value):
+        if self.first_visit(value):
+            self.pending.extend(reversed(value))
+
+    @handles(str)
+    def text(self, value):
+        if value.strip():
+            self.fallback = value.strip()

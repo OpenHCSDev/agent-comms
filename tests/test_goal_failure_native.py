@@ -20,7 +20,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import SelectedSummaryAttempt
 from agent_comms.compaction_states import LinkedSummary, CommittedOperation
 from agent_comms.acp_failure import PromptFailureReceipt
-from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 from agent_comms.goal_failure_observation import read_failed_turn_projection
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration
@@ -175,7 +175,8 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
         await agent.shutdown()
 
 
-async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monkeypatch):
+@pytest.mark.parametrize("owner_pauses", [False, True])
+async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monkeypatch, owner_pauses):
     native = native_backend
     assert (await native.run("Retained history before goal failure"))[-1].ok
     await native.persistent.close()
@@ -215,6 +216,21 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             )
             unknown = agent.inputs.dispositions.read().rows[key]
             native.provider.status = 503
+            if owner_pauses:
+                class PauseAtResponse:
+                    async def wait(self):
+                        # Only the localhost response is controlled. Pause at
+                        # the actual provider request of the tracked native turn.
+                        current = comms.registry.require(sid)
+                        assert current.executing
+                        paused = comms.goals.update_goal(
+                            sid, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                            actor=OwnerInvocable,
+                        )
+                        assert paused.state.protected
+                        return True
+
+                native.provider.response_gate = PauseAtResponse()
             # Direct user inputs intentionally do not spend a goal grant.
             # Run the normal autonomous owner entrypoint against the same loaded
             # session; the real backend, input journal and settlement remain live.
@@ -236,9 +252,9 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             before = store.path.read_bytes()
             projected = read_failed_turn_projection(
                 store.path, owner=owner, owner_status=registry.statuses[sid],
-                admission=registry.admission_generations[sid], pause=comms.goals.goal_pause(sid),
+                admission=registry.admission_generations[sid],
             )
-            assert projected.state == "backend_suspended", projected
+            assert projected.state == ("owner_paused" if owner_pauses else "backend_suspended"), projected
             assert projected.reason != "missing_binding"
             assert store.path.read_bytes() == before
             with pytest.raises(UnresolvedAttemptError):
@@ -246,6 +262,14 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             agent.turns.goals.schedule_goal(sid)
             assert not agent.inputs.pending_turns.get(sid)
             assert len(native.saved_inputs()) == 3
+            if owner_pauses:
+                reopened = Comms(comms.root)
+                paused = reopened.registry.require(sid).goal
+                assert paused.state.pause_source.instruction()
+                assert reopened.goals.goal_history(sid)[-1].after == paused
+                assert not (comms.root / "goal_pause_events.json").exists()
+                assert agent.inputs.dispositions.read().rows[key] == unknown
+                return
             # Explicit owner Retry traverses the socket control, new scheduler,
             # existing wake runner and native journal. The failed/UNKNOWN input
             # above is retained; only one new goal continuation is dispatched.
