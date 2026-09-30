@@ -403,3 +403,27 @@ whole consumer deletion and stages f8bad541 with reviewedText650/Core720/native4
 for the sole original-history physical profile/video comparison. Earlier4103
 physical failure remains preserved. No scrolling readiness follows until the
 new installed journey is assessed.
+
+### Cursor candidate actual failure and consumer correction
+
+The staged f8 original-history physical test exited before completing scrolls.
+Actual saved ToolCall expansion still called the deleted update_follow method
+from ToolCall.watch_expanded, producing AttributeError. The earlier statement
+that every old cursor caller was removed was incorrect; geometry source checks
+did not exercise this retained-history tool expansion. Heisenberg owns the
+remaining consumer migration and the retired API census/guard, followed by the
+corrected installed journey. No alias, swallowed exception or guessed scene-map
+fix is admitted. The failed candidate and partial footage/profile remain
+protected, the original owner is unchanged/alive, and cleanup has no remaining
+owned processes. Default remains222.
+
+Mendel's subsequent CompactionBoundary descriptor consumer control uses actual
+HeldCompaction: the child inherits all five exact FDs and retains the four store
+locks plus executor fence after scope unwind until reaped. Source/local native
+controls passed2cases in3.74s without provider input. Its next whole resource
+checkpoint still requires publication and installed custody/messaging acceptance.
+Kepler takes422's remaining disjoint negative native fixture/retired fake-helper
+closure in his own persistent worktree; the completed5.45s positive is preserved,
+not rerun. Einstein's compaction scheduling followup is tracked before long work
+in draft439, reusing the existing policy/provider admission rather than adding
+another pool or progress store.

@@ -1,5 +1,5 @@
 {
-  "state": "staged-reviewed-imports-native-trust-verified-not-activated",
+  "state": "installed-physical-candidate-failed-not-activated",
   "stage": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-geometry-20260930",
   "pins": {
     "agent-comms": "72062939239b0f07707406309305a056a23f925f",
@@ -10,5 +10,15 @@
   "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent",
   "default_launchers_unchanged": true,
   "pending": "sole original-history physical profile/video comparison under Heisenberg",
-  "verification_correction": "initial operator guessed WorkspaceScreen module as session_view; authoritative owner is screens.workspace, corrected without package mutation"
+  "verification_correction": "initial operator guessed WorkspaceScreen module as session_view; authoritative owner is screens.workspace, corrected without package mutation",
+  "actual_failure": {
+    "receipt": "/home/ts/.cache/agent-scratch/toad-reader-217-cursor-geometry-20260930/capture/receipt.json",
+    "crash": "/home/ts/.local/state/toad/logs/Terminal_crash_2026-09-30T01_04_36_224766.txt",
+    "cause": "Saved ToolCall expansion still invokes retired cursor.update_follow; AttributeError in ToolCall.watch_expanded before scrolling completed",
+    "capture_completed": false,
+    "original_owner_unchanged": true,
+    "remaining_owned_pids": [],
+    "owner": "Heisenberg217",
+    "next": "Complete retired Cursor API consumer closure and actual tool expansion check, then corrected installed physical journey"
+  }
 }
