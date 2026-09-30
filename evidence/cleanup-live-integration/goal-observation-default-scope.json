@@ -1,0 +1,180 @@
+{
+  "state": "SCOPED-DEFAULT-HISTORY-RETURN-PASS-WITH-OPEN-BACKEND-FAILURE",
+  "overall_ready": false,
+  "actual_default_command": [
+    "/home/ts/bin/toad-comms",
+    "nra-architecture"
+  ],
+  "runtime": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930/bin",
+  "pins": {
+    "agent-comms": "4295d680a5e63885a3f338a299afc07dbb34bd85",
+    "batrachian-toad": "629cca65be1e342124df0bd6ff673e1d50dd8be3",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "duration_seconds": 28.931864903017413,
+  "raw": "/home/ts/.cache/agent-scratch/comms-default-goal-observation-20260930",
+  "driver_commit": "4b9e0a56234cd07eaa57d670ce09e11dae216a5c",
+  "checks": {
+    "checks": {
+      "journey": "default_history_return",
+      "actual_A_B_A": true,
+      "editor_and_history_window_reused": true,
+      "draft_unchanged": true,
+      "goal_start": null,
+      "goal_return": null,
+      "goal_read_pending": "Not exposed by existing recorder DTO; no pending-goal fault injection",
+      "physical_frames_require_review": true
+    },
+    "source_and_owner_unchanged": true,
+    "runtime_override": false,
+    "prompt_submissions": 0,
+    "physical_review": "Required before any default live PASS",
+    "scope": "default_history_return"
+  },
+  "physical_review": {
+    "startup": "Readable original retained history with existing NRA failure messages",
+    "peer_opened": "Actual nra-domain-mapping tab selected; sampled frame still shows Loading new thread and history. Peer readable-history NOT established.",
+    "original_return": "Original retained history readable; same history window/editor, draft unchanged",
+    "goal_pending_read": "Not exposed by existing recorder DTO; no injected held read and no claim of this specialized condition",
+    "fresh_backend_failure": "Existing NativePiUnavailable/PromptSendUnknown + Inbox unavailable visible in original and NRA roster; separate parent/452 ownership, unchanged by this read-only UI gate"
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3396186,
+        "start_ticks": 25540295,
+        "returncode": 0
+      },
+      {
+        "pid": 3396194,
+        "start_ticks": 25540380,
+        "returncode": 0
+      },
+      {
+        "pid": 3396196,
+        "start_ticks": 25540388,
+        "returncode": 0
+      },
+      {
+        "pid": 3396197,
+        "start_ticks": 25540394,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 3396202,
+        "start_ticks": 25540456,
+        "returncode": 0
+      },
+      {
+        "pid": 3396204,
+        "start_ticks": 25540464,
+        "returncode": 0
+      },
+      {
+        "pid": 3396205,
+        "start_ticks": 25540473,
+        "returncode": 0
+      },
+      {
+        "pid": 3396206,
+        "start_ticks": 25540483,
+        "returncode": 255
+      },
+      {
+        "pid": 3396580,
+        "start_ticks": 25541684,
+        "returncode": 0
+      },
+      {
+        "pid": 3396586,
+        "start_ticks": 25541712,
+        "returncode": 0
+      },
+      {
+        "pid": 3396591,
+        "start_ticks": 25541753,
+        "returncode": 0
+      },
+      {
+        "pid": 3396615,
+        "start_ticks": 25541882,
+        "returncode": 0
+      },
+      {
+        "pid": 3396690,
+        "start_ticks": 25541972,
+        "returncode": 0
+      },
+      {
+        "pid": 3396796,
+        "start_ticks": 25542184,
+        "returncode": 0
+      },
+      {
+        "pid": 3396838,
+        "start_ticks": 25542325,
+        "returncode": 0
+      },
+      {
+        "pid": 3396844,
+        "start_ticks": 25542417,
+        "returncode": 0
+      },
+      {
+        "pid": 3396867,
+        "start_ticks": 25542630,
+        "returncode": 0
+      },
+      {
+        "pid": 3396880,
+        "start_ticks": 25542767,
+        "returncode": 0
+      },
+      {
+        "pid": 3396951,
+        "start_ticks": 25542980,
+        "returncode": 0
+      },
+      {
+        "pid": 3397053,
+        "start_ticks": 25543315,
+        "returncode": 0
+      },
+      {
+        "pid": 3397059,
+        "start_ticks": 25543340,
+        "returncode": 0
+      },
+      {
+        "pid": 3397085,
+        "start_ticks": 25543410,
+        "returncode": 0
+      },
+      {
+        "pid": 3397087,
+        "start_ticks": 25543498,
+        "returncode": 0
+      },
+      {
+        "pid": 3397135,
+        "start_ticks": 25543755,
+        "returncode": 0
+      }
+    ]
+  },
+  "tracked_processes_still_present": [],
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "default_mutations": 0,
+  "backend_restarts": 0,
+  "source_and_owner_unchanged": true,
+  "new_run_after_cli_restart": false,
+  "recorder_stop": {
+    "capture_returncode": 255,
+    "meaning": "Existing recorder sends FFmpeg SIGINT after completing capture; accepts0/255 at lines975-979",
+    "receipt_setup_error": "Initial receipt writer incorrectly asserted only0 and stopped before evidence files; corrected to existing recorder contract without rerun"
+  }
+}

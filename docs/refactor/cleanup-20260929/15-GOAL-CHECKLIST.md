@@ -45,7 +45,13 @@ Parallel outstanding owners and measured progress:
   Toad238 merged629cca65 (reviewed productiondef49) at14:25:18Z; Einstein owns
   the UI-only immutable install stage, with backend4295/nativee36 unchanged.
   Default executables now select runtime-goal-observation; original clients are
-  not stopped. The short actual default UI acceptance is pending. No backend
+  not stopped. The actual default saved-history A/B/A return check completed28.932s with
+  readable startup/return, unchanged editor/history/draft, unchanged original
+  source and zero owned-process leaks. Its sampled cold peer still showed
+  loading and the recorder does not expose a pending-goal read; neither condition
+  is claimed verified by this default check. Actual specialized candidate
+  held-goal acceptance remains its original source/native/ACP receipt. Evidence:
+  `evidence/cleanup-live-integration/goal-observation-default-scope.json`. No backend
   owner restart or state reset accompanied this UI-only activation.
   Actual mid-active-compaction latency remains follow-up, not a readiness claim.
   Capacity has not recurred.
