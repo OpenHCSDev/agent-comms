@@ -32,6 +32,7 @@ from .native_pi import (
     _verify_context,
 )
 from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
+from .native_startup import NativeStartupAdmission
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import AssistantMessage, TextDelta
 from .pi_rpc import PiRpcChannel
@@ -63,6 +64,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             command.message,
             session_file=launch.session_file,
             model_wait_timeout=model_wait_timeout,
+            startup=NativeStartupAdmission.for_launch(launch, root=maintenance_root),
         )
         self.command = command
         self.provider, self.model = provider, model
