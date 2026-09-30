@@ -1,0 +1,1488 @@
+.............ss...............FFFFF.............................         [100%]
+=================================== FAILURES ===================================
+_ test_selected_first_source_get_state_fences_runtime_before_raw_prompt[low_runtime] _
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f583587ba10>
+
+    async def complete(self) -> NativeTurnResult:
+        async with AsyncExitStack() as custody:
+            custody.callback(self.startup.release)
+            await self.open_tools(custody)
+            self.native = await self.native_session.open(
+                self.launch,
+                self.session_file,
+                reuse=False,
+                require_input_id=True,
+                startup=self.startup,
+                finish_event=self.finish_event,
+                watchdog=self.watchdog,
+            )
+            custody.push_async_callback(self.native_session.close)
+            await custody.enter_async_context(self.native.failures())
+            custody.callback(self.native.reader.pending.cancel_all)
+            if self.tool_socket is not None:
+                self.tool_socket.expected_pid = self.native.proc.pid
+            self.watchdog.reading(True)
+            try:
+                try:
+>                   await self.attest()
+
+src/agent_comms/tracked_turn.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f583587ba10>
+
+    async def attest(self) -> None:
+        request = self.native.attestation.request
+        await self.send(request)
+        event = await self.next_event()
+        if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
+>           raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
+E           agent_comms.native_pi.NativePiUnavailable: Native Pi emitted an unexpected preflight event
+
+src/agent_comms/tracked_turn.py:253: NativePiUnavailable
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f583558d240>
+damage = 'low_runtime'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+        with pytest.raises(expected, match=reason):
+>           await TrackedTurnSession.execute(
+                tmp_path,
+                input_id=INPUT_ID,
+                prompt="never send this fake prompt",
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                maintenance_root=tmp_path,
+                prompt_send_boundary=boundary,
+                fresh_selected=fresh,
+            )
+
+tests/test_native_pi.py:835: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/tracked_turn.py:149: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/tracked_turn.py:187: in complete
+    self.admission.raise_native_failure(error, self.native.attestation)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_admission.UnwrittenPrompt object at 0x7f5835600830>
+error = NativePiUnavailable('Native Pi emitted an unexpected preflight event')
+attestation = PendingAttestation(expected=None, request=GetState(id='agent-comms-preflight-21678a851f02e93a28e677ab66d1592c'))
+
+    def raise_native_failure(self, error, attestation):
+        from .native_pi import NativePiInputNotSent
+    
+>       raise NativePiInputNotSent(error, attestation) from error
+E       agent_comms.native_pi.NativePiInputNotSent: Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event
+E       Original native child stderr:
+E       (empty)
+
+src/agent_comms/turn_admission.py:65: NativePiInputNotSent
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f583558d240>
+damage = 'low_runtime'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+>       with pytest.raises(expected, match=reason):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'thinking_changed: Selected first source thinking level differs'
+E         Actual message: 'Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event\nOriginal native child stderr:\n(empty)'
+
+tests/test_native_pi.py:834: AssertionError
+_ test_selected_first_source_get_state_fences_runtime_before_raw_prompt[wrong_model] _
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f5834c587d0>
+
+    async def complete(self) -> NativeTurnResult:
+        async with AsyncExitStack() as custody:
+            custody.callback(self.startup.release)
+            await self.open_tools(custody)
+            self.native = await self.native_session.open(
+                self.launch,
+                self.session_file,
+                reuse=False,
+                require_input_id=True,
+                startup=self.startup,
+                finish_event=self.finish_event,
+                watchdog=self.watchdog,
+            )
+            custody.push_async_callback(self.native_session.close)
+            await custody.enter_async_context(self.native.failures())
+            custody.callback(self.native.reader.pending.cancel_all)
+            if self.tool_socket is not None:
+                self.tool_socket.expected_pid = self.native.proc.pid
+            self.watchdog.reading(True)
+            try:
+                try:
+>                   await self.attest()
+
+src/agent_comms/tracked_turn.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f5834c587d0>
+
+    async def attest(self) -> None:
+        request = self.native.attestation.request
+        await self.send(request)
+        event = await self.next_event()
+        if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
+>           raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
+E           agent_comms.native_pi.NativePiUnavailable: Native Pi emitted an unexpected preflight event
+
+src/agent_comms/tracked_turn.py:253: NativePiUnavailable
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f583558d5c0>
+damage = 'wrong_model'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+        with pytest.raises(expected, match=reason):
+>           await TrackedTurnSession.execute(
+                tmp_path,
+                input_id=INPUT_ID,
+                prompt="never send this fake prompt",
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                maintenance_root=tmp_path,
+                prompt_send_boundary=boundary,
+                fresh_selected=fresh,
+            )
+
+tests/test_native_pi.py:835: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/tracked_turn.py:149: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/tracked_turn.py:187: in complete
+    self.admission.raise_native_failure(error, self.native.attestation)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_admission.UnwrittenPrompt object at 0x7f5834c59450>
+error = NativePiUnavailable('Native Pi emitted an unexpected preflight event')
+attestation = PendingAttestation(expected=None, request=GetState(id='agent-comms-preflight-eac956ae9184ce3aa3759b608e11891e'))
+
+    def raise_native_failure(self, error, attestation):
+        from .native_pi import NativePiInputNotSent
+    
+>       raise NativePiInputNotSent(error, attestation) from error
+E       agent_comms.native_pi.NativePiInputNotSent: Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event
+E       Original native child stderr:
+E       (empty)
+
+src/agent_comms/turn_admission.py:65: NativePiInputNotSent
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f583558d5c0>
+damage = 'wrong_model'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+>       with pytest.raises(expected, match=reason):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'model_changed: Selected first source model differs'
+E         Actual message: 'Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event\nOriginal native child stderr:\n(empty)'
+
+tests/test_native_pi.py:834: AssertionError
+_ test_selected_first_source_get_state_fences_runtime_before_raw_prompt[wrong_session] _
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f5834c5bed0>
+
+    async def complete(self) -> NativeTurnResult:
+        async with AsyncExitStack() as custody:
+            custody.callback(self.startup.release)
+            await self.open_tools(custody)
+            self.native = await self.native_session.open(
+                self.launch,
+                self.session_file,
+                reuse=False,
+                require_input_id=True,
+                startup=self.startup,
+                finish_event=self.finish_event,
+                watchdog=self.watchdog,
+            )
+            custody.push_async_callback(self.native_session.close)
+            await custody.enter_async_context(self.native.failures())
+            custody.callback(self.native.reader.pending.cancel_all)
+            if self.tool_socket is not None:
+                self.tool_socket.expected_pid = self.native.proc.pid
+            self.watchdog.reading(True)
+            try:
+                try:
+>                   await self.attest()
+
+src/agent_comms/tracked_turn.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f5834c5bed0>
+
+    async def attest(self) -> None:
+        request = self.native.attestation.request
+        await self.send(request)
+        event = await self.next_event()
+        if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
+>           raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
+E           agent_comms.native_pi.NativePiUnavailable: Native Pi emitted an unexpected preflight event
+
+src/agent_comms/tracked_turn.py:253: NativePiUnavailable
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5834c558d0>
+damage = 'wrong_session'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+        with pytest.raises(expected, match=reason):
+>           await TrackedTurnSession.execute(
+                tmp_path,
+                input_id=INPUT_ID,
+                prompt="never send this fake prompt",
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                maintenance_root=tmp_path,
+                prompt_send_boundary=boundary,
+                fresh_selected=fresh,
+            )
+
+tests/test_native_pi.py:835: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/tracked_turn.py:149: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/tracked_turn.py:187: in complete
+    self.admission.raise_native_failure(error, self.native.attestation)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_admission.UnwrittenPrompt object at 0x7f5834ce4a50>
+error = NativePiUnavailable('Native Pi emitted an unexpected preflight event')
+attestation = PendingAttestation(expected=None, request=GetState(id='agent-comms-preflight-2ff3d50938c54c1218e8b612b24ef61b'))
+
+    def raise_native_failure(self, error, attestation):
+        from .native_pi import NativePiInputNotSent
+    
+>       raise NativePiInputNotSent(error, attestation) from error
+E       agent_comms.native_pi.NativePiInputNotSent: Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event
+E       Original native child stderr:
+E       (empty)
+
+src/agent_comms/turn_admission.py:65: NativePiInputNotSent
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5834c558d0>
+damage = 'wrong_session'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+>       with pytest.raises(expected, match=reason):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'session_changed: Selected first source session identity differs'
+E         Actual message: 'Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event\nOriginal native child stderr:\n(empty)'
+
+tests/test_native_pi.py:834: AssertionError
+_ test_selected_first_source_get_state_fences_runtime_before_raw_prompt[changed_inode] _
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f5834c5b9d0>
+
+    async def complete(self) -> NativeTurnResult:
+        async with AsyncExitStack() as custody:
+            custody.callback(self.startup.release)
+            await self.open_tools(custody)
+            self.native = await self.native_session.open(
+                self.launch,
+                self.session_file,
+                reuse=False,
+                require_input_id=True,
+                startup=self.startup,
+                finish_event=self.finish_event,
+                watchdog=self.watchdog,
+            )
+            custody.push_async_callback(self.native_session.close)
+            await custody.enter_async_context(self.native.failures())
+            custody.callback(self.native.reader.pending.cancel_all)
+            if self.tool_socket is not None:
+                self.tool_socket.expected_pid = self.native.proc.pid
+            self.watchdog.reading(True)
+            try:
+                try:
+>                   await self.attest()
+
+src/agent_comms/tracked_turn.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f5834c5b9d0>
+
+    async def attest(self) -> None:
+        request = self.native.attestation.request
+        await self.send(request)
+        event = await self.next_event()
+        if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
+>           raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
+E           agent_comms.native_pi.NativePiUnavailable: Native Pi emitted an unexpected preflight event
+
+src/agent_comms/tracked_turn.py:253: NativePiUnavailable
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5834c57bd0>
+damage = 'changed_inode'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+        with pytest.raises(expected, match=reason):
+>           await TrackedTurnSession.execute(
+                tmp_path,
+                input_id=INPUT_ID,
+                prompt="never send this fake prompt",
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                maintenance_root=tmp_path,
+                prompt_send_boundary=boundary,
+                fresh_selected=fresh,
+            )
+
+tests/test_native_pi.py:835: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/tracked_turn.py:149: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/tracked_turn.py:187: in complete
+    self.admission.raise_native_failure(error, self.native.attestation)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_admission.UnwrittenPrompt object at 0x7f5834cf55b0>
+error = NativePiUnavailable('Native Pi emitted an unexpected preflight event')
+attestation = PendingAttestation(expected=None, request=GetState(id='agent-comms-preflight-04e07de5cf72492c4e1372e9e2f2448f'))
+
+    def raise_native_failure(self, error, attestation):
+        from .native_pi import NativePiInputNotSent
+    
+>       raise NativePiInputNotSent(error, attestation) from error
+E       agent_comms.native_pi.NativePiInputNotSent: Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event
+E       Original native child stderr:
+E       (empty)
+
+src/agent_comms/turn_admission.py:65: NativePiInputNotSent
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5834c57bd0>
+damage = 'changed_inode'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+>       with pytest.raises(expected, match=reason):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'saved inode changed'
+E         Actual message: 'Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event\nOriginal native child stderr:\n(empty)'
+
+tests/test_native_pi.py:834: AssertionError
+_ test_selected_first_source_get_state_fences_runtime_before_raw_prompt[valid_preflight] _
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f5834ce6fd0>
+
+    async def complete(self) -> NativeTurnResult:
+        async with AsyncExitStack() as custody:
+            custody.callback(self.startup.release)
+            await self.open_tools(custody)
+            self.native = await self.native_session.open(
+                self.launch,
+                self.session_file,
+                reuse=False,
+                require_input_id=True,
+                startup=self.startup,
+                finish_event=self.finish_event,
+                watchdog=self.watchdog,
+            )
+            custody.push_async_callback(self.native_session.close)
+            await custody.enter_async_context(self.native.failures())
+            custody.callback(self.native.reader.pending.cancel_all)
+            if self.tool_socket is not None:
+                self.tool_socket.expected_pid = self.native.proc.pid
+            self.watchdog.reading(True)
+            try:
+                try:
+>                   await self.attest()
+
+src/agent_comms/tracked_turn.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.tracked_turn.TrackedTurnSession object at 0x7f5834ce6fd0>
+
+    async def attest(self) -> None:
+        request = self.native.attestation.request
+        await self.send(request)
+        event = await self.next_event()
+        if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
+>           raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
+E           agent_comms.native_pi.NativePiUnavailable: Native Pi emitted an unexpected preflight event
+
+src/agent_comms/tracked_turn.py:253: NativePiUnavailable
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/source-focus03/test_selected_first_source_get4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5834c849f0>
+damage = 'valid_preflight'
+
+    @pytest.mark.parametrize(
+        "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
+    )
+    async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
+        tmp_path: Path, monkeypatch, damage: str
+    ) -> None:
+        """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+        )
+        received = tmp_path / "preflight.json"
+        start = AttachedChild.start
+        launched: list[tuple[str, ...]] = []
+        launch_envs: list[dict[str, str]] = []
+        boundary_seen = False
+    
+        async def launch(argv, **kwargs):
+            launched.append(argv)
+            launch_envs.append(kwargs["env"])
+            if damage == "changed_inode":
+                # Keep the original inode allocated; unlink may immediately reuse it.
+                fresh.path.rename(fresh.path.with_suffix(".original"))
+                fresh.path.write_text('{"type":"session","id":"replacement"}\n')
+                fresh.path.chmod(0o600)
+            else:
+                for row in (
+                    {
+                        "type": "model_change",
+                        "id": "f0f0f001",
+                        "parentId": fresh.bootstrap_leaf_id,
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "provider": "openrouter",
+                        "modelId": "z-ai/glm-5.3-flash",
+                    },
+                    {
+                        "type": "thinking_level_change",
+                        "id": "f0f0f002",
+                        "parentId": "f0f0f001",
+                        "timestamp": "2026-09-26T00:00:00.000Z",
+                        "thinkingLevel": "high",
+                    },
+                ):
+                    with fresh.path.open("a") as stream:
+                        stream.write(json.dumps(row, separators=(",", ":")) + "\n")
+            state = {
+                "type": "response",
+                "id": "native-capability",
+                "command": "get_state",
+                "success": True,
+                "data": {
+                    "nativeInputProofCapability": CAPABILITY,
+                    "sessionId": fresh.session_id,
+                    "sessionFile": str(fresh.path),
+                    "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+                    "thinkingLevel": "high",
+                    "messageCount": 0,
+                    "pendingMessageCount": 0,
+                    "isStreaming": False,
+                    "isCompacting": False,
+                },
+            }
+            data = state["data"]
+            if damage == "low_runtime":
+                data["thinkingLevel"] = "low"
+            elif damage == "wrong_model":
+                data["model"]["id"] = "unreviewed/model"
+            elif damage == "wrong_session":
+                data["sessionId"] = "other-session"
+            program = (
+                "import json,sys; from pathlib import Path; "
+                "request=json.loads(sys.stdin.readline()); "
+                f"Path({str(received)!r}).write_text(json.dumps(request)); "
+                f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            )
+            return await start((sys.executable, "-u", "-c", program), **kwargs)
+    
+        class BoundaryReachedError(RuntimeError):
+            pass
+    
+        def boundary(_file, revision):
+            nonlocal boundary_seen
+            assert _file == fresh.path
+            assert revision == fresh.verify_selected_startup()
+            boundary_seen = True
+            raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
+    
+        async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
+            assert timeout > 0
+            admission()  # The real raw writer is deliberately never entered.
+    
+        monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
+        monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        )
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
+        monkeypatch.setattr(
+            "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
+        )
+        reason = (
+            "fake prewrite boundary"
+            if damage == "valid_preflight"
+            else "saved inode changed" if damage == "changed_inode"
+            else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+                  "wrong_model": "model_changed: Selected first source model differs",
+                  "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
+        )
+        expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
+        with pytest.raises(expected, match=reason):
+>           await TrackedTurnSession.execute(
+                tmp_path,
+                input_id=INPUT_ID,
+                prompt="never send this fake prompt",
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                maintenance_root=tmp_path,
+                prompt_send_boundary=boundary,
+                fresh_selected=fresh,
+            )
+
+tests/test_native_pi.py:835: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/tracked_turn.py:149: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/tracked_turn.py:187: in complete
+    self.admission.raise_native_failure(error, self.native.attestation)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.turn_admission.UnwrittenPrompt object at 0x7f5834cf7e10>
+error = NativePiUnavailable('Native Pi emitted an unexpected preflight event')
+attestation = PendingAttestation(expected=None, request=GetState(id='agent-comms-preflight-2092acff56b927e480da2cdfb8a5d78a'))
+
+    def raise_native_failure(self, error, attestation):
+        from .native_pi import NativePiInputNotSent
+    
+>       raise NativePiInputNotSent(error, attestation) from error
+E       agent_comms.native_pi.NativePiInputNotSent: Native Pi failed before prompt admission; input not sent: Native Pi emitted an unexpected preflight event
+E       Original native child stderr:
+E       (empty)
+
+src/agent_comms/turn_admission.py:65: NativePiInputNotSent
+=========================== short test summary info ============================
+FAILED tests/test_native_pi.py::test_selected_first_source_get_state_fences_runtime_before_raw_prompt[low_runtime]
+FAILED tests/test_native_pi.py::test_selected_first_source_get_state_fences_runtime_before_raw_prompt[wrong_model]
+FAILED tests/test_native_pi.py::test_selected_first_source_get_state_fences_runtime_before_raw_prompt[wrong_session]
+FAILED tests/test_native_pi.py::test_selected_first_source_get_state_fences_runtime_before_raw_prompt[changed_inode]
+FAILED tests/test_native_pi.py::test_selected_first_source_get_state_fences_runtime_before_raw_prompt[valid_preflight]
+5 failed, 57 passed, 2 skipped in 2.44s

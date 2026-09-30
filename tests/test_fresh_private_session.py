@@ -430,3 +430,34 @@ def test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_select
             fresh_session=fresh,
             admission_generation=3,
         )
+
+
+@pytest.mark.parametrize(
+    "mutation, reason",
+    [
+        ({"model": None}, "model_changed"),
+        ({"model": {"provider": "other", "id": "z-ai/glm-5.3-flash"}}, "model_changed"),
+        ({"messageCount": 1}, "messages_present"),
+        ({"pendingMessageCount": 1}, "pending_messages"),
+        ({"isStreaming": True}, "streaming"),
+        ({"isStreaming": None}, "streaming"),
+        ({"isCompacting": True}, "compacting"),
+        ({"isCompacting": None}, "compacting"),
+    ],
+)
+def test_enrollment_refuses_nonempty_or_unattested_runtime(tmp_path, mutation, reason):
+    from agent_comms.pi_payloads import StateData
+
+    fresh = create_fresh_private_session(
+        tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+    )
+    observed = {
+        "sessionId": fresh.session_id,
+        "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+        "thinkingLevel": "high", "messageCount": 0, "pendingMessageCount": 0,
+        "isStreaming": False, "isCompacting": False,
+    }
+    fresh.require_runtime(StateData.from_wire(observed))
+    with pytest.raises(NativePiUnavailable, match=reason):
+        fresh.require_runtime(StateData.from_wire(observed | mutation))
+    fresh.verify_prewrite()
