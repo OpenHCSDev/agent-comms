@@ -25,7 +25,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch, private_nk_launch
+from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
@@ -36,7 +36,7 @@ tmp_path = private_root_fixture
 def test_explicit_owner_entrypoint_requires_exact_root_and_package(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    assert private_nk_launch(root, {}) is None  # marker alone never enables a worker
+    assert PrivateNkLaunch.from_environment(root, {}) is None  # marker alone never enables a worker
     for values in (
         {ROOT_ID_ENV: root_id},
         {PACKAGE_ENV: str(tmp_path)},
@@ -45,9 +45,12 @@ def test_explicit_owner_entrypoint_requires_exact_root_and_package(tmp_path, mon
         {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path), "PI_PROMPT": "legacy"},
     ):
         with pytest.raises((PublicationActivationBlocked, IdentityConflict, ValueError)):
-            private_nk_launch(root, values)
-    exact = private_nk_launch(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
+            launch = PrivateNkLaunch.from_environment(root, values)
+            if launch is not None:
+                launch.validate()
+    exact = PrivateNkLaunch.from_environment(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
     assert exact is not None
+    exact.validate()
     assert exact.wire_root_id == root_id and exact.native_package == tmp_path
     assert exact.validated_root == root
     assert exact.selected_tool_intent is None
@@ -61,7 +64,7 @@ def test_private_claim_root_keeps_normal_coding_tools(tmp_path, monkeypatch):
     comms = Comms(root)
     root_id = comms.messaging.initialize_private_initial_protocol()
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    selected = private_nk_launch(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
+    selected = PrivateNkLaunch.from_environment(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
     assert selected is not None
     assert selected.selected_tool_intent is None
 
@@ -118,6 +121,26 @@ def test_environment_launch_uses_selected_root_not_cwd(tmp_path, monkeypatch):
     assert selected.native_package == tmp_path and seen == [tmp_path]
     assert selected.validated_root == root
     assert os.environ["AGENT_COMMS_ROOT"] == str(root)
+
+
+def test_thread_observation_does_not_admit_an_untrusted_native_owner(tmp_path, monkeypatch):
+    root, root_id, comms, _, _ = _root(tmp_path)
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(root))
+    monkeypatch.setenv(ROOT_ID_ENV, root_id)
+    monkeypatch.setenv(PACKAGE_ENV, str(tmp_path))
+
+    def rejected_package(_package):
+        raise PublicationActivationBlocked("Reviewed package differs")
+
+    monkeypatch.setattr(cohort_foreground, "_trusted_package", rejected_package)
+    name = next(iter(comms.registry.all_threads()))
+    observed = wire(root)
+    assert observed.views.thread_detail(name, include_pending=False)["name"] == name
+    with pytest.raises(PublicationActivationBlocked, match="Reviewed package differs"):
+        private_nk_entrypoint.private_nk_from_environment()
+    with pytest.raises(PublicationActivationBlocked, match="Reviewed package differs"):
+        observed.owners.restart_environment({})
+    assert not (root / "native-sessions").exists()
 
 
 def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_path, monkeypatch):
