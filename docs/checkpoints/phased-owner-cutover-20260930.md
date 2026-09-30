@@ -100,8 +100,80 @@ any worker started. The acceptance will use the authentic original e36 package
 and another verified copy of that same artifact as the new route path, proving
 publication and launch coherence without weakening native validation.
 
-Installed acceptance remains pending at this source checkpoint. Public root,
-route, owners and historical UNKNOWN remain untouched.
+## Installed affected-path acceptance
+
+Final private run06 passed against a noneditable candidate wheel on authentic000
+dependencies. All288 production Python files are byte-equal to source
+254311654b88ded2a817ede29ceaff26f44f6f0f, including normally integrated443/444.
+Sanitized persistent receipt: evidence/phased-owner-cutover/installed-receipt.json.
+
+The continuous provider-free journey starts two real original000 workers with
+different argument lists/config directories/credential markers and a protected
+blocked goal. One is renamed. A busy original rejects before any fence, stop,
+route or document mutation. The successful batch retains all settings in RAM,
+fences all originals before the first signal, verifies all OS exits, transforms
+all three registry Threads and the one historical release-receipt Thread, then
+publishes the expected route to a DIFFERENT verified e36 artifact path before
+either replacement launch. Both real target workers complete runtime subscription
+attachment, retain exact Thread fields except their new process identities, and
+have no native child or input admission. Both are retired at fixture teardown.
+
+Original wire, protected native fixture bytes and reserved UNKNOWN input bytes
+are hash-identical. This small provider-free batch is the actual format/lifecycle
+boundary proof; it is not another41MB/native model/UI gate. The accepted225
+original41MB read-only capture and earlier436 native/UI gates are not repeated.
+The existing ordinary same-format restart/stop caller check also passed1/1 in
+5.49s on candidate6eba; final source closes the moved option/status queries via
+the original request owner, existing role/active capabilities and the stopped
+ThreadStatus member. No status flag, cache or last-owner mirror is introduced.
+
+An installed attempt exposed an owner-mode failure in the fixture's disposable
+native copy after format installation. Source/proof and stopped private batch
+were preserved. The operator now calls the publisher's SAME original native
+trust boundary before any signal, and the copy's container is700. Original000
+still refuses4ab instead of accepting a mismatched manifest. Subprocess failures
+retain their original stderr cause at one shared outside-src effect boundary.
+Private preimages include registry, release receipts and the expected route.
+Do not retry a partially installed operation. Recovery requires explicit review;
+uncertain guarded writes may refuse rollback, and publication/launch failures
+retain the target-format stopped state without automatic resume.
+
+Bounded same-run production ratchet passes with zero increases. Census has zero
+StringDispatch/TypeSwitch subject or arm growth, zero boolean-chain/codec growth,
+and three fewer foreign absence probes. Source delta from normally integrated
+main:76 deleted,245 added lines, including202 lines of acquired phase resources.
+The prior restart body is deleted; each installation member consumes the one
+phase procedure. Fixture/tool/docs counts are separate from production counts.
+Raw private traces and preimages remain under .phase-fixtures/run01..06.
+Public root, route, owners and historical UNKNOWN remain untouched.
+
+## Parent-only future paired operator
+
+Run ONCE from the final reviewed target installation after the parent's coherent
+paired gates and quiet ingress decision. The original interpreter is the actual
+current000 producer, not retired720. Use a fresh owner-only persistent receipt
+directory. Target dependencies/runtime environment belong to that installation;
+do not point its PYTHONPATH at another source cohort.
+
+```sh
+TARGET/bin/python /home/ts/wt/comms-phased-owner-cutover-20260930/tools/cutover/restart_thread_format.py \
+  --original-python /home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python \
+  --root /var/tmp/agent-comms-live-20260927-wzjtqhza \
+  --root-id e206f3766e60451a989ca34df0e2a94b \
+  --native-package /home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent \
+  --route-path /home/ts/.local/state/agent-comms/active-route.json \
+  --receipt PRIVATE_FRESH_DIRECTORY/c3-owner-cutover.json
+```
+
+All original typed capture, exact process/interpreter checks, per-owner RAM
+settings, atomic all-idle fencing, central stop-all, original writer OFDs,
+complete prevalidation, private preimages, both carrier publications, guarded
+route EX expected-value publication and target launch are automatic. No separate
+stop/start loop, credential file, production converter or route JSON writer.
+The operation does not publish launcher symlinks; parent retains that release
+authority. No new native/proof/wire/input format or public phase ABI reset is
+declared here. The only durable format operation retires the C3 Thread member
+from both carriers. Keep originals/UNKNOWN and all historical source proofs.
 
 ## Receiving225 private-fixture capture crossing
 
