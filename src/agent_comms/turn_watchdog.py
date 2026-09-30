@@ -120,7 +120,7 @@ class ProgressWatchdog:
         attempt: tuple[int | None, int | None] | None = None,
     ) -> events.TurnState:
         replay_safe = not (
-            session.prompt_dispatched
+            session.admission.dispatched
             or self.tool_ever_started
             or self.output_started
             or session.inputs.started
@@ -133,7 +133,7 @@ class ProgressWatchdog:
             phase=event_phase or self.phase.declared_name,
             retryable=replay_safe,
             replay_safe=replay_safe,
-            side_effects_possible=session.prompt_dispatched
+            side_effects_possible=session.admission.dispatched
             or self.tool_ever_started
             or session.inputs.started
             or self.compaction_started,
