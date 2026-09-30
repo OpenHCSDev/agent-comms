@@ -1,0 +1,11 @@
+{
+  "accepted_source": "1de10e3f910a649b152120e866f30c832737a885",
+  "merged_source": "0f6380536b87918cc5eec7ec4317266e4bbb4010",
+  "exact_equal": [
+    "src",
+    "pyproject.toml",
+    "uv.lock"
+  ],
+  "fresh_gate_runs": 0,
+  "acceptance": "parent reviewed245 installed84.811s16PASS, preserved raw physical/source proof; no new performance claim"
+}

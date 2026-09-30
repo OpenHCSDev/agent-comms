@@ -1,0 +1,50 @@
+{
+  "state": "READY-IMMUTABLE-PAIRED-STAGE-AWAITING-PARENT-ACTIVATION",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "0f6380536b87918cc5eec7ec4317266e4bbb4010",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "frozen_packages": 68,
+  "source_proof": {
+    "agent-comms": {
+      "pin": "6feb634ba184d94d763028406152fff07027cccc",
+      "python_files_equal": 291,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "0f6380536b87918cc5eec7ec4317266e4bbb4010",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-viewport-native-cost-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "native_full_trust": true,
+  "metadata_published_from_same_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3742518,
+        "start_ticks": 26852879,
+        "returncode": 0
+      }
+    ]
+  },
+  "builds": 1,
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "paid_calls": 0,
+  "native_inputs": 0,
+  "accepted_scope": "Packaging/source provenance/import/trust admission only; 245 source1de exact accepted physical84s16PASS production equals merged0f. Previous whole453454242 and ordinarydefault gate already accepted; no backend/native delta. Parent owns UI-only defaults and Einstein ordinarydefault check.",
+  "remaining_scope": "No full eleven-API installed claim or whole latency/performance closure. UI-only default publication and ordinarydefault acceptance owned by parent/Einstein. No backendrestart/route/TS/schema change; totalCPU target remains open."
+}
