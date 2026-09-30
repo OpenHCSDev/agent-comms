@@ -92,8 +92,8 @@ refactoring scopes below.
 
 ## Current fleet and resource constraint
 
-Six Codex workers carry active work: Heisenberg217, Arendt435, Schrodinger215,
-Mendel430/421/422, Kepler221 and Einstein434. Einstein now owns actual native
+Six Codex workers carry active work: Heisenberg217, Arendt436, Schrodinger215,
+Mendel430/421/422, Kepler221 and Einstein434/437. Einstein now owns actual native
 admission contention and the malformed provider-error boundary. Installed native
 journeys run serially. Latest resource check reports11.7GiB available RAM,
 19.8GiB free home storage and13.3GiB swap used; headroom remains a warning.
@@ -103,10 +103,12 @@ The next installation is prioritized for usage-blocking recovery, lifecycle,
 delivery and deadline defects. Final warm first paint and the remaining broader
 performance targets do not hold a useful verified checkpoint, and remain tracked.
 
-Next native fixture ownership: Schrodinger215 consumes Mendel430 original-source
-checkpoint; Kepler214 follows its released slot. Arendt433 continues nominal
-identity closure, Mendel421/216 and422 remain open, and Heisenberg217 owns full
-reader/focus/resource continuation. These are active unfinished scopes.
+Current native fixture ownership: Schrodinger215 consumes Mendel430 original-source
+and Einstein434 admission/error checkpoints, using the actual configured provider
+and native forks of the original41MB history. Arendt436 owns original-turn resource
+and settlement closure after435; Mendel421/216 and422 remain open. Heisenberg217
+owns full reader/focus/resource continuation, with Kepler221 contributing source
+preparation and video/profile assessment. These are active unfinished scopes.
 
 ## Launch admission followthrough
 
@@ -196,3 +198,36 @@ that delivery or scrolling is fixed. Defer global cutover to the coherent tested
 usage-blocking pair; use one canonical batch, fresh matching connections and
 preserve all durable provenance. The completed220 worktree was removed only
 after merge, source-clean verification and absence of process references (44MiB).
+
+## Combined reader candidate failed actual acceptance
+
+The noneditable staged pair Core72062939/Toad88792e41/Textual412/native4ab
+is at runtime-reader-preparation-candidate-20260929. Default launchers and the
+original owner remain unchanged. The exact68-package installation input is
+reader-preparation-candidate-requirements.txt in the integration evidence.
+
+Heisenberg recorded the original nra-architecture through the actual installed
+candidate, held PageUp/PageDown/reverse/End and15s idle. PageDown blanked the
+entire viewport, reverse temporarily recovered it, and End left it blank through
+idle. An unprofiled repeat also failed, so profiling alone does not explain the
+failure. Both runs cleaned their owned processes, submitted no prompt and left
+the original process unchanged. The947-sample profile had zero sampling errors;
+idle UI CPU remained approximately59%. No scrolling or idle-CPU success is claimed.
+The evidence is committed in Toad217/d8ceee98 under evidence/reader-workspace-217.
+
+Heisenberg owns the existing viewport/body/extent diagnosis. Kepler's recorder
+uses the existing live geometry/SVG export to correlate the blank frames with
+source, prepared body and scroll extent. They do not create another semantic
+cache or geometry store. The22_17_47 tab-close crash remains a separate useful
+checkpoint: dispose the live presentation before widget removal, and never
+capture a removed editor during final disposal. Actual installed tab-close and
+application-shutdown acceptance is required before merging that checkpoint.
+
+Core436/f955ee52 is a scoped source checkpoint: the original exception chain is
+recorded privately before a safe public error, and child joining survives either
+publication or diagnostic failure. It is integrated into434/bd18e9c3 for the next
+real paired gate. The rejected nullable-resource cleanup was not committed;
+the remaining whole-turn resource work stays with Arendt436. Core437 now owns
+canonical automatic/manual compaction progress and the remaining native latency
+investigation; the controlled429 scheduling receipt does not close the user's
+six-minute compaction observation.
