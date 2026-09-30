@@ -70,6 +70,42 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     assert row.unresolved  # prior snapshot is immutable and unchanged
 
 
+def test_original_native_user_receipts_include_group_and_corrected_final_only(tmp_path):
+    from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
+    from agent_comms.turn_lease import TurnLeaseFence
+
+    lease = TurnLeaseFence(TurnIdentity(ThreadIncarnation('worker', 123.0), 5), 'turn', 7)
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    for key, sequence, text in (('bus:1', 1, 'First original'), ('bus:2', 2, 'Second original')):
+        assert store.record(key, seq=sequence, owner='worker', admission=7,
+                            target='worker', text=text)
+        assert store.bind(key, admission=7, turn_id='turn', native_id='a' * 32,
+                          text='Actual grouped native user')
+        assert store.started(key, turn_id='turn', native_id='a' * 32,
+                             text='Actual grouped native user')
+    assert store.record('acp:correction', seq=None, owner='worker', admission=7,
+                        target='worker', text='Distinct correction')
+    assert store.bind('acp:correction', admission=7, turn_id='turn', native_id='b' * 32,
+                      text='Actual corrected native user')
+    assert store.started('acp:correction', turn_id='turn', native_id='b' * 32,
+                         text='Actual corrected native user')
+    document = store.read()
+    group = document.started_for_native(lease, 'a' * 32, 'Actual grouped native user')
+    assert {row.key for row in group} == {'bus:1', 'bus:2'}
+    assert all(row is document.rows[row.key] for row in group)
+    assert document.started_for_native(lease, 'b' * 32, 'Actual corrected native user') == (
+        document.rows['acp:correction'],)
+    assert not document.started_for_native(replace(lease, turn_id='foreign'), 'a' * 32,
+                                           'Actual grouped native user')
+    assert not document.started_for_native(replace(lease, admission_generation=5), 'a' * 32,
+                                           'Actual grouped native user')
+    assert not document.started_for_native(lease, 'a' * 32, 'Foreign input body')
+    assert not document.started_for_native(lease, 'c' * 32, 'Actual grouped native user')
+    assert not document.started_for_native(replace(lease, identity=replace(
+        lease.identity, incarnation=ThreadIncarnation('foreign', 123.0))), 'a' * 32,
+        'Actual grouped native user')
+
+
 @pytest.mark.parametrize(
     "damage", [{}, {"rows": {}}, {"version": True, "rows": {}}, {"version": 1, "rows": []}]
 )
