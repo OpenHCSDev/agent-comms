@@ -55,10 +55,13 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert send.type is MessageType.INFO
     restart = parse(["restart", "--all"])
     assert restart.all_ is True
-    assert restart.agent_bin == "/a pi"
-    assert restart.agent_args == ["--label", "two words"]
+    assert restart.agent_bin is None
+    assert restart.agent_args is None
+    explicit = parse(["restart", "--all", "--agent-bin", "/a pi", "--agent-args", '--label "two words"'])
+    assert explicit.agent_bin == "/a pi"
+    assert explicit.agent_args == ["--label", "two words"]
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/next pi")
-    assert build_parser().parse_args(["restart", "--all"]).agent_bin == "/next pi"
+    assert build_parser().parse_args(["restart", "--all"]).agent_bin is None
 
 
 def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, capsys, monkeypatch):
