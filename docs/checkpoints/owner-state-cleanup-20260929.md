@@ -276,3 +276,16 @@ with the explicit native-package fixture environment).
 This is an in-progress source checkpoint. Paired216 installed goal/menu/native
 acceptance is required next; source tests do not close C3 or authorize activation.
 Scratch ownership and preserved original proofs remain as declared above.
+
+Installed20079652 wheel + reviewed native615 now passes the two retained native
+ACP goal failure journeys in31.95s. One preserves failure/UNKNOWN and permits
+only explicit Retry/new continuation; the other pauses through the actual owner
+command at the held localhost response, preserves that Goal source and journal
+through cold reopen, and remains passive. Original native history is a retained
+prefix; the earlier unrelated UNKNOWN row is unchanged. Native/owner resources
+are retired by the existing fixtures. Sanitized evidence is in
+`evidence/c3-goal-owner/native-receipt.json`; full private originals stay under
+the declared scratch run02 root. Actual deleted production lines:104, added22.
+This is installed Core/native/ACP acceptance, not completed paired216 mounted
+UI acceptance. The first mismatched native614 preflight was rejected before
+launch and is preserved. No production restriction was bypassed or reset.
