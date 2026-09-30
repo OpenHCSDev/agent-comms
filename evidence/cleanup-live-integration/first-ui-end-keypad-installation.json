@@ -1,0 +1,29 @@
+{
+  "state": "installed-default-physical-verification-pending",
+  "installed_at": "2026-09-30T10:19:04.635736+00:00",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930",
+  "pins": {
+    "agent-comms": "000a31c562b6d048e26e288b24fcd3f1ac64f803",
+    "batrachian-toad": "9354b391880980c9c987f421e16b9a1fd59b3f3b",
+    "textual": "4e8d13d21bf98e4ad52e610277d7d06c9035ccfa"
+  },
+  "previous_links": {
+    "/home/ts/.local/bin/agent-comms": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms",
+    "/home/ts/.local/bin/agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-acp",
+    "/home/ts/.local/bin/agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-agent",
+    "/home/ts/.local/bin/agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-nk-foreground",
+    "/home/ts/.local/bin/toad": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/toad"
+  },
+  "current_links": {
+    "/home/ts/.local/bin/agent-comms": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/agent-comms",
+    "/home/ts/.local/bin/agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/agent-comms-acp",
+    "/home/ts/.local/bin/agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/agent-comms-agent",
+    "/home/ts/.local/bin/agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/agent-comms-nk-foreground",
+    "/home/ts/.local/bin/toad": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/toad"
+  },
+  "active_route_unchanged": true,
+  "native_owner_restarts": 0,
+  "provider_calls": 0,
+  "accepted_preflight": "OpenHCSDev/toad PR231 persistent-preflight.json",
+  "scope": "Source-publication fix retained; adds End continuity and native application keypad protocol. Current-main C3, CPU and repeated-header followups not installed."
+}

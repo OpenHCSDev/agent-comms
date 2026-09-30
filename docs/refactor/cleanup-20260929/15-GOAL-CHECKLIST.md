@@ -773,3 +773,32 @@ resume/clear or failed original attempt was invoked. Existing authorized
 source fixes, worker coordination and the reviewed install have continued
 without replaying uncertain input. Completion remains unfinished, and a
 tracker status change requires the user's goal controls.
+
+### Header/keypad merges and first UI installation
+
+Toad229 merged fda1b5d2 after the actual 39-chunk native journey produced one
+answer/header. Its shared publication owner joins accepted retirement before
+propagating cancellation; matched real Snapshot/Checkpoint red/green cases
+closed the pre-prune cancellation gap. Four production lines were deleted.
+This current-main checkpoint is not installed in the first UI cohort.
+
+Textual14 merged 2e49cb83. The existing terminal Driver owns application-keypad
+entry/exit, used by full and inline Linux drivers. Actual physical keystrokes
+changed abcdef to abcf with Delete rather than opening Help, in both agent and
+channel editors. The unrelated whole history-focus assertion failed because
+the physical click selected an outbound link; that failure remains preserved
+and Kepler/Heisenberg retain the correct native-region focus follow-up.
+
+At 2026-09-30T10:19:04Z the parent switched the five default executable links to
+runtime-first-ui-end-keypad-20260930. It contains reviewed source publication
+173 plus End224, normally composed as Toad9354, Core000, Textual4e8 and native
+e36. All 68 frozen dependencies and the mechanical runtime/native preflight
+passed. Route and native owners are unchanged: no restart or input replay.
+This partial release excludes current-main C3/CPU/header follow-ups and does
+not restore its old Core pin to main. Draft231 tracks the release composition.
+
+Installation receipt: evidence/cleanup-live-integration/first-ui-end-keypad-installation.json.
+Kepler owns bounded actual normal-launcher startup/Delete/End verification
+without an override or provider call. Installed is not yet live-verified.
+Independent227 warm history/adaptive scroll,228 fork-task/tags,230 action
+ownership,442 phased C3 cutover and443 native startup work continue.
