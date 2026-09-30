@@ -11,7 +11,7 @@ import pytest
 from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_identity import SelectedCommitReference
 from agent_comms.compaction_journal import CompactionJournal
-from agent_comms.compaction_outcomes import CompactionOutcomeTranscript
+from agent_comms.transcript_events import CompactionOutcomeTranscript
 from agent_comms.compaction_records import CompactionOperation
 from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, RetiredUnknownSummary
 from agent_comms.coordination_errors import StaleRevision

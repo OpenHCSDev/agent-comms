@@ -16,15 +16,8 @@ from .thread_identity import ThreadIncarnation
 from .registry_document import RegistrySnapshot
 from .selected_source import SessionRevision
 from .coordination_errors import StaleRevision
-from .transcript_events import NoticeTranscript
+from . import transcript_events
 from .typed_table import TypedRow
-
-
-@dataclass(frozen=True, kw_only=True)
-class CompactionOutcomeTranscript(NoticeTranscript):
-    """An original operation's notice, with unrecorded event time left unrecorded."""
-
-    identity: SummaryOperationIdentity
 
 
 @dataclass(frozen=True)
@@ -69,8 +62,8 @@ class SelectedCompactionOutcome:
         state: SummaryOutcome = self.attempt.state
         return state.outcome_text
 
-    def event(self) -> CompactionOutcomeTranscript:
-        return CompactionOutcomeTranscript(text=self.text, identity=self.identity)
+    def event(self) -> transcript_events.CompactionOutcomeTranscript:
+        return transcript_events.CompactionOutcomeTranscript(text=self.text, identity=self.identity)
 
 
 @dataclass(frozen=True)

@@ -2,6 +2,8 @@
 
 import json
 import os
+import subprocess
+import sys
 from dataclasses import replace
 
 import pytest
@@ -19,6 +21,27 @@ from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.selected_source import ManualSource
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
+
+
+def test_fresh_transcript_boundary_decodes_outcome_without_journal_reader():
+    from agent_comms.compaction_identity import SummaryOperationIdentity
+    from agent_comms.transcript_events import CompactionOutcomeTranscript
+
+    original = CompactionOutcomeTranscript(
+        text="Original uncertain compaction", identity=SummaryOperationIdentity("/original/session", "a" * 32),
+    )
+    code = """
+import json, sys
+from agent_comms.acp_extension import decode_updates
+from agent_comms.field_codec import FieldCodec
+from agent_comms.transcript_events import TranscriptEvent
+assert 'agent_comms.compaction_outcomes' not in sys.modules
+event = FieldCodec.decode(TranscriptEvent, json.loads(sys.argv[1]))
+assert event.identity.operation_id == 'a' * 32
+assert event.timestamp is None
+assert 'agent_comms.compaction_outcomes' not in sys.modules
+"""
+    subprocess.run([sys.executable, "-c", code, json.dumps(FieldCodec.encode(original))], check=True)
 
 
 def test_late_original_outcome_invalidates_source_and_pages_once(tmp_path):
@@ -60,7 +83,7 @@ def test_late_original_outcome_invalidates_source_and_pages_once(tmp_path):
     assert page.after.outcome_seq == before_page.after.outcome_seq
     assert not before_page.after.contains(page.after)
     assert not page.after.contains(before_page.after)
-    from agent_comms.compaction_outcomes import CompactionOutcomeTranscript
+    from agent_comms.transcript_events import CompactionOutcomeTranscript
     outcomes = [event for event in page.events if isinstance(event, CompactionOutcomeTranscript)]
     assert [event.identity for event in outcomes] == [original.identity, later.identity]
     assert all(event.timestamp is None for event in outcomes)
