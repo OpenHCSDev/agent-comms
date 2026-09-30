@@ -52,6 +52,67 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
 
 @dataclass(frozen=True)
 class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
+    @classmethod
+    def published_reply(cls, root, reader, user, owner_lookup):
+        """Join the original tracked input to its exact published execution.
+
+        This is a read-only projection of existing records. It never enrolls a
+        native input, installs a schema, advances a cursor, or authorizes retry.
+        The SQLite reader is closed before any wire read or presentation work.
+        """
+        import sqlite3
+        from contextlib import closing
+
+        from .coordination_tables.executions import ExecutionRecord
+        from .coordination_tables.responses import ResponseObligation
+        from .coordinated_runtime_schema import assert_native_runtime_schema
+        from .coordination_response import _assert_response_schema
+        from .errors import RelationViolationError
+        from .message_reference import MessageReference
+        from .recovery_projection import _preflight
+
+        if user.input_id is None:
+            return None
+        database = root / "coordination.sqlite3"
+        failure = _preflight(database)
+        if failure == "missing":
+            return None
+        if failure:
+            raise RelationViolationError("Native reply source has an invalid coordinator")
+        session_id = reader.session_id
+        with closing(
+            sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.05)
+        ) as db:
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA query_only=ON")
+            db.execute("PRAGMA foreign_keys=ON")
+            db.execute("BEGIN")
+            assert_native_runtime_schema(db)
+            _assert_response_schema(db)
+            rows = cls.select(db, where="input_id=? AND stage='full'", parameters=(user.input_id,))
+            if not rows:
+                return None
+            original = rows[0]
+            if (
+                original.owner_lookup,
+                original.session_file,
+                original.session_id,
+                original.session_entry_id,
+            ) != (owner_lookup, str(reader.path), session_id, user.id):
+                return None
+            execution = ExecutionRecord.one(db, execution_id=original.execution_id)
+            if (execution.owner_lookup, execution.lifecycle.current_attempt_ordinal) != (
+                original.owner_lookup,
+                original.attempt_ordinal,
+            ):
+                return None
+            obligation = ResponseObligation.one(db, execution_id=original.execution_id)
+            if obligation is None or not obligation.lifecycle.published:
+                return None
+            return MessageReference(
+                obligation.lifecycle.receipt_seq, obligation.lifecycle.receipt_message_id
+            )
+
     input_id: str = field(
         metadata={
             "sql": Column(

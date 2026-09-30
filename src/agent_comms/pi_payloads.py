@@ -359,6 +359,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     opaque: ClassVar[bool] = False
     assistant: ClassVar[bool] = False
     user: ClassVar[bool] = False
+    final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
     usage: PiUsage | None = None
     input_id: str | None = wire_field("inputId")
@@ -431,6 +432,10 @@ class AbsentMessage(PiMessage):
 
 class AssistantMessage(PiMessage):
     assistant = True
+
+    @property
+    def final_reply(self):
+        return self.stop_reason.successful
 
     async def apply_start(self, session, event):
         session.output.start_message()
