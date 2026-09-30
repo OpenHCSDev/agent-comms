@@ -22,13 +22,18 @@ acceptance is assigned to Einstein and remains pending. Installation receipt:
 
 Parallel outstanding owners and measured progress:
 
-- Mendel, Core450: checkpoint56d362f2 deletes42 production lines and adds44,
-  removes repeated native-package hashing from observation routing and redundant
-  managed-native activity hooks while retaining launch admission verification.
-  Actual private CLI elapsed1.201s→0.479s; seven controls pass. Compiled native
-  extension/actual managed-tool acceptance remains pending. The separate129.898s
-  tool-result-to-assistant gap has no established provider/reasoning attribution.
-  Core450 is neither merged nor installed.
+- Core450: reviewed production56d362f2 removes40 Python/extension lines and adds44,
+  plus2 manifest lines replaced. Observation routing no longer repeatedly hashes
+  the native package, and managed hooks no longer duplicate phase publication.
+  Actual private CLI elapsed1.201s→0.479s; seven controls passed. Compiled native
+  SDK read/edit/read and project guard passed3.734s, with network denied and no
+  provider/native input. Production packaged discovery requires the new reviewed
+  native bundle. Mendel hit model capacity twice; Schrodinger now owns native
+  preparation/pins/discovery in the original450 worktree, retaining source93f4.
+  Stock-build02 assembled a fresh unverified artifact and populated locked npm
+  dependencies; no new bundle is published yet. Mendel owns only the remaining
+  read-only129.898s provider/model interval attribution. Core450 is neither
+  merged nor installed; no original uncertain input is replayed.
 - Schrodinger, Toad238: checkpointdef49f06 replaces5 production lines, releases
   native tab restoration from the awaited goal read, and invalidates the existing
   canonical observation resource instead. Actual original-read lifetime gate
@@ -54,7 +59,7 @@ Parallel outstanding owners and measured progress:
   Toad236 mergedddf180dd at14:41:14Z, reviewedaa0be31, with106 additions/29
   deletions across six production files. Einstein owns next immutable UI stage.
   Cold B first paint, high CPU, transient gaps, Strip reuse and the complete
-  growing-end/warm workflow remain in Heisenberg's main-based follow-up. Kepler
+  growing-end/warm workflow remain in Heisenberg's main-based draft239 at f73aefb1. Kepler
   publishedaa83d98 using existing source-cursor comparisons; old failed captures
   remain preserved and no new provider/input run was needed for observer repair.
 
@@ -74,6 +79,17 @@ pending guarded original-incarnation restoration. This activation preserves
 current settings; it does not claim those historical settings have been restored.
 The full original and second-round refactor/C0/T4/retained-memory requirements
 below remain tracked and unfinished. Older checkpoint sections are history.
+
+## Account-switch continuation
+
+At the owner's request all six Codex subagents were closed and the goal paused
+for the account/CLI switch. The owner resumed; the goal is active and all six
+same-model agents have been resumed with their exact ownership and worktrees.
+Original native inputs are not replayed. Interrupted build/test processes are
+revalidated by their existing handles before further actions. Public native
+owners were not stopped for the account switch. The latest resource check has
+19.2GiB available RAM and20.1GiB home free; swap9.6GiB is a warning, so existing
+bounded builds/tests continue under the explicit proportional-resource rule.
 
 ## Original named PRs
 
