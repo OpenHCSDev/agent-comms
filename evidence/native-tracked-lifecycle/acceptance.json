@@ -73,6 +73,22 @@
     "native_phase_changed": "internal AgentEvent, not a new ACP extension member",
     "current_toad43949_compatible": false,
     "pair_gate_owner": "Arendt425/Toad211; actual warm rename native/ACP/UI acceptance pending at this checkpoint",
-    "activation_owner": "parent432; use Arendt final211 tested source pin; do not activate Core431 alone"
+    "activation_owner": "parent432; use Arendt final211 tested source pin; do not activate Core431 alone",
+    "additional_required_field": "InputStartedUpdate.native_id: str | None (required constructor field); all producers use actual StartedInput proof",
+    "saved_native_input_identity": "UserTranscript.native_id from decoded UserMessage.input_id; paired NativeInputClaim exact snapshot retirement"
+  },
+  "followup425_integration": {
+    "published425": "5e61097a",
+    "merge": "a88162094332e4ff55d5fe70f54f09de4d80ee06",
+    "focused_integration_gate": {
+      "passed": 15,
+      "seconds": 0.91,
+      "files": [
+        "tests/test_native_phase_producer.py",
+        "tests/test_acp_extension.py",
+        "tests/test_acp_queue_contract.py"
+      ]
+    },
+    "tracked_watchdog_native_sources_unchanged": true
   }
 }
