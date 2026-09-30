@@ -133,6 +133,15 @@ class TranscriptReadIdentity:
             FieldCodec.project(self, "content"), sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
 
+    @property
+    def page_bound(self) -> TranscriptCursor:
+        """The original witnessed byte/receipt bound owns page preparation."""
+        return self.through or TranscriptCursor(
+            self.session_file,
+            self.native_revision[1] if self.native_revision is not None else 0,
+            self.receipt_frontier,
+        )
+
     def same_content(self, other: TranscriptReadIdentity) -> bool:
         """Fence content, including the original native publication proof.
 
@@ -173,7 +182,7 @@ class TranscriptRead:
             identity.requested_name,
             before=identity.before,
             after=identity.after,
-            through=identity.through,
+            through=identity.page_bound,
         )
         if not self.content_current():
             raise StaleRevision("Transcript read inputs changed during preparation")
