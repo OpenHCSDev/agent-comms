@@ -1,26 +1,43 @@
 """One installed provider-free original000 -> target C3 retained batch journey."""
 import asyncio
+from contextlib import closing
 from dataclasses import replace
 import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
+import sqlite3
 import sys
 
 from agent_comms.active_route import read_active_route
+from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ObservedProcess, ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.compaction_records import PrivateRawInput
+from agent_comms.coordination_cohort import next_sealed_assignment
+from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
-from seed_thread_retirement_fixture import ready
+from seed_thread_retirement_fixture import historical_reservation, ready
 
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def prompt_count(root):
+    # Every selected raw prompt writer reserves this original marker before
+    # touching stdin. Count original admission records, not observed absence of
+    # a process or a UI event. The saved native journal must also remain absent.
+    with closing(sqlite3.connect((root/'compaction-commits.sqlite3').as_uri()+'?mode=ro', uri=True)) as db:
+        db.execute('PRAGMA query_only=ON')
+        count = len(PrivateRawInput.select(db))
+    assert not list((root/'native-sessions').rglob('*.jsonl'))
+    return count
 
 
 def main():
@@ -42,8 +59,10 @@ def main():
         originals = [FieldCodec.decode(ProcessIdentity, item) for item in source['owners']]
         expected = [FieldCodec.decode(Thread, item) for item in source['original_threads']]
         expected[1] = replace(expected[1], active_turn=None)
-        protected = [root/'bus.jsonl', root/'protected-native.jsonl', root/InputDispositions.filename]
+        protected = [root/'bus.jsonl', root/'protected-native.jsonl', root/InputDispositions.filename,
+                     root/'diagnostics'/f"{source['historical_input_id']}.json"]
         hashes = {str(path.relative_to(root)): digest(path) for path in protected}
+        assert prompt_count(root) == 0
         before_registry, before_route = digest(root/'registry.json'), digest(route)
         command = [sys.executable, str(Path(__file__).with_name('restart_thread_format.py')),
                    '--original-python', original_python, '--root', str(root), '--root-id', source['root_id'],
@@ -77,6 +96,14 @@ def main():
             assert launch.environment['AGENT_COMMS_THREAD'] == name
             assert owner == replace(expected[index], process_identity=owner.process_identity)
             assert not Path(f'/proc/{owner.pid}/task/{owner.pid}/children').read_text().strip()
+        with Coordination(str(root/'coordination.sqlite3')) as store:
+            owner = service.registry.require('phase-alpha')
+            assert next_sealed_assignment(store, stable_thread_lookup(owner.created_at), owner.name,
+                after_seq=0) is None, 'Historical failed reservation became a fresh native attempt'
+        assert historical_reservation(root, source['historical_input_id']) == source['historical_reservation_sha256']
+        assert all(row.public_status == 'unknown'
+                   for row in InputDispositions(root/InputDispositions.filename).read().rows.values())
+        assert prompt_count(root) == 0
         releases = FieldCodec.decode(dict[str, OwnerReleaseReceipt],
                                      json.loads((root/'owner_release_receipts.json').read_text()))
         assert releases['phase-retired'].thread.name == 'phase-retired'
@@ -84,7 +111,7 @@ def main():
         assert hashes == {str(path.relative_to(root)): digest(path) for path in protected}
         assert read_active_route(route).native_package == Path(os.environ['AC_NATIVE_COPIED_PACKAGE'])
         proof = json.loads(receipt.read_text())
-        assert proof['target_validation'] == {'threads': 3, 'releases': 1}
+        assert proof['target_validation'] == {'threads': 4, 'releases': 2}
         assert proof['phase'] == 'target_owners_launched' and proof['route_published_before_first_launch']
         proof.update(busy_refusal_without_stops=True, retained_distinct_settings=True,
                      renamed_owner_retained=True, both_thread_carriers_retired=True,
@@ -92,8 +119,6 @@ def main():
                      protected_hashes=hashes, actual_target_runtime_attachment=True,
                      original_python=original_python, target_python=sys.executable,
                      source_head=os.environ['AC_PHASE_CORE_HEAD'], complete=True)
-        (stage/'sanitized-receipt.json').write_text(json.dumps(proof, indent=2)+'\n')
-        print(json.dumps(proof), flush=True)
     finally:
         seed.stdin.close()
         seed.wait(timeout=5)
@@ -103,6 +128,18 @@ def main():
             process = ObservedProcess(identity)
             if process.alive():
                 process.stop_sync()
+    # Close both complete worker lifetimes before the final no-replay assertion:
+    # late work cannot escape a check taken only at runtime attachment.
+    assert prompt_count(root) == 0
+    assert historical_reservation(root, source['historical_input_id']) == source['historical_reservation_sha256']
+    assert hashes == {str(path.relative_to(root)): digest(path) for path in protected}
+    assert all(service.registry.require(prior.name).goal == prior.goal for prior in expected)
+    proof.update(historical_unknown_not_reclassified=True, historical_failure_receipt_unchanged=True,
+                 historical_reservation_sha256=source['historical_reservation_sha256'],
+                 historical_assignment_ineligible=True, blocked_goal_not_resumed=True,
+                 prompt_count=0, fixture_processes_retired=True)
+    (stage/'sanitized-receipt.json').write_text(json.dumps(proof, indent=2)+'\n')
+    print(json.dumps(proof), flush=True)
 
 
 if __name__ == '__main__':

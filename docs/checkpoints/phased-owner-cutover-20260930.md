@@ -102,7 +102,7 @@ publication and launch coherence without weakening native validation.
 
 ## Installed affected-path acceptance
 
-Final private run06 passed against a noneditable candidate wheel on authentic000
+Final private run09 passed against a noneditable candidate wheel on authentic000
 dependencies. All288 production Python files are byte-equal to source
 254311654b88ded2a817ede29ceaff26f44f6f0f, including normally integrated443/444.
 Sanitized persistent receipt: evidence/phased-owner-cutover/installed-receipt.json.
@@ -112,13 +112,31 @@ different argument lists/config directories/credential markers and a protected
 blocked goal. One is renamed. A busy original rejects before any fence, stop,
 route or document mutation. The successful batch retains all settings in RAM,
 fences all originals before the first signal, verifies all OS exits, transforms
-all three registry Threads and the one historical release-receipt Thread, then
+all four registry Threads and both historical release-receipt Threads, then
 publishes the expected route to a DIFFERENT verified e36 artifact path before
 either replacement launch. Both real target workers complete runtime subscription
 attachment, retain exact Thread fields except their new process identities, and
 have no native child or input admission. Both are retired at fixture teardown.
 
-Original wire, protected native fixture bytes and reserved UNKNOWN input bytes
+The same fixture now includes a historical failed channel TRIAGE, matching the
+seq160 reservation/failure state. A short-lived authentic000 owner authors the
+sealed source, `SelectedRequest.reserve`, expected prompt binding, bound UNKNOWN
+input and generic `NativePiUnavailable` failure publication, then voluntarily
+releases and exits. No native send/execute method is replaced or called while
+authoring that saved state. Its old stopped-drain diagnostic is owner-fenced;
+replacement startup cannot treat it as a new original input or NotSent witness.
+The model selection is fixture-local, never a paid provider.
+
+After the real original and target worker lifetimes close, the original typed
+NativeRuntimeInput, deferred assignment and PromptBinding remain equal. Sealed
+assignment selection still excludes that failed attempt. All input dispositions
+remain UNKNOWN; original failure diagnostic/notice and blocked goals survive.
+`prompt_count=0` comes from the original durable PrivateRawInput writer-admission
+records, not from a missing process or journal field. No native session journal
+is created. This proves no historical replay, reclassification or goal resume.
+It does not retroactively settle or relabel live refactor-r1 seq160.
+
+Original wire, protected native fixture bytes, UNKNOWN input and failure receipt
 are hash-identical. This small provider-free batch is the actual format/lifecycle
 boundary proof; it is not another41MB/native model/UI gate. The accepted225
 original41MB read-only capture and earlier436 native/UI gates are not repeated.
@@ -144,7 +162,12 @@ and three fewer foreign absence probes. Source delta from normally integrated
 main:76 deleted,245 added lines, including202 lines of acquired phase resources.
 The prior restart body is deleted; each installation member consumes the one
 phase procedure. Fixture/tool/docs counts are separate from production counts.
-Raw private traces and preimages remain under .phase-fixtures/run01..06.
+Raw private traces and preimages remain under .phase-fixtures/run01..09. The
+strengthened fixture's first seed attempt correctly refused a still-live retired
+seed PID; authoring now runs in a short-lived original process. Its next driver
+check was correctly rejected for attempting selected execution from a foreign
+process; the driver now reads the existing sealed-assignment eligibility owner.
+Both failure traces are retained; no product process fence was relaxed.
 Public root, route, owners and historical UNKNOWN remain untouched.
 
 ## Parent-only future paired operator
@@ -224,7 +247,7 @@ private diagnostic ownership must retain bounded startup stderr and command proo
 for all consumers; no bespoke logging authority or deadline increase.
 
 Mendel confirms PersistentPiSession acquisition/readiness is disjoint from his
-merged C3/goal source. Einstein has no competing native-startup patch. Full C3
-phase source remains uncommitted while the urgent incident's causal proof is
-established. Timestamp-only original operator proof and source call ordering are
+merged C3/goal source. Einstein has no competing native-startup patch. The443
+initialization checkpoint and444 explicit-root closure are merged and normally
+integrated into this tested C3 phase. Timestamp-only original operator proof and source call ordering are
 recorded in native-preflight-incident-20260930.md; originals/preimages stay private.
