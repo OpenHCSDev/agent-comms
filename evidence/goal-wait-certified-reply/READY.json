@@ -29,5 +29,15 @@
     "/home/ts/.cache/agent-scratch/gw462",
     "/home/ts/.cache/agent-scratch/comms-goal-wait-certified-reply-20260930"
   ],
-  "next_owner": "parent merge and activation; Arendt cutover custody"
+  "next_owner": "parent merge and activation; Arendt cutover custody",
+  "item5_review": {
+    "receipt": "NONE-REVIEW.md",
+    "source_changed_by_review": false,
+    "own_nullable_state_defects_found": 0,
+    "confirmed_imported_builder_defect": "CurrentNativeCursor accepts NULL request_generation; NativeInputContext.reference returns incomplete acquired reference",
+    "receiving_owner": "Arendt",
+    "dependency": "canonical complete native reference construction and all consumers; acknowledged by owner, pending source checkpoint",
+    "authority_bypass_proven": false,
+    "original_proofs_unchanged": true
+  }
 }

@@ -34,7 +34,7 @@ fixture, leaving its original DB, journals and inputs unchanged:
   bypasses that native-input fence.
 
 See `none-context-shape-probe.json`. The public getter's existing
-`CurrentNativeCursorOwner._require_source` proof-reference comparison rejects
+`NativeSourceCursor._require_source` proof-reference comparison rejects
 this cursor against its complete original journal proof. No replay, native
 authority bypass or live corruption was demonstrated. The confirmed defect
 is construction/admission of an incomplete supposedly acquired reference.
