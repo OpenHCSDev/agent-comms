@@ -14,6 +14,7 @@ from .registration_change import InitialRegistration, RegistrationChange, Update
 from .routing import TurnRouting
 from .restart_refusals import OwnerBusyRefusal, OwnerChangedBeforeFenceRefusal, OwnerGenerationChangedRefusal
 from .thread_identity import GenerationCounter, OwnerIdentity
+from .thread_presentation import ThreadOwnerBinding, LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
     RunningThreadStatus,
@@ -328,6 +329,15 @@ class RegistryDocument:
             admission_generation=lease.admission_generation,
         )
 
+    def transition_turn(self, lease: TurnLeaseFence, phase) -> bool:
+        """Only the existing exact lease can publish its observed phase."""
+        name = self.aliases.get(lease.identity.incarnation.name, lease.identity.incarnation.name)
+        current = self.threads.get(name)
+        if current is None or current.turn_lease != lease.renamed(name):
+            return False
+        self.threads[name] = replace(current, active_turn=replace(current.active_turn, phase=phase))
+        return True
+
 
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot:
@@ -368,6 +378,14 @@ class RegistrySnapshot:
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.aliases.get(name, name)
         return self.threads[canonical].owner_identity(self.owner_generations[canonical])
+
+    def owner_binding(self, name: str) -> ThreadOwnerBinding:
+        try:
+            thread = self.require_active(name)
+            process = thread.require_process()
+        except RelationViolationError:
+            return UnavailableThreadOwnerBinding()
+        return LiveThreadOwnerBinding(self.owner_identity(thread.name), process)
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
         """A read attachment retains its owner lease across startup, not across restart."""

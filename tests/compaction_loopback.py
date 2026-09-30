@@ -13,6 +13,10 @@ class LoopbackProvider:
         self.paths = []
         self.requests = []
 
+    def response_chunks(self):
+        yield {"content": self.text}, None
+        yield {}, "stop"
+
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 3)
@@ -51,19 +55,21 @@ class LoopbackProvider:
                 )
             else:
 
-                def event(text: str, reason):
+                def event(delta, reason):
                     chunk = {
                         "id": "chatcmpl-local",
                         "object": "chat.completion.chunk",
                         "created": 1,
                         "model": "fake-compact",
                         "choices": [
-                            {"index": 0, "delta": {"content": text}, "finish_reason": reason}
+                            {"index": 0, "delta": delta, "finish_reason": reason}
                         ],
                     }
                     return b"data: " + json.dumps(chunk).encode() + b"\n\n"
 
-                body = event(self.text, None) + event("", "stop") + b"data: [DONE]\n\n"
+                body = b"".join(
+                    event(delta, reason) for delta, reason in self.response_chunks()
+                ) + b"data: [DONE]\n\n"
                 writer.write(
                     b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: "
                     + str(len(body)).encode()

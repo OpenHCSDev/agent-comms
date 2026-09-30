@@ -38,6 +38,7 @@ from .turn_input_source import (
     ScheduledOriginalInput,
 )
 from .turn_progress import TurnProgress
+from .turn_phase import CancellingPhase, PromptAcceptancePhase
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
@@ -236,7 +237,6 @@ class OwnedTurn:
         )
         if self.controller is UNBOUND_CONTROLLER:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
-        self.runner.active_turns[self.session_id] = self.turn_id
         if self.original_owner_input:
             permission = OwnerGoalPermission(self.goal)
         elif self.goal is not None and self.goal.state.active:
@@ -289,9 +289,6 @@ class OwnedTurn:
             routing=self.routing,
             checkpoint=self.checkpoint,
             task=self.task,
-            original_keys=self.original_keys,
-            accepted_input_id=self.accepted_input_id,
-            initial_display_text=self.initial_display_text,
             finish_event=self.finish_event,
             goals=TurnGoalAccount(
                 comms=self.runner.comms,
@@ -303,19 +300,18 @@ class OwnedTurn:
                 open_store=self.runner.goals.open_goal_store,
                 pending_origins=self.runner.goals.pending_goal_origins,
             ),
-            finish_stream=self.runner.finish_turn_stream,
             sync_goals=self.runner.goals.sync_goal_execution,
         )
 
     async def prepare_native(self):
         await self.runner.effects._emit_event(
             self.session_id,
-            self.runner.started_event(self.thread_name, self.turn_id),
+            self.runner.current_turn_update(self.session_id),
         )
         await self.runner.inputs.emit_input_delivery_changed(self.session_id)
         # This turn already holds the session authority. Publish its cursor
         # without reacquiring the observer lock held by a selected handoff;
-        # private delivery sees active_turns and cannot start another turn.
+        # Private delivery sees the registry lease and cannot start another turn.
         await self.runner.inputs.drain_owned_inbox(self.session_id)
 
         # Existing local ACP owner session only. If delivery is uncertain,
@@ -375,6 +371,7 @@ class OwnedTurn:
         self.image_options: dict[str, Any] = {"images": self.images} if self.images else {}
 
     async def stream(self):
+        await self.runner.transition_turn(self.session_id, self.turn_lease, PromptAcceptancePhase())
         admission = OwnedSendAdmission(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
@@ -411,7 +408,7 @@ class OwnedTurn:
             await self.progress.consume(event)
 
     async def finish(self):
-        self.progress.goals.finish(self.progress.terminal_ok)
+        self.progress.goals.finish(self.progress.outcome)
         self.runner.emitted_errors.pop(self.session_id, None)
         self.thread_name = await self.runner.sessions.sync_identity(self.session_id)
         self.current_project = self.runner.comms.registry.require(self.thread_name).worktree
@@ -421,7 +418,7 @@ class OwnedTurn:
             await persistent.close_idle()
         await self.runner.inputs.finish_turn_inputs(self.session_id, self.backend_inbox)
         if (
-            not self.progress.cancelled
+            self.progress.phase.accepts_followup
             and not self.runner.inputs.closing
             and self.current_project != self.thread.worktree
         ):
@@ -439,8 +436,6 @@ class OwnedTurn:
             self.thread_name,
             self.turn_id,
             self.turn_lease,
-            stream_settled=self.progress.settled,
-            terminal_fence=self.progress.terminal_fence,
         )
 
     async def run(self) -> None:
@@ -456,7 +451,7 @@ class OwnedTurn:
             if failure := self.runner.emitted_errors.get(self.session_id):
                 raise PromptFailureReceipt(failure, True).request_error()
         except asyncio.CancelledError:
-            self.progress.cancelled = True
+            await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await backend.terminate_task_process(self.owner_task)
             with _store_lock(self.runner.comms._wire_lock_path):
                 self.runner.inputs.dispositions.settle_unbound(self.original_keys)
