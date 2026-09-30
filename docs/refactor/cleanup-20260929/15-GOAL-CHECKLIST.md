@@ -14,7 +14,9 @@ Parent published five defaults from one normal68package immutable cohort as
 runtime-viewport-native-residency-20260930: Core6feb,Toad19970f,Textual2e49,
 SDK0.12.1,same native593b. All291Core/273Toadfiles exact and accepted386500df
 production/config equals merged19970f. No route/native/store/ABI change or owner
-restart. Einstein owns the one short ordinary-default physical acceptance now.
+restart. Ordinary-default physical acceptance passed16.534s: readable original
+history, canonical idle/nullgoal/queue,0 newprotocolerrors, originals unchanged,
+cleanup0. Parent personally viewed the actual physical frame.
 Receipt:evidence/cleanup-live-integration/viewport-native-residency-activation.json.
 Full readiness/sidebar/CPU/focus/TC1/T9/growing-End scope continues in249 under
 Heisenberg, with Kepler read-only profiling support. Goal remains active.
