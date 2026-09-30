@@ -251,6 +251,7 @@ class SelectedAttempt:
                 self.stage.fence,
                 owner_witness=participant.response_owner,
             ).value
+            participant.consume_reply_wait()
             return CoordinatedTurn.published(
                 participant, session, request.admission.input_id, published
             )

@@ -371,10 +371,9 @@ class InputDrain(FutureInputQueue):
     ) -> asyncio.Queue[str | dict[str, Any]]:
         """Transfer existing live inputs to the new lease, never read them from disk."""
         inbox = self.backend_inboxes.setdefault(session_id, asyncio.Queue())
-        wait = self.comms.goals.goal_wait(owner.name)
         for input_id, item in self.queued_inputs.get(session_id, {}).items():
             self.queued_inputs[session_id][input_id] = item.bind_turn(
-                owner, admission, wait, turn_id
+                owner, admission, turn_id
             )
         return inbox
 

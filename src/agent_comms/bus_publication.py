@@ -144,6 +144,18 @@ class CommittedDelivery(WireRecord):
     manifest_codec: str = INITIAL_CODEC
     receipt: KeyedResponseReceipt | None = None
 
+    def direct_for(self, recipient_lookup: str) -> bool:
+        """Direct reply semantics and its original addressed incarnation agree."""
+        policy = self.message.response_policy
+        return (
+            policy.starts_turn
+            and policy.separate_turn
+            and any(
+                recipient.recipient_lookup == recipient_lookup
+                for recipient in self.audience.recipients
+            )
+        )
+
     @classmethod
     def from_wire(cls, record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
         from .messages import Message
