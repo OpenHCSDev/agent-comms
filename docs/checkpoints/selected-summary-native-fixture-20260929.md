@@ -50,3 +50,15 @@ The nine existing RPC framing/cancellation and failed-receipt correlation
 boundary controls pass0.16s. Native acceptance is explicitly UNREVIEWED pending
 the serial433/214 slot. Remaining fake negative cases and helper are pending
 whole semantic migration/deletion, not declared closed by these nine controls.
+
+The prepared replacement passed actual native4ab in5.45s atd8c748a4: two real
+SDK input/assistant turns, read-only native preparation, same retained native
+child selected summary with actual metadata/progress/instructions, unchanged
+saved native bytes/inputs, and durable blocking reservation/no second provider
+attempt. native-summary-actual-run01-receipt.json records the real reserved
+operation and exact session/root. Shared fixture custody reaped every child;
+private root/config/project ProcessIdentity scan found no survivors. Released
+the serial native slot directly to215 before optional221 profiling comparison.
+This is actual native test acceptance, not global installed activation or
+production large-context/adaptive readiness. Full fake negative facade deletion
+and original covered-vs-injected higher215 journey remain assigned here.
