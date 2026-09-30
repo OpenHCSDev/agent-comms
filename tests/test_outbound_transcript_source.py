@@ -87,6 +87,8 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
         )
     after = comms.transcripts.capture_page_read("sender")
     assert not before.current()
+    assert before.content_current()
+    assert before.read() == sender_page
     assert after.identity.receipt_frontier == before.identity.receipt_frontier
     assert after.read() == sender_page
     assert comms.bus.log.path.read_bytes() == wire_before
