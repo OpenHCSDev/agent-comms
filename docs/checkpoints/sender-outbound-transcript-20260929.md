@@ -380,3 +380,44 @@ same persistent430 scratch owner. This remains source evidence, not installed
 41MB wall latency or native delivery acceptance. Reusing the opened certificate
 within each canonical lock remains a separate read-transaction improvement;
 no retained proof/cache or alternate lock authority was introduced.
+
+## Canonical lock lifetime owns the opened certificate
+
+Deleted the17-line conversation_read_unlocked definition and both consumers'
+second source/index connection and _saved decode. Original conversation rows
+and visible references now borrow the resource opened by the actual canonical
+durability barrier. Its complete existing prefix verification, cold recovery,
+schema, marker, seal and inode checks remain the verification owner. The query
+validates the fresh original marker and performs existing entry/exit revision
+checks against that same opened wire and index. SQLite query_only applies after
+verification/recovery. No lock bypass, admission cap increase or proof cache
+was added (IDEN-5, IDEN-7, BOUND-2).
+
+StoreLock owns the existing inheritable descriptor and this lock's opened
+resource. LockedStore and WireLog keep supplying the original descriptor to
+actual process custody consumers. All resource handles close before the flock
+is released; a retained resource is rejected after scope exit. This is bounded
+runtime resource ownership, with no durable format or reset in this change.
+Wire/native/frozen audiences/UNKNOWN remain untouched. The existing standalone
+native, delivery and publication verifier still uses the same verification
+owner; it is not a compatibility reader or a second proof implementation.
+
+The actual source reproducer at4dc6b3b performs two _saved reads per original
+thread presentation. The candidate performs one. Missing certified wire cannot
+become an empty presentation, and the expired resource cannot serve another
+read. The guard preserves the original exception thrown by its caller; only
+verification failures are attributed to the durability boundary.
+
+22 focused source/read/notification/ownership controls pass in4.52s. 25 focused
+prefix/recovery/custody controls pass in2.91s, with the larger1000-row/8MiB case
+deliberately excluded. Final exception/certificate/original-source controls pass
+36 checks in4.90s with that same exclusion. The actual inherited descriptor
+survives its fixture parent's death and prevents a competing writer until the
+owned child retires. Resource expiry proves the source and SQLite handles close.
+
+Sch215 real04 still failed BUS admission before native bytes and retained its
+UNKNOWN input; it was not replayed. These source checks do not prove that gate
+fixed or original41MB CPU/blanking acceptable. Sch215 owns the new read-only
+profile and continuous installed gate on the parent432 paired cohort. Current
+headroom assertion exits2 at15.9GiB swap; no build, capture, new worker or paid
+input was started here. Only bounded serial controls ran.

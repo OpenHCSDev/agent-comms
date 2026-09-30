@@ -10,10 +10,27 @@ import tempfile
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, TYPE_CHECKING
 
 from .errors import RelationViolationError
+
+if TYPE_CHECKING:
+    from .private_bus_checkpoint import CertifiedSourceRead
+
+
+@dataclass(frozen=True)
+class StoreLock:
+    """One physical lock's descriptor and opened durability resource."""
+
+    descriptor: int
+    source: CertifiedSourceRead | None
+
+    def certified_read(self) -> CertifiedSourceRead:
+        if self.source is None:
+            raise RelationViolationError("Store has no certified original wire source.")
+        return self.source
 
 
 @contextmanager
@@ -23,8 +40,8 @@ def _store_lock(
     blocking: bool = True,
     max_bus_bytes: int | None = None,
     shared: bool = False,
-) -> Iterator[int]:
-    """Hold a canonical store lock; yield its inheritable descriptor.
+) -> Iterator[StoreLock]:
+    """Hold a canonical store lock with its inheritable descriptor/resource.
 
     Shared document readers can coexist; updates retain exclusive ownership.
     A bounded projection refuses over-budget bus bytes before its durability
@@ -66,8 +83,8 @@ def _store_lock(
                     raise RelationViolationError("Bus exceeds bounded read budget.")
             from .wire_log import WireLog
 
-            WireLog(store_path).verify_before_read_unlocked()
-            yield lock_file.fileno()
+            with WireLog(store_path).verify_before_read_unlocked() as source:
+                yield StoreLock(lock_file.fileno(), source)
         finally:
             if os.name == "nt":
                 lock_file.seek(0)
