@@ -1,3 +1,5 @@
+The round-2 rules (`docs/refactor/round2/00-RULES.md`) apply to this work; these rules add to them.
+
 # Binding rules
 
 ## Ownership

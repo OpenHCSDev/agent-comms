@@ -43,7 +43,7 @@ owned behavior; do not invent subclasses just to represent three value labels.
 | Probe cadence and cost | Default provider probing off. If enabled with a budget, at most one bounded probe per new eligible completed-subtask source revision; charge it to the attempt and skip optional probing when the budget is exhausted. |
 | Mid-turn and split-turn eligibility | Default to the existing safe native preparation boundary, after a complete tool-call/result pair and before the next original input admission. Unfinished/split-turn reasoning waits; hard-context protection stays independent. |
 | Unsupported effects/aliases/callers | Refuse the unsupported optional path; trace and migrate all native callers before enabling it. |
-| Activation | Task-aware timing starts opt-in. Default activation requires S4 benefit and the journeys below. |
+| Activation | Task-aware timing starts opt-in; S4 owns the default flip. When its predeclared margins and the journeys below pass, the same implementation PR turns the default on. Otherwise S4 posts the measured result to Tristan's queue for a decision: flip anyway, change the design, or drop the feature. |
 
 ## Identical user journeys and latency budgets
 

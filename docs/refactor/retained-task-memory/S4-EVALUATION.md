@@ -139,3 +139,10 @@ and held-out lock-in gates above, not only retrieval questions. CI queue latency
 does not hold useful checkpoints: publish after focused local verification, while
 respecting enforced merge rules. Provider-free checks verify the oracle/scorer and
 exporter; native and model runs establish the corresponding acceptance results.
+
+S4 owns the task-aware timing default flip. When the predeclared margins and S1's
+journeys pass, turn the default on in the same implementation PR. If they do not
+pass, post the measured result to Tristan's queue with the explicit decision:
+flip anyway, change the design, or drop the feature. S4 closes only with the
+default enabled or Tristan's recorded disposition; it cannot leave timing opt-in
+without that decision.
