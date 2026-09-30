@@ -287,3 +287,45 @@ content.25 focused source/guard checks pass with one pre-existing skip in2.72s.
 Installed original-source race/blanking/CPU acceptance remains UNREVIEWED until
 Sch215's coherent paired gate. This correction supersedes the global coordinator
 content fence described at the earlier checkpoint; it does not waive proof.
+
+## Unrelated wire appends and short display lock custody
+
+The original canonical source check at d603699b rejects beta's prepared page
+after an unrelated sender-to-alpha append, although beta's certified frozen
+sender/recipient frontier remains identical. The failure is preserved in
+unrelated-append-baseline.log. Content now projects the retained bus inode and
+the existing certified conversation frontier instead of global wire size,
+mtime and ctime. Full bus revisions still invalidate annotation/publication
+identity. A related original append revokes content; replacing even byte-identical
+wire storage is rejected by the existing certificate. No new revision counter,
+index, cache, seen list or store was added (IDEN-7).
+
+TranscriptReadIdentity.content_identity derives hashable canonical JSON bytes
+from that same FieldCodec content projection. Sch215 consumes this public
+identity for its existing bounded preparation WorkKey; frontend annotation
+changes no longer require another content identity implementation.
+
+DMDisplayBasis now captures and checks registry, reader and source custody under
+short wire-lock boundaries, preparing its page and older-unread scan outside
+native admission. Subsequent appends may coexist with the opened page; inode
+replacement and marker changes remain rejected. MessagePageRequest's rejected
+derived-index path consumes the existing WireLog opened-inode/byte-bound
+snapshot after releasing the writer lock. Actual independent nonblocking flock
+checks and canonical concurrent appends verify both lifetimes without replacing
+the reader or protocol. The scan excludes an append made after its open bound.
+
+Sch215 real02 failed native admission on its original private wire. The source
+diagnostic and uncertain attempt remain preserved; there is no replay. Einstein
+confirmed that NativeWindowApp/#team does not call DMDisplayBasis, so this DM
+lock correction is NOT proof of real02's causal lock holder. Sch215 owns the
+next coherent installed original-history gate and holder profiling.
+
+Remaining content risk: TranscriptRoutes.revision still compares the global
+annotation database/WAL. TranscriptRoute has an indexed session_file owner;
+InputDisplay has only its original native_id, without a session relation.
+Dropping that global witness would miss genuine saved-input annotation changes
+(covered by the existing DELETE/WAL controls). It remains fenced until the
+original source supplies its actual input membership; no speculative native
+scan, new membership index, counter or mirror was substituted. Ordinary
+StartedInput-to-original-publication closure is still coordinated with Arendt.
+Full 41MB installed blanking/CPU/original handling acceptance is UNREVIEWED.
