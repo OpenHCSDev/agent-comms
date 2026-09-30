@@ -42,12 +42,42 @@ after-tool model waiting. Native output end preserves the lease through final
 statistics, input retirement and terminal publication. Manual compaction resumes
 PublishingPhase until the same authoritative release. No extra lifecycle store.
 
-Source imports, typed capture codec and native phase producer are checked. The
-actual installed warm rename/busy queue/start/input paint/next reply journey is
-pending the serial native fixture slot. Full startup envelope, remaining goal
+Source imports, typed capture codec and native phase producer pass 15 focused checks.
+The paired installed warm rename/busy queue/start/input paint/next reply journey
+passed with exit 0 and four localhost calls on Core5e610/Toad192259/native4ab.
+The first original paints once through its actual durable native identity and the
+existing saved snapshot retirement relation; status/goal refresh and editor
+Document/undo retention pass. Corrected Core426 and Toad210/213 main are integrated.
+No paid call, healthy reconnect, uncertain original replay or global install.
+Paired receipt and exact completed command are in Toad211
+`docs/validation/canonical-turn-lifecycle-20260929.md`. Full startup envelope, remaining goal
 account mirrors and all legacy fixture consumers remain integration followup;
 this checkpoint does not claim a green full suite or live activation.
 
 Owned disposable wheel overlay: `/home/ts/.cache/agent-scratch/canonical-turn-lifecycle-20260929`.
 Source, fixtures and evidence are persistent under the two owned worktrees.
 Parent owns matched installation and activation; CI is deferred.
+
+## Ownership and remaining domain closure
+
+Production delta against current Core main d306: 22 files, 576 added / 310 deleted
+lines, excluding fixture and documentation code. Replaced Started/Settled wire
+families, active-turn dictionary, progress status/cancellation copies and three
+original input fields are deleted; all production lifecycle publications and goal
+snapshot refresh consume TurnState. InputStartedUpdate retains the original durable
+StartedInput native_id; UserTranscript owns native identity projection. Core431
+includes this contract and requires paired Toad211; no compatibility aliases.
+
+IDEN-1 remains a declared S14/C0 closure: Scope's OwnerIdentity currently carries
+an admission generation whereas RegistrySnapshot.owner_identity carries an owner
+generation. Core426 now compares only the original accepted/failed registry and
+full process witnesses, never a queue generation. The representation itself must
+move to distinct nominal domains through the existing identity/attachment owners,
+with all admission, start, request, floor and projection callers migrated. Do not
+add caller guards, cached owner identity, a PID exception or a second resolver.
+
+The startup admission/resource envelope, remaining goal-account mirror removal,
+initial prompt command custody and operation-owned compaction measurement remain
+Arendt's full lifecycle scope after this useful checkpoint. Mendel owns legacy
+fixture cleanup. Focused passes do not certify the entire suite. Parent owns matched
+activation and the actual default launcher gate. Existing416/209 receipts remain.
