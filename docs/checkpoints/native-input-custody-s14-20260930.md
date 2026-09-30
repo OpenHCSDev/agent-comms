@@ -93,3 +93,70 @@ shared dependency is required before its reader controls. Parent459 owns common
 POSIX observations; Arendt will consume that original FileRevision and path-role
 contract rather than retain tuple revision or socket validators. Selected
 compaction acquisition and the actual installed whole journey remain in progress.
+
+## Functional source candidate ab5ba4ae
+
+The candidate normally integrates parent459 `9890c75e`, Einstein458 `6fabde90`,
+Mendel457 `51631c9b` and Schrodinger460 `4b54a8d2`. Fresh enrollment stores its
+original `FileIdentity`; the prewrite/startup helper and tracked consumer use
+`FileRevision`. Native files, package/session ancestors, selected-write/tool
+resources and the recovery socket consume the one declared POSIX role family.
+These observations cannot mint enrollment, input admission or a terminal receipt.
+
+Adaptive and manual compaction acquire the existing `RegistryOwner` from one
+original registry snapshot, require its active turn and saved session, and
+consume `SelectedModel` projected from the original runtime observation. The
+settings probe takes that value instead of three independently compared scalars;
+all production and native-fixture callers were changed. Response envelope
+correlation belongs to `Response.require_request`; its declared data member owns
+settings-source or summary-operation matching. Unknown/nonresponse cases refuse
+through their inherited declaration, without a switch or a response mirror.
+
+Historical lookup/root spelling belongs to Schrodinger's original
+`StableLookupText` and the existing `WireRootIdText`; the reader no longer repeats
+the grammar or checks a trusted store's concrete class. Cursor and reservation
+joins still require original proof and committed rows, not spelling validation.
+
+Source controls completed on this closure: 33 history/cursor/recovery-reader
+controls (9.58s), 17 selected-tool/write controls (10.15s), 27 selected-summary
+custody controls (1.39s), and 34 response/envelope/source controls (0.66s).
+Optional native cases skipped when no native package was configured are not
+counted as passes. Installed whole-workflow acceptance remains pending the
+parent's correctly pinned shared candidate; the immutable prior `6fabde90`
+candidate does not cover the additional selected-compaction APIs here.
+
+### State and format classification
+
+- Native journals, SQLite native-input/context proofs, reservation and UNKNOWN
+  receipts, wire identity/certificates, registry and selected-write file keys are
+  durable originals. This checkpoint does not reset, convert or replay them.
+- Original SQL identities, emitted context values and registry captures are
+  immutable observations of those originals, not additional admission stores.
+- The acquired released-owner grant is valid only inside its original exclusion
+  scope. Its active flag is resource custody, not copied turn status.
+- `FileRevision` is a POSIX resource observation. The fresh-startup type changes
+  only internal Python producer/consumer calls; native event fields and wire
+  ABI remain unchanged. No current checkpoint runtime reset is required.
+- The existing compound `SelectedSource.SessionRevision` / backend resource
+  tuple representation remains an explicitly tracked S14 ownership gap. Its
+  serialized compaction reservation consumers require one separately classified
+  closure; this checkpoint does not disguise that representation with an alias.
+
+### Actual timing evidence and limits
+
+Sanitized receipts in `evidence/native-input-custody/live-request-timing-20260930.json`
+and `live-tool-timing-20260930.json` come from bounded read-only current comms428
+ACP/native evidence. One original request took 42.319s, with 74.046ms of the
+native request observer's declared callbacks and a 5.066ms maximum callback.
+Its original dispatch-to-first-event interval was 255.299ms and
+ dispatch-to-first-delta interval 3663.753ms, all measured by the same native
+request producer. These counters do not measure arbitrary extension or UI work.
+
+A native assistant message's timestamp is established at model-request creation,
+not tool execution start. Subtracting it from a saved tool result would combine
+provider generation with tool dispatch/execution/publication. Original native
+tool-start/end payloads lack producer timestamps, so these public records cannot
+allocate that combined interval further. The controlled installed journey will
+record tool consumer/callback timing in one Python process separately from the
+original native request clock. The historical 129.898s interval remains
+unattributed; no provider queue, deadlock or CPU diagnosis is claimed.
