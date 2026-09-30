@@ -50,8 +50,6 @@ cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$be
 compaction=dist/core/compaction/compaction.js
 cp -- "$stack_root/native-compaction-policy.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/agent-comms-policy.js"
-python3 "$stack_root/patch-native-compaction.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 session=dist/core/agent-session.js
 python3 "$stack_root/patch-native-auto-compaction.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
