@@ -59,6 +59,10 @@ input reset. Rebuildable projections may be replaced after their producers stop.
 
 ## Verification and delivery
 
+This owner performs review directly using Python and the skill-provided tools.
+Do not invoke subagents or delegate review. Coordination with existing owners
+of genuinely crossed mechanisms does not authorize taking over their work.
+
 Tests protect behavior and exact-state invalidation, not an internal JSON golden.
 Measure model recall separately from authoritative-store availability. Admit the
 new-case maintenance experiment and add a narrow guard with each real ownership

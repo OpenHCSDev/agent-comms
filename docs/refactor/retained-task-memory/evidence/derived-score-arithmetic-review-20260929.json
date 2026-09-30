@@ -1,0 +1,9 @@
+{
+  "seed": 428,
+  "answer_sets": 250,
+  "conditions_per_set": 4,
+  "checks": 1000,
+  "arithmetic_matches": true,
+  "source_identity_matches": true,
+  "provider_calls": 0
+}

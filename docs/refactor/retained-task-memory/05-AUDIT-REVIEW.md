@@ -18,7 +18,8 @@ state duplication ever. Every consumer must derive from its authoritative source
 - [x] Replace implicit aggregate records with source-derived score views,
       migrate all callers and complete a fresh contextual scan. No stored totals.
 - [x] Publish tested code/evidence update to the existing PR428 branch (`79a8a323`).
-- [ ] Receive independent scoped ownership review from `nra-architecture`.
+- [x] Finish direct tool-driven review; user prohibits subagents/review delegation.
+      No independent-review verdict is claimed.
 
 ## Source and exact coverage
 
@@ -193,3 +194,19 @@ actual exporter match. All decoded CLI results equal baseline `b0c94e4a`; none
 calls a provider or mutates native state. The small baseline Python/answers files
 were created in owned persistent scratch and removed after the run. These checks
 establish the scaffold's exercised behavior, not model recall or native usability.
+
+## Direct review, no delegation
+
+The user instructed this owner not to use subagents. The attempted isolated
+review invocation was aborted and produced no review result. The outstanding
+peer review request was withdrawn; NRA's separately accepted tool-defect ownership
+remains unchanged. Review now stays with `comms428` using Python and the provided
+skill tools. No peer presence or pending message is treated as active work.
+
+[Arithmetic review receipt](evidence/derived-score-arithmetic-review-20260929.json)
+records seed 428, 250 answer sets across four labels, and 1,000 checks. Exact,
+obsolete, empty, incorrect and missing answers were checked against arithmetic
+computed directly from each authoritative Question. Every scored scenario, round
+and question retains its original source object reference. All counts and identity
+checks passed. This supplements the fixed behavioral tests and CLI comparisons;
+it is not a substitute for the contextual NRA coverage or a model-quality study.
