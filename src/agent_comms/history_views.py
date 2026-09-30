@@ -457,6 +457,8 @@ class HistoryViews:
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
+        from .notification_assignment import NotificationAssignment
+
         return WireRevision(
             tuple(
                 file_revision(path)
@@ -469,6 +471,7 @@ class HistoryViews:
                     self.agents.runtime_info.path,
                     self.bus.reads.path,
                     self.root / GoalWaits.filename,
+                    *NotificationAssignment.source_paths(self.root),
                 )
             ),
             int(time.time()),
