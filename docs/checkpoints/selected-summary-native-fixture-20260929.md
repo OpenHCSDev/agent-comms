@@ -89,3 +89,34 @@ current approved native package once the existing physical capture releases its
 slot. No additional physical capture is assigned here. Preserve each replaced
 negative contract by naming its actual native, journal or strict RPC coverage in
 the deletion receipt; report uncovered behavior instead of weakening assertions.
+
+### First deletion checkpoint
+
+Removed the fake CHILD executable, its manufactured session header/witness and
+`selected` facade. The accepted positive function is AST-identical to 24e710c;
+its recorded 5.45-second result is preserved and not rerun. Shared source helper
+consumer census found live journal, reservation, private-session and native
+contracts; `selected_summary_cases.py` is unchanged.
+
+26 strict RPC controls pass in 0.14 seconds: original bounded-reader and failed
+receipt controls plus uncorrelated ID/operation/source/model/settings, invalid
+tokens/files/text, duplicate or incomplete frames and provider failure detail.
+An initial collection of these checks exposed a missing NativeWitness import;
+restoring the existing import fixed that test-authoring defect. These are external
+wire-contract checks, not physical or native lifecycle acceptance.
+
+Nine serial native negative cases are authored but UNREVIEWED: stale package,
+source and sidecar revision before reservation; selected model/settings refusal
+without provider calls; actual provider-inflight timeout, cancel and disconnect
+with durable UNKNOWN and child reaping; joined provider failure without replay.
+They use the existing native_backend's SDK-produced history and actual retained
+native reader with a localhost provider. No fake native/state/protocol object.
+
+Deletion closure remains pending native acceptance and exact mappings for clean
+decline/refusal recovery, large file metadata and progress liveness/correlation.
+Correction, settings-change-after-summary, saved-source-change-after-summary and
+disconnect higher contracts belong to existing
+`test_selected_owner_compaction_integration.py` journeys. Original injected versus
+covered source identity and the four standby fake-stream gaps remain open here;
+Schrodinger was asked for the current higher215 coverage before deleting them.
+This checkpoint is not READY and does not alter production or the installed app.

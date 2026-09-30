@@ -1,143 +1,257 @@
-"""Actual local pipes and durable SQLite; no Pi/provider/network calls."""
+"""Actual retained native summaries and strict RPC boundary contracts.
+
+Only provider responses are controlled locally. Native saved state, transport,
+reservation, cancellation and child custody are real; no substitute child host.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-import sys
-from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
-from agent_comms.native_pi import NativePiRpcLaunch
-from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.owner_compaction_prepare import NativeWitness
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
-from retained_native_fixture import retained_native_host
-from selected_summary_cases import manual_source
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
-CHILD = r"""
-import json,sys,sqlite3,time
-from agent_comms.compaction_journal import SelectedSummaryAttempt
-from agent_comms.compaction_states import ReservedSummary
-from pathlib import Path
-mode,journal,received=sys.argv[1:]
-print('ready',file=sys.stderr,flush=True)
-r=json.loads(sys.stdin.readline())
-# Check the actual persisted reservation before producing any result.
-db=sqlite3.connect(journal)
-row=SelectedSummaryAttempt.one(db,operation_id=r['operationId'])
-assert row is not None and isinstance(row.state,ReservedSummary),row
-Path(received).write_text(json.dumps(r))
-if mode in ('progress','duplicate-progress','foreign-progress'):
-    for sequence in range(1, 6):
-        print(json.dumps(dict(type='agent_comms_compaction_progress',id=r['id'],
-              operationId='foreign' if mode=='foreign-progress' else r['operationId'],
-              sequence=sequence if mode=='progress' else 1)),flush=True)
-        time.sleep(.035)
-if mode=='hang':
-    time.sleep(30)
-if mode=='source':
-    with open(r['witness']['sessionFile'],'a') as f: f.write('{}\n')
-if mode=='sidecar':
-    Path(r['witness']['sessionFile']+'.input-proof').write_text('{}\n')
-if mode=='large':
-    print('x'*200000,flush=True)
-    time.sleep(30)
-cost=dict.fromkeys(['input','output','cacheRead','cacheWrite','total'],0)
-usage=dict.fromkeys(['input','output','cacheRead','cacheWrite','totalTokens'],0)
-usage['cost']=cost
-result=dict(summary='native summary',firstKeptEntryId=r['witness']['firstKeptEntryId'],
-            tokensBefore=1200,details=dict(readFiles=['foo.py'],modifiedFiles=[]),usage=usage)
-if mode=='many-files':
-    result['details']['readFiles']=[f'{n}/'+'x'*3990 for n in range(3800)]
-if mode=='tokens': result['tokensBefore']=True
-if mode=='file': result['details']['readFiles']=['bad\0path']
-if mode=='surrogate': result['summary']='\ud800'
-d=dict(version=1,status='summarized',operationId=r['operationId'],
-       witness=r['witness'],selected=r['selected'],settings=r['settings'],result=result)
-if mode=='wrong': d['operationId']='f'*32
-if mode in ('decline','limit'):
-    d=dict(version=1,status='declined',operationId=r['operationId'],
-           reason='limit_exceeded' if mode=='limit' else 'split_turn')
-if mode=='unknown': d=dict(version=1,status='unknown',operationId=r['operationId'])
-if mode in ('provider-error', 'invalid-error', 'oversize-error'):
-    d=dict(version=1,status='unknown',operationId=r['operationId'],
-           reason='402: insufficient credits on configured model')
-    if mode=='invalid-error': d['reason']='bad\x1bdetail'
-    if mode=='oversize-error': d['reason']='x'*1025
-response=dict(id=r['id'],type='response',command=r['type'],success=True,data=d)
-raw=json.dumps(response)
-if mode=='duplicate': raw=raw[:-1]+',"success":true}'
-print(raw,flush=True)
-# Behave as an existing idle child: do not exit just after our one exchange.
-sys.stdin.read()
-"""
 
+@pytest.fixture
+async def retained_summary(native_backend):
+    """Prepare a real SDK source without replacing the retained child or its reader."""
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.owner_compaction_prepare import prepare_native_source
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from agent_comms.pi_summary_payloads import SelectedModel
+    from selected_summary_cases import manual_source
 
-@asynccontextmanager
-async def selected(tmp_path, mode="success"):
-    file = tmp_path / "session.jsonl"
-    file.write_text('{"type":"session","version":3,"id":"session"}\n')
-    journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-    received = tmp_path / "received.json"
-    child = await AttachedChild.start(
-        (
-            sys.executable,
-            "-u",
-            "-c",
-            CHILD,
-            mode,
-            str(journal.path),
-            str(received),
-        )
+    native = native_backend
+    settings = PiCompactionSettings(2048, 1)
+    configured = json.loads((native.config / "settings.json").read_text())
+    configured["compaction"].update(reserveTokens=2048, keepRecentTokens=1)
+    (native.config / "settings.json").write_text(json.dumps(configured))
+    for text in ("First original retained question", "Second original retained question"):
+        assert (await native.run(text))[-1].ok
+    model = native.persistent.custody.child.attestation.state.model
+    assert model is not None
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
+    preparation = await asyncio.to_thread(
+        prepare_native_source, package, str(native.session), settings=settings,
+        context_window=model.context_window,
     )
-    async with asyncio.timeout(5):
-        assert await child.stderr.readline() == b"ready\n"
-    persistent = retained_native_host(
-        child,
-        NativePiRpcLaunch((sys.executable,), tmp_path, {}, tmp_path, file, tmp_path),
-        NativeSessionIdentity("session", str(file)),
+    assert preparation is not None
+    envelope = dict(
+        source=manual_source(native.session),
+        selected=SelectedModel(model.provider, model.id, model.context_window).to_wire(),
+        settings=FieldCodec.encode(settings),
     )
-    witness = NativeWitness(
-        session_id="session",
-        session_file=str(file),
-        leaf_id="last",
-        first_kept_entry_id="kept",
-        revision=":".join(map(str, persistent.custody.revision[0])),
-    )
-    source = dict(
-        source=manual_source(persistent.custody.identity.session_file),
-        selected=dict(provider="fixture", modelId="fixture", contextWindow=4096),
-        settings=dict(reserveTokens=100, keepRecentTokens=100),
-    )
-    slot = SelectedSummarySlot("owner", "session")
+    journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
+    slot = SelectedSummarySlot("owner", preparation.witness.session_id)
 
-    async def run(**kwargs):
+    async def run(*, source=envelope, expected_package=package, **options):
         return await slot.run_selected_summary(
-            persistent,
-            journal,
-            witness,
-            source,
-            expected_package=tmp_path,
-            tokens_before=1200,
-            **kwargs,
+            native.persistent, journal, preparation.witness, source,
+            expected_package=expected_package, tokens_before=preparation.tokens_before,
+            **options,
         )
 
+    yield native, preparation, envelope, journal, run
+
+
+@pytest.mark.parametrize("changed", ["package", "revision", "sidecar"])
+async def test_actual_retained_stale_source_never_reserves_or_sends(retained_summary, changed):
+    native, _, _, journal, run = retained_summary
+    original, inputs, calls = native.session.read_bytes(), native.saved_inputs(), native.provider.posts
+    options = {}
+    if changed == "package":
+        options["expected_package"] = native.project
+    else:
+        path = native.session if changed == "revision" else Path(str(native.session) + ".input-proof")
+        assert path.exists()
+        stat = path.stat()
+        os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1000000))
+    with pytest.raises(SelectedChildUnknown, match="stale"):
+        await run(**options)
+    assert not journal.summaries.history(str(native.session))
+    assert native.provider.posts == calls
+    assert native.session.read_bytes() == original
+    assert native.saved_inputs() == inputs
+
+
+@pytest.mark.parametrize("changed", ["model", "settings"])
+async def test_actual_selected_mismatch_refuses_without_provider_or_replay(retained_summary, changed):
+    from agent_comms.compaction_records import SelectedSummarySource
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.pi_summary_payloads import SummaryDeclinedData
+
+    native, _, envelope, journal, run = retained_summary
+    original, inputs, calls = native.session.read_bytes(), native.saved_inputs(), native.provider.posts
+    source = FieldCodec.decode(SelectedSummarySource, envelope)
+    source = (
+        replace(source, selected=replace(source.selected, model_id="unselected-model"))
+        if changed == "model"
+        else replace(source, settings=replace(source.settings, reserve_tokens=2049))
+    )
+    result = await run(source=FieldCodec.encode(source))
+    assert isinstance(result, SummaryDeclinedData)
+    assert result.reason == changed + "_mismatch"
+    attempt = journal.summaries.get(result.operation_id)
+    assert attempt.state.declared_name == "refused"
+    assert journal.summaries.blocking(str(native.session)) == (attempt,)
+    assert not native_input_admitted(native.root, str(native.session))
+    assert native.persistent.custody.idle().current
+    assert native.provider.posts == calls
+    assert native.session.read_bytes() == original
+    assert native.saved_inputs() == inputs
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        await run(source=FieldCodec.encode(source))
+    assert native.provider.posts == calls
+
+
+@pytest.mark.parametrize("termination", ["timeout", "cancel", "disconnect"])
+async def test_actual_inflight_summary_uncertainty_reaps_and_never_replays(retained_summary, termination):
+    native, _, _, journal, run = retained_summary
+    original, inputs, calls = native.session.read_bytes(), native.saved_inputs(), native.provider.posts
+    native.provider.status = 0
+    child = native.persistent.custody.child.proc
+    task = asyncio.create_task(run(idle_timeout_seconds=0.5 if termination == "timeout" else 10))
     try:
-        yield run, persistent, journal, file, received
+        async with asyncio.timeout(5):
+            while native.provider.posts == calls:
+                assert not task.done(), task.result() if task.done() else None
+                await asyncio.sleep(0.005)
+        if termination == "cancel":
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            if termination == "disconnect":
+                await child.stop()
+            with pytest.raises(SelectedChildUnknown):
+                await task
+        assert not child.alive()
+        assert not native.persistent.available
+        (attempt,) = journal.summaries.history(str(native.session))
+        assert attempt.state.declared_name == "unknown"
+        assert journal.summaries.blocking(str(native.session)) == (attempt,)
+        assert not native_input_admitted(native.root, str(native.session))
+        assert native.provider.posts == calls + 1
+        assert native.session.read_bytes() == original
+        assert native.saved_inputs() == inputs
+        with pytest.raises(SelectedChildUnknown):
+            await run()
+        assert native.provider.posts == calls + 1
     finally:
-        await persistent.close_idle()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_actual_joined_provider_failure_preserves_source_without_replay(retained_summary):
+    from agent_comms.selected_pi_summary_rpc import SelectedSummaryFailed
+
+    native, _, _, journal, run = retained_summary
+    original, inputs, calls = native.session.read_bytes(), native.saved_inputs(), native.provider.posts
+    native.provider.status = 400
+    with pytest.raises(SelectedSummaryFailed, match="maximum context length exceeded") as failure:
+        await run()
+    attempt = journal.summaries.get(failure.value.operation_id)
+    assert attempt.state.declared_name == "failed"
+    assert attempt.state.terminal and attempt.state.settled_without_original
+    assert not attempt.state.original_eligible
+    assert not journal.summaries.blocking(str(native.session))
+    assert native.persistent.custody.idle().current
+    assert native.provider.posts == calls + 1
+    assert native.session.read_bytes() == original
+    assert native.saved_inputs() == inputs
+
+
+def selected_request():
+    from agent_comms.owner_compaction_prepare import NativeWitness
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from agent_comms.pi_commands import AgentCommsSummarizeCompaction
+    from agent_comms.pi_summary_payloads import SelectedModel
+
+    return AgentCommsSummarizeCompaction(
+        id="selected", version=1, operation_id="a" * 32,
+        witness=NativeWitness("session", "/saved.jsonl", "leaf", "kept", "1:2:3:4:5"),
+        selected=SelectedModel("fixture", "fixture", 32768),
+        settings=PiCompactionSettings(2048, 1024),
+    )
+
+
+def summarized_frame(request):
+    """External wire contract only: no process, journal or retained state facade."""
+    data = request.to_rpc()
+    data.pop("id")
+    data.pop("type")
+    data.update(status="summarized", result=dict(
+        summary="native summary", firstKeptEntryId="kept", tokensBefore=1200,
+        details=dict(readFiles=["foo.py"], modifiedFiles=[]),
+        usage=dict(input=1, output=1, cacheRead=0, cacheWrite=0, totalTokens=2,
+                   cost=dict(input=0, output=0, cacheRead=0, cacheWrite=0, total=0)),
+    ))
+    return dict(type="response", id=request.id, command=request.declared_name, success=True, data=data)
+
+
+@pytest.mark.parametrize("path,value", [
+    (("id",), "unrelated"), (("success",), False),
+    (("data", "operationId"), "b" * 32),
+    (("data", "witness", "leafId"), "different"),
+    (("data", "selected", "modelId"), "different"),
+    (("data", "settings", "reserveTokens"), 2049),
+    (("data", "result", "tokensBefore"), True),
+    (("data", "result", "tokensBefore"), 1201),
+    (("data", "result", "firstKeptEntryId"), "different"),
+    (("data", "result", "summary"), "\ud800"),
+    (("data", "result", "details", "readFiles"), ["bad\0path"]),
+])
+def test_summary_wire_refuses_uncorrelated_or_invalid_native_data(path, value):
+    from agent_comms.selected_pi_summary_rpc import _summary_response
+
+    request = selected_request()
+    frame = summarized_frame(request)
+    target = frame
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    with pytest.raises(SelectedChildUnknown):
+        _summary_response((json.dumps(frame) + "\n").encode(), request, 1200)
+
+
+@pytest.mark.parametrize("corruption", ["duplicate", "incomplete"])
+def test_summary_wire_requires_one_complete_unambiguous_record(corruption):
+    from agent_comms.selected_pi_summary_rpc import _summary_response
+
+    request = selected_request()
+    raw = json.dumps(summarized_frame(request))
+    raw = raw[:-1] + ',"success":true}\n' if corruption == "duplicate" else raw
+    with pytest.raises(SelectedChildUnknown):
+        _summary_response(raw.encode(), request, 1200)
+
+
+@pytest.mark.parametrize("reason,detail", [
+    (None, "no failure detail"),
+    ("402: insufficient credits on configured model", "402: insufficient credits"),
+    ("bad\x1bdetail", "Invalid selected summary failure detail"),
+    ("x" * 1025, "Invalid selected summary failure detail"),
+])
+def test_unknown_summary_wire_preserves_only_valid_provider_detail(reason, detail):
+    from agent_comms.selected_pi_summary_rpc import _summary_response
+
+    request = selected_request()
+    frame = summarized_frame(request)
+    frame["data"] = dict(version=1, status="unknown", operationId=request.operation_id, reason=reason)
+    with pytest.raises(SelectedChildUnknown, match=detail):
+        _summary_response((json.dumps(frame) + "\n").encode(), request, 1200)
 
 
 async def test_retained_native_summary_preserves_source_and_blocks_replay(native_backend):
@@ -250,86 +364,6 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
         await native.persistent.close()
 
 
-async def test_decline_is_data_and_does_not_automatically_clear_input_gate(tmp_path):
-    async with selected(tmp_path, "decline") as (run, _, journal, file, _received):
-        result = await run()
-        assert result.summary is None and result.decline_reason == "split_turn"
-        assert journal.summaries.get(result.operation_id).state.declared_name == "reserved"
-        assert not native_input_admitted(journal.path.parent, str(file))
-
-
-@pytest.mark.parametrize(
-    "mode", ["wrong", "tokens", "file", "surrogate", "duplicate", "unknown", "source", "sidecar"]
-)
-async def test_uncertain_result_retires_child_and_retains_unknown(tmp_path, mode):
-    async with selected(tmp_path, mode) as (run, persistent, journal, file, _received):
-        child = persistent.custody.child.proc
-        with pytest.raises(SelectedChildUnknown):
-            await run()
-        assert child.returncode is not None
-        assert persistent.custody.session_file == str(file)
-        assert journal.summaries.unresolved(str(file))[0].state.declared_name == "unknown"
-        assert not native_input_admitted(journal.path.parent, str(file))
-
-
-async def test_timeout_does_not_retry_summary(tmp_path):
-    async with selected(tmp_path, "hang") as (run, persistent, journal, file, received):
-        with pytest.raises(SelectedChildUnknown, match="made no progress for 0.15 seconds"):
-            await run(idle_timeout_seconds=0.15)
-        assert not persistent.available and received.exists()
-        assert len(journal.summaries.unresolved(str(file))) == 1
-
-
-@pytest.mark.parametrize(
-    ("mode", "detail"),
-    [
-        ("provider-error", "402: insufficient credits on configured model"),
-        ("invalid-error", "Invalid selected summary failure detail"),
-        ("oversize-error", "Invalid selected summary failure detail"),
-    ],
-)
-async def test_failure_detail_survives_without_authorizing_replay(tmp_path, mode, detail):
-    async with selected(tmp_path, mode) as (run, persistent, journal, file, received):
-        with pytest.raises(SelectedChildUnknown, match=detail):
-            await run()
-        assert not persistent.available
-        operation = json.loads(received.read_text())["operationId"]
-        assert journal.summaries.get(operation).state.declared_name == "unknown"
-        assert not native_input_admitted(journal.path.parent, str(file))
-        assert len(journal.summaries.unresolved(str(file))) == 1
-
-
-async def test_cancellation_retains_durable_unknown_and_reaps(tmp_path):
-    async with selected(tmp_path, "hang") as (run, persistent, journal, file, received):
-        child = persistent.custody.child.proc
-        task = asyncio.create_task(run())
-        async with asyncio.timeout(2):
-            while not received.exists():
-                await asyncio.sleep(0.005)
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        assert child.returncode is not None
-        assert journal.summaries.unresolved(str(file))[0].state.declared_name == "unknown"
-
-
-@pytest.mark.parametrize("changed", ["revision", "package"])
-async def test_stale_child_never_reserves_or_sends(tmp_path, changed):
-    async with selected(tmp_path) as (run, persistent, journal, file, received):
-        if changed == "revision":
-            persistent.custody.revision = ((0, 0, 0, 0, 0), None)
-        else:
-            launch, auth = persistent.custody.child.key
-            persistent.custody.child.key = (
-                replace(launch, package=tmp_path / "changed-package"),
-                auth,
-            )
-        with pytest.raises(SelectedChildUnknown, match="stale"):
-            await run()
-        assert not received.exists()
-        assert not journal.summaries.unresolved(str(file))
-
-
 async def test_bounded_reader_refuses_oversize_across_transport_fragments():
     stream = asyncio.StreamReader(limit=16)
     reader = PiRpcChannel(stream)
@@ -352,94 +386,6 @@ async def test_reader_keeps_partial_record_on_cancel_and_enforces_bound():
     stream.feed_data(b"y" * 13 + b"\n")
     with pytest.raises(ValueError, match="transport limit"):
         await reader.readline(max_bytes=32)
-
-
-async def test_limit_decline_is_durable_and_never_admits_original(tmp_path):
-    from agent_comms.cli import main
-    from agent_comms.comms import wire
-    from agent_comms.threads import Thread
-
-    async with selected(tmp_path, "limit") as (run, persistent, journal, file, received):
-        result = await run()
-        assert result.summary is None and result.decline_reason == "limit_exceeded"
-        attempt = CompactionJournal(journal.path).summaries.get(result.operation_id)
-        assert attempt.state.declared_name == "refused"
-        assert attempt.state.decline_reason == "limit_exceeded"
-        assert not attempt.state.original_eligible
-        assert persistent.custody.child.proc.returncode is None
-        assert not native_input_admitted(tmp_path, str(file))
-        comms = wire(tmp_path)
-        comms.registry.register(Thread("owner", frozenset(), str(tmp_path), session_file=str(file)))
-        assert main(["--root", str(tmp_path), "compaction-status", "--thread", "owner"]) == 0
-        before = received.read_bytes()
-        with pytest.raises(CompactionJournalError, match="never replay"):
-            await run()
-        assert received.read_bytes() == before
-
-
-async def test_observable_progress_extends_idle_deadline_without_total_limit(tmp_path):
-    async with selected(tmp_path, "progress") as (run, persistent, journal, file, _):
-        result = await run(idle_timeout_seconds=0.08)
-        assert result.summary.text == "native summary"
-        assert persistent.custody.child.proc.returncode is None
-
-
-async def test_repeated_progress_does_not_hide_stalled_provider(tmp_path):
-    async with selected(tmp_path, "duplicate-progress") as (run, persistent, journal, file, _):
-        with pytest.raises(SelectedChildUnknown, match="made no progress"):
-            await run(idle_timeout_seconds=0.06)
-        assert journal.summaries.unresolved(str(file))[0].state.declared_name == "unknown"
-        assert not persistent.available
-
-
-async def test_manual_instructions_share_selected_rpc_and_adaptive_omits_field(tmp_path):
-    async with selected(tmp_path, "decline") as (run, _, journal, file, received):
-        await run(custom_instructions="Preserve the owner decisions")
-        assert (
-            json.loads(received.read_text())["customInstructions"] == "Preserve the owner decisions"
-        )
-    other = tmp_path / "adaptive"
-    other.mkdir()
-    async with selected(other, "decline") as (run, _, journal, file, received):
-        await run()
-        assert "customInstructions" not in json.loads(received.read_text())
-
-
-async def test_foreign_progress_cannot_extend_selected_attempt(tmp_path):
-    async with selected(tmp_path, "foreign-progress") as (run, persistent, journal, file, _):
-        with pytest.raises(SelectedChildUnknown, match="Foreign selected compaction progress"):
-            await run(idle_timeout_seconds=0.06)
-        assert journal.summaries.unresolved(str(file))[0].state.declared_name == "unknown"
-        assert not persistent.available
-
-
-async def test_selected_frame_uses_transport_without_retired_file_count_budget(tmp_path):
-    async with selected(tmp_path, "many-files") as (run, persistent, journal, file, _):
-        result = await run()
-        assert len(result.summary.details.read_files) == 3800
-        assert persistent.custody.child.proc.returncode is None
-        assert journal.summaries.blocking(str(file))
-
-
-async def test_refusal_recovery_rechecks_exact_record_and_never_reattempts(tmp_path):
-    from agent_comms.compaction_states import RetiredRefusalSummary
-
-    async with selected(tmp_path, "limit") as (run, _, journal, file, _):
-        result = await run()
-        attempt = journal.summaries.get(result.operation_id)
-        journal.summaries.refuse(result.operation_id, result.decline_reason)
-        assert journal.summaries.get(result.operation_id) == attempt
-        with pytest.raises(CompactionJournalError, match="refusal transition"):
-            journal.summaries.refuse(result.operation_id, "different native reason")
-        with pytest.raises(CompactionJournalError, match="commit reservation"):
-            attempt.state.require_commit_reservation()
-        journal.summaries.retire_refused(attempt)
-        retired = journal.summaries.get(result.operation_id)
-        assert isinstance(retired.state, RetiredRefusalSummary)
-        assert retired.state.decline_reason == result.decline_reason
-        with pytest.raises(CompactionJournalError, match="changed"):
-            journal.summaries.retire_refused(attempt)
-        assert journal.summaries.get(result.operation_id) == retired
 
 
 @pytest.mark.parametrize(
