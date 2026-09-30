@@ -289,3 +289,46 @@ the declared scratch run02 root. Actual deleted production lines:104, added22.
 This is installed Core/native/ACP acceptance, not completed paired216 mounted
 UI acceptance. The first mismatched native614 preflight was rejected before
 launch and is preserved. No production restriction was bypassed or reset.
+
+## Paired installed mounted216 acceptance
+
+Toad216 checkpointde8e9acd normally includes current main53154 through0b27bf39.
+Its production wheel0b27bf39 paired with this Core20079652 wheel and reviewed
+native615 passes one continuous installed ToadApp/native/ACP journey. Actual
+Pilot goal and menu clicks cover saved history without a prompt, Resume then
+Pause during a held native turn without cancellation, native completion,
+A/channel/A preserving original draft document and undo history, original
+Goal.state/goal_history cold reopen, Stop then Start, and a fresh editor input
+whose fourth native response is visibly painted. The original native history
+byte prefix and UNKNOWN record remain unchanged. All four provider requests
+are localhost controls; no paid call, live-root mutation or original replay.
+
+The four unmodified SVG exports were rendered by existing rsvg-convert and
+inspected: saved responses with owner pause/Resume; held native waiting state;
+stopped owner Start menu with retained draft; fresh response4 and original
+paused revision4. The held-turn frame precedes asynchronous paused-goal repaint;
+the original executing/paused assertions and final visible revision supply its
+proof. Earlier run04 passes behavior but inherits NO_COLOR=1 and is excluded
+from visual acceptance. Fresh run05 removes that environment flag at startup.
+This is actual installed mounted headless App acceptance, not a desktop st
+capture or verification of the frozen native06 handling idle/A-B/A failure.
+
+Run05 exits0; original canonical Thread process checks show both fixture owners
+stopped/dead and environment-scoped observations find no owned child leftovers.
+The existing OwnerLifecycle owns cleanup. Toad deletes its entire58-line fake
+goal agent facade and all consumers are covered by the real native journey or
+Core declaration family controls. Existing thread action deletion guard passes.
+Sanitized paired receipt is committed in Toad216 at
+evidence/c3-goal-owner/mounted-receipt.json; logs, original journals and four
+SVG/PNG frames remain under the216 scratch/c3-mounted-run05-evidence directory.
+Original private root /home/ts/.cache/agent-scratch/c3-216-05 is preserved.
+
+This goal/history/control deletion checkpoint has installed paired acceptance.
+Full C3 remains open for Arendt's already assigned shared initial/forwarded
+backend, turn_inputs and OwnedSendAdmission custody capability. All six files
+and five family rows above remain tracked; parent reviews source independently
+of the frozen critical stage. Core430/436 original native/wire reference source
+and consumer checkpoint is now merged at1f327fd0/000a31c5, not installed.
+Arendt FULL owns its old720 routing carry operator and actual original-format
+fixture; parent owns activation and single cutover custody. No competing builder,
+future-format mixture, goal-pause historical file cleanup or legacy reader here.
