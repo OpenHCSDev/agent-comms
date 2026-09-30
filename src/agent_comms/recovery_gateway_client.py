@@ -12,7 +12,6 @@ import asyncio
 import json
 import os
 import socket
-import stat
 import struct
 import sys
 from contextlib import suppress
@@ -20,6 +19,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from .field_codec import FieldCodec
+from .private_path import PrivateDirectoryRole, PrivateSocketRole, TrustedAncestorRole
 from .recovery_projection import AvailableRecoveryProjection, RecoveryProjection, RecoveryRequest
 
 _MAX_REPLY = 4096
@@ -60,25 +60,12 @@ def _private_socket(path: Path) -> bool:
         root = path.parent.parent
         for ancestor in (root, *root.parents):
             info = ancestor.lstat()
-            if (
-                not stat.S_ISDIR(info.st_mode)
-                or info.st_uid not in (0, os.geteuid())
-                or (info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX)
-            ):
-                return False
-        if root.lstat().st_uid != os.geteuid() or stat.S_IMODE(root.lstat().st_mode) != 0o700:
-            return False
-        directory = path.parent.lstat()
-        endpoint = path.lstat()
-        return (
-            stat.S_ISDIR(directory.st_mode)
-            and directory.st_uid == os.geteuid()
-            and stat.S_IMODE(directory.st_mode) == 0o700
-            and stat.S_ISSOCK(endpoint.st_mode)
-            and endpoint.st_uid == os.geteuid()
-            and stat.S_IMODE(endpoint.st_mode) == 0o600
-        )
-    except OSError:
+            TrustedAncestorRole.require(info)
+        PrivateDirectoryRole.require(root.lstat())
+        PrivateDirectoryRole.require(path.parent.lstat())
+        PrivateSocketRole.require(path.lstat())
+        return True
+    except (OSError, ValueError):
         return False
 
 

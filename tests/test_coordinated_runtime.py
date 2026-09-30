@@ -532,7 +532,7 @@ async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
     assert len(calls) == 1 and len(witnessed) == 1
-    assert witnessed[0][:2] == (result.fresh_session.device, result.fresh_session.inode)
+    assert witnessed[0].identity == result.fresh_session.identity
     assert result.fresh_session.selected_thinking_level == "high"
     result.fresh_session.verify_saved_identity()
     rows = [json.loads(row) for row in result.fresh_session.path.read_text().splitlines()]

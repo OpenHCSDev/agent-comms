@@ -11,7 +11,6 @@ import os
 import re
 import shutil
 import sqlite3
-import stat
 import sys
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
@@ -26,6 +25,7 @@ from .field_codec import FieldCodec
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .native_entries import NativeEntry, SessionEntry
 from .pi_vocabulary import ThinkingLevel
+from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
 from .selected_tool_broker import NativeToolMode
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
@@ -269,13 +269,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
             ) as held:
                 before = os.fstat(held.fileno())
-                if not stat.S_ISREG(before.st_mode):
-                    raise NativePiUnavailable("Native proof must be a regular file")
-                if (before.st_uid, stat.S_IMODE(before.st_mode), before.st_nlink) != (
-                    os.geteuid(),
-                    0o600,
-                    1,
-                ):
+                PrivateFileRole.require(before)
+                if before.st_nlink != 1:
                     raise NativePiUnavailable("Native proof must be private and unaliased")
                 with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)) as db:
                     db.execute("PRAGMA query_only=ON")
@@ -287,10 +282,10 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                         raise NativePiUnavailable(
                             "Native proof requires offline durable conversion"
                         )
-                    if not os.path.samestat(before, path.lstat()):
+                    if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
                         raise NativePiUnavailable("Native proof inode changed while opening")
                     yield db
-                    if not os.path.samestat(before, path.lstat()):
+                    if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
                         raise NativePiUnavailable("Native proof inode changed during observation")
         except (OSError, sqlite3.Error, ValueError, TypeError) as error:
             raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
@@ -669,13 +664,13 @@ def _read_private_file(path: Path):
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(fd, "rb") as stream:
             info = os.fstat(stream.fileno())
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_uid != os.geteuid()
-                or stat.S_IMODE(info.st_mode) != 0o600
-                or not info.st_size
-            ):
-                raise NativePiUnavailable("Native Pi evidence file is not private or is empty")
+            try:
+                PrivateFileRole.require(info)
+            except ValueError as error:
+                raise NativePiUnavailable("Native Pi evidence file is not private") from error
+            if not info.st_size:
+                raise NativePiUnavailable("Native Pi evidence file is empty")
+            revision = FileRevision.from_stat(info)
             remaining = info.st_size
             while remaining:
                 raw = stream.readline(remaining)
@@ -693,13 +688,7 @@ def _read_private_file(path: Path):
                 yield row
             after, named = os.fstat(stream.fileno()), path.lstat()
             for observed in (after, named):
-                if (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns) != (
-                    observed.st_dev,
-                    observed.st_ino,
-                    observed.st_size,
-                    observed.st_mtime_ns,
-                    observed.st_ctime_ns,
-                ):
+                if revision != FileRevision.from_stat(observed):
                     raise NativePiUnavailable("Native Pi evidence changed during observation")
     except OSError as error:
         raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
@@ -717,14 +706,11 @@ def _trusted_package(package: Path) -> Path:
         raise NativePiUnavailable("Canonical native Pi package layout is required")
     for ancestor in (package, *package.parents):
         info = ancestor.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-            raise NativePiUnavailable("Native Pi package has a redirected ancestor")
-        if info.st_uid not in (0, os.geteuid()):
-            raise NativePiUnavailable("Native Pi package has a foreign ancestor")
-        if info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX:
-            raise NativePiUnavailable("Native Pi package has a writable ancestor")
+        failed = TrustedAncestorRole.violation(info)
+        if failed is not None:
+            raise NativePiUnavailable(f"Native Pi package has unsafe ancestor: {failed.declared_name}")
     root = package.parents[2]
-    if root.stat().st_uid != os.geteuid() or stat.S_IMODE(root.stat().st_mode) != 0o700:
+    if PrivateDirectoryRole.violation(root.lstat()) is not None:
         raise NativePiUnavailable("Disposable native Pi root must be owner-only")
     from .native_package import NativePackageError, verify_native_package
 
@@ -740,14 +726,10 @@ def _private_session_dir(directory: Path) -> None:
         raise NativePiUnavailable("Native Pi session directory is not lexical")
     for ancestor in (directory, *directory.parents):
         info = ancestor.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-            raise NativePiUnavailable("Native Pi session directory has a redirected ancestor")
-        if info.st_uid not in (0, os.geteuid()):
-            raise NativePiUnavailable("Native Pi session directory has a foreign ancestor")
-        if info.st_mode & 0o022 and not info.st_mode & stat.S_ISVTX:
-            raise NativePiUnavailable("Native Pi session directory has a writable ancestor")
-    info = directory.lstat()
-    if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
+        failed = TrustedAncestorRole.violation(info)
+        if failed is not None:
+            raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {failed.declared_name}")
+    if PrivateDirectoryRole.violation(directory.lstat()) is not None:
         raise NativePiUnavailable("Native Pi session directory must be owner-only")
 
 
@@ -787,11 +769,7 @@ def _durable_private_session_dir(directory: Path) -> None:
         while True:
             _fsync_directory(parent)
             info = parent.lstat()
-            if (
-                parent == parent.parent
-                or info.st_uid != os.geteuid()
-                or stat.S_IMODE(info.st_mode) != 0o700
-            ):
+            if parent == parent.parent or PrivateDirectoryRole.violation(info) is not None:
                 break
             parent = parent.parent
     except OSError as error:
@@ -873,10 +851,10 @@ def _require_reviewed_selected_source_cli() -> None:
 
 def _fresh_selected_revision(
     fresh: FreshPrivateSession, *, started: bool = False
-) -> tuple[int, int, int, int, int]:
+) -> FileRevision:
     """Exact saved inode+revision; not a provider or terminal receipt."""
     if started:
         return fresh.verify_selected_startup()
     fresh.verify_prewrite()
     info = fresh.path.lstat()
-    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+    return FileRevision.from_stat(info)
