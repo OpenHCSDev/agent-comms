@@ -1,0 +1,11 @@
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930
+   Updating https://github.com/OpenHCSDev/toad.git (b2006bfe50ae50a262b049074258f7f0281791ac)
+    Updated https://github.com/OpenHCSDev/toad.git (b2006bfe50ae50a262b049074258f7f0281791ac)
+Resolved 68 packages in 1.41s
+   Building batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@b2006bfe50ae50a262b049074258f7f0281791ac
+      Built batrachian-toad @ git+https://github.com/OpenHCSDev/toad.git@b2006bfe50ae50a262b049074258f7f0281791ac
+Prepared 1 package in 444ms
+Uninstalled 1 package in 7ms
+Installed 1 package in 8ms
+ - batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@0aaacf43c135e3270813ebbc2c300a885d630e90)
+ + batrachian-toad==0.6.20 (from git+https://github.com/OpenHCSDev/toad.git@b2006bfe50ae50a262b049074258f7f0281791ac)

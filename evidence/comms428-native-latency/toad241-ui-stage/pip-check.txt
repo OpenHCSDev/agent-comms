@@ -1,0 +1,3 @@
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930
+Checked 68 packages in 1ms
+All installed packages are compatible

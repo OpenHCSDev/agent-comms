@@ -1,0 +1,11 @@
+{
+  "reason": "Merged exactsource became available after requested premerge package preparation, before verification/GUI/publication",
+  "initial_head": "0aaacf43c135e3270813ebbc2c300a885d630e90",
+  "final_head": "b2006bfe50ae50a262b049074258f7f0281791ac",
+  "native_core_unchanged": true,
+  "stage_builds": 1,
+  "normal_toad_pin_finalization_transactions": 1,
+  "verified_before_finalization": false,
+  "process_refs": [],
+  "original_build_log_preserved": true
+}

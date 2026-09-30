@@ -280,3 +280,36 @@ counts; unchanged e36/ceca ContextBudgetRequest rejection decoder recognizes onl
 the prior Cloudflare grammar. Mendel owns that typed external decoder/native
 correction in a separate draft. This stage does not fix output budgeting or claim
 whole model/performance readiness, and its immutable ceca was not patched.
+
+
+## Actual GUI caller failure and Toad241 candidate
+
+The paired package/import preflight did not exercise the GUI spawn consumer.
+Einstein's actual default toad-comms launch found a deleted private_nk_launch
+import in MaintenanceIngress before ACP/history attachment. Arendt owned and
+merged the whole consumer closure in Toad241; no Core alias was restored.
+This failure preserves the distinction between package preflight and actual GUI
+acceptance, which had remained explicitly assigned to the parent.
+
+One UI-only stage is prepared at
+`/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930`, exact
+Toad `b2006bfe50ae50a262b049074258f7f0281791ac`. Core a80, Textual2e49,
+SDK0.12.1 and public stable native ceca are unchanged. The stage initially
+assembled the requested reviewed 0aa source while its merge completed; before
+verification or any GUI use, normal resolution finalized its single Toad
+requirement to merged b200. Source/pyproject/lock differences are zero between
+those heads. Both original and finalization logs are retained; no direct_url
+metadata was rewritten or source override used.
+
+All 68 installed requirements match exactly; pip check passes. Toad273 and
+Core290 Python files match their exact source trees, noneditable Git provenance
+and existing RuntimeSelection metadata/probe pass with clean owned-process
+retirement. Unchanged native trust is reused, without another native build or
+tool/provider journey. Package-stage evidence is under
+`evidence/comms428-native-latency/toad241-ui-stage`.
+
+This is package readiness only. Einstein owns actual NORMAL candidate
+`toad-comms` startup -> ACP -> original41MB saved history -> peer -> A return.
+That must pass before parent UI-default publication. No backend/13-owner/route/
+TS/native change is required or performed here. Known budget policy remains
+Mendel453-owned and uncovered by this UI caller repair.

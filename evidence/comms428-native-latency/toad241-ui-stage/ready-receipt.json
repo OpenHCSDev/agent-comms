@@ -1,0 +1,54 @@
+{
+  "state": "READY-PACKAGE-STAGE-AWAITING-EINSTEIN-ACTUAL-CANDIDATE-CLI-ACCEPTANCE",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930",
+  "pins": {
+    "agent-comms": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+    "batrachian-toad": "b2006bfe50ae50a262b049074258f7f0281791ac",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "frozen_packages": 68,
+  "source_proof": {
+    "agent-comms": {
+      "pin": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+      "python_files_equal": 290,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "b2006bfe50ae50a262b049074258f7f0281791ac",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "runtime_preflight_pass": true,
+  "native_trust": "Unchanged canonical stable ceca, prior reviewed full proof reused",
+  "metadata_published_from_same_staging_receipt": true,
+  "owned_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 3513515,
+        "start_ticks": 25985781,
+        "returncode": 0
+      }
+    ]
+  },
+  "builds": 1,
+  "public_default_changes": 0,
+  "public_owner_restarts": 0,
+  "paid_calls": 0,
+  "native_inputs": 0,
+  "accepted_scope": "UI-only241 normal package/source provenance; unchanged Core/native acceptance reused. Einstein actual normal candidate launcher/ACP/41MB saved history A/B/A must pass BEFORE parent UI-default publication.",
+  "remaining_scope": "Known provider output-budget decoder defect remains Mendel453-owned; no budget fix claim. Parent UI-default only after Einstein actual candidate CLI acceptance; no backend/route/native/globalTS/owner updates.",
+  "normal_toad_pin_finalization_transactions": 1,
+  "pin_finalization_receipt": "/home/ts/.cache/agent-scratch/toad-private-launch-admission-stage-20260930/pending-pin-finalization.json",
+  "stage_builds": 1,
+  "only_changed_requirement": "batrachian-toad"
+}

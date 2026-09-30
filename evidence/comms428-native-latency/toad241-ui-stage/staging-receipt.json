@@ -1,0 +1,81 @@
+{
+  "owner": "Schrodinger241stage",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930",
+  "pins": {
+    "agent-comms": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+    "batrachian-toad": "b2006bfe50ae50a262b049074258f7f0281791ac",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-ceca2c05cf0ae07b/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "ceca2c05cf0ae07bc7bfab3831387bbf7f54a122675f26264f240dc5476b6e47",
+  "frozen_package_count": 68,
+  "only_changed_requirement": "batrachian-toad",
+  "baseline": "/home/ts/.local/share/agent-comms/runtime-managed-tool-bus-custody-20260930",
+  "requirements_sha256": "b6bb272b40292473b31f66bafd5859c919c4ca58447a8dd39c7d5ef39d56836a",
+  "component_source_proof": {
+    "agent-comms": {
+      "pin": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+      "python_files_equal": 290,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930/lib/python3.14/site-packages/agent_comms",
+      "source": "exact merged Git tree"
+    },
+    "batrachian-toad": {
+      "pin": "b2006bfe50ae50a262b049074258f7f0281791ac",
+      "python_files_equal": 273,
+      "noneditable": true,
+      "origin": "/home/ts/.local/share/agent-comms/runtime-private-launch-caller-20260930/lib/python3.14/site-packages/toad",
+      "source": "exact merged Git tree"
+    }
+  },
+  "component_provenance": {
+    "agent-comms": {
+      "url": "https://github.com/OpenHCSDev/agent-comms.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "a80c15025624eec3ed6bd93ef6173cfb66a193b6",
+        "requested_revision": "a80c15025624eec3ed6bd93ef6173cfb66a193b6"
+      }
+    },
+    "batrachian-toad": {
+      "url": "https://github.com/OpenHCSDev/toad.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "b2006bfe50ae50a262b049074258f7f0281791ac",
+        "requested_revision": "b2006bfe50ae50a262b049074258f7f0281791ac"
+      }
+    },
+    "textual": {
+      "url": "https://github.com/OpenHCSDev/textual.git",
+      "vcs_info": {
+        "vcs": "git",
+        "commit_id": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347",
+        "requested_revision": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+      }
+    }
+  },
+  "package_compatibility": "normal uv pip check passed68",
+  "affected_imports": [
+    "agent_comms.private_nk_entrypoint",
+    "agent_comms.active_route",
+    "agent_comms.cohort_foreground",
+    "agent_comms.response_conversation",
+    "agent_comms.coordination_response",
+    "toad.widgets.conversation",
+    "toad.widgets.viewport_body",
+    "toad.widgets.presentation_window",
+    "toad.screens.comms"
+  ],
+  "native_trust": "Unchanged canonical stable ceca; prior matching Corea80 full trust proof reused, no repeat package/tool scan",
+  "native_trust_reference": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/paired-ready-receipt.json",
+  "build_count": 1,
+  "parent_activation_required": true,
+  "defaults_changed": false,
+  "owners_restarted": false,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_root_loaded": false,
+  "accepted_scope": "UI-only241 normal package/source provenance; unchanged Core/native acceptance reused. Einstein actual normal candidate launcher/ACP/41MB saved history A/B/A must pass BEFORE parent UI-default publication.",
+  "remaining_scope": "Known provider output-budget decoder defect remains Mendel453-owned; no budget fix claim. Parent UI-default only after Einstein actual candidate CLI acceptance; no backend/route/native/globalTS/owner updates."
+}
