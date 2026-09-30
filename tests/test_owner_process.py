@@ -163,3 +163,99 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     finally:
         if owner.process_alive:
             ObservedProcess(owner.process_identity).stop_sync()
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Exact retained launch uses Linux /proc")
+def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, monkeypatch):
+    """One provider-free installed worker batch, with original distinct settings."""
+    from agent_comms.goal_states import BlockedGoal
+    from agent_comms.goals import Goal
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+
+    comms = Comms(tmp_path)
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
+    originals = []
+    settings = (
+        ("batch-a", ("--offline", "--no-tools", "--thinking", "off"), "credential-a"),
+        ("batch-b", (), "credential-b"),
+    )
+
+    def ready(owner):
+        deadline = time.monotonic() + 10
+        while not socket_path(tmp_path, owner.pid).exists():
+            assert owner.process_alive, "Actual batch worker exited before runtime attach"
+            assert time.monotonic() < deadline, "Actual batch worker failed to attach"
+            time.sleep(.02)
+
+    try:
+        for name, arguments, credential in settings:
+            goal = Goal("Protected failed original", name + "-goal", state=BlockedGoal("No replay"))
+            comms.registry.declare(Thread(
+                name, frozenset({name}), str(tmp_path),
+                model="openai-codex/gpt-6.1-sol", thinking_level="off",
+                goal=goal, task="retained task " + name,
+            ))
+            with monkeypatch.context() as patch:
+                patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
+                patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))
+                comms.owners.start(name, agent_args=arguments)
+            original = comms.registry.require(name)
+            ready(original)
+            originals.append(original)
+        # The original process launch name remains valid through registry rename.
+        comms.registry.rename("batch-b", "batch-renamed")
+        selected = ["batch-a", "batch-renamed"]
+        before = comms.registry.snapshot()
+        last = before.require_active("batch-renamed")
+        busy = replace(last, active_turn=ActiveTurn("protected-turn", last.pid))
+        comms.registry.register(busy)
+        refusal_source = comms.registry.snapshot()
+        with pytest.raises(RelationViolationError, match="idle before restart"):
+            comms.owners.restart_owners(selected)
+        assert comms.registry.snapshot() == refusal_source
+        assert all(owner.process_alive for owner in originals)
+        comms.registry.register(last)
+        original_goals = {name: comms.registry.require(name).goal for name in selected}
+        source_files = {
+            path: path.read_bytes() for path in tmp_path.rglob("*")
+            if path.is_file() and path.suffix == ".jsonl"
+        }
+        # The operator's model/arguments/credential must never overwrite a source owner.
+        monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", "--thinking high")
+        monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
+        target_binary = tmp_path / "target-pi-comms-native"
+        target_binary.symlink_to(comms.owners.native_entrypoint())
+        receipts = comms.owners.restart_owners(selected, agent_bin=str(target_binary))
+        assert len(receipts) == 2
+        assert all(not owner.process_alive for owner in originals)
+        for index, (receipt, (_, arguments, credential)) in enumerate(zip(receipts, settings, strict=True)):
+            current = comms.registry.require(receipt.thread)
+            ready(current)
+            launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
+            assert launch.binary == str(target_binary)
+            assert launch.arguments == arguments
+            assert launch.environment["BATCH_OWNER_CREDENTIAL"] == credential
+            assert launch.environment["PI_CODING_AGENT_DIR"] == str(tmp_path / (settings[index][0] + "-config"))
+            assert launch.environment["AGENT_COMMS_THREAD"] == selected[index]
+            assert current.process_identity != originals[index].process_identity
+            assert current.created_at == originals[index].created_at
+            assert current.tags == originals[index].tags
+            assert current.task == originals[index].task
+            assert current.model == originals[index].model
+            assert current.thinking_level == originals[index].thinking_level
+            assert current.goal == original_goals[current.name]
+            # Idle startup/handoff creates no model process and sends no original.
+            assert not Path(f"/proc/{current.pid}/task/{current.pid}/children").read_text().strip()
+        assert all(path.read_bytes() == content for path, content in source_files.items())
+        assert not list(tmp_path.rglob("*.input-proof"))
+    finally:
+        for name in ("batch-a", "batch-renamed", "batch-b"):
+            try:
+                owner = comms.registry.require(name)
+            except KeyError:
+                continue
+            if owner.process_alive:
+                comms.owners.stop(owner.name)
+        assert all(not owner.process_alive for owner in originals)
