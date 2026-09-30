@@ -26,6 +26,21 @@ repeated rebuild, bounded ownership at4/16/32/64 loaded/blank cohorts, cropped
 answer paint and measured spike frequency. Those remaining requirements are
 retained under213/214; a median improvement alone does not close them.
 
+## Current default activation
+
+The default paired checkpoint is now Core72062939, Toad3b019be0,
+Textual412b5a2b and reviewed native4ab91006. All11 live executable owners
+were idle at preflight and were restarted through the existing lifecycle;
+each retained session, model, thinking level, tags and goal. Stopped or dead
+registrations were left alone. Their exact interpreter/native pins were checked.
+The actual default `toad-comms comms428` launcher completed saved-history
+attachment with27 events, no ACP error, no prompt request and exit0.
+Receipts: `evidence/cleanup-live-integration/paired-activation.json`,
+`paired-owner-processes.json` and `paired-default-attachment.json`.
+Existing Toad windows must be restarted to consume the new public lifecycle ABI.
+This activation does not close the still-open full performance, messaging or
+refactoring scopes below.
+
 ## Current delivery checklist
 
 - [x] Merge Toad208 with the whole202 retained-history checkpoint and209 summary
@@ -34,36 +49,39 @@ retained under213/214; a median improvement alone does not close them.
 - [x] Merge Core417 C1,427 C4 and429 scheduling. Stage noneditable7fcf826a,
   Toad43949ee, Textual412 and native4ab; validate native package trust and actual
   staged loading of27 comms428 events. Default Core remains ab3397a6/native7817.
-- [ ] Arendt425/211: finish one canonical turn lifecycle, rename-safe attachment
-  scope, first native input publication and all UI status/goal consumers.
-  Continuous installed workflow must pass; no local append or lifecycle mirror.
+- [x] Arendt425/211 checkpoint merged Coreb554c1e3/Toad3b019be0 and activated.
+  Actual installed native self-rename, original first-input publication once,
+  physical warm A/B/A with editor/undo and goal/status refresh passed with exit0.
+  Remaining whole S14/C0 admission/registry domain closure is Core433/Toad219;
+  it is not complete merely because this checkpoint is live.
 - [x] Schrodinger426/210: corrected original accepted registry/process witness
   passed the expanded installed gate in4.793 seconds; fresh reply painted,
   no replay or repair-time provider call. Merged Cored306d0df/Toad6e56770d.
   Parent stage uses the merged noneditable pair; actual comms428 load delivered
   a27-event saved snapshot with no error/prompt and clean exit. Default activation
-  remains outstanding under the paired-install item below.
-- [ ] Einstein431: remove both whole-turn clocks and the300-second maximum,
-  consume the shared lifecycle, and prove an actual95-second native tool turn
-  plus cancellation/EOF dispositions. Ready500429bd; actual installed acceptance
-  passed all three cases in106.04 seconds, with children retired and UNKNOWN/no
-  replay preserved. No total-turn deadline is allowed. Merge/activation requires
-  the211 public lifecycle consumer; the current default UI is incompatible.
+  is now complete under the paired-install checkpoint below.
+- [x] Einstein431 merged72062939 and activated with paired211. Both whole-turn
+  clocks and the300-second maximum are removed. Actual95-second native bash
+  plus cancellation and EOF passed three cases in106.04 seconds, with original
+  input dispositions and child retirement checked. No completed gate was replayed.
 - [ ] Mendel430 / Schrodinger215: original sender chronology and recipient
   handling update in both open DM/IRC views without tab reopening. Delete
   synthetic sender publication and its consumers. Perform the derived-index
   quiet rebuild under the retained old-schema bus lock; preserve original wire,
   frozen audiences, history and UNKNOWN.
-- [ ] Heisenberg213: installed saved-history A/B/A, retained reader/draft/undo,
-  focus/editing recovery and repeated PageDown while lazy end grows, then reverse
-  and idle. Existing geometry test reproduces false follow on the old version
-  and passes on the candidate; full installed workflow remains pending.
+- [x] Heisenberg213 reader checkpoint merged4c20f882, inherited by211 and live.
+  Real146MB/41MB saved histories,351 completed compositor frames and3/3 physical
+  B-return retained-body hashes passed. Repeated PageDown while the lazy extent
+  grew, reverse, idle and separate End were covered. The user's broader void and
+  focus/resource acceptance remain explicitly open in continuation Toad217.
 - [ ] Kepler214: velocity/direction-dependent bounded preparation, End bottom
   burst and shared background rendering. Implementation49df55d9 is pushed;
   Kepler resumed after Einstein finished, without expanding the active fleet.
-  Capture video correlated
-  with the same-run CPU profile after the serial native fixture slot opens.
-- [ ] Merge useful tested checkpoints into the OpenHCSDev forks, stage matching
+  A pushed continuation now includes the real capture and674-sample CPU profile,
+  plus the async MRO handler fix. The complete native journey failed after capture
+  during offline encoding; that failure is preserved. Encoding has been moved
+  outside the native journey for the next serial gate. Not READY or live.
+- [x] Merge this useful tested checkpoint into the OpenHCSDev forks, stage matching
   Core/Toad/Textual/native pins, perform the declared quiet cutover, restart only
   eligible owners and verify the actual default affected entrypoint. Preserve
   active turns, original sessions/proofs and uncertain input dispositions.
@@ -87,3 +105,8 @@ Do not launch a heavy parallel fixture fleet or delete unreviewed work/history.
 The next installation is prioritized for usage-blocking recovery, lifecycle,
 delivery and deadline defects. Final warm first paint and the remaining broader
 performance targets do not hold a useful verified checkpoint, and remain tracked.
+
+Next native fixture ownership: Schrodinger215 consumes Mendel430 original-source
+checkpoint; Kepler214 follows its released slot. Arendt433 continues nominal
+identity closure, Mendel421/216 and422 remain open, and Heisenberg217 owns full
+reader/focus/resource continuation. These are active unfinished scopes.
