@@ -92,7 +92,9 @@ subprocess observes typed canonical ToolRunningPhase; subsequent provider
 requests observe ModelWaitPhase. No participant registration. Original native
 input equality/cursor/source joins hold; second execution refuses replay.
 Three separate discovery process controls pass, and seven focused source
-controls pass. Original TUI evidence is Einstein's retained capture; this
+controls pass. The extended existing native-owner guard passes in 0.17s;
+the required ratchet at source `1c653f91ac81720b20dfb0d7a70537f0354b0c14`
+has zero positive deltas. Original TUI evidence is Einstein's retained capture; this
 backend checkpoint does not claim a new physical TUI gate or performance result.
 
 ## Authorized recovery and remaining public boundary
@@ -113,10 +115,22 @@ The same original FULL journal then recorded toolResult `95ffaa0c` at
 13:26:33.491Z, proving the original two-help call completed without a new input.
 R1 subsequently invoked old `worker.main` directly in a new tool call, creating
 third helper 3261930/birth 25044097. The owner explicitly authorized this third
-exact helper's retirement; it is pending in this source checkpoint. No further
-helper retirement is authorized. Public R1's original lease is still active;
-do not describe that turn as recovered until its actual original completion
-and canonical retirement are observed. Parent owns reviewed installation.
+exact helper's retirement. It received one guarded SIGTERM, actually exited,
+and was canonically stopped with its record retained; see
+`helper-retirement-03.json`. No further helper retirement is authorized.
+
+The SAME original FULL input `9bb9d2bf609798c3667a472184cd48b0` ended with native
+assistant `d2eec48f`, stop reason `stop`, at 13:34:02.442Z. Read-only canonical
+execution `wirev1a73e3ce8c726ba62907029d19afa140671ec406f921714174de8530a115369ba`
+is Completed, attempt Succeeded, backend_done and process_dead both true.
+Original lease `e4a75845ce1143d5d1a71759c3a19594` retired. No new recovery prompt,
+retry, lease clear, native input or goal resume. R1's original owner remains
+alive and the helper remains Stopped. `original161-completion.json` records a
+different subsequent admitted turn: **not a global idle proof**. Parent owns
+reviewed installation; live Preparing labels still use the unpatched source.
+
+The final evidence commit changes no production bytes from the installed,
+tested source checkpoint `1c653f91ac81720b20dfb0d7a70537f0354b0c14`.
 
 Scratch owner Mendel: `/home/ts/.cache/agent-scratch/comms-r1-preparing-input-custody-20260930`.
 Preserve recovery receipts, original root native/wire/drafts/UNKNOWN and

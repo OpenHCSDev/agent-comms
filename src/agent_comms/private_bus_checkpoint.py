@@ -20,6 +20,7 @@ import tempfile
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from collections.abc import Iterator, Set
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, file_revision
@@ -32,6 +33,8 @@ from .wire_record import WireRecord, WireScan
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .wire_log import WireLog
+    from .messages import Message
+    from .coordination_tables.publications import PublicationIntents
 
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
 _TAIL_BYTES = 4096
@@ -86,6 +89,54 @@ class CertifiedSourceRead:
             or file_revision(self.path.stat()) != self.witness.revision
         ):
             raise RelationViolationError("Conversation source needs a current certificate.")
+
+    def delivery(self, seq: int) -> CommittedDelivery:
+        """Resolve an exact source sequence through this original opened proof."""
+        self.require_current()
+        row = DeliverySources.one(self.connection, seq=seq)
+        if row is None:
+            raise RelationViolationError("No committed initial sideband for this wire sequence.")
+        original = row.delivery(self.stream, self.witness.root_id)
+        self.require_current()
+        return original
+
+    def addressed_deliveries(
+        self, lookup: str, after: int, sealed: Set[int]
+    ) -> Iterator[CommittedDelivery]:
+        """Original addressed rows not already sealed by the coordinator owner."""
+        self.require_current()
+        rows = DeliverySources.iterate(self.connection.execute(
+            f"SELECT {','.join('i.' + column for column in DeliverySources.columns())} "
+            f"FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq "
+            "WHERE a.lookup=? AND i.seq>? ORDER BY i.seq", (lookup, after)))
+        for row in rows:
+            if row.seq not in sealed:
+                initial = row.delivery(self.stream, self.witness.root_id)
+                if not any(r.recipient_lookup == lookup for r in initial.audience.recipients):
+                    raise RelationViolationError("Certified address differs from original frozen row.")
+                yield initial
+        self.require_current()
+
+    def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
+        """The sealed key index filters absence; an original row proves presence."""
+        self.require_current()
+        if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
+            return None
+        # No new key-to-source store: resolve current original pointers, newest
+        # first. The canonical prefix already proves publication-key uniqueness.
+        cursor = self.connection.execute(
+            f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC")
+        for row in DeliverySources.iterate(cursor):
+            original = row.delivery(self.stream, self.witness.root_id)
+            receipt = original.receipt
+            if receipt is not None and receipt.publication_key == intent.publication_key:
+                if receipt.execution_id != intent.execution_id:
+                    raise RelationViolationError("Response publication identity conflicts.")
+                if not intent.matches_publication(original.message):
+                    raise RelationViolationError("Response publication intent conflicts.")
+                self.require_current()
+                return original.message
+        raise RelationViolationError("Certified response key has no original source row.")
 
 
 class CheckpointTable:

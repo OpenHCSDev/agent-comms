@@ -1,0 +1,167 @@
+{
+  "observed_utc": "2026-09-30T15:05:08.965966+00:00",
+  "scope": "read-only original journal and existing installed source; no requests, inputs, process signals, public writes or bundle edits",
+  "journal": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-29T23-39-56-904Z_01a0ef8a-0c69-75a1-86fe-53cd38ab0d18.jsonl",
+  "journal_bytes_at_read": 44168354,
+  "records": [
+    {
+      "line": 9887,
+      "id": "83b1f787",
+      "parent_id": "5280469d",
+      "entry_utc": "2026-09-30T13:35:56.167Z",
+      "message_timestamp_ms": 1790775356167,
+      "role": "toolResult",
+      "response_id": null,
+      "stop_reason": null,
+      "raw_stop_reason": null,
+      "api": null,
+      "provider": null,
+      "model": null,
+      "usage": null,
+      "entry_keys": [
+        "type",
+        "id",
+        "parentId",
+        "timestamp",
+        "message"
+      ],
+      "message_keys": [
+        "role",
+        "toolCallId",
+        "toolName",
+        "content",
+        "isError",
+        "timestamp"
+      ]
+    },
+    {
+      "line": 9888,
+      "id": "b8490b7e",
+      "parent_id": "83b1f787",
+      "entry_utc": "2026-09-30T13:38:06.065Z",
+      "message_timestamp_ms": 1790775356207,
+      "role": "assistant",
+      "response_id": "resp_0869806902d4e442016abd103c7b6887d2a62378f5990cef86",
+      "stop_reason": "toolUse",
+      "raw_stop_reason": "completed",
+      "api": "openai-codex-responses",
+      "provider": "openai-codex",
+      "model": "gpt-6.1-sol",
+      "usage": {
+        "input": 3413,
+        "output": 2060,
+        "cacheRead": 70272,
+        "cacheWrite": 0,
+        "reasoning": 1034,
+        "totalTokens": 75745,
+        "cost": {
+          "input": 0.006826,
+          "output": 0.0206,
+          "cacheRead": 0.007027200000000001,
+          "cacheWrite": 0,
+          "total": 0.0344532
+        }
+      },
+      "entry_keys": [
+        "type",
+        "id",
+        "parentId",
+        "timestamp",
+        "message"
+      ],
+      "message_keys": [
+        "role",
+        "content",
+        "api",
+        "provider",
+        "model",
+        "usage",
+        "stopReason",
+        "timestamp",
+        "responseId",
+        "rawStopReason"
+      ]
+    },
+    {
+      "line": 9889,
+      "id": "41c19d41",
+      "parent_id": "b8490b7e",
+      "entry_utc": "2026-09-30T13:38:13.364Z",
+      "message_timestamp_ms": 1790775493364,
+      "role": "toolResult",
+      "response_id": null,
+      "stop_reason": null,
+      "raw_stop_reason": null,
+      "api": null,
+      "provider": null,
+      "model": null,
+      "usage": null,
+      "entry_keys": [
+        "type",
+        "id",
+        "parentId",
+        "timestamp",
+        "message"
+      ],
+      "message_keys": [
+        "role",
+        "toolCallId",
+        "toolName",
+        "content",
+        "details",
+        "isError",
+        "timestamp"
+      ]
+    }
+  ],
+  "intervals_seconds": {
+    "tool_result_to_provider_output_creation": 0.04,
+    "provider_output_creation_to_journal_entry_creation": 129.858,
+    "tool_result_to_assistant_journal_entry": 129.898,
+    "assistant_entry_to_edit_result_entry": 7.299
+  },
+  "source_files": [
+    {
+      "path": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js",
+      "sha256": "e6003ded7cd11fc8bfd01e4f48cd3d5a19338b64c2e1febe81d0659c31013c11"
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "sha256": "f5705d45ae72102110238d6265a548df3aef50b777f654f1f91a32d563c91b3e"
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js",
+      "sha256": "b5d9f001e97bfafa8dfeef2e292f923c39f77fa8aef014132bf3530760f222e3"
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js",
+      "sha256": "3ac3fdef20729789387e985a07c51a5a1027823d5c030f1a9f721cd5e83d6fa3"
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js",
+      "sha256": "4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67"
+    }
+  ],
+  "boundary_findings": [
+    "agent-loop streamAssistantResponse awaits context transform, convertToLlm, onContextReady and API-key resolution before invoking provider streamFunction; provider output timestamp follows those operations.",
+    "Provider timestamp is client Date.now before body construction/onPayload/serialization and transport selection, not provider acceptance or first-token time.",
+    "Agent loop awaits message-update event handling; AgentSession awaits extension message-end handling and invokes listeners before SessionManager creates journal entry timestamp. The 129.858s interval therefore also includes local event handling/publication before append, not just provider time.",
+    "response.created maps response ID only. Server created_at and individual delta arrival times are not carried into the retained assistant message.",
+    "WebSocket debug stats are process-memory counters, without per-request timing. Original native PID is now absent; inspecting a replacement process cannot recover those counters."
+  ],
+  "unresolved": [
+    "request send time",
+    "transport chosen for this request",
+    "response headers/acceptance time",
+    "first/last reasoning delta arrival",
+    "provider queue versus reasoning time",
+    "transport retries/fallbacks for this request",
+    "historical event-loop CPU/backpressure and listener/extension handling duration"
+  ],
+  "limits": "No new causal allocation of the 129.858s is justified. Historical original env receipt records debug disabled; lifetime CPU/IO after the event cannot allocate this interval. No new instrumentation, provider call or production change. Source hashes describe files inspected now, not independent proof of the historical process loaded bytes.",
+  "dependencies": {
+    "provider_timeline": "Original request trace for recorded response_id, or already-retained original RPC/stream arrival trace. Neither was found in this bounded journal/source inspection. Parent owns any external diagnostic authorization.",
+    "native_bundle": "Schrodinger owns #450 bundle/pins/discovery; managed SDK snapshot gate already published at93f4b110.",
+    "bus_admission": "Arendt #452 owns actual pre-byte BUS contention/UNKNOWN, independent of historical model interval."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "utc": "2026-09-30T14:01:57.327089+00:00",
+  "wall": 1.2489185529993847,
+  "cpu": 1.242488673,
+  "io_before": "rchar: 6280322\nwchar: 1095\nsyscr: 711\nsyscw: 2\nread_bytes: 0\nwrite_bytes: 0\ncancelled_write_bytes: 0\n",
+  "io_after": "rchar: 144632836\nwchar: 2459\nsyscr: 39085\nsyscw: 3\nread_bytes: 0\nwrite_bytes: 4096\ncancelled_write_bytes: 0\n",
+  "package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+  "scope": "Actual installed canonical package verification, read only; cProfile perturbation applies"
+}

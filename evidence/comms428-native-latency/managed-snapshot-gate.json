@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "source_snapshot_sha256": "40a4a85d790a5e9a156c7a412ce6f23da8b215ca7f8168e5468dff888a7bcb87",
+  "compiled_bytes": 247554,
+  "handlers": [
+    "session_start"
+  ],
+  "tool_count": 32,
+  "saved_native_session": "/home/ts/.cache/agent-scratch/comms428-native-wait-custody-20260930/managed-snapshot02/sessions/2026-09-30T14-26-46-269Z_01a0f2b5-f57c-7146-ab4d-58c2309f47b8.jsonl",
+  "saved_state": "Native-generated header only, no retained message history claim",
+  "tool_timings": [
+    {
+      "name": "read",
+      "hook_before_ms": 565.4441200000001,
+      "tool_ms": 3.8692489999998543,
+      "hook_after_ms": 0.3884459999999308
+    },
+    {
+      "name": "edit",
+      "hook_before_ms": 541.7311399999999,
+      "tool_ms": 7.083798999999999,
+      "hook_after_ms": 0.054342999999789754
+    },
+    {
+      "name": "read",
+      "hook_before_ms": 556.2821249999997,
+      "tool_ms": 1.2000729999999749,
+      "hook_after_ms": 0.03988600000002407
+    }
+  ],
+  "network": "kernel-denied",
+  "provider_prompts": 0,
+  "native_inputs": 0,
+  "limits": "Actual unchanged native SDK factory/hooks/builtin read-edit-read; private saved native session and installed candidate CLI. Explicit SDK extensionFactories, not packaged discovery, ACP or provider-turn acceptance. Production packaged loading needs new reviewed compiled bundle.",
+  "gate_wall_seconds": 3.7342641039867885,
+  "source_checkpoint": "56d362f2cd3393b70a60c53b7af964e21f461aad",
+  "first_probe": {
+    "root": "/home/ts/.cache/agent-scratch/comms428-native-wait-custody-20260930/managed-snapshot01",
+    "failure": "Fixture used oldText/newText instead of declared edits[] before native preparation. Read completed; edit rejected validation before file mutation. No provider/native input."
+  },
+  "owned_fixture_processes_remaining": []
+}
