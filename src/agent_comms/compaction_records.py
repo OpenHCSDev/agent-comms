@@ -121,11 +121,7 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
 
     def represents_summary(self, attempt: SelectedSummaryAttempt) -> bool:
         """Read-only original linkage, never an input-admission capability."""
-        if not self.state.committed:
-            return False
-        self.require_summary_link(attempt, admit_original=True)
-        self.committed_outcome()
-        return True
+        return self.state.represents_summary(self, attempt)
 
     def publication(self) -> CompactionPublication:
         try:
