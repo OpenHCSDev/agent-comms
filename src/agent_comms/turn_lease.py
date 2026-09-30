@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 
 from .routing import TurnRouting
+from .field_codec import FieldCodec
 from .thread_identity import TurnIdentity
+from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +20,7 @@ class ActiveTurn:
     routing: TurnRouting | None = None
     admission_generation: int | None = None
     turn_generation: int | None = None
+    phase: TurnPhase = field(default_factory=PreparingPhase)
 
     def owned_by(self, pid: int, admission_generation: int) -> bool:
         """This turn's local process and registry admission witness agree."""
@@ -37,17 +40,57 @@ class ActiveTurn:
 
     @classmethod
     def from_wire(cls, data: Mapping) -> ActiveTurn:
-        return cls(
-            data["id"],
-            data["owner_pid"],
-            data["started_at"],
-            TurnRouting.from_wire(data["routing"]) if data.get("routing") else None,
-            data.get("admission_generation"),
-            data.get("turn_generation"),
-        )
+        return FieldCodec.decode(cls, data)
 
     def to_wire(self) -> dict[str, object]:
-        return {**asdict(self), "routing": self.routing.to_wire() if self.routing else None}
+        return FieldCodec.encode(self)
+
+
+@dataclass(frozen=True)
+class TurnState:
+    """Read-only capture of the existing lease, not another lifecycle store."""
+
+    active: ActiveTurn | None = None
+    finished_turn_id: str | None = None
+
+    @property
+    def phase(self) -> TurnPhase:
+        return self.active.phase if self.active is not None else IdlePhase()
+
+    @property
+    def report_turn(self) -> str:
+        return self.active.id if self.active is not None else ""
+
+    @property
+    def managed_id(self) -> str | None:
+        return self.active.id if self.active is not None else None
+
+    @property
+    def started_at(self) -> float | None:
+        return self.active.started_at if self.active is not None else None
+
+    def matches(self, turn_id: str | None) -> bool:
+        return turn_id is None or (self.managed_id or self.finished_turn_id) == turn_id
+
+    @property
+    def busy(self) -> bool:
+        return self.phase.busy
+
+    @property
+    def accepts_prompt(self) -> bool:
+        return self.phase.accepts_prompt
+
+    @property
+    def accepts_followup(self) -> bool:
+        return self.phase.accepts_followup
+
+    @property
+    def can_compact(self) -> bool:
+        return self.phase.can_compact
+
+    @property
+    def activity(self) -> str:
+        return self.phase.summary
 
 
 @dataclass(frozen=True, slots=True)

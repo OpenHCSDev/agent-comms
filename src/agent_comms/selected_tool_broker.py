@@ -428,6 +428,12 @@ class OwnerToolSocket(ABC, Generic[Call]):
             call.assert_complete()
 
     @property
+    def active_tools(self) -> set[str]:
+        return {
+            call.call_id for call in self.calls.values() if call.observation.executing
+        }
+
+    @property
     def selected_call_id(self) -> str | None:
         return None
 
