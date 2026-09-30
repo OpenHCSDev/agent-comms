@@ -372,6 +372,22 @@ class TurnSession:
         return self.admission.started and self.inputs.permits_admission
 
     @property
+    def awaiting_native_attestation(self):
+        return self.require_input_id and self.native.attestation.state is None
+
+    async def consume_native_event(self, event):
+        """Observe one decoded event through the shared native lifecycle owner."""
+        async for update in self.watchdog.observe(event, self):
+            yield update
+        async for update in self.apply_native_event(event):
+            yield update
+        self.watchdog.transition(event, self.active_tools)
+
+    async def apply_native_event(self, event):
+        async for update in event.apply(self):
+            yield update
+
+    @property
     def accepts_output(self):
         return self.native.attestation.trustworthy
 
