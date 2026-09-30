@@ -26,6 +26,7 @@ from .turn_lease import TurnLeaseFence
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_receipts import AssignedSourceCursor, AssignedSourceIdentity
+from .transcript_outcomes import CompactionOutcomeCursor
 from .store_files import file_revision
 from .coordination_errors import StaleRevision
 
@@ -37,6 +38,20 @@ class TranscriptCursor:
     session_file: str
     offset: int
     receipts: AssignedSourceCursor | None = None
+    outcomes: CompactionOutcomeCursor | None = None
+
+    @property
+    def outcome_seq(self) -> int:
+        return self.outcomes.sequence if self.outcomes is not None else 0
+
+    def at_outcome(self, sequence: int) -> TranscriptCursor:
+        from dataclasses import replace
+
+        if self.outcomes is None:
+            if sequence == 0:
+                return self
+            raise ValueError("Cursor has no original compaction outcome source")
+        return replace(self, outcomes=self.outcomes.at(sequence))
 
     @property
     def wire_seq(self) -> int:
@@ -58,10 +73,21 @@ class TranscriptCursor:
 
     def contains(self, other: TranscriptCursor) -> bool:
         return (
-            self.session_file == other.session_file
-            and self.offset >= other.offset
+            other.native_within(self)
             and other.receipts_within(self)
+            and other.outcomes_within(self)
         )
+
+    def native_within(self, parent: TranscriptCursor) -> bool:
+        return self.session_file == parent.session_file and self.offset <= parent.offset
+
+    def outcomes_within(self, parent: TranscriptCursor) -> bool:
+        if self.outcomes is None:
+            return parent.outcomes is None
+        return parent.includes_outcomes(self.outcomes)
+
+    def includes_outcomes(self, outcomes: CompactionOutcomeCursor) -> bool:
+        return self.outcomes is not None and self.outcomes.contains(outcomes)
 
     def receipts_within(self, parent: TranscriptCursor) -> bool:
         return self.receipts is None or parent.includes_receipts(self.receipts)
@@ -114,6 +140,7 @@ class TranscriptReadIdentity:
     reply_revision: PublishedReplyRevision
     read_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
     receipt_frontier: AssignedSourceCursor
+    outcome_frontier: CompactionOutcomeCursor | None
     before: TranscriptCursor | None
     after: TranscriptCursor | None
     through: TranscriptCursor | None
@@ -142,6 +169,7 @@ class TranscriptReadIdentity:
             self.session_file,
             self.native_revision[1] if self.native_revision is not None else 0,
             self.receipt_frontier,
+            self.outcome_frontier,
         )
 
     def same_content(self, other: TranscriptReadIdentity) -> bool:
@@ -255,15 +283,20 @@ class Transcripts:
 
         if not 1 <= source_limit <= MessageNotification.window_limit:
             raise ValueError("Transcript source capture requires a bounded window")
+        registry = self.registry.snapshot()
         thread, session_file, _ = self._thread_transcript_source(
             name,
             through.session_file if through is not None else None,
+            registry=registry,
         )
         from .transcript_receipts import AssignedTranscriptSource
 
         receipt_frontier, sources = AssignedTranscriptSource.for_thread(
             self.root, thread, self.bus.log
         ).window(limit=source_limit)
+        _outcomes, outcome_frontier = CompactionOutcomeCursor.capture(
+            self.root, thread, session_file, registry,
+        )
         read = TranscriptRead(
             self,
             TranscriptReadIdentity(
@@ -287,6 +320,7 @@ class Transcripts:
                 ),
                 file_revision(self.bus.reads.path),
                 receipt_frontier,
+                outcome_frontier,
                 before,
                 after,
                 through,
@@ -308,16 +342,16 @@ class Transcripts:
         ) + page.events
 
     def _thread_transcript_source(
-        self, name: str, source_file: str | None = None
+        self, name: str, source_file: str | None = None, *, registry
     ) -> tuple[Thread, str, bool]:
         """Resolve a temporary inherited view without changing runtime ownership."""
-        thread = self.registry.require(name)
+        thread = registry.require(name)
         if thread.session_file and (source_file is None or source_file == thread.session_file):
             return thread, thread.session_file, False
         ancestor = thread
         visited = {thread.name}
         while ancestor.parent is not None:
-            ancestor = self.registry.require(ancestor.parent)
+            ancestor = registry.require(ancestor.parent)
             if ancestor.name in visited:
                 break
             visited.add(ancestor.name)
@@ -360,8 +394,9 @@ class Transcripts:
         # select the child's file; existing scroll cursors keep working.
         routes_owner = self.routes
         if historical_source is None:
+            registry = self.registry.snapshot()
             thread, session_file, inherited = self._thread_transcript_source(
-                name, through.session_file if through is not None else None
+                name, through.session_file if through is not None else None, registry=registry,
             )
         else:
             source = next(
@@ -369,7 +404,8 @@ class Transcripts:
             )
             if source is None:
                 raise ValueError("Historical source detached; refresh history")
-            thread = source.registry().require(name)
+            registry = source.registry().snapshot()
+            thread = registry.require(name)
             session_file, inherited = thread.session_file or "", False
             routes_owner = TranscriptRoutes(Path(source.root))
         cursor = before or after
@@ -385,7 +421,6 @@ class Transcripts:
             size = through.offset
             if cursor and cursor.offset > size:
                 raise ValueError("Cursor is outside the transcript window.")
-        from contextlib import closing
         from .transcript_receipts import (
             AssignedTranscriptSource,
             EarlierTranscript,
@@ -399,81 +434,60 @@ class Transcripts:
             WireLog(receipt_root / "bus.jsonl") if historical_source is not None else self.bus.log
         )
         receipts = AssignedTranscriptSource.for_thread(receipt_root, thread, receipt_log)
-        frontier = through or TranscriptCursor(session_file, size, receipts.frontier)
+        outcomes, outcome_frontier = CompactionOutcomeCursor.capture(
+            receipt_root, thread, session_file, registry,
+        )
+        for outcome in outcomes.outcomes:
+            outcome.require_native_source(path, size)
+        frontier = through or TranscriptCursor(
+            session_file, size, receipts.frontier, outcome_frontier,
+        )
+        if frontier.outcomes != outcome_frontier:
+            # A pinned range can end before the captured outcome frontier, but
+            # cannot read records from a different original journal projection.
+            if outcome_frontier is None or not frontier.outcomes_within(
+                TranscriptCursor(session_file, size, outcomes=outcome_frontier)
+            ):
+                raise StaleRevision("Compaction outcome source changed; recapture history")
         frontier.require_source(AssignedSourceIdentity(str(receipt_root), thread.incarnation))
         if frontier.wire_seq < 0 or (cursor is not None and not frontier.contains(cursor)):
             raise ValueError("Cursor is outside the combined transcript source")
         traversal = LaterTranscript() if after is not None else EarlierTranscript()
         initial = cursor or frontier
-        consumed = initial
-        records: list[tuple[TranscriptEvent, ...]] = []
-        used = 0
         reader = NativeTranscript(path)
-        native = traversal.native(reader, initial, frontier) if size else (record for record in ())
         from functools import partial
 
         with routes_owner.for_session(session_file) as routes:
             project_native = partial(receipts.native_events, routes=routes, reader=reader)
-            try:
-                record = next(native, None)
-                events = record.project(project_native) if record is not None else ()
-                source_rows = iter(
-                    receipts.page_rows(
-                        traversal, consumed.wire_seq, frontier, limit=max_messages + 1
-                    )
-                )
-                message = next(source_rows, None)
-                while record is not None or message is not None:
-                    if record is not None and not events:
-                        if after and record.incomplete_tail(size):
-                            break
-                        consumed = consumed.at_offset(traversal.native_position(record))
-                        record = next(native, None)
-                        events = record.project(project_native) if record is not None else ()
-                        continue
-                    # NativeEntry owns one clock for all parts of a record.
-                    native_time = events[0].timestamp if events else None
-                    choose_native = record is not None and (
-                        message is None
-                        or traversal.chooses_native(native_time, message.message.timestamp)
-                    )
-                    batch = events if choose_native else receipts.events(message)
-                    cost = record.size if choose_native else sum(event.text_size for event in batch)
-                    if records and (len(records) >= max_messages or used + cost > max_bytes):
-                        break
-                    records.append(batch)
-                    used += cost
-                    if choose_native:
-                        consumed = consumed.at_offset(traversal.native_position(record))
-                        record = next(native, None)
-                        events = record.project(project_native) if record is not None else ()
-                    else:
-                        consumed = consumed.at_sequence(traversal.receipt_position(message.message))
-                        message = next(source_rows, None)
-                if record is None:
-                    consumed = consumed.at_offset(frontier.offset if after else 0)
-                if message is None:
-                    consumed = consumed.at_sequence(frontier.wire_seq if after else 0)
-            finally:
-                native.close()
+            consumed, records = traversal.read_records(
+                reader, project_native, receipts, outcomes.outcomes, initial, frontier,
+                max_messages=max_messages, max_bytes=max_bytes,
+            )
         start, end = traversal.bounds(initial, consumed)
         events = traversal.finish(records)
         if inherited and not after and (cursor is None or cursor == frontier):
             events = (*events, *self._fork_start_events(thread))
         return TranscriptPage(
-            events, start, end, start.offset > 0 or start.wire_seq > 0, end != frontier
+            events, start, end,
+            start.offset > 0 or start.wire_seq > 0 or start.outcome_seq > 0,
+            end != frontier,
         )
 
     def transcript_checkpoint(self, name: str) -> TranscriptCursor:
         from .transcript_receipts import AssignedTranscriptSource
 
-        thread = self.registry.require(name)
+        registry = self.registry.snapshot()
+        thread = registry.require(name)
         session_file = thread.session_file or ""
         path = Path(session_file)
+        _outcomes, outcome_frontier = CompactionOutcomeCursor.capture(
+            self.root, thread, session_file, registry,
+        )
         return TranscriptCursor(
             session_file,
             path.stat().st_size if session_file and path.is_file() else 0,
             AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier,
+            outcome_frontier,
         )
 
     def record_turn_publication(

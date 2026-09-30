@@ -1,7 +1,7 @@
 # Original compaction outcome source
 
 Owner: Schrodinger. This paired follow-up closes the selected compaction outcome
-source/coverage relation after the scoped To ad235 permission checkpoint. Parent
+source/coverage relation after the scoped Toad235 permission checkpoint. Parent
 owns release integration;442/231 remain independent.
 
 ## Original evidence
@@ -38,5 +38,24 @@ reconnect journey retains one accurate canonical outcome, unchanged native bytes
 and UNKNOWN originals. No paid provider, public mutation, original replay, body
 deduplication, classname exclusion or permanently unsourced notice.
 
-Status: claim and source investigation only. No implementation or acceptance
-claim beyond the protected235 controls.
+## Working source checkpoint
+
+Core446 (Mendel) owns the read-only original journal projection, including exact
+selected/native commit joins, declared lifecycle text and registry alias proof.
+Core445 owns its complete certified source/cursor/page consumers. A source epoch
+is derived from scoped original outcomes, not database mtime or a max-row-only
+counter: an earlier reserved attempt can become UNKNOWN after a later outcome.
+The original SQLite row ID owns paging order; the original reserved native
+inode/byte boundary owns logical placement. Missing journals are not created.
+
+The existing TranscriptTraversal owns native, wire and outcome paging together.
+RegistrySnapshot owns lookup within that exact captured cohort; Registration
+uses the same lookup contract. The source field is not input admission authority.
+
+Toad237 deletes terminal-event and request-error history synthesis. Events finish
+the provisional resource and request canonical source publication; the retained
+notice comes from the original journal/native record, not another UI response.
+This leaves232 capture and229 retirement ownership unchanged.
+
+Status: source checkpoint awaiting Core446 integration and the one changed
+installed cancellation/source-refresh/reconnect journey. No readiness claim.
