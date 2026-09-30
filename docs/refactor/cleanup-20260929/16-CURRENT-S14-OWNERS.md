@@ -9,14 +9,14 @@ Audited Core6feb634b (291 Python files) and Toad8a924e1d (273). Whole-source AST
 | Bus source/index and projection custody | Schrodinger | Core460: bus_activity_index, bus_display_index, presentation, private_bus_checkpoint, proven_source_coverage, wake_candidate_index. No second index/schema/cache identity roster. |
 | Pi terminal data and original C1/TC2/T2 caller closure | Einstein | Core458: tracked_turn, turn_output and their native payload owners/consumers. ACP official SDK and original strict extension retained. |
 | Private launch and minted source validation | Parent Codex | Core459: private_nk_entrypoint, acp_extension, fresh_private_session, private_path and private_send_admission; shared PiModel/StateData extension submitted by Einstein. Existing WireRootIdText, FieldCodec and path representation reused; preserve unforgeable fresh enrollment, no filesystem authority mirror. |
-| Retained workspace/rendering, TC1/T4/T9 | Heisenberg | Toad245/248 installed;249 merged, install pending. Draft252 owns the full CPU/focus/warm/resource/End scope and first-fork duplicate answer paint. Remaining Toad six-plus sites: transcript_publication269, streaming_markdown67, transcript_history769. Shared T5 owner coordination explicit. |
+| Retained workspace/rendering, TC1/T4/T9 | Heisenberg | Toad245/248/249 installed and ordinary default accepted. Draft253 owns the full CPU/focus/warm/resource/End scope;252 owns first-fork duplicate answer paint. Remaining Toad six-plus sites: transcript_publication269, streaming_markdown67, transcript_history769. Shared T5 owner coordination explicit. |
 | Continuous input submission, queue and native-user presentation | Kepler | Toad251: original submission/queue/input handlers, with Heisenberg's explicit shared-file grant. Backend facts remain with Mendel457/Arendt456; no second queue or accepted-input mirror. |
 
 Correction after direct source reading: todos280 is a six-term exact uncertain-transfer retry decision, not repository-path grammar. Its whole Todo assignment/transfer/release/state workflow is reassigned to Mendel457, the coordination-state integration owner. Current durable row remains the authority; no retry may replay an uncertain native/provider side effect. It is included in S14 closure. File names here refer to src/agent_comms or src/toad as appropriate. Every shared type has one builder; contributors request extensions rather than copying schema, identity, validation or lifecycle semantics.
 
 Original C4 fresh current closure: HistoryViews496 and CommsAgent418, all291 Core installed source files equal accepted6feb, retired cursor APIs/maps absent. Schrodinger is checking the complete ownership/guard/public attachment proof, not extracting below-threshold classes. Original C0/C1/C2/TC2 sites that already landed receive a current closure note; old source-only or draft status is not copied forward as incomplete work. Toad116/142 source-return, loaded cohorts and complete resource acceptance remain with the workspace owner, independent of the useful245 body-cost checkpoint.
 
-Latest installed user build: Core6feb/Toad19970f/Textual2e49/SDK0.12.1/native593b,13 retained original owners; ordinary physical default saved-history acceptance16.534s. The current native/owner ABI remains unchanged. No original prompts or UNKNOWN inputs are replayed. CI deferred; actual affected installed user paths remain mandatory.
+Latest installed user build: Core6feb/Toad98bab/Textual2e49/SDK0.12.1/native593b,13 retained original owners; ordinary physical default saved-history acceptance16.678s. The current native/owner ABI remains unchanged. No original prompts or UNKNOWN inputs are replayed. CI deferred; actual affected installed user paths remain mandatory.
 
 
 ## 2026-09-30 shared source owner published
@@ -32,7 +32,7 @@ installed/privateACP validated; branch needs integrated456/458 caller closure.
 No journal or durable row format changed by this ephemeral receipt API.
 
 248 is installed and ordinarydefault liveverified after exactmergedsource pairing;
-full remaining performance scope is active252, with no fifty-millisecond or full
+full remaining performance scope is active253, with no fifty-millisecond or full
 warm/CPU claim. Original S14/T9 zero-long-chain completion remains open.
 
 ## Latest live basic-read timings and active latency owner
