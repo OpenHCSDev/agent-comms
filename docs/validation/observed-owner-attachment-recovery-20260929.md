@@ -35,8 +35,9 @@ recovery consumer; #425 owns canonical turn/input lifecycle. The original failed
 load command captures RegistrySnapshot full OwnerIdentity/ProcessIdentity before
 proxy subscription. Its FieldCodec FailedSessionLoadAdmission disposition is
 carried through official RequestError.data and cannot resolve/replay. Accepted
-attachments retain their existing trusted queue lease; no prebind observations
-are promoted. Replacement uses strictly newer generation for the same thread,
+attachments retain their ORIGINAL successful load response proof in the same
+WitnessedSessionLoadAdmission family; no queue admission counter or prebind
+observation is used for owner replacement. Replacement uses strictly newer generation for the same thread,
 including reused PIDs, then strict fresh full owner/process validation. No
 current-owner mirror, new store, compatibility decoder or input replay.
 
@@ -53,3 +54,22 @@ against current main passes with zero positive measures. CI is deferred.
 T5 outbound/source hot invalidation remains scoped to Core #430 and Toad #215;
 it does not delay this useful recovery checkpoint. Parent owns global paired
 installation and quiet cutover. No worker global install or live owner mutation.
+
+
+## Counter-domain review correction
+
+The preceding installed receipt establishes failed-load recovery. Review found
+that its accepted-path comparison used QueueScope's admission generation against
+RegistrySnapshot's owner generation. Those are different allocation domains;
+that comparison and its consumer are deleted. Core 3e4e0c88 captures one original
+registry binding before proxy subscription and includes that same witness in
+successful and failed load records. Both derive replacement through the shared
+WitnessedSessionLoadAdmission capability. Toad consumes the original successful
+record for BOTH new/load responses; unsupported external responses carry no
+replacement authority. No refreshed last-owner field or second witness path.
+
+The concrete owner=950/admission=914 same-process negative, same-PID/new process
+birth and owner generation, rename, unavailable and missing original-witness
+checks pass. Required ratchets remain zero. The exact affected installed paired
+journey with accepted-record assertions is next after the active #425 fixture;
+this new accepted-path closure is not yet claimed live-verified.
