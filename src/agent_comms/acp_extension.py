@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from hashlib import sha256
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
 from .agent_events import CompactionEvent
 from .compaction_states import CompactionPublishedMetadata
 from .declared_family import DeclaredFamily
-from .input_attempt import InputAttempt
+from .input_attempt import ACPInputIdText, InputAttempt
 from .field_codec import FieldCodec
 from .goal_presentation import GoalExecution
 from .goals import Goal
@@ -469,6 +469,10 @@ class CommsRequest(DeclaredFamily, affix="Request"):
 class PromptRequest(CommsRequest):
     user_text: str | None = None
     defer_display: bool = False
+    input_id: Annotated[str, ACPInputIdText] = field(default_factory=ACPInputIdText.new)
+
+    def __post_init__(self):
+        ACPInputIdText.decode(self.input_id)
 
     @property
     def draft_text(self) -> str | None:
@@ -481,16 +485,12 @@ class PromptRequest(CommsRequest):
         pass
 
     async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
-        pass
+        await inputs.emit_queue_state(session_id)
 
 
 class QueuePromptRequest(PromptRequest):
     def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:
         return item.deferred(row, owner)
-
-    async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
-        await inputs.emit_queue_state(session_id)
-
 
 class SteerPromptRequest(PromptRequest):
     def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:

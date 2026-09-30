@@ -5,9 +5,11 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar
+from uuid import UUID, uuid4
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, projected
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, TextRepresentation, projected
 from .native_input_record import NativeInputIdText
 from .thread_identity import GenerationCounter, ThreadIncarnation
 from .threads import Thread
@@ -17,6 +19,24 @@ if TYPE_CHECKING:
     from .text_digest import TextDigest
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
+
+
+class ACPInputIdText(TextRepresentation):
+    """One original submission ID, independent of its later native input ID."""
+
+    @classmethod
+    def new(cls) -> str:
+        return uuid4().hex
+
+    @classmethod
+    def encode(cls, value):
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if UUID(hex=value).hex != value:
+            raise ValueError("ACP submission requires a canonical UUID hex identity")
+        return value
 
 @dataclass(frozen=True, slots=True)
 class GoalInputDecision:
@@ -47,6 +67,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def queued_for(self, owner: ThreadIncarnation, admission: int, text: str) -> bool:
         return False
+
+    def require_started(self, admission: int) -> StartedInput:
+        raise RelationViolationError("Input start lacks its original native disposition")
 
     def proves_started(
         self,
@@ -264,6 +287,11 @@ class StartedInput(SentInput):
     has_started = True
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
+
+    def require_started(self, admission: int) -> StartedInput:
+        if not self.matches_admission(admission):
+            raise RelationViolationError("Input start admission changed")
+        return self
 
     def started_for_native(
         self,

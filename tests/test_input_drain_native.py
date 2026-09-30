@@ -11,6 +11,8 @@ import pytest
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
+    InputStartedUpdate,
+    QueueChangedUpdate,
     QueuePromptRequest,
     decode_updates,
     encode_request,
@@ -55,10 +57,19 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
             private_nk_wire_root_id=root_id,
         )
         updates = []
+        facts = []
 
         class Client:
             async def session_update(self, **kwargs):
                 updates.append(kwargs["update"])
+                for fact in decode_updates(kwargs["update"].field_meta):
+                    if isinstance(fact, InputStartedUpdate):
+                        # The source still owns this exact input until the
+                        # awaited native presentation handoff has completed.
+                        assert fact.input_id in agent.inputs.queued_inputs["proj"]
+                        row = agent.inputs.dispositions.read().lookup("acp:" + fact.input_id)
+                        assert row.has_started and row.native_id == fact.native_id
+                    facts.append(fact)
 
         agent.on_connect(Client())
         await agent.new_session(cwd=str(project), mcp_servers=[])
@@ -79,13 +90,19 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
         selected_exchange = SelectedSummarySlot.run_selected_summary
         accepted = []
         operations = []
+        original_request = QueuePromptRequest()
 
         async def summary_with_queue(slot, *args, **kwargs):
             # Source was captured; selected summary has not finished or committed.
+            queued = next(f for f in reversed(facts) if isinstance(f, QueueChangedUpdate))
+            assert [item.input_id for item in queued.projection.items] == [original_request.input_id]
+            original = agent.inputs.dispositions.read().lookup("acp:" + original_request.input_id)
+            assert original.accepts_reservation and not original.has_native_binding
+            followup_request = QueuePromptRequest(defer_display=True)
             response = await agent.prompt(
                 "proj",
                 [{"type": "text", "text": "Fresh followup"}],
-                field_meta=encode_request(QueuePromptRequest(defer_display=True)),
+                field_meta=encode_request(followup_request),
             )
             receipt = next(
                 update
@@ -93,6 +110,7 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
                 if isinstance(update, InputDeliveryChangedUpdate)
             )
             key = "acp:" + receipt.input_id
+            assert receipt.input_id == followup_request.input_id
             accepted.append(key)
             row = agent.inputs.dispositions.read().rows.get(key)
             assert not row.has_native_binding and row.accepts_reservation
@@ -136,7 +154,10 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
         monkeypatch.setattr(NativePiRpcLaunch, "managed", offline_launch)
         try:
             async with asyncio.timeout(35):
-                await agent.prompt("proj", [{"type": "text", "text": "Original after summary"}])
+                await agent.prompt(
+                    "proj", [{"type": "text", "text": "Original after summary"}],
+                    field_meta=encode_request(original_request),
+                )
             rows = agent.inputs.dispositions.read().rows
             own = [row for row in rows.values() if row.owner == "proj"]
             assert len(own) == 2
@@ -163,6 +184,14 @@ async def test_actual_acp_queued_during_summary_runs_once_after_original(
                 positions.append(starts[0])
             assert compact[0] < positions[0] < positions[1]
             assert not agent.inputs.queued_inputs.get("proj")
+            starts = [fact for fact in facts if isinstance(fact, InputStartedUpdate)]
+            assert [fact.input_id for fact in starts] == [original_request.input_id, followup.public_id]
+            for start in starts:
+                before_start = facts[:facts.index(start)]
+                queued = next(f for f in reversed(before_start) if isinstance(f, QueueChangedUpdate))
+                assert start.input_id in {item.input_id for item in queued.projection.items}
+            last_queue = next(f for f in reversed(facts) if isinstance(f, QueueChangedUpdate))
+            assert not last_queue.projection.items
             if foreign:
                 assert rows["acp:foreign"].declared_name == "reserved"
         finally:

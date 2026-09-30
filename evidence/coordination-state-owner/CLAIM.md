@@ -17,3 +17,14 @@ Concrete additional C3 relation: GoalWait.matches currently derives original mes
 Target: existing declared assignment/execution/attempt/wake/goal/source identities own admission, retry and relation checks; consumers use their operations. No local predicate wrapper, tuple/name-field roster, copied status, second record/codec, semantic flag/catalog or compatibility reader. Runtime/durable storage remains one current format; any schema effect must be explicitly declared before activation.
 
 Patterns: IDEN-1/3/5/6, IMPL-2/7/10/12/14, BOUND-2, TIME-9. Verification follows affected actual installed native/ACP workflow with existing private retained fixture/controlled endpoint where needed, preserving prior paired live evidence. No completed421/native/menu/budget gate repeats or optional broad scans.
+
+Receiving queue-visibility integration: Kepler owns Toad251 presentation;
+Arendt456 owns native admission/proof. Mendel owns existing `PromptRequest`
+identity/publication, `QueuedInput` live acceptance and `InputDrain` handoff,
+including original request propagation through `CommsAgent`/`TurnRunner`.
+The successful-send gap is initial acceptance missing from the existing queue
+projection, plus immediate follow-ups hidden by deferred-display filtering.
+The original live input is the sole acceptance capability. Reservation and
+UNKNOWN remain durable observations, never inferred queue/native acceptance.
+The client retains one original request ID and received native-start receipt
+on its bounded outstanding-request resource, not a seen list or status mirror.

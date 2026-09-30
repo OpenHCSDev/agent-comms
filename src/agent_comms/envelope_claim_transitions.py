@@ -177,10 +177,11 @@ class WakeAdmission:
         return MessageReference(self.source_seq, self.source_message_id)
 
     def __post_init__(self) -> None:
+        from .bus_publication import StableLookupText
         from .wire_metadata import WireRootIdText
 
         WireRootIdText.decode(self.wire_root_id)
-        _generation(self.recipient_lookup)
+        StableLookupText.decode(self.recipient_lookup)
         _generation(self.operation_id)
         try:
             FieldCodec.decode(Literal[1], self.version)
