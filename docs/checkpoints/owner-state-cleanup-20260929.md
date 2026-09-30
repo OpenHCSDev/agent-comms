@@ -105,3 +105,40 @@ Remaining canonical turn/activity/control consumers await Arendt's reviewed425
 contract; f05a62e7 is an importable source checkpoint, not full acceptance.
 The owner prioritizes the separate sender outbound relation contribution to
 Schrodinger210. C3 full acceptance remains tracked here, no scope discarded.
+
+## Current main remeasurement and whole-row closure
+
+Normally merged main7fcf826a atf522f722. Parent432's current C0 screen remains
+the source ledger; older chain counts above are historical evidence only.
+Goal.state resolution is already removed from main, which does not close the
+separate GoalMentionBinding.__post_init__ seven-resolution validation row.
+This branch replaces that validator and its relationship projection consumer
+with declared mention members. Authoring, stored decode, renamed/deleted peer
+incarnation, diagnostics and contact projection stay in that same workflow.
+
+Both relationship action sites belong to this PR: RelationshipDocument.edit
+and ThreadRelationships.edit. The former string-dispatch method is deleted;
+declared RelationshipEdit members own changes through RelationshipEditContext.
+The latter accepts the declared command, with tools and all source tests migrated.
+No parallel string entrypoint remains. The external tool wire spelling is decoded
+once through the existing FieldCodec family representation.
+
+ACP _error_detail and maintenance current_unlocked raw record/phase screening
+sites remain full assigned rows: external error data decodes through the existing
+MroDispatch boundary; MaintenanceMarker/State decode through FieldCodec and the
+phase lifecycle owns admission. Neither closure is a renamed raw-shape wrapper.
+All consumer removal, admitted-site guards and actual paired acceptance remain
+required before claiming full C3 closure.
+
+ThreadStatus.allows_control is still open. Its actual cross-project consumer is
+Toad ThreadAction.available, which passes the tool name. Extend the existing
+declared command capability and migrate that consumer with Arendt's canonical
+turn/permission/status contract. Do not build another control roster, status
+copy or private active-turn projection. Backend and GoalActionContext turn
+consumers also remain assigned here, with shared edits coordinated to Arendt425.
+
+Tests-only422 retains the obsolete selected-summary child fixture and the
+separate selected-native injected-original versus coverage gap. It is not
+closed by430 source/handling sanity checks. Current priority430 contributes
+canonical source identity and original-recipient handling to Schrodinger215;
+native acceptance is serialized after425 and431, without replaying failed input.
