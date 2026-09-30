@@ -33,8 +33,9 @@ its complete response in 15ms. This does not attribute the historical 129s.
 The existing SocketClient now owns all its output handoffs: updates, permission
 requests, result/ready records and error envelopes. It writes into the original
 asyncio transport, yields to readers, and retires only that socket if its buffered
-bytes exceed the transport's high-water budget. The budget remains the actual
-transport's configuration, including a caller's parameterized override. One
+bytes exceed the transport's high-water budget. It retains the configured high
+and low watermarks, reserving at least one burst from the actual kernel send
+buffer. Kernel and transport overrides remain the resource owners. One
 original saved snapshot's record size establishes the minimum byte budget for
 that record. There is no second queue, whole-turn timer, copied transcript,
 input disposition, or retry authority. Existing disconnection denies pending
@@ -46,9 +47,8 @@ observer retired while the controller, another fast observer and a temporarily
 busy observer retained their attachments. Fresh recovery read the 392391-byte
 canonical snapshot and matched its original content/frontier identity. Recovery
 did not send another input. [Sanitized receipt](../../evidence/native-request-wait/installed07.json).
-The busy-reader fixture is being tightened to resume after actual streamed text,
-rather than after the provider finishes writing. This final affected check
-remains open, together with Mendel's transport hooks.
+The final check below tightens this to a50ms pause after actual streamed text,
+keeping the non-reading observer unread through native completion.
 
 Run06 is a retained failed attempt: its premature complete flag is not acceptance.
 The first watermark correction retired a healthy fresh reader of one large saved
@@ -64,12 +64,54 @@ times. Completed publication counters describe preceding completed operations;
 they cannot be subtracted from native clocks without an original clock bracket.
 Optional diagnostic I/O failure reports a warning and cannot change admission.
 
-Remaining: Mendel's true dispatch/header/raw-first-event/terminal adapter hooks
-against his budget owner; final coherent native manifest and installed affected
-journey. Original retry attempts come from `maxRetries - retriesRemaining`,
-not a second attempt counter. Accepted streams are never replayed.
+## Ready combined checkpoint
+
+Mendel's adapter contribution `45521172` is normally integrated with merged453
+`a4df9589`. Ten native stream adapters expose actual dispatch, available HTTP
+headers, first raw parsed event and original iterator release through the same
+request observation helper. Google SDK raw headers are unavailable; WebSocket
+connection is not HTTP headers. Original retry attempts come from
+`maxRetries - retriesRemaining`, with the original delay decision observed before
+its existing abortable wait. No second counter or retry policy. Stream closure,
+including cancellation/failure, does not assert successful commit.
+
+Installed10 exits0 through actual Toad/ACP/worker/native:
+
+- Two accepted originals and two provider POSTs; both replies visibly painted.
+- Controller and fast reader retain the reply; a legitimate reader paused50ms
+  after first streamed text retains its attachment and reply data.
+- One observer never reads until native completion. Native settles, and only
+  that observer is retired when its resource budget is exhausted.
+- Both original input dispositions remain `started`; no UNKNOWN reconstruction.
+- Fresh recovery reads the619196-byte canonical saved snapshot, matching its
+  source/frontier content identity. Recovery sends no original again.
+- Native dispatch→headers measures2023.30ms for the deliberately delayed provider;
+  headers→raw event→consumed delta ordering has the same original native process
+  and request/input/turn fence.
+- Normal shutdown retires fixture children; bounded readonly census finds no
+  remaining454 fixture processes. Zero paid/public calls.
+
+[Authoritative sanitized receipt](../../evidence/native-request-wait/installed10.json).
+Private `/home/ts/wt/aw454-10/receipt.json`, frames, journal, proof and diagnostics
+remain retained. Failed08 caught false retirement of a genuinely busy reader;
+the kernel burst allowance closes it. Failed09 resumed the observer before
+publication finished and is not acceptance. Failed originals are preserved.
+
+The original normal stock recipe passes zero-fuzz patches, exact pins and full
+tree verification: selector `593b978a717ae8f6`, tree
+`b7b2dc5693227740a91a09ac9aa9189519ca084e8fd9dfc71a9698aa65d76eda`.
+Observation/adapters run after session-storage assembly, closing the constructor
+crossing. Locked import-boundary preparation uses an owned npm cache; no global
+package/source/default changes. The normal private Core wheel has no source
+fallback; unchanged Toadb200/Text2e49/SDK0.12.1,68 compatible packages. Parent
+owns final current-Toad pin/stage, affected entrypoint review and quiet cutover.
+
+Historical129.898s stays unattributed. Ordinary requests now retain transport and
+callback coordinates; direct compaction summaries keep their separate operation
+and progress owner. Callback wall time is not CPU. Bedrock internal SDK socket
+retries remain SDK-owned and unobserved.
 
 `ModelWaitPhase.source` changes the live phase publication ABI. Release requires
 matched owners and clients through the canonical idle batch; durable formats,
 native journals, reservations, UNKNOWN receipts and original proof stores are
-unchanged. Parent owns that cutover. This checkpoint is pushed, not Ready/live.
+unchanged. Parent owns that cutover. Ready for review/merge, not publicly installed.

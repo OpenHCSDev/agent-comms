@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import secrets
+import socket
 import tempfile
 from collections.abc import Coroutine
 from contextlib import suppress
@@ -44,6 +45,13 @@ ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
 class SocketClient:
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
+        transport = writer.transport
+        low_water, high_water = transport.get_write_buffer_limits()
+        # Reserve one burst from the socket's actual configured send resource.
+        # A brief reader pause must not be confused with an abandoned observer.
+        # Kernel/transport overrides remain the budget owners; no timer or queue.
+        send_bytes = writer.get_extra_info("socket").getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
+        transport.set_write_buffer_limits(high=max(high_water, send_bytes), low=low_water)
         self.token = secrets.token_hex(32)
         self.pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
 

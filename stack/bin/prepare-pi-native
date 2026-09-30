@@ -70,10 +70,6 @@ python3 "$stack_root/patch-native-context-budget.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$completion_api/openai-completions.js"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
     -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-generation-policy.patch"
-python3 "$stack_root/patch-native-request-observation.py" \
-    "$stage/node_modules/@earendil-works/pi-coding-agent"
-patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
-    -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-request-progress-adapters.patch"
 rpc=dist/modes/rpc/rpc-mode.js
 python3 "$stack_root/patch-native-selected-compaction-summary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
@@ -89,6 +85,10 @@ cp -- "$stack_root/native-compaction-source.mjs" "$native_package/dist/core/comp
 cp -- "$stack_root/native-compaction-source.d.ts" "$native_package/dist/core/compaction/agent-comms-source.d.ts"
 cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
+python3 "$stack_root/patch-native-request-observation.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
+patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
+    -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-request-progress-adapters.patch"
 python3 "$stack_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 verify "$stage"

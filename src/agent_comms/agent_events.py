@@ -74,7 +74,7 @@ class PromptCancelled(AgentEvent):
 class NativePhaseChanged(AgentEvent):
     """Actual native observer phase; never reconstructed from visible chunks."""
     phase: TurnPhase
-    native_process: ProcessIdentity | None = None
+    native_process: ProcessIdentity
 
 
 @dataclass(frozen=True)

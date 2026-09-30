@@ -71,7 +71,7 @@ async def run(arguments):
             await writer.drain(); record["headers_written_ns"] = time.monotonic_ns()
             text = "WAIT_NATIVE_OK_" + str(count) + " "
             for index in range(80 if count == 0 else 700):
-                content = text + "native controlled response " * (1 if count == 0 else 20)
+                content = text + "native controlled response " * (1 if count == 0 else 32)
                 packet = {"id": "wait-" + str(count), "object": "chat.completion.chunk",
                           "created": int(time.time()), "model": "fixture",
                           "choices": [{"index": 0, "delta": {"role": "assistant", "content": content}, "finish_reason": None}]}
@@ -173,8 +173,11 @@ async def run(arguments):
                 await until(pilot, lambda: len(posts) >= index + 1, 60)
                 if index == 1:
                     await asyncio.wait_for(provider_end.wait(), 30)
-                    await pilot.pause(2)
-                    report["blocked_owner_busy"] = service.registry.require("wait-native").executing
+                    # Keep the observer genuinely non-reading throughout the
+                    # original native completion, rather than resuming it at an
+                    # arbitrary provider-write time while publication continues.
+                    await until(pilot, lambda: not service.registry.require("wait-native").executing, 90)
+                    report["completed_with_nonreading_observer"] = True
                     reader._transport.resume_reading()
                     await asyncio.wait_for(consume(reader, slow_packets), 30)
                     report["nonreading_observer_retired"] = True
@@ -194,6 +197,21 @@ async def run(arguments):
             observations = [json.loads(line) for path in (service.root / "diagnostics").glob("*.requests.jsonl")
                             for line in path.read_text().splitlines()]
             assert observations, "No retained request measurements"
+            requests = {}
+            for observation in observations:
+                assert observation["native_process"] is not None, "Native request clock lost its original process fence"
+                requests.setdefault(observation["native"]["requestId"], []).append(observation)
+            assert len(requests) == 2, "Unexpected provider request or replay"
+            request_groups = sorted(requests.values(), key=lambda group: group[0]["native"]["startedAtMs"])
+            for group in request_groups:
+                stages = {point["native"]["stage"]: point["native"] for point in group}
+                for stage_name in ("dispatch", "headers", "first_event", "first_delta_consumed", "stream_end", "finished"):
+                    assert stage_name in stages, f"Original native transport omitted {stage_name}"
+                assert stages["headers"]["status"] == 200
+                assert int(stages["dispatch"]["monotonicNs"]) <= int(stages["headers"]["monotonicNs"]) <= int(stages["first_event"]["monotonicNs"]) <= int(stages["first_delta_consumed"]["monotonicNs"])
+            delayed_stages = {point["native"]["stage"]: point["native"] for point in request_groups[0]}
+            report["native_delayed_headers_ms"] = delayed_stages["headers"]["elapsedMs"] - delayed_stages["dispatch"]["elapsedMs"]
+            assert report["native_delayed_headers_ms"] >= 1900, "Provider wait was not measured at original transport boundaries"
             report.update(native_originals=len(originals), observations=observations,
                           visible_wait_frames=len(app.wait_frames), provider_calls=len(posts))
             for label, packets, task in (("fast_reader", fast_packets, observer_tasks[0]),
@@ -220,6 +238,10 @@ async def run(arguments):
             assert len(posts) == 2, "Attaching replayed an original native input"
             (stage / "frames.json").write_text(json.dumps(app.wait_frames))
             report["complete"] = True
+    except BaseException as error:
+        report["complete"] = False
+        report["failure"] = f"{type(error).__name__}: {error}"
+        raise
     finally:
         for writer in observers:
             writer.close()
