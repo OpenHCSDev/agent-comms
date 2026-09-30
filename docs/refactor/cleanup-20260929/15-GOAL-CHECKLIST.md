@@ -74,13 +74,10 @@ refactoring scopes below.
   B-return retained-body hashes passed. Repeated PageDown while the lazy extent
   grew, reverse, idle and separate End were covered. The user's broader void and
   focus/resource acceptance remain explicitly open in continuation Toad217.
-- [ ] Kepler214: velocity/direction-dependent bounded preparation, End bottom
-  burst and shared background rendering. Implementation49df55d9 is pushed;
-  Kepler resumed after Einstein finished, without expanding the active fleet.
-  A pushed continuation now includes the real capture and674-sample CPU profile,
-  plus the async MRO handler fix. The complete native journey failed after capture
-  during offline encoding; that failure is preserved. Encoding has been moved
-  outside the native journey for the next serial gate. Not READY or live.
+- [x] Kepler214 preparation checkpoint merged and installed, as recorded below.
+  This does not close scrolling: actual original/forked history fails the End
+  journey. Kepler221 and Heisenberg217 own the remaining producer, preparation,
+  geometry and retirement corrections.
 - [x] Merge this useful tested checkpoint into the OpenHCSDev forks, stage matching
   Core/Toad/Textual/native pins, perform the declared quiet cutover, restart only
   eligible owners and verify the actual default affected entrypoint. Preserve
@@ -95,11 +92,11 @@ refactoring scopes below.
 
 ## Current fleet and resource constraint
 
-Five Codex workers now carry the active work: Heisenberg, Arendt, Schrodinger,
-Mendel and resumed Kepler. Einstein's completed agent was closed after431's
-children retired. Installed native fixtures run serially. The resource check
-reports15.5GiB available RAM,21.6GiB free home storage and13.9GiB swap used;
-its headroom assertion is still a warning.
+Six Codex workers carry active work: Heisenberg217, Arendt435, Schrodinger215,
+Mendel430/421/422, Kepler221 and Einstein434. Einstein now owns actual native
+admission contention and the malformed provider-error boundary. Installed native
+journeys run serially. Latest resource check reports11.7GiB available RAM,
+19.8GiB free home storage and13.3GiB swap used; headroom remains a warning.
 Do not launch a heavy parallel fixture fleet or delete unreviewed work/history.
 
 The next installation is prioritized for usage-blocking recovery, lifecycle,
@@ -151,3 +148,51 @@ connection projections and restart eligible exact owners onto Core433. Keep all
 durable reservations, histories, native sessions and proofs. Production42 lines
 were deleted across10 files; the ambiguous Thread.owner_identity(int) constructor
 was removed along with all admission-domain consumers.
+
+## Actual user-path failure reproduction, 22:14–22:22
+
+This is the default installation, original private bus, actual installed
+`toad-comms`, physical isolated st/Linux keyboard input and configured
+openai-codex/gpt-6.1-sol/high provider. No UI, ACP, native process, state or
+provider was substituted. A native SessionManager fork of nra-architecture
+retained41,270,274 bytes of real history; originals and uncertain inputs were
+preserved. Two distinct bounded checks received actual native finals4.834s and
+3.672s after native acceptance. These exchanges alone do not establish usable
+scrolling, channel delivery, cancellation or warm return.
+
+**Scrolling failed on both the real fork and the original nra-architecture.**
+Held PageUp, PageDown, reverse PageUp, then End and15s stationary left the
+message viewport entirely blank. Before/after screenshots and the software
+compositor export agree. Original-history capture submitted zero prompts and
+did not restart its owner. One initial24-event snapshot was observed; delayed
+inbound replay did not reproduce in this quiet cohort and remains unresolved.
+
+The original-history same-run GIL profile collected1207 samples with zero
+errors. Notification/thread-presentation reads include8.34 sampled seconds,
+message_by_id5.90 and repeated verification5.82. These overlap and are not wall
+latencies. Kernel UI CPU reaches approximately one core during scrolling and
+59.6% during the following stationary interval. The actual profile and footage
+remain available for candidate comparison; neither is a performance success.
+
+| Defect | Active owner and current causal work |
+| --- | --- |
+| Late preparation, unstable lazy end, blank after End | Heisenberg217 owns reader/extent/follow; Kepler221 owns source-leaf/background preparation. Publish ahead of the edge, retain valid same-direction reads, never treat temporary loaded maximum as canonical end. |
+| User crash on final tab disposal | Heisenberg217: saved22_17_47 traceback captures editor after Prompt children have unmounted. Canonical presentation disposal must precede widget pruning; do not suppress NoMatches. |
+| Historical inbound repeats and blocks new input | Mendel430/Schrodinger215 own original read/source coverage, snapshot replacement and nonblocking publication. Actual repeated snapshots across owner replacement are distinguished from same-open replay. No text/seen-ID deduplication. |
+| Native admission ends before any bytes | Einstein434 has an actual multi-UI contention witness: coordination store opens write schema transactions on every connection. Canonical schema/read custody correction, no deadline increase. |
+| comms428 long failure hides actual provider error | Einstein434: actual journal ends WebSocket1012; provider phase scalar is incorrectly decoded as a family object, yielding generic invalid Pi event. Decode the external scalar once through its existing owner. Arendt retains lifecycle/settlement ownership. |
+| Safe paired activation | Arendt435 central batch captures distinct original launches, fences all eligible idle owners before signaling and preserves credentials/settings in memory. Installed real-worker acceptance passed; remaining S14 stays open. |
+
+Compact evidence is in `evidence/cleanup-live-integration/real-live-repro-20260929`.
+Raw recordings/profile total approximately9MiB in the two named cache directories
+listed in receipt.json, owned by parent432 until candidate assessment. First
+capture had inherited NO_COLOR and failed profiler permission: it is not visual
+acceptance. Second capture fixed the terminal environment but its profiler was
+terminated before output; the original-history third capture completed profiling
+and clean process teardown. No original failure was retried to conceal it.
+
+433 is staged, not activated. 435 is a reviewed merge checkpoint, not a claim
+that delivery or scrolling is fixed. Defer global cutover to the coherent tested
+usage-blocking pair; use one canonical batch, fresh matching connections and
+preserve all durable provenance. The completed220 worktree was removed only
+after merge, source-clean verification and absence of process references (44MiB).
