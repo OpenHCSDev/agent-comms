@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from contextlib import AsyncExitStack, ExitStack
 from abc import abstractmethod
 from pathlib import Path
 
@@ -47,7 +48,7 @@ class ToolCase(EffectCase):
 
     async def assert_effect(self, execution, progress):
         await super().assert_effect(execution, progress)
-        assert progress.goals.successful_tool_observed
+        assert progress.goals.productive_tool == self.body()[2]
 
 
 class CompactionCase(EffectCase):
@@ -126,18 +127,16 @@ async def owner_turn(comms, tmp_path):
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", reply_targets=("#comms",))
-    assert execution.admit()
-    execution.begin()
-    execution.prepare_prompt()
-    execution.open_stream()
-    progress = execution.progress
     try:
-        yield execution, progress
+        async with AsyncExitStack() as resources:
+            with ExitStack() as permits:
+                assert execution.admit(permits)
+                execution.begin(resources)
+                execution.prepare_prompt()
+                execution.open_stream(resources, permits)
+                resources.enter_context(permits.pop_all())
+                yield execution, execution.progress
     finally:
-        if comms.registry.require(name).active_turn is not None:
-            await owner.turns.settle_turn(
-                session.session_id, name, execution.turn_id, execution.turn_lease
-            )
         await owner.shutdown()
 
 
@@ -293,10 +292,12 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
     execution = OwnedTurn(
         owner.turns, session.session_id, name, "native work", reply_targets=("#comms",)
     )
-    assert execution.admit()
-    execution.begin()
+    resources, permits = AsyncExitStack(), ExitStack()
+    assert execution.admit(permits)
+    execution.begin(resources)
     execution.prepare_prompt()
-    execution.open_stream()
+    execution.open_stream(resources, permits)
+    resources.enter_context(permits.pop_all())
     progress = execution.progress
     waiting_owner(execution)
     try:
@@ -325,6 +326,8 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             assert any(row.notice and "[Open diagnostic]" in row.body for row in rows)
             assert not any(row.body == "Native response lifecycle." for row in rows)
     finally:
+        await resources.aclose()
+        permits.close()
         await owner.shutdown()
 
 
