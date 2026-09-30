@@ -10,14 +10,14 @@ import fcntl
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
 
 from agent_comms.active_route import read_active_route
 from agent_comms.field_codec import FieldCodec
-from agent_comms.native_package import verify_native_package
+from agent_comms.native_pi import _trusted_package
 from agent_comms.owner_launch import RestartEnvironment
 import agent_comms.owner_restart
+from cutover_child import run_cutover_child
 
 
 def main():
@@ -29,7 +29,9 @@ def main():
     parser.add_argument('--route-path', type=Path, required=True)
     parser.add_argument('--receipt', type=Path, required=True)
     arguments = parser.parse_args()
-    verify_native_package(arguments.native_package)
+    # The publisher uses this SAME native trust boundary. Validate it before
+    # any fence/signal, without asking a target registry reader to read old data.
+    _trusted_package(arguments.native_package)
     descriptor = os.open(arguments.route_path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         # Canonical directory -> wire lock order, held across the WHOLE batch.
@@ -55,12 +57,11 @@ def main():
         authentic.update(AGENT_COMMS_ROOT=str(original.root),
                          AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=original.wire_root_id,
                          AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(original.native_package))
-        result = subprocess.run([
+        result = run_cutover_child([
             str(arguments.original_python),
             str(Path(__file__).with_name('restart_original_thread_format.py')),
             str(Path(agent_comms.owner_restart.__file__).parent), str(descriptor),
-        ], input=json.dumps(packet), env=authentic, pass_fds=(descriptor,),
-            capture_output=True, text=True, check=True)
+        ], packet=json.dumps(packet), environment=authentic, descriptors=(descriptor,))
         print(result.stdout.strip(), flush=True)
     finally:
         os.close(descriptor)

@@ -9,13 +9,13 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import subprocess
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_cutover import OwnerCutover
 from agent_comms.store_files import _atomic_write_text
 from thread_format_retirement import GoalReportMemberRetirement
+from cutover_child import run_cutover_child
 
 
 @dataclass(frozen=True)
@@ -31,10 +31,9 @@ class ThreadRetirementCutover(OwnerCutover):
     def validate(self, registry, releases):
         projected = {'registry': GoalReportMemberRetirement.threads(FieldCodec.encode(registry)),
                      'releases': GoalReportMemberRetirement.releases(FieldCodec.encode(releases))}
-        result = subprocess.run([
+        result = run_cutover_child([
             str(self.target_python), str(Path(__file__).with_name('validate_thread_retirement.py')),
-        ], input=json.dumps(projected), env=self.target_environment,
-            capture_output=True, text=True, check=True)
+        ], packet=json.dumps(projected), environment=self.target_environment)
         return projected, json.loads(result.stdout)
 
     def require_selection(self, snapshot, owners):
@@ -66,6 +65,7 @@ class ThreadRetirementCutover(OwnerCutover):
                        (lifecycle.releases, 'owner_release_receipts.json'))
             originals = {name: store.path.read_bytes() if store.path.exists() else None
                          for store, name in sources}
+            originals['active-route.json'] = self.route_path.read_bytes()
             self.originals.mkdir(mode=0o700)
             for name, contents in originals.items():
                 if contents is not None:
@@ -94,12 +94,11 @@ class ThreadRetirementCutover(OwnerCutover):
         packet = {'handoff': FieldCodec.encode(stopped.handoff),
                   'route_path': str(self.route_path), 'original_route': self.original_route,
                   'target_route': self.target_route, 'receipt': str(self.receipt)}
-        result = subprocess.run([
+        result = run_cutover_child([
             str(self.target_python), str(Path(__file__).with_name('launch_thread_retirement.py')),
             str(stopped.wire.descriptor), str(self.route_descriptor),
-        ], input=json.dumps(packet), env=self.target_environment,
-            pass_fds=(stopped.wire.descriptor, self.route_descriptor),
-            capture_output=True, text=True, check=True)
+        ], packet=json.dumps(packet), environment=self.target_environment,
+            descriptors=(stopped.wire.descriptor, self.route_descriptor))
         from agent_comms.owner_lifecycle import OwnerRestartResult
 
         return FieldCodec.decode(tuple[OwnerRestartResult, ...], json.loads(result.stdout))

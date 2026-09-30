@@ -1,0 +1,32 @@
+{
+  "originals": {
+    "registry.json": "b93233c777a5d42ac6368f7dc1c27c5fdbea4a5e193f6968ab5966dd6ac9d46d",
+    "owner_release_receipts.json": "935881fddb8d6da434198cc7a6988e9b91bc8352e102e44b5ba641fab86f28e0"
+  },
+  "target_validation": {
+    "threads": 3,
+    "releases": 1
+  },
+  "all_original_processes_retired": true,
+  "provider_calls": 0,
+  "original_input_replays": 0,
+  "phase": "target_owners_launched",
+  "owners": 2,
+  "route_published_before_first_launch": true,
+  "original_wire_descriptor_retained": true,
+  "busy_refusal_without_stops": true,
+  "retained_distinct_settings": true,
+  "renamed_owner_retained": true,
+  "both_thread_carriers_retired": true,
+  "original_native_wire_unknown_unchanged": true,
+  "protected_hashes": {
+    "bus.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "protected-native.jsonl": "bd2a168e49c4a08fd665c8d97b124a3e7d82a81ba58e5c846b654864be1b9765",
+    "input_dispositions.json": "ae62c2a409d3debf344b79b3dc2098dc908c5bba7984433a728eb0adb9a9760e"
+  },
+  "actual_target_runtime_attachment": true,
+  "original_python": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python",
+  "target_python": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python",
+  "source_head": "6eba2efd",
+  "complete": true
+}
