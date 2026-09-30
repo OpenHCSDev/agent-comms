@@ -138,8 +138,8 @@ def test_selected_startup_requires_exact_two_durable_metadata_appends(
         monkeypatch.setattr(module.os, "fsync", lambda _: (_ for _ in ()).throw(OSError("EIO")))
     if damage == "none":
         revision = fresh.verify_selected_startup()
-        assert revision[:2] == (fresh.device, fresh.inode)
-        assert revision[2] > fresh.bootstrap_size
+        assert revision.identity == fresh.file_identity
+        assert revision.size > fresh.bootstrap_size
         with pytest.raises(NativePiUnavailable, match="earlier input"):
             fresh.verify_prewrite()
     else:

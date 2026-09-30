@@ -672,6 +672,10 @@ class PiModel(PiPayload):
     context_window: int | None = wire_field("contextWindow")
 
     @property
+    def identity(self):
+        return self.provider, self.id
+
+    @property
     def display_name(self):
         name = self.id or self.name
         return f"{self.provider}/{name}" if self.provider and name else name or self.provider
@@ -743,6 +747,9 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     pending_message_count: int | None = wire_field("pendingMessageCount")
     is_streaming: bool | None = wire_field("isStreaming")
     is_compacting: bool | None = wire_field("isCompacting")
+
+    def matches_model(self, selected: tuple[str, str]) -> bool:
+        return self.model is not None and self.model.identity == selected
 
     @property
     def session_busy(self) -> bool:
