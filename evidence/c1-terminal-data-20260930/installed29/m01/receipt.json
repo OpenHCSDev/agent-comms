@@ -37,7 +37,7 @@
     "error": "psutil.TimeoutExpired",
     "qualification": "Original terminal footer preserves failure; current final process census does not reconstruct worker state at wait instant."
   },
-  "phase": "original-row-rightclick-and-fork-dialog-opened-escape-cancel-failed",
+  "phase": "original-row-and-menu-visible-pass-fork-screen-type-reached-escape-dismissal-failed",
   "partial_positive": {
     "driver": "3a3a36059da0c615990ff39f18754ab16ff064b1",
     "target": "beta",
@@ -70,7 +70,8 @@
     "declared_contract": "Installed ForkDialog.BINDINGS Escape\u2192cancel; action_cancel dismiss(None). Declared binding exists, no unsupported-oracle waiver.",
     "owner": "Kepler original focus/event/Modal route trace; Heisenberg product route if proven",
     "unmeasured": "No exact focused widget/binding namespace/event trace retained. SVG/ANSI and original source retained.",
-    "source_correction": "Initial unsupportedEscape/#fork-cancel button assumption was immediately retracted after reading actual installed source; not a readiness explanation."
+    "source_correction": "Initial unsupportedEscape/#fork-cancel button assumption was immediately retracted after reading actual installed source; not a readiness explanation.",
+    "readiness_qualification": "Kepler readonlyb581 original132ANSI frames contain ContextMenu Fork item but never ForkDialog title/name/task/tags. fork-dialog.svg is empty text matrix. Screen type alone did not prove mounted/focused/painted controls. Declared Escape exists; exact focus/binding/keydispatch not captured, so intrinsic binding defect versus unready dialog is unresolved. Preserve original failure, no unsupported-binding claim."
   },
   "sha256": {
     "terminal.timing": "817165b08ebae645c9aceae0d725d67b32358cee1fba6540bdf1c579ba8a27a4",
