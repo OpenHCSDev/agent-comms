@@ -11,10 +11,10 @@ import types
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
-from typing import Any, ClassVar, Literal, Union, get_args, get_origin
+from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
 
@@ -228,14 +228,15 @@ class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
     """Native transport timing is display evidence, never input admission."""
 
     @classmethod
-    def normalize_wire(cls, value):
-        if type(value) is not str:
-            raise ValueError("Native transport phase must be a string")
+    def from_text(cls, value: str):
         try:
             member = cls.decode(value)
         except ValueError:
-            return {"kind": UnrecognizedTransportStage.declared_name, "reported_phase": value}
-        return {"kind": member.declared_name}
+            return UnrecognizedTransportStage(value)
+        return member()
+
+    def to_text(self) -> str:
+        return self.declared_name
 
     @property
     @abstractmethod
@@ -261,6 +262,9 @@ class UnreportedTransportStage(ProviderTransportStage):
 class UnrecognizedTransportStage(ProviderTransportStage):
     reported_phase: str
 
+    def to_text(self) -> str:
+        return self.reported_phase
+
     @property
     def description(self) -> str:
         return f"provider stage: {self.reported_phase}"
@@ -278,12 +282,26 @@ class ProviderDiagnosticError(PiPayload):
         return f"{name} (code {self.code})" if self.code is not None else name
 
 
+class TransportStageText(TextRepresentation):
+    """The native provider's scalar spelling, not a second record decoder."""
+
+    @classmethod
+    def encode(cls, value: ProviderTransportStage) -> str:
+        return value.to_text()
+
+    @classmethod
+    def from_text(cls, value: str) -> ProviderTransportStage:
+        return ProviderTransportStage.from_text(value)
+
+
 @dataclass(frozen=True)
 class ProviderTransportDetails(PiPayload):
     configured_transport: str | None = wire_field("configuredTransport")
     fallback_transport: str | None = wire_field("fallbackTransport")
     events_emitted: bool | None = wire_field("eventsEmitted")
-    phase: ProviderTransportStage = field(default_factory=UnreportedTransportStage)
+    phase: Annotated[ProviderTransportStage, TransportStageText] = field(
+        default_factory=UnreportedTransportStage
+    )
     request_bytes: int | None = wire_field("requestBytes")
 
     def __post_init__(self):
