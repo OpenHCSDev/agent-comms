@@ -162,3 +162,31 @@ chronology alone or a seen list. No matching successful selected-reply record wa
 found in the two reviewed424 restart fixtures (both have zero obligations/native
 runtime inputs), or425's ordinary bash-rename fixture. Preserve those limits;
 the original recipient selected-response native journey remains required.
+
+## Actual private installed backend checkpoint
+
+Core0dabd493 wheel90159ce9fc0e, imported from candidate-site-partition, passed
+the actual retained native/tool/official ACP journey in12.49s. Exact native
+package is native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent.
+Run04 supplied the bundle root instead of this package leaf and was rejected
+before native launch; its evidence remains. Fresh independent run05 seeded real
+native history, loaded the sender before sending, executed the native extension's
+installed comms_send CLI, observed one original outbound Sent event and ID-only
+tool receipt, and checked cold ACP/fresh Comms replay and unchanged native prefix.
+Fixture custody teardown passed, and the exact private root/config/project scan
+found no surviving owned processes. The slot was released directly to215.
+Receipt: installed-native-outbound-run05-receipt.json in this named scratch.
+
+Normally integrated main72062939 (merged425 and431) atb5698bf2. Kept the public
+TurnChangedUpdate/TurnTranscriptUpdate producer and PublishingPhase, while
+deleting the retired AgentTextTranscriptUpdate and every unused import. The
+existing controlled provider's response_chunks seam owns the optional tool call;
+no competing protocol fixture was introduced. Nine affected canonical source,
+notification and deletion checks pass2.95s. Busy presentation checks now assert
+the original managed lease and canonical phase activity, replacing the retired
+generic "In a turn" wording after425's phase projection.
+
+Schrodinger215 owns full installed both-open sender/recipient/IRC hot refresh,
+original recipient handling, reply uniqueness and physical A/B/A. Its private
+pair includes430 plus425. The passing backend checkpoint does not establish
+those pending UI/recipient outcomes or change global activation.
