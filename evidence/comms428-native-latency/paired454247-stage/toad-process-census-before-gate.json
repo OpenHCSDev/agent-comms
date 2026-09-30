@@ -1,0 +1,5 @@
+{
+  "scope": "READONLY current process observation, not cutover or owner authority; parent freshly checks again at execution",
+  "toad_processes": [],
+  "public_effects": 0
+}

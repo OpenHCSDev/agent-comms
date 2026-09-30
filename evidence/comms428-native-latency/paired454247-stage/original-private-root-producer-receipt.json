@@ -1,0 +1,11 @@
+{
+  "root": "/home/ts/wt/g454e/meta/wire",
+  "root_id": "755ba55a60524b61b1a83cf07950e4aa",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "python": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/python",
+  "core_pin": "6feb634ba184d94d763028406152fff07027cccc",
+  "purpose": "Fresh owned private-root canonical producer witness for final454 strict paired launch metadata",
+  "owner_starts": 0,
+  "provider_calls": 0,
+  "public_mutations": 0
+}

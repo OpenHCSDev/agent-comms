@@ -1,0 +1,15 @@
+{
+  "package_ready_receipt": {
+    "path": "/home/ts/.cache/agent-scratch/native454-paired-stage-20260930/paired-ready-receipt.json",
+    "sha256": "da4d2b17fe05b42f28fd421ca82cd01fc245a4ee97b7bb20c80c5aee687a74bb"
+  },
+  "activation_metadata": {
+    "path": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/activation.json",
+    "sha256": "f68937b7290c776d6c599879b3040c5171465d4573b066237672f5137d909a3e"
+  },
+  "scope": "Packaging/source/fullnative-trust/originalprivate-rootpreflight proof only, not actualjourney/live publication proof",
+  "actual_gate_owner": "Einstein231",
+  "activation_owner": "Parent",
+  "original453761_protected": true,
+  "public_effects": 0
+}

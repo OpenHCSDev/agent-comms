@@ -1,0 +1,16 @@
+{
+  "owner": "Schrodinger454stage",
+  "state": "FINAL-WHOLE454-SOURCE-FROZEN-ACTUAL-EINSTEIN-GATE-PENDING",
+  "planned_core": "6feb634ba184d94d763028406152fff07027cccc",
+  "planned_stage": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "original453stage_preserved": true,
+  "public_effects": 0,
+  "actual_gate_owner": "Einstein231",
+  "activation_owner": "Parent",
+  "toad": "8a924e1d6c4a32098876f7885cc06c7173d499fa",
+  "core": "6feb634ba184d94d763028406152fff07027cccc",
+  "private_root": "/home/ts/wt/g454e/meta/wire",
+  "private_root_id": "755ba55a60524b61b1a83cf07950e4aa",
+  "source_changes_after_handoff": false
+}
