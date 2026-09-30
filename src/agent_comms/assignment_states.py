@@ -56,7 +56,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
 
     def notification(
         self,
-        recipient: str,
+        recipient,
         *,
         owner_active: bool,
         current_turn: bool = False,

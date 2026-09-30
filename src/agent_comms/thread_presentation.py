@@ -11,6 +11,7 @@ from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
+    from .transcripts import TranscriptReadIdentity
 
 
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
@@ -56,6 +57,7 @@ class ThreadPresentation:
     notifications: tuple[MessageNotification, ...] = ()
     attention: bool = False
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
+    read_identity: TranscriptReadIdentity | None = None
 
     @property
     def label(self) -> str:
