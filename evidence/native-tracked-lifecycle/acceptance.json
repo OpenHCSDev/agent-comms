@@ -54,5 +54,25 @@
     "native_wait_source_unchanged": true,
     "repeat_native_gate": false,
     "reason": "426 owner-attachment recovery passed its separate real gate; disjoint from tracked native waiting and native package"
+  },
+  "paired_activation_requirement": {
+    "core425_integrated": "dc2754156cb5a381b3556f7713b78fb283f458e8",
+    "required_toad_pr": 211,
+    "published_candidate_at_inspection": "f415d6ee47e67a34655a71df0ba886bf09bf7fa7",
+    "required_wire_update": "TurnChangedUpdate(state: TurnState)",
+    "removed_wire_updates": [
+      "TurnStartedUpdate",
+      "TurnSettledUpdate"
+    ],
+    "consumers": [
+      "toad.acp.comms_updates.CommsUpdates.turn_changed",
+      "toad.agent_presentation.ManagedTurnBinding",
+      "toad.widgets.conversation",
+      "toad.widgets.prompt"
+    ],
+    "native_phase_changed": "internal AgentEvent, not a new ACP extension member",
+    "current_toad43949_compatible": false,
+    "pair_gate_owner": "Arendt425/Toad211; actual warm rename native/ACP/UI acceptance pending at this checkpoint",
+    "activation_owner": "parent432; use Arendt final211 tested source pin; do not activate Core431 alone"
   }
 }

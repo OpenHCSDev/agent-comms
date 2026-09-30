@@ -29,3 +29,9 @@ The noneditable wheel built from08ced729 and unchanged canonical native4ab passe
 All owned fixture children are retired and disposable roots are removed by the existing fixture owner. The serial native slot was returned directly to425 and214. No paid calls, live user input, installed default or active user process was changed. This is installed candidate acceptance, not a claim that the live default has already been activated. Parent432 owns coherent425/431 integration and reviewed activation.
 
 Normally integrated current main d306d0df (426 recovery) at b0c806e1. Its session-attachment/publication changes do not change the tracked native wait source or native package used in this gate. The existing426 real acceptance is recorded separately; this disjoint merge does not require another95s native run.
+
+## Required paired UI cutover
+
+431 includes425dc275. That inherited protocol replaces TurnStartedUpdate and TurnSettledUpdate with TurnChangedUpdate(state: TurnState). The currentToad43949 client still imports the removed classes and cannot pair with this backend. The required211 client consumes TurnChangedUpdate in acp/comms_updates.py through the existing managed-turn binding, and conversation/prompt derive state and permissions from it. NativePhaseChanged itself is an internal AgentEvent, not another ACP extension record.
+
+Toad211 published candidate was f415d6ee47e67a34655a71df0ba886bf09bf7fa7 at inspection. Arendt owns its final actual warm rename native/ACP/UI acceptance and exact final source pin. Parent432 must install the tested211 client with425/431; backend Ready means the installed native gate passed, not that the paired UI has already passed or that431 may activate alone.
