@@ -20,6 +20,10 @@ state duplication ever. Every consumer must derive from its authoritative source
 - [x] Publish tested code/evidence update to the existing PR428 branch (`79a8a323`).
 - [x] Finish direct tool-driven review; user prohibits subagents/review delegation.
       No independent-review verdict is claimed.
+- [x] Fold four-class retention, explicit Decision ownership, revision mass and
+      held-out lock-in requirements into S2/S4 and the shared-owner/index documents.
+- [x] Normally integrate refreshed main `4295d680` (`87a05d9f`), rerun the complete
+      contextual scaffold audit, skill APIs, focused tests and real CLI entrypoint.
 
 ## Source and exact coverage
 
@@ -194,6 +198,46 @@ actual exporter match. All decoded CLI results equal baseline `b0c94e4a`; none
 calls a provider or mutates native state. The small baseline Python/answers files
 were created in owned persistent scratch and removed after the run. These checks
 establish the scaffold's exercised behavior, not model recall or native usability.
+
+## Refreshed main and final scope checkpoint
+
+Normally merged main `4295d680a5e63885a3f338a299afc07dbb34bd85` at
+`87a05d9f9c6b3c3b8cd117943ce20a68af3a221f`. The shared remote-tracking reference
+had advanced beyond the preceding `f648e973` observation; this receipt names the
+actual merge parent, not an assumed fetch result. No conflicts or authored edits
+to production code. Both scaffold source hashes are identical to `79a8a323`.
+
+[Fresh contextual receipt](evidence/main-refresh-20260930.json) records 292 source
+files, 85/85 detectors, complete coverage and zero omissions. Both CLI scans exit
+zero. The nine original scoped ClassDefs join to the canonical class index via
+ModuleSyntaxIndex; no unprojected declaration. Census/overlay use the provided
+skill APIs and the NRA-parsed source trees: raw shapes remain zero, keyed
+subscripts ten, and the same one boundary-publication raw lead remains visible.
+The two import-only dead-module leads are rejected by actual unittest collection;
+fixture length and subprocess retain the earlier behavioral counterevidence.
+This is scoped coverage/class evidence, not production-wide zero findings or an
+NRA equivalence proof.
+
+Current original message owners were inspected: `messages.py:46-156` owns author,
+scope, identity/reference and claim linkage; `wire_log.py:365-386` exposes canonical
+snapshot/reference reads; `envelope_claim_transitions.py:216-289` owns original
+claim events and their derived projection. S2/shared-owner notes now distinguish
+this from transcript inference and an independent claims store. Dormant
+TriggerRule/RetentionPolicy still have only their prototype-test importer;
+HistorySummarySource remains a narrative source, not four-class retention.
+`PiCompactionDecision` still observes settings/threshold, not authored alternatives.
+
+Ten provider-free tests, including the actual CLI subprocess, pass after this
+merge. Black verifies both unchanged Python files. Package and diff checks pass
+before publication. No native/provider/production usability claim is added.
+CI queue latency does not hold this planning/scaffold checkpoint. Remaining work
+is the explicitly planned production ownership/adapters, metric/probe implementation
+and authorized model evaluation, not hidden unfinished work in this draft.
+
+Disposable refresh outputs belong to `comms428` at
+`/home/ts/.cache/agent-scratch/comms428-refresh-20260930`. One worker, bounded scans;
+headroom warning was swap use 14.4 GiB with 17.6 GiB RAM available. Retain the
+machine-readable receipt before retiring the owned outputs after worker exit.
 
 ## Direct review, no delegation
 

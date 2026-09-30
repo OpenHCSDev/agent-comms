@@ -37,7 +37,8 @@ state, not the team's unrecorded prioritization decisions.
 | `owner_compaction_adaptive.py`, preparation/source/witness and selected RPC | S1/S2 request changes from one accepted owner; no second route |
 | `CompactionPolicy`, native summary generation/accounting | S2/S3/S4 share owner; [PR416](https://github.com/OpenHCSDev/agent-comms/pull/416) first |
 | Pi vocabulary/payload declarations | [PR417](https://github.com/OpenHCSDev/agent-comms/pull/417) merged and integrated in the followthrough worktree; use its typed response owners |
-| state/commands and turn lifecycle | [PR421](https://github.com/OpenHCSDev/agent-comms/pull/421) and [PR425](https://github.com/OpenHCSDev/agent-comms/pull/425) own implementation; merged [PR418](https://github.com/OpenHCSDev/agent-comms/pull/418) records dispatch |
+| state/commands and turn lifecycle | [PR421](https://github.com/OpenHCSDev/agent-comms/pull/421) and [PR425](https://github.com/OpenHCSDev/agent-comms/pull/425) are merged in refreshed main; extend their original state/lifecycle owners, not retired mirrors |
+| native preparation and shared compaction scheduling | Merged [PR439](https://github.com/OpenHCSDev/agent-comms/pull/439) owns shared admission across independent summary sources; retention must preserve that existing source/custody contract |
 | retained native fixtures | Reuse `tests/retained_native_fixture.py`, selected-owner integration and manual-compaction journeys |
 | synthetic recall oracle | S4 owns fixture/measurement, never runtime selection or task authority |
 
@@ -61,7 +62,10 @@ The user-supplied Paper4b retention/lock-in translation is incorporated in S2/S4
 as intended design and acceptance requirements. Formal proposition/notation
 references remain unverified; neither Decision emission nor revision-mass/lock-in
 measurement is implemented in this draft. The original table is pinned historical
-source evidence, not a fresh audit of the subsequently advanced remote main.
+source evidence. Main `4295d680` is now normally integrated; the fresh 292-file,
+85-detector scaffold-context receipt and current source-owner observations are in
+[05-AUDIT-REVIEW.md](05-AUDIT-REVIEW.md). The four production features remain
+planned, distinct from this completed evidence/scaffold checkpoint.
 
 Followthrough at source `452bc01f` is recorded in
 [05-AUDIT-REVIEW.md](05-AUDIT-REVIEW.md): all 85 detectors completed for the

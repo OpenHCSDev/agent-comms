@@ -84,10 +84,13 @@ packing/strategy through the existing policy owner; do not silently summarize it
 Prompt-injected peer messages also appear in native history. Retention must read
 the original message/wire owner, keyed by original message identity, rather than
 extract another authoritative copy from that injected transcript. Preserve source
-revision, author, recipient and scope. The concrete join between canonical message
-identity, original wire evidence and current claims remains OPEN until refreshed
-source admission; a native transcript event ID is not interchangeable with a bus
-message ID (IDEN-5, BOUND-2).
+revision, author, recipient and scope. At refreshed main `4295d680`, Message
+provides its original seq/ID reference; WireLog reads those references under its
+existing certificate lifetime. ClaimTransition binds claims/releases to that
+original message and ClaimProjection derives current claim ownership from wire
+rows. Do not introduce a separate mutable claims store. The join to retained
+constraints and their admission remains OPEN; a native transcript event ID is not
+interchangeable with a bus message ID (IDEN-5, BOUND-2).
 
 Exact retention does not promote every peer sentence into an instruction. Existing
 authority, trust, claim validity and scope rules determine applicability. A thread's
@@ -112,6 +115,9 @@ forbidden. Retention, packing, UI and evaluation only project that owner's facts
 The storage location, tool admission, native-turn/message join, update authority
 and all-callers closure are production design obligations, not implemented here.
 Decision emission and later correction must not authorize execution or input replay.
+`PiCompactionDecision` is an existing settings/threshold observation, not a record
+of an agent's chosen/rejected task alternatives; do not overload it into a second
+purpose because its name contains Decision.
 
 ## New-case experiment, deletions and guards
 

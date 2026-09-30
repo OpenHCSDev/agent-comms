@@ -1,5 +1,15 @@
 # Adaptive compaction and retained task memory
 
+Current completion planning is in
+[the retained-task-memory package](../docs/refactor/retained-task-memory/README.md).
+Its S2/S4 contracts now include verbatim constraints, real decisions with valid
+rejected alternatives, exact forced references and lossy narrative; original
+wire-message provenance and explicit Decision ownership; and unauthorized
+revision-mass plus held-out lock-in gates. Those additions are planning, not
+implemented retention or measured model-quality results. The original draft below
+is historical PR48 evidence; its activation-status statements are not a description
+of today's shipped transaction/journal pipeline.
+
 **Status: historical draft plan. Implementation remains DORMANT.** The
 prototype and decision record now live in
 `stack/adaptive-wiring-decision.md` and `stack/native-writer-policy.md` on

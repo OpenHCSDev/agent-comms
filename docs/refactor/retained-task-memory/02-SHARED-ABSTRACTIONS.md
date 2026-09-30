@@ -15,14 +15,18 @@ New names in the historical plan are sketches, not a mandate to add classes.
 | selected provider exchange | `SelectedSummarySlot` and selected native stream | Cache capability belongs at the transport/route owner, not ACP |
 | summary outcome, commit and original admission | `OwnerSummaryOutcome`, `NativeSummary`, `OwnerCompactionCommit` | Extend existing payload and outcome contracts; no separate memory commit |
 | publication | TurnProgress/event family and existing compaction outbox | UI derives view; no memory authority in Toad |
+| original peer message and claims | `Message.reference`, `WireLog.messages_for_references`, wire-owned `ClaimTransition` / `ClaimProjection` | Preserve original seq/ID, author, scope and wire evidence; no reconstructed transcript authority or independent claims/memory store |
 
 ## Newly requested provenance obligations
 
 [S2](S2-MEMORY.md) now requires four retention classes and a declared Decision
 owner. No Decision abstraction or storage is built by this planning PR. Existing
 message/wire and claim authorities must determine authored constraints; native
-transcript injection is only a representation. Their concrete identity/authority
-join requires fresh admission at implementation time.
+transcript injection is only a representation. At refreshed main `4295d680`,
+`Message.reference` carries seq/ID and WireLog exposes certified bounded original
+reference reads. Claims/releases reside in original message ClaimTransition rows;
+ClaimProjection derives their current state, not a separately writable claims
+store. The retention/constraint-admission join still needs implementation admission.
 
 Audit existing richer decision authorities before introducing the proposed nominal
 Decision. If none supplies choice, valid rejected alternatives, scope, source turn
