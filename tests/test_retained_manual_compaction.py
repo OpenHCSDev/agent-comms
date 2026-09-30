@@ -39,6 +39,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
     source = Path(os.environ["RETAINED_COMPACTION_SOURCE"])
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve()
     launcher = os.environ["AC_NATIVE_STACK_BIN"]
+    context_window = int(os.environ.get("RETAINED_COMPACTION_CONTEXT_WINDOW", "272000"))
     settings = PiCompactionSettings(
         16384, int(os.environ.get("RETAINED_COMPACTION_KEEP_RECENT_TOKENS", "20000"))
     )
@@ -70,7 +71,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
                             {
                                 "id": "fixture",
                                 "name": "local fixture",
-                                "contextWindow": 272000,
+                                "contextWindow": context_window,
                                 "maxTokens": 8192,
                             }
                         ],
@@ -110,7 +111,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             package,
             str(session),
             settings=settings,
-            context_window=272000,
+            context_window=context_window,
         )
         assert preparation is not None
         comms = Comms(tmp_path / "wire")
@@ -186,7 +187,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             persistent,
             session_file=str(session),
             expected_package=package,
-            selected=SelectedModel("retained-local", "fixture", 272000),
+            selected=SelectedModel("retained-local", "fixture", context_window),
         )
         assert not decision.trigger, "Committed context must be usable on a fresh native reopen"
         identity = await asyncio.to_thread(
@@ -209,6 +210,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         receipt = {
             "source_bytes": before_source.st_size,
             "tokens_before": preparation.tokens_before,
+            "selected_context_window": context_window,
             "provider_calls": provider.posts,
             "transport": "loopback only",
             "native_commit": True,

@@ -84,9 +84,9 @@ fresh_selected/selected_revision fields or reconstructs their relationship.
 Selected first-source CLI remains refused by its existing reviewed trust gate;
 this checkpoint does not enable that path or mint enrollment from a stat value.
 
-The existing selected observation exchange now supports canonical GetState for
-real fixtures, retaining package/session identity, serialized child borrowing,
-and retirement after a transmitted uncertain probe. No new observation store,
+The test-only GetState product helper introduced in the first source checkpoint
+is deleted. Fixtures now reopen through original NativeSessionPreparation.open,
+the same preparation owner used by TurnRunner. No observation helper, store,
 codec or source authority is introduced.
 
 Fifteen reference/selected-start controls pass0.64s. The affected native saved
@@ -97,3 +97,11 @@ those checks; the fixture now reads canonical registry.active_turn. That
 completed run is preserved and not replayed. Twenty runtime/native argument
 checks passed in that invocation. The installed prepared-model/compaction proof
 remains pending; this is a source checkpoint, not installed or live readiness.
+
+Installed manual compaction on the protected44,661,933-byte original copy passed:
+five localhost summary calls, native commit and strict reopen, zero new original
+inputs, canonical owner idle. The accompanying adaptive fixture used a272k
+window and correctly skipped at185,067 tokens; its obsolete summary expectation
+failed and that run is preserved. A fresh adaptive case declares a180k localhost
+model to exercise actual preparation, selected-policy trigger and original input
+admission. The completed manual case is not repeated; no live input is replayed.

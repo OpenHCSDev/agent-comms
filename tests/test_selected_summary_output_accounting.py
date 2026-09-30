@@ -17,8 +17,8 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
-from agent_comms.selected_pi_route import read_selected_state
 from agent_comms.registration import Registration
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown
 from agent_comms.store_files import _store_lock
@@ -111,6 +111,15 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
                 NativePiRpcLaunch(("node",), tmp_path, {}, tmp_path, file, package),
                 NativeSessionIdentity(ready["sessionId"], str(file)),
             )
+            (tmp_path / "settings.json").write_text(os.environ["PR95_NATIVE_SETTINGS"])
+            prepared = await NativeSessionPreparation.open(
+                persistent, "pi",
+                ["--provider", "local-owner", "--model", "selected", "--thinking", "low",
+                 "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+                 "--no-prompt-templates", "--no-tools"],
+                worktree=str(tmp_path), environment=dict(os.environ), session_file=str(file),
+            )
+            before = hashlib.sha256(file.read_bytes()).hexdigest()
             registry = Registration(tmp_path / "registry.json")
             registry.register(
                 Thread(
@@ -146,7 +155,7 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
                     "pi",
                     "owner",
                     "acceptance",
-                    await read_selected_state(persistent, session_file=str(file), expected_package=package),
+                    prepared,
                     "acp:acceptance",
                     persistent,
                     input_text=original,

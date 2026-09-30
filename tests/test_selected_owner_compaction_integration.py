@@ -22,6 +22,7 @@ from agent_comms.input_attempt import NotSentInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
 from agent_comms.registration import Registration
 from agent_comms.runtime_info import AgentRuntimeInfo
@@ -131,6 +132,13 @@ async def owner_fixture(
     )
     agent_dir = tmp_path / "pi-settings"
     agent_dir.mkdir()
+    (agent_dir / "settings.json").write_text(json.dumps({
+        "compaction": {
+            "enabled": os.environ.get("PR95_EFFECTIVE_DISABLED") != "1",
+            "reserveTokens": 1000, "keepRecentTokens": 10,
+        },
+        "retry": {"enabled": False},
+    }))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", f"{provider}/{model}")
@@ -185,9 +193,13 @@ async def owner_fixture(
             "PR95_EMPTY_SESSION"
         ):
             record_fixture_history(inputs, "owner", owner.active_turn.admission_generation)
-        from agent_comms.selected_pi_route import read_selected_state
-
-        info = await read_selected_state(persistent, session_file=file, expected_package=package)
+        info = await NativeSessionPreparation.open(
+            persistent, launcher,
+            ["--provider", provider, "--model", model, "--thinking", "off",
+             "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+             "--no-prompt-templates", "--no-tools"],
+            worktree=str(tmp_path), environment=dict(os.environ), session_file=file,
+        )
         async with asyncio.timeout(60):
             yield persistent, registry, inputs, file, launcher, info
     finally:
