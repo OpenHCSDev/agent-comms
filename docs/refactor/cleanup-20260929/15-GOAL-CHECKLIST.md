@@ -291,3 +291,28 @@ The default remains the scoped verified222 disposal checkpoint. Shared global
 cutover awaits a coherent original-source/lifecycle/compaction candidate and the
 typed stopped-owner maintenance seam in438. Independent real tests can continue
 in three lanes; there is no recreated sole fixture slot or product turn cap.
+
+## Canonical paint pair staged, not activated
+
+Parent staged immutable Core72062939/Toad4103c80b/Textual65053c5a/SDK0.12.1/native4ab
+at `runtime-canonical-paint-admission-20260930`. All68 distribution pins and
+noneditable source provenance were checked; the actual WorkspaceScreen inherits
+native Screen paint admission and no longer overrides compositor refresh.
+Both current default Toad222 merge/source are ancestors of the staged Toad,
+so the verified disposal fix remains present. Relative to current default222,
+the full continuation has67 production/packaging lines deleted and129 added
+across14 files; the central Textual pair deletes18 production lines/adds42
+across app.py and screen.py. Source counts are not terminal acceptance.
+
+Heisenberg owns one original41MB held PageUp/PageDown/reverse/End and15-second
+idle capture with the matching CPU profile. Original owner and native sessions
+remain untouched and no provider prompt is sent. Kepler owns native Screen
+source/callback proof (five affected framework tests pass); Heisenberg's
+queued-layout/reentry/follow source pilot passes. The existing physical blank
+failure must be resolved in the actual installed candidate before merging this
+checkpoint. All current default launcher symlinks still point to disposal222.
+
+Exact staging receipts and dependency inputs are under
+`evidence/cleanup-live-integration/canonical-paint-admission-*`. The broader
+workspace resource, warm tab, focus/sidebar and adaptive-end goals remain open
+where acceptance is missing, even if a useful paint checkpoint can be shipped.
