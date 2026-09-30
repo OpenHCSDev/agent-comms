@@ -20,8 +20,6 @@ from .comms import Comms
 from .diagnostics import record_terminal_failure
 from .messages import MessageType
 from .mro_dispatch import MroDispatch, handles
-from .routing import MessageRoute
-from .transcript_updates import AgentTextTranscriptUpdate
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
 
@@ -43,18 +41,6 @@ class TurnEventPublication(MroDispatch):
     async def sync_goals(self, event: events.InputStarted) -> None:
         await self.sync_goal_execution(self.session_id, self.sessions.bindings[self.session_id])
 
-    @handles(events.ToolEnd)
-    async def tool_result(self, event: events.ToolEnd) -> None:
-        sent = await asyncio.to_thread(
-            self.comms.messaging.sent_tool_message, event.name, event.output, bool(event.ok)
-        )
-        if sent is not None:
-            await self.effects._emit_event(
-                self.session_id,
-                AgentTextTranscriptUpdate(
-                    text=sent.body, route=MessageRoute(sent.sender, (sent.target,))
-                ),
-            )
 
 
 

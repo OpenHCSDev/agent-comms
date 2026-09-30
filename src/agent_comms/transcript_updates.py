@@ -10,14 +10,12 @@ from typing import Any
 from acp.schema import AgentMessageChunk, TextContentBlock
 
 from .acp_extension import (
-    TextRouteUpdate,
     TurnChangedUpdate,
     TranscriptSnapshotUpdate,
     encode_updates,
 )
 from .comms import Comms
 from .declared_family import DeclaredFamily
-from .routing import MessageRoute
 from .runtime import RuntimeServer
 from .turn_lease import TurnState
 
@@ -26,23 +24,6 @@ from .turn_lease import TurnState
 class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
     @abstractmethod
     async def publish(self, session_id: str, client: Any) -> None: ...
-
-
-@dataclass(frozen=True, kw_only=True)
-class AgentTextTranscriptUpdate(TranscriptUpdate):
-    text: str = ""
-    route: MessageRoute | None = None
-
-    async def publish(self, session_id: str, client: Any) -> None:
-        if self.text:
-            await client.session_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=self.text),
-                    field_meta=encode_updates(TextRouteUpdate(self.route)),
-                ),
-            )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -67,7 +48,8 @@ class TranscriptReplay:
     async def replay(self, session_id: str, name: str, client: Any = None) -> None:
         destination = client or self.runtime
         snapshot = await asyncio.to_thread(
-            TranscriptSnapshotUpdate.capture, self.comms.transcripts, name)
+            TranscriptSnapshotUpdate.capture, self.comms.transcripts, name
+        )
         await destination.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
