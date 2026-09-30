@@ -1,3 +1,26 @@
+## Coherent final candidate and actual acceptance owners
+
+Toad250 d3ba4cf330acd4d2eec6cd806fab8113c3a046ec is published with normal
+source union main253+251f265+252ad4, exact Core970bc527f4ddd9b3bde5522dc671aea11fd27ece
+and Textual merged6b5895fa0a72aeec2aeaef7206d5debfa0c1803c in both pyproject
+and uv.lock. Core includes requested462 and final467 as well as merged463/465/466.
+Parent owns metadata; Schrodinger owns one normal new noneditable assembly and
+source/native proof, Einstein the same installed continuous native/ACP/terminal
+queue/fork/cancel journey, Schrodinger then its same open-DM/IRC/tab-return bus
+acceptance. No unchanged failed candidate/original input is replayed.
+
+Arendt467 Ready4ba model/reference/source closure and actual manual/adaptive
+native acceptance complete; remain available for concrete joint-gate failures.
+Kepler251 strict physical pending-before-delivery tooling completef265; support
+the sole actual runner, no duplicate provider run. Heisenberg254 continues full
+warm/scroll/CPU resource work independently. Mendel's verified disposable cleanup
+and read-only deferred SessionRevision inventory are complete; parent is sole
+value builder after the requested stack merges. The compaction journal is
+declared runtime/reset; original native proof/history/UNKNOWN are protected.
+
+Current public installation is still scoped253/Core6feb/Textual2e49. Frozen
+source/metadata do not prove installed native/UI/bus usability or cutover.
+
 ## Current paired-candidate dependency update
 
 Textual15 merged6b5895fa0a72aeec2aeaef7206d5debfa0c1803c; original shared

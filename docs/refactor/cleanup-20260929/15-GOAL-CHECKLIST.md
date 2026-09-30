@@ -1,3 +1,49 @@
+## 2026-09-30 next coherent pair frozen and normal assembly dispatched
+
+Parent Toad250 d3ba4cf330acd4d2eec6cd806fab8113c3a046ec normally merges
+current253/main,251f265a9f2 and252ad4a32d4. Both source contributions survive:
+idle on_turn_changed does not reset original submissions; settlement and
+original pager/worker completion retry are retained. Core458 final970bc527
+normally includes462a65ad88e/productc53449cb,4674ba42ddb and current main
+463/465/466;462 was explicitly checked and added before freeze rather than
+silently omitted. Textual pin is merged6b5895fa. SDK0.12.1/native593b unchanged.
+
+Root pyproject/uv.lock agree on full exact source pins; normal uv lock completed
+2.10s, changing only Core/Textual plus the lightweight audit dependency. The99
+lock entries include dev/platform alternatives; actual installed graph must be
+derived (expected69 after old live68). Parent published normal no-dev export and
+metadata hashes in Toad250/evidence/native-custody-pair-20260930/next-cohort-freeze.json.
+No source/dependency override, original prefix mutation or public default change.
+
+Schrodinger has the exact freeze and starts one new normal noneditable assembly
+runtime-native-source-queue-cohort-20260930, followed by package/source/native
+verification. Einstein owns the same fresh cohort's continuous installed native/
+ACP/Linux terminal journey with strict original physical Enter pending-before-
+Started and exactly-one queue/chat transfer. Schrodinger then checks that cohort's
+open sender/receiver/IRC and tab-return bus views. Old failedg458/g460 originals
+are not replayed. Source/metadata freeze is not installed or live readiness.
+
+Arendt467 final ready4ba42ddb removes the test-only product GetState helper.
+Installed original preparation/manual path passes5localhost posts/zero new input;
+adaptive180k passes9posts/exactly one new input/27.68s with native commit/strict
+reopen/idle and original44.7MB source/proof hashes unchanged. A valid skipped
+adaptive272k fixture and the pre-provider undefined settings_paths failure are
+preserved. The triggered case corrected that leftover; final invalidation paths
+derive captured child HOME/config/cwd, not current ambient/display metadata.
+Parent reviewed all affected source callers and the exact proof limits.
+Reference closure deletes27/adds76 production lines across4files; final model/
+startup closure deletes150/adds120 across8files. No full TUI acceptance inferred.
+
+Mendel removed318111744 allocated bytes of verified owned disposable output
+(observed available increase255102976 during concurrent activity). Protected
+sources/WTs/native proof/raw failure/candidate/UNKNOWN files remain. His read-only
+SessionRevision inventory verifies13 direct production consumers,7 indirect
+persistence/transcript relations and the distinct native five-field colon ABI.
+Owner classification is explicit: compaction journal runtime/reset at cutover;
+native sessions/.input-proof and UNKNOWN/wire/goals stay protected. Parent builds
+the requested value only after456/458/459/462 merges; no new implementation yet.
+Heisenberg254 remains independent and does not hold this critical release.
+
 ## 2026-09-30 Textual geometry-damage checkpoint merged
 
 Textual15 merged6b5895fa0a72aeec2aeaef7206d5debfa0c1803c after complete
