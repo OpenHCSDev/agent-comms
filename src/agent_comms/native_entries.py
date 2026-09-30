@@ -33,6 +33,8 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     timestamp: str | None = None
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
+    input_boundary: ClassVar[bool] = False
+    final_reply: ClassVar[bool] = False
 
     @classmethod
     def wire_member(cls, value):
@@ -165,6 +167,14 @@ class SessionEntry(NativeEntry):
 class MessageEntry(NativeEntry):
     message: PiMessage
     is_message = True
+
+    @property
+    def input_boundary(self):
+        return self.message.user
+
+    @property
+    def final_reply(self):
+        return self.message.final_reply
 
     @property
     def assistant_message(self) -> bool:

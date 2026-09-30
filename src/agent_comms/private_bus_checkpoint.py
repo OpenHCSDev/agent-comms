@@ -617,11 +617,17 @@ def conversation_sources_unlocked(
             raise RelationViolationError("Conversation source needs a current certificate.")
         rows = DeliverySources.read(
             db.execute(
-                f"SELECT w.* FROM {DeliverySources.declared_name} w "
-                f"WHERE (w.sender_lookup=? OR EXISTS(SELECT 1 FROM {Addressed.declared_name} a "
-                f"WHERE a.seq=w.seq AND a.lookup=?)) AND ({predicate}) "
+                f"SELECT w.* FROM {DeliverySources.declared_name} w JOIN ("
+                f"SELECT seq FROM (SELECT w.seq FROM {DeliverySources.declared_name} w "
+                f"WHERE w.sender_lookup=? AND ({predicate}) "
+                f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?) UNION "
+                f"SELECT seq FROM (SELECT a.seq FROM {Addressed.declared_name} a "
+                f"JOIN {DeliverySources.declared_name} w ON w.seq=a.seq "
+                f"WHERE a.lookup=? AND ({predicate}) "
+                f"ORDER BY a.seq {'ASC' if ascending else 'DESC'} LIMIT ?)"
+                ") membership ON membership.seq=w.seq "
                 f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?",
-                (lookup, lookup, *parameters, limit),
+                (lookup, *parameters, limit, lookup, *parameters, limit, limit),
             )
         )
         originals = tuple(row.delivery(stream, saved.root_id) for row in rows)

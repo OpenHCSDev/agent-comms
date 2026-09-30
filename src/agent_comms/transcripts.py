@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from .channel_targets import is_channel_target
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, projected
 from .message_bus import MessageBus
 from .messages import Message
 from .messaging import Messaging
@@ -95,18 +95,31 @@ class TranscriptReadIdentity:
 
     root: str
     requested_name: str
-    thread: Thread
+    thread: Thread = field(metadata={"content_exclude": True})
     session_file: str
     native_revision: tuple[int, int, int, int] | None
     route_revision: TranscriptRouteRevision
     bus_revision: tuple[int, int, int, int] | None
     coordination_revision: tuple[int, int, int, int] | None
     coordination_journal_revision: tuple[int, int, int, int] | None
-    read_revision: tuple[int, int, int, int] | None
+    read_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
     receipt_frontier: AssignedSourceCursor
     before: TranscriptCursor | None
     after: TranscriptCursor | None
     through: TranscriptCursor | None
+
+    @projected(view="content", name="thread")
+    def content_thread(self):
+        return self.thread.incarnation, self.thread.parent, self.thread.task
+
+    def same_content(self, other: TranscriptReadIdentity) -> bool:
+        """Fence content, including the original native publication proof.
+
+        Reader acknowledgements and thread activity do not change page content.
+        Coordinator revisions remain fenced: a published obligation can commit
+        just after its wire append and replace the native final reply projection.
+        """
+        return FieldCodec.project(self, "content") == FieldCodec.project(other, "content")
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,19 +130,19 @@ class TranscriptRead:
     identity: TranscriptReadIdentity
 
     def current(self) -> bool:
+        return self.identity == self.current_identity()
+
+    def current_identity(self) -> TranscriptReadIdentity:
         identity = self.identity
-        return (
-            self.owner.capture_page_read(
-                identity.requested_name,
-                before=identity.before,
-                after=identity.after,
-                through=identity.through,
-            ).identity
-            == identity
-        )
+        return self.owner.capture_page_read(
+            identity.requested_name,
+            before=identity.before,
+            after=identity.after,
+            through=identity.through,
+        ).identity
 
     def read(self) -> TranscriptPage:
-        if not self.current():
+        if not self.identity.same_content(self.current_identity()):
             raise StaleRevision("Transcript read inputs changed before preparation")
         identity = self.identity
         page = self.owner.thread_transcript_page(
@@ -138,7 +151,7 @@ class TranscriptRead:
             after=identity.after,
             through=identity.through,
         )
-        if not self.current():
+        if not self.identity.same_content(self.current_identity()):
             raise StaleRevision("Transcript read inputs changed during preparation")
         return page
 
@@ -309,25 +322,23 @@ class Transcripts:
         consumed = initial
         records: list[tuple[TranscriptEvent, ...]] = []
         used = 0
-        native = (
-            traversal.native(NativeTranscript(path), initial, frontier)
-            if size
-            else (record for record in ())
-        )
+        reader = NativeTranscript(path)
+        native = traversal.native(reader, initial, frontier) if size else (record for record in ())
         from functools import partial
 
         with routes_owner.for_session(session_file) as routes:
-            project_native = partial(receipts.native_events, routes=routes)
+            project_native = partial(receipts.native_events, routes=routes, reader=reader)
             try:
                 record = next(native, None)
+                events = record.project(project_native) if record is not None else ()
                 message = receipts.next(traversal, consumed.wire_seq, frontier)
                 while record is not None or message is not None:
-                    events = record.project(project_native) if record is not None else ()
                     if record is not None and not events:
                         if after and record.incomplete_tail(size):
                             break
                         consumed = consumed.at_offset(traversal.native_position(record))
                         record = next(native, None)
+                        events = record.project(project_native) if record is not None else ()
                         continue
                     # NativeEntry owns one clock for all parts of a record.
                     native_time = events[0].timestamp if events else None
@@ -344,6 +355,7 @@ class Transcripts:
                     if choose_native:
                         consumed = consumed.at_offset(traversal.native_position(record))
                         record = next(native, None)
+                        events = record.project(project_native) if record is not None else ()
                     else:
                         consumed = consumed.at_sequence(traversal.receipt_position(message.message))
                         message = receipts.next(traversal, consumed.wire_seq, frontier)

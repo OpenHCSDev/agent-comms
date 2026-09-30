@@ -190,3 +190,39 @@ Schrodinger215 owns full installed both-open sender/recipient/IRC hot refresh,
 original recipient handling, reply uniqueness and physical A/B/A. Its private
 pair includes430 plus425. The passing backend checkpoint does not establish
 those pending UI/recipient outcomes or change global activation.
+
+## Urgent original reply and read-frontier closure
+
+The preserved215 native05 archive proves two mounted reply resources: original
+OutgoingMessage and native TranscriptFragmentView. Tracked input e379c7057bb3b53b82efe0fe627ba1ed,
+native user8167d53c and assistant2e04d636 belong to execution wirev1d6eb29e95f8150d016d663daa492d194d13232ec63faff1585d83e989cc7f012;
+its PublishedResponse is original wire(seq7,id16801ff097a3). The source projection
+now follows native parent IDs to the original user boundary and reads the existing
+typed NativeRuntimeInput, ExecutionRecord and ResponseObligation. It corroborates
+session path/header, original input entry, recipient incarnation and attempt;
+the certified original wire record supplies the sender and message reference.
+Only that published final assistant text is represented by the original wire row.
+Tool progress, thinking and unpublished native answers remain original history.
+No message text comparison, seen cache, index or stored binding was added.
+
+The original conversation SQL plan scanned all DeliverySources under the wire
+lock. Its replacement bounds each sender/addressed membership branch using the
+already-declared indexes and joins only those original source sequences. Actual
+native05 index EXPLAIN shows indexed sender and addressed searches plus primary
+key source reads. Page merging also projects each visited native record once,
+rather than reprojecting it for every preceding wire row.
+
+Snapshot capture no longer retries indefinitely on changing source revisions.
+TranscriptReadIdentity owns a content comparison distinct from full handling
+refresh identity. It excludes reader acknowledgements and unrelated Thread
+annotations; original incarnation, fork task/parent, native bytes, routes, wire
+and coordinator revisions remain fenced. Coordinator revisions are necessary:
+the published obligation may commit after the original wire append. No SQLite
+reader is held across wire reads, file ancestry traversal or an await.
+
+Source controls pass22 with one pre-existing skip. This new correction remains
+UNREVIEWED for installed continuous acceptance. Einstein434 owns the proven
+existing-coordinator-open write transaction and admission lock defect; Sch215
+owns already-open DM/IRC publication, late replay, next-message delay, physical
+reply uniqueness and cold/A-B/A proof. Run one coherent affected installed gate
+after those checkpoints are paired. No live root/default runtime was changed.
