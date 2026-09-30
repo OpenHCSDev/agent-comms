@@ -8,6 +8,7 @@ from pathlib import Path
 import os
 import subprocess
 import sys
+from typing import ClassVar
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_cutover import OwnerCutover
@@ -21,6 +22,12 @@ class RetainedIndexCutover(OwnerCutover):
     original_python: Path
     wire_root_id: str
     native_package: Path
+    writer_script: ClassVar[str] = 'retained_index_writer.py'
+    installer_script: ClassVar[str] = 'install_retained_index.py'
+
+    @property
+    def operation_arguments(self) -> tuple[str, ...]:
+        return ()
 
     def require_selection(self, snapshot, owners) -> None:
         audience = {thread.name for thread in snapshot.threads.values()
@@ -47,8 +54,9 @@ class RetainedIndexCutover(OwnerCutover):
         environment = dict(os.environ)
         environment.pop('PYTHONPATH', None)
         subprocess.run([
-            str(self.original_python), str(Path(__file__).with_name('retained_index_writer.py')),
+            str(self.original_python), str(Path(__file__).with_name(self.writer_script)),
             str(lifecycle.root), sys.executable,
-            str(Path(__file__).with_name('install_retained_index.py')), self.wire_root_id,
+            str(Path(__file__).with_name(self.installer_script)), self.wire_root_id,
+            *self.operation_arguments,
         ], env=environment, check=True)
         lifecycle.pin_private_nk_launch(lifecycle.root, self.wire_root_id, self.native_package)
