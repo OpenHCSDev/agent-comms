@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     """A projection of the registry lease, never an alternative owner store."""
 
-    def replaces(self, incarnation: ThreadIncarnation, owner_pid: int) -> bool:
+    def replaces(self, owner: OwnerIdentity | None) -> bool:
         return False
 
 
@@ -30,11 +30,12 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
     owner: OwnerIdentity
     process: ProcessIdentity
 
-    def replaces(self, incarnation: ThreadIncarnation, owner_pid: int) -> bool:
-        # Earlier coordination attests a thread incarnation and owner PID.
-        # A different process for that same thread permits read-only reattach;
-        # matching PIDs never infer a replacement from display text or timing.
-        return self.owner.incarnation == incarnation and self.process.pid != owner_pid
+    def replaces(self, owner: OwnerIdentity | None) -> bool:
+        # The attachment's original owner lease survives PID reuse. Only a
+        # later registry generation for the same thread permits read-only
+        # reattachment; process birth is revalidated at load admission.
+        return (owner is not None and self.owner.incarnation == owner.incarnation
+                and self.owner.generation > owner.generation)
 
 
 @dataclass(frozen=True, slots=True)
