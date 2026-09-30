@@ -11,6 +11,7 @@ import typing
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
@@ -201,6 +202,23 @@ class StringDispatchArms(DispatchArms, StringDispatch):
 
 class TypeSwitchArms(DispatchArms, TypeSwitch):
     pass
+
+
+class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileOccurrenceMeasure):
+    """Admit the canonical audit collector through the original packaged ratchet.
+
+    Per-file identities keep moving primitive cases into another method/file
+    from cancelling growth. Parsing is the existing Git/source boundary; the
+    shared collector owns primitive arms and codec admission.
+    """
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return cls.count_module(node) if isinstance(node, ast.Module) else 0
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        return super().count(source, filename) if cls.admits(filename) else 0
 
 
 class GodClassExcess(GitMeasure):
