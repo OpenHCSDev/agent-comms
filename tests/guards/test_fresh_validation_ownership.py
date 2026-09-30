@@ -20,3 +20,9 @@ def test_fresh_source_has_no_long_validation_chain_or_split_identity():
     fields = {node.target.id for node in enrolled.body
               if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)}
     assert "file_identity" in fields and not fields & {"device", "inode"}
+    checks = [node for node in tree.body
+              if isinstance(node, ast.ClassDef) and node.name.endswith("FileCheck")]
+    assert not [field.lineno for check in checks for field in check.body
+                if isinstance(field, ast.AnnAssign)
+                and any(isinstance(part, ast.Constant) and part.value is None
+                        for part in ast.walk(field.annotation))]

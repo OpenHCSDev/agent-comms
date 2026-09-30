@@ -81,6 +81,7 @@ def test_explicit_selected_bootstrap_is_prewrite_durable_and_attested(tmp_path: 
         "partial",
         "duplicate_key",
         "fsync_failed",
+        "revision_changed",
     ],
 )
 def test_selected_startup_requires_exact_two_durable_metadata_appends(
@@ -136,6 +137,17 @@ def test_selected_startup_requires_exact_two_durable_metadata_appends(
         from agent_comms import fresh_private_session as module
 
         monkeypatch.setattr(module.os, "fsync", lambda _: (_ for _ in ()).throw(OSError("EIO")))
+    elif damage == "revision_changed":
+        from agent_comms import fresh_private_session as module
+
+        actual_fsync = module.os.fsync
+
+        def append_during_fsync(descriptor: int) -> None:
+            actual_fsync(descriptor)
+            with fresh.path.open("ab") as stream:
+                stream.write(b"{}\n")
+
+        monkeypatch.setattr(module.os, "fsync", append_during_fsync)
     if damage == "none":
         revision = fresh.verify_selected_startup()
         assert revision.identity == fresh.file_identity
