@@ -19,6 +19,7 @@ from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
 from .thread_identity import OwnerIdentity
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_phase import PreparingPhase, TurnPhase
 
 _LOG = logging.getLogger(__name__)
 
@@ -40,17 +41,17 @@ class AgentActivity:
         snapshot = snapshot or self.registry.snapshot()
         owner = snapshot.owner_identity(thread)
         participant = snapshot.threads[owner.incarnation.name]
-        return self.activity.current(participant.name, active=participant.executing).for_owner(
-            owner
-        )
+        activity = self.activity.current(participant.name, active=participant.executing).for_owner(owner)
+        if participant.turn_state.busy:
+            phase = participant.turn_state.phase
+            return replace(activity, state=phase.activity_state, detail=phase.summary)
+        return activity
 
     def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, Activity]:
         snapshot = snapshot or self.registry.snapshot()
-        active = frozenset(t.name for t in snapshot.threads.values() if t.executing)
         return {
-            name: activity.for_owner(snapshot.owner_identity(name))
-            for name, activity in self.activity.all_current(active=active).items()
-            if name in snapshot.threads
+            name: self.activity_of(name, snapshot=snapshot)
+            for name in snapshot.threads
         }
 
     def _emit_activity(self, activity: Activity) -> None:
@@ -81,11 +82,15 @@ class AgentActivity:
             lease = leased.turn_lease
             assert lease is not None
             try:
-                self._emit_activity(Activity(leased.name, ActivityState.THINKING, detail))
+                self.registry.transition_turn(lease, PreparingPhase(detail[:200]))
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
             return lease
+
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> bool:
+        with _store_lock(self._wire_lock_path):
+            return self.registry.transition_turn(lease, phase)
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
         """Persist this lease's terminal identity before publishing idle activity."""

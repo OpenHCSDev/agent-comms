@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from . import agent_events as events
 from . import turn_failure as failures
 from .declared_family import DeclaredFamily
+from .compaction_progress import CompactionSourceProgress
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
@@ -53,11 +54,14 @@ class PiEvent(PiPayload, DeclaredFamily):
 
     async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         """Apply shared progress and phase behavior around this event's meaning."""
+        previous = session.watchdog.phase
         async for update in session.watchdog.observe(self, session):
             yield update
         async for event in self.apply(session):
             yield event
         session.watchdog.transition(self, session.active_tools)
+        for update in session.native_phase_changes(previous):
+            yield update
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if False:
@@ -786,7 +790,7 @@ class AgentCommsCompactionProgress(PiEvent):
     operation_id: str = field(metadata={"wire_name": "operationId"})
     sequence: int
     text: str
-    source: events.CompactionSourceProgress | None
+    source: CompactionSourceProgress | None
 
     def __post_init__(self):
         if type(self.sequence) is not int or self.sequence < 1:

@@ -23,6 +23,7 @@ from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_phase import TurnPhase
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -166,6 +167,12 @@ class Registration:
             result = edit.document.release_turn(lease)
             edit.commit()
             return result
+
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> bool:
+        with self.store.editing() as edit:
+            changed = edit.document.transition_turn(lease, phase)
+            edit.commit()
+            return changed
 
     def live_owner_with_generation(self, name: str) -> tuple[Thread, int]:
         """Capture an active owner and its persistent incarnation under one lock.

@@ -149,12 +149,13 @@ class InputDrain(FutureInputQueue):
         session_id: str,
         text: str | None,
         input_id: str | None = None,
-        queued_item: QueuedInput | None = None,
+        source_scope: QueueScope | None = None,
         *,
+        native_id: str | None,
         client: Any = None,
     ) -> None:
         scope = self.queue_binding(session_id)
-        if queued_item is None or scope is None or not queued_item.context.owns(scope.owner):
+        if source_scope is None or scope is None or not source_scope.relation(scope).current:
             scope = None
         revision = None
         if scope is not None:
@@ -165,7 +166,7 @@ class InputDrain(FutureInputQueue):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(InputStartedUpdate(input_id, text, scope, revision)),
+                field_meta=encode_updates(InputStartedUpdate(input_id, text, scope, revision, native_id)),
             ),
         )
 
@@ -269,7 +270,7 @@ class InputDrain(FutureInputQueue):
             self.sessions.runtime_enabled,
             self.sessions.bindings.get(session_id),
             session_id in self.backend_inboxes,
-            session_id in self.effects.turns.active_turns,
+            self.effects.turns.turn_state(session_id).busy,
             session_id in self.effects.turns.turn_tasks,
             file_revision(self.comms.bus.log.path),
             file_revision(self.comms.registry.store.path),
@@ -423,25 +424,29 @@ class InputDrain(FutureInputQueue):
         self,
         session_id: str,
         input_id: str | None,
-        original_keys: tuple[str, ...],
-        initial_display_text: str | None,
+        source_scope: QueueScope,
     ) -> None:
+        original = self.original_sources[session_id]
+        input_id = input_id if input_id is not None else original.accepted_id
         source = self.following_sources.get(session_id, {}).get(input_id)
-        started_keys = original_keys if input_id is None else source.keys if source else ()
+        started_keys = original.keys if input_id is None else source.keys if source else ()
         for key in started_keys:
             row = self.dispositions.read().rows.get(key)
             if row is not None and not row.unresolved:
                 await self.emit_input_disposition(session_id, row)
         item = self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
+        text = item.text if item and item.echo else None
+        row = self.dispositions.read().lookup(started_keys[0] if len(started_keys) == 1 else None)
+        if input_id is None and original.notice_keys:
+            row = self.dispositions.read().lookup(original.notice_keys[0])
+            if row.has_started and row.matches_admission(source_scope.admission_generation):
+                input_id, text = row.public_id, original.notice_text
         await self.emit_input_started(
             session_id,
-            (
-                item.text
-                if item and item.echo
-                else initial_display_text if input_id is None else None
-            ),
+            text,
             input_id,
-            queued_item=item,
+            source_scope=source_scope,
+            native_id=row.native_id if row.has_started else None,
         )
         await self.emit_queue_state(session_id)
 

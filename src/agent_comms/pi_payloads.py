@@ -516,7 +516,7 @@ class UserMessage(PiMessage):
                 routing = display = None
         if routing is not None and routing.requests:
             return [
-                UserTranscript(request.body, routing=TurnRouting((request,), None))
+                UserTranscript(request.body, routing=TurnRouting((request,), None), native_id=self.input_id)
                 for request in routing.requests
             ]
         parts = self.parts
@@ -532,7 +532,7 @@ class UserMessage(PiMessage):
             )
         for part in parts:
             events.extend(part.user_transcript())
-        return [replace(event, routing=routing) for event in events]
+        return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
 
 
 @dataclass(frozen=True)
