@@ -1,3 +1,30 @@
+## 2026-09-30 merged-head source freeze and parallel results
+
+Toad243 merged3625ce9e includes244/239/241. Its actual31.8866s provider chooser
+and native terminal/cancel run reached Pi's first project-trust approval boundary,
+with no trust/auth submission; original owner/history unchanged and cleanup0.
+Parent personally reviewed the native terminal screenshot. Login completion and
+the preloaded login editor are not claimed. Source delta3 deleted/3 added lines.
+
+Schrodinger finalized the one all-merged stage to exactToad3625/Core29b/Textual2e49/
+SDK0.12.1/nativececa before any UI gate. Parent independently confirmed exact
+noneditable installed origins. Kepler's first100s recording lacked --actions and
+was idle: not a product failure or acceptance. He deleted that optional-control
+split in the existing PhysicalJourney declaration (a33d78e5) and the actual
+scripted second recording is running against the unchanged stage. Parent owns
+default publication after acceptance; Einstein owns the short actual default
+launcher check afterward. No route/backend/schema/configuration change is needed.
+
+Parallel work has advanced: Mendel453 source60ecf89f is Ready with actual42MB
+native/ACP, image/mandatory-provider and accepted-cancellation proofs; source
+review accepted and Schrodinger prepares its separate stable native artifact
+without touching the frozen release. Heisenberg242 source3d684358 (normally
+integrated main at8923a57a) fixes canonical history coverage and avoids expanding
+body descendants; installed resource checks pass, whole physical check remains.
+Arendt454's real nonreading subscriber reproducer proves owner publication stalls
+and its transport closure needs large canonical snapshot/recovery acceptance.
+These unmerged scopes remain active and do not change this source freeze.
+
 ## 2026-09-30 next live build includes every merged fork head
 
 User explicitly requested all merged changes in the next live build. Parent owns
