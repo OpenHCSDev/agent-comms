@@ -31,3 +31,5 @@ export declare class NativeRequestObservation {
     options<T>(config: T): T & { onRequestProgress: RequestObserver };
     emit<T>(event: { type: string }, publish: (event: { type: string }) => T | Promise<T>): Promise<T>;
 }
+export declare function observeStream<T>(options: { onRequestProgress?: RequestObserver } | undefined,
+    events: AsyncIterable<T>, transport: string): AsyncGenerator<T>;

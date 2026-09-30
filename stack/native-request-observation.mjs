@@ -58,3 +58,23 @@ export class NativeRequestObservation {
         return this.callback(event.type, () => publish(event), event.type !== "message_update");
     }
 }
+
+/** Observe the original provider event iterator, before message projection.
+ * End is iterator custody release (including failure/cancel), not a commit proof.
+ */
+export async function* observeStream(options, events, transport) {
+    let first = true;
+    try {
+        for await (const event of events) {
+            if (first) {
+                first = false;
+                observeRequest(options, { stage: "first_event", transport,
+                    detail: "Provider stream started" });
+            }
+            yield event;
+        }
+    } finally {
+        observeRequest(options, { stage: "stream_end", transport,
+            detail: "Provider stream closed" });
+    }
+}

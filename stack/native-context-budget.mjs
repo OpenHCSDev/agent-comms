@@ -133,11 +133,11 @@ export class ContextBudgetRequest {
 
     get allowance() { return this.params[this.budgetField]; }
 
-    async send() {
+    async send(attempt) {
         for (;;) {
             this.signal?.throwIfAborted();
             try {
-                return await this.sendRequest(this.params);
+                return await this.sendRequest(this.params, attempt);
             } catch (error) {
                 this.signal?.throwIfAborted();
                 const revised = ProviderRejection.decode(error).revisedAllowance(this);
