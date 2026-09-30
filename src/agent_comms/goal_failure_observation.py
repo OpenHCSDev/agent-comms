@@ -20,7 +20,7 @@ from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goal_pauses import GoalPauseEvent
 from .goals import Goal
 from .recovery_projection import _preflight
-from .thread_identity import OwnerIdentity, ThreadIncarnation, TurnIdentity
+from .thread_identity import AdmissionIdentity, ThreadIncarnation, TurnIdentity
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .turn_lease import TurnFence, TurnLeaseFence
@@ -71,8 +71,8 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
         return ThreadIncarnation(self.owner, self.owner_created_at)
 
     @property
-    def owner_identity(self) -> OwnerIdentity:
-        return OwnerIdentity(self.incarnation, self.admission)
+    def admission_identity(self) -> AdmissionIdentity:
+        return AdmissionIdentity(self.incarnation, self.admission)
 
     @property
     def turn(self) -> TurnFence:
@@ -81,7 +81,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
     def matches_owner(self, owner: Thread, admission: int | None) -> bool:
         if admission is None:
             return False
-        if self.owner_identity != owner.owner_identity(admission):
+        if self.admission_identity != AdmissionIdentity(owner.incarnation, admission):
             return False
         if self.worktree != owner.worktree:
             return False

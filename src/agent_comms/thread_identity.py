@@ -57,8 +57,16 @@ class TurnId:
 
 @dataclass(frozen=True, slots=True)
 class OwnerIdentity:
+    """An allocation from RegistryDocument.owners, used with process proof."""
     incarnation: ThreadIncarnation
     generation: int
+
+
+@dataclass(frozen=True, slots=True)
+class AdmissionIdentity:
+    """An allocation from RegistryDocument.admissions, never an owner lease."""
+    incarnation: ThreadIncarnation
+    admission_generation: int
 
 
 @dataclass(frozen=True, slots=True)

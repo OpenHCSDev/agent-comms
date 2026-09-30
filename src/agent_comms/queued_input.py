@@ -20,7 +20,7 @@ from .input_attempt import InputAttempt
 from .store_files import _store_lock
 from .turn_goal_permission import AcceptedGoalPermission
 from .turn_input_source import AcceptedFollowingInput
-from .thread_identity import OwnerIdentity
+from .thread_identity import AdmissionIdentity
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -35,26 +35,26 @@ class InputHandoffRefused(RelationViolationError):
 
 @dataclass(frozen=True, slots=True)
 class QueuedInputContext:
-    owner: OwnerIdentity
+    admission: AdmissionIdentity
     goal: Goal | None = None
     wait: GoalWait | None = None
 
     @classmethod
-    def capture(cls, owner: Thread, admission: int, wait: GoalWait | None):
-        return cls(owner.owner_identity(admission), owner.goal, wait)
+    def capture(cls, owner: Thread, admission: AdmissionIdentity, wait: GoalWait | None):
+        return cls(admission, owner.goal, wait)
 
     def named(self, name: str) -> QueuedInputContext:
         """Use the caller's canonical registry name without changing authority."""
         return replace(
             self,
-            owner=replace(
-                self.owner,
-                incarnation=replace(self.owner.incarnation, name=name),
+            admission=replace(
+                self.admission,
+                incarnation=replace(self.admission.incarnation, name=name),
             ),
         )
 
-    def owns(self, owner: OwnerIdentity) -> bool:
-        return self.named(owner.incarnation.name).owner == owner
+    def owns(self, admission: AdmissionIdentity) -> bool:
+        return self.named(admission.incarnation.name).admission == admission
 
     @property
     def active_goal_id(self) -> str | None:
@@ -104,7 +104,7 @@ class QueuedInput:
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(
             owner,
-            snapshot.admission_generations[canonical],
+            snapshot.admission_identity(canonical),
             inputs.comms.goals.goal_wait(canonical),
         )
         item = cls(
@@ -120,7 +120,7 @@ class QueuedInput:
             item.key,
             seq=None,
             owner=canonical,
-            admission=context.owner.generation,
+            admission=context.admission.admission_generation,
             target=canonical,
             text=item.text,
         ):
@@ -176,7 +176,9 @@ class QueuedInput:
             raise RelationViolationError("Accepted input source changed")
 
     def current(self, owner: Thread, admission: int, wait: GoalWait | None) -> bool:
-        return self.context.named(owner.name) == QueuedInputContext.capture(owner, admission, wait)
+        return self.context.named(owner.name) == QueuedInputContext.capture(
+            owner, AdmissionIdentity(owner.incarnation, admission), wait
+        )
 
     def require_handoff(
         self,
@@ -230,6 +232,6 @@ class DeferredQueuedInput(QueuedInput):
         turn = owner.active_turn
         if turn is None or self.turn_id != turn.id:
             return None
-        if self.context.owns(owner.owner_identity(turn.admission_generation)):
+        if self.context.owns(AdmissionIdentity(owner.incarnation, turn.admission_generation)):
             return self.receipt
         return None

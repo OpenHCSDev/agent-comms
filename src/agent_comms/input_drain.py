@@ -40,7 +40,7 @@ from .schedule_rules import WakeScheduleCheck
 from .selected_summary_admission import SelectedSummaryAdmission
 from .session_lifecycle import SessionLifecycle
 from .store_files import _store_lock, file_revision
-from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_watch import WireWatch
@@ -104,7 +104,7 @@ class InputDrain(FutureInputQueue):
             return None
         return QueueScope(
             session_id,
-            OwnerIdentity(ThreadIncarnation(owner.name, owner.created_at), admission),
+            AdmissionIdentity(owner.incarnation, admission),
             owner.pid,
         )
 
@@ -120,7 +120,7 @@ class InputDrain(FutureInputQueue):
             return tuple(
                 QueueItem(input_id, item.text)
                 for input_id, item in values.items()
-                if item.echo and item.context.owns(scope.owner)
+                if item.echo and item.context.owns(scope.admission)
             )
 
         items = current(self.queued_inputs.get(session_id, {}))
