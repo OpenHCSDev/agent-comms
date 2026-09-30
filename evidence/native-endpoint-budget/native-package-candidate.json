@@ -1,0 +1,25 @@
+{
+  "source": "595ec39278c78ff65aa7d2b7de078347afbbc700",
+  "tree": "21fcd78ad743ed5e96d5b0e329988db4b0915a3e29e8259564ddae3ebf78ca91",
+  "manifest_sha256": "7616293d01862aba5bdbe17adce2a3171955bdd08da716a53c0d8523e2f3a04c",
+  "selector": "7616293d01862aba",
+  "changed_files": [
+    "node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/agent-comms-request-input.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js",
+    "node_modules/@earendil-works/pi-ai/dist/api/simple-options.js",
+    "node_modules/@earendil-works/pi-ai/dist/utils/estimate.js"
+  ],
+  "fresh_exact_stock": true,
+  "old_e36_ceca_unchanged": true,
+  "scratch_owner": "Mendel453"
+}
