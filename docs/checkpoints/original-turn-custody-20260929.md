@@ -135,3 +135,29 @@ admission/turn/process checks. A later failed target cannot erase an earlier
 committed wire reference. These are source-owner and acquired-resource closure,
 not per-target status copies. The missing API is named and owned by Mendel;
 consumer preparation is not yet a runnable or Ready messaging checkpoint.
+
+
+### Original input group rename relation
+
+The public started_for_native family now requires one captured RegistrySnapshot
+keyword throughout InputDocument, InputAttempt and StartedInput. The existing
+ThreadIncarnation owns matches_recorded_name, deriving membership from the
+original registry aliases and original birth. Stored names are never upgraded
+to invented birth/process witnesses. Native ID/text, admission and turn still
+match the recorded original input fields; source publication separately owns
+complete live lease/process and certified-wire validation.
+
+One focused original-store/real-registry check passed in0.10seconds. It retains
+the two original grouped bus rows, renames the busy registry owner, records a
+correction under the new name, and retrieves each original row group under the
+original or canonical lease name without changing stored bytes. Foreign
+name/birth, native ID/text, turn/admission and deletion/recreation controls deny
+membership. No fallback reader, optional snapshot or caller alias loop remains.
+
+Mendel's subsequent routing closure replaces persisted full request Message
+copies with original MessageReference values in the existing TurnRouting JSON.
+It requires one quiet certified durable carry, preserving all old annotations;
+no SQL reset, body/time reconstruction or legacy reader. Arendt owns OwnedTurn,
+OwnedSendAdmission and TurnProgress constructor/consumer migration; Mendel owns
+the routing/source relation and Sch owns its two frontend consumers. This is a
+paired source dependency, not a separate installed cohort.

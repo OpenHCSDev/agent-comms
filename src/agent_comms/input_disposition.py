@@ -21,6 +21,7 @@ from .messages import Message
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
     from .selected_source import SelectedSource
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
@@ -94,7 +95,8 @@ class InputDocument:
         return tuple(self.rows[key].source_text for key in keys)
 
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str
+        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
+        *, snapshot: RegistrySnapshot,
     ) -> tuple[StartedInput, ...]:
         """Original rows for one actual native user, including grouped inputs.
 
@@ -103,7 +105,9 @@ class InputDocument:
         initial turn input, a public event or the first matching row.
         """
         return tuple(receipt for row in self.rows.values()
-                     if (receipt := row.started_for_native(lease, native_id, sent_text)) is not None)
+                     if (receipt := row.started_for_native(
+                         lease, native_id, sent_text, snapshot=snapshot
+                     )) is not None)
 
     def shared_state(self, keys: tuple[str, ...]) -> type[InputAttempt] | None:
         """Project only a complete, homogeneous durable observation."""
