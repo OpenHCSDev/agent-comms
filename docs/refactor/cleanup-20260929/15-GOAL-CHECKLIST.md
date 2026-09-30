@@ -1056,3 +1056,36 @@ witness. Its private physical recording can continue independently using the
 existing typed-capture capability. Sch445/237 and Mendel446 implement original
 journal outcome source coverage and deletion of synthesized compaction notices;
 the changed cancellation journey is still pending and excluded from this build.
+
+### Actual default attachment verified; remaining live defects retained
+
+Einstein's30.598s physical isolated-st default capture selects the new immutable
+cohort through /home/ts/bin/toad-comms nra-architecture without overrides.
+Original41MB history is readable, physical Delete turns abcdef into abcf,
+and the stationary tail remains readable at59/maximum59. Parent personally
+viewed startup, edited and stationary PNGs. Native source/PID/birth remain
+unchanged; zero inputs/provider calls and zero owned fixture process leaks.
+The wrapper's extra Ctrl+A-select-all assumption failed: Textual's binding is
+Home. Its failure and copied private draft remain preserved; no capture was
+repeated. End started at tail with editor focused, so this is NOT a jump from an
+older history page or fast-tab/warm-raster acceptance.
+
+The selected nra thread is Ready. A separate newly registered participant row
+shows IdentityConflict: participant aggregate is not registered. Its PID3200830
+and creation1790772493 postdate cutover; worktree is refactor-r1's NRA plan tree.
+Canonical refactor-r1 also has real active Preparing turne4a75845 with newowner
+3196780/admission998, rather than merely stale sidebar text. Mendel owns one
+global startup/admission/participant source trace, preserving original UNKNOWN
+and checking input attribution before any intervention. No retry, lease clear
+or active-process interruption is authorized by those observations. Full live
+workflow readiness remains unproven.
+
+Core447 mergedf4d06630 at13:04:26Z, reviewedf1c57aa8. Actual old client history
+read and configuration write while maintenance-paused restored the retired
+field in a disposable fixture; source receipts and source-zero-prompt hashes
+remain unchanged. Operator admission explicitly requires new default ingress
+and old-client retirement. CurrentTypedCapture extends the same authentic
+producer/custody mechanism with a declared current-record projection; no
+shape-based fallback reader. No paired rebuild is needed for these outside-src
+tools/docs/proofs. Arendt also retired one proven owned l0a orphan in0.98s,
+preserving its input/wire/native bytes and fixture root.
