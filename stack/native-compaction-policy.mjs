@@ -3,9 +3,33 @@
  * Provider/model selection, context window, and no-replay are not policy knobs.
  */
 const strategies = Object.freeze({
-    serial: Object.freeze({ plan: segments => ({ segments, workers: 1 }) }),
-    parallel: Object.freeze({ plan: (segments, policy) => ({ segments, workers: policy.concurrency }) }),
+    serial: Object.freeze({ plan: segments => new CompactionPlan(segments, 1) }),
+    parallel: Object.freeze({ plan: (segments, policy) => new CompactionPlan(segments, policy.concurrency) }),
 });
+
+/** One bounded scheduler for every native map and reduction source. */
+export class CompactionPlan {
+    constructor(segments, workers) { Object.assign(this, { segments, workers }); }
+    async execute(consume, controller) {
+        const iterator = this.segments[Symbol.iterator]();
+        let index = 0;
+        let failure;
+        const worker = async () => {
+            try {
+                while (!controller.signal.aborted) {
+                    const next = iterator.next();
+                    if (next.done) return;
+                    await consume(next.value, index++);
+                }
+            } catch (error) { failure ??= error; controller.abort(error); }
+        };
+        try {
+            await Promise.allSettled(Array.from({ length: this.workers }, worker));
+            if (failure) throw failure;
+            controller.signal.throwIfAborted();
+        } finally { iterator.return?.(); }
+    }
+}
 export class CompactionPolicy {
     static declarations = Object.freeze({
         strategy: Object.freeze({ default: 'parallel', choices: Object.keys(strategies) }),
@@ -68,5 +92,17 @@ export class CompactionPolicy {
     summaryTokens(model, byteLimit, reserveTokens) {
         return Math.min(reserveTokens, this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(byteLimit * this.summaryOutputRatio)),
             model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
+    }
+    requireSummaryOutput(usage, maxTokens) {
+        // Pi's Usage contract includes reasoning in output. Only the remaining
+        // tokens become retained summary text; preserve the full usage for cost.
+        const reasoning = usage.reasoning ?? 0;
+        if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 ||
+            !Number.isSafeInteger(usage.output) || usage.output < 0 ||
+            !Number.isSafeInteger(reasoning) || reasoning < 0 || reasoning > usage.output)
+            throw new Error('Summary provider returned invalid output accounting');
+        const retained = usage.output - reasoning;
+        if (retained > maxTokens)
+            throw new Error(`Summary provider exceeded the native plan output token budget (retained ${retained}, reasoning ${reasoning}, total ${usage.output}, budget ${maxTokens})`);
     }
 }

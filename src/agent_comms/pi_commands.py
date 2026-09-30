@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import uuid4
 
+from .pi_vocabulary import ThinkingLevel
 from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -210,7 +211,7 @@ class GetState(SessionSnapshot, PiCommand):
             session.usage.size = state.model.context_window if state.model else None
             yield events.AgentInfo(
                 model=state.model.display_name if state.model else None,
-                thinking_level=state.thinking_level,
+                thinking_level=ThinkingLevel.optional_name(state.thinking_level),
                 session_name=state.session_name,
                 session_file=session.active_session_file,
                 context_used=session.usage.used,

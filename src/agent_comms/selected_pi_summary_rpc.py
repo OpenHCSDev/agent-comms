@@ -24,16 +24,10 @@ from .input_disposition import FutureInputQueue
 from .native_pi import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_prepare import NativeWitness
-from .owner_compaction_provider import NativeSummary
 from .pi_commands import AgentCommsSummarizeCompaction
 from .pi_events import AgentCommsCompactionProgress, Response
 from .pi_rpc import PiRpcChannel
-from .pi_summary_payloads import (
-    SummaryDeclinedData,
-    SummaryFailedData,
-    SummarySummarizedData,
-    SummaryUnknownData,
-)
+from .pi_summary_payloads import SelectedSummaryData, SummaryFailedData
 
 
 class SelectedChildUnknown(RuntimeError):  # noqa: N818 - UNKNOWN is a protocol state
@@ -49,16 +43,9 @@ class SelectedSummaryFailed(RuntimeError):  # noqa: N818 - terminal protocol sta
         super().__init__(f"Selected summary failed: {receipt.reason}; original input not sent")
 
 
-@dataclass(frozen=True)
-class SelectedSummaryResult:
-    operation_id: str
-    summary: NativeSummary | None
-    decline_reason: str | None = None
-
-
 def _summary_response(
     raw: bytes, request: AgentCommsSummarizeCompaction, tokens_before: int
-) -> SelectedSummaryResult | SummaryFailedData:
+) -> SelectedSummaryData:
     """Decode the existing native v1 protocol once at the RPC boundary."""
 
     try:
@@ -75,39 +62,7 @@ def _summary_response(
         data = response.data
         if data is None or data.operation_id != request.operation_id:
             raise ValueError("Unmatched selected summary operation")
-        if isinstance(data, SummaryDeclinedData):
-            return SelectedSummaryResult(data.operation_id, None, data.reason)
-        if isinstance(data, SummaryUnknownData):
-            detail = (
-                f"Selected summary failed: {data.reason} (outcome uncertain; input not retried)"
-                if data.reason is not None
-                else (
-                    "Selected summary outcome is uncertain; "
-                    "native child supplied no failure detail"
-                )
-            )
-            raise SelectedChildUnknown(detail)
-        if not isinstance(data, (SummarySummarizedData, SummaryFailedData)) or (
-            data.witness != request.witness
-            or data.selected != request.selected
-            or data.settings != request.settings
-        ):
-            raise ValueError("Selected summary outcome unknown")
-        if isinstance(data, SummaryFailedData):
-            return data
-        if (
-            data.result.first_kept_entry_id != request.witness.first_kept_entry_id
-            or data.result.tokens_before != tokens_before
-        ):
-            raise ValueError("Selected summary result source changed")
-        return SelectedSummaryResult(
-            data.operation_id,
-            NativeSummary(
-                data.result.summary,
-                data.result.details,
-                data.result.usage,
-            ),
-        )
+        return data.response(request, tokens_before)
     except (ValueError, TypeError, KeyError) as error:
         raise SelectedChildUnknown(f"Selected summary response is uncertain: {error}") from error
 
@@ -133,7 +88,8 @@ class SelectedSummarySlot:
         future_queue: FutureInputQueue | None = None,
         idle_timeout_seconds: float = MODEL_WAIT_TIMEOUT_SECONDS,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
-    ) -> SelectedSummaryResult:
+        reason: str = "adaptive",
+    ) -> SelectedSummaryData:
         """Reserve durably, exchange once, and leave settlement to the owner.
 
         Caller holds owner/turn exclusion and supplies its captured source.
@@ -200,18 +156,17 @@ class SelectedSummarySlot:
                     if event.sequence > sequence:
                         sequence = event.sequence
                         deadline = loop.time() + idle_timeout_seconds
-                        if on_event is not None:
-                            await on_event(CompactionSummaryProgress(reason="adaptive"))
+                        # Thinking deltas extend native liveness, but only text
+                        # and measured source work change the presentation.
+                        if on_event is not None and (event.text or event.source is not None):
+                            await on_event(CompactionSummaryProgress(
+                                reason=reason, operation_id=operation,
+                                text=event.text, source=event.source,
+                            ))
                 result = _summary_response(raw, request, tokens_before)
                 if not retained.current:
                     raise SelectedChildUnknown("Selected source changed during summary")
-                if isinstance(result, SummaryFailedData):
-                    journal.summaries.fail(operation, result.reason)
-                elif result.summary is None and result.decline_reason not in {
-                    "split_turn",
-                    "unsupported",
-                }:
-                    journal.summaries.refuse(operation, result.decline_reason)
+                result.settle(journal)
             except BaseException as error:
                 persistent.require_reopen(session_file)
                 # Keep the child marked unusable even if cancellation interrupts
@@ -234,6 +189,4 @@ class SelectedSummarySlot:
                 ) from error
             # Raise only after attestation and durable settlement succeed. This
             # known terminal outcome must not enter the transport UNKNOWN handler.
-            if isinstance(result, SummaryFailedData):
-                raise SelectedSummaryFailed(result)
-            return result
+            return result.require_result()

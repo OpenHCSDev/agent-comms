@@ -43,6 +43,7 @@ from agent_comms.comms import wire
 from agent_comms.compaction_result import RefusedCompactionResult
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import PiUsage
@@ -151,7 +152,7 @@ class TestHandlers:
             session_id="proj", config_id="thinking_level", value="high"
         )
         assert changed.config_options[1].current_value == "high"
-        assert agent._comms.registry.require("proj").thinking_level == "high"
+        assert agent._comms.registry.require("proj").thinking_level is HighThinkingLevel
 
     async def test_attach_metadata_restores_saved_context_without_reading_transcript(
         self, tmp_path
@@ -247,7 +248,7 @@ class TestHandlers:
             assert command["type"] == "set_thinking_level" and command["level"] == "high"
             agent.sessions.config.setting_requests.resolve(ae.ThinkingChanged(command["id"], True))
             await request
-            assert agent._comms.registry.require("proj").thinking_level == "high"
+            assert agent._comms.registry.require("proj").thinking_level is HighThinkingLevel
         finally:
             await agent.shutdown()
 
