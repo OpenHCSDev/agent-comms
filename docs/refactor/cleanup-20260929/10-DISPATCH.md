@@ -69,8 +69,9 @@ recovery remains with Schrodinger; canonical lifecycle425/211 remains Arendt.
 
 ## Direct coordination and write ownership
 
-Five coding agents were confirmed active at this checkpoint. Kepler's existing
-Toad214 task is interrupted; its pushed implementation remains assigned to him.
+Five coding agents carry active work at this checkpoint. Einstein completed431
+and was closed after its native children retired. Kepler resumed his existing
+Toad214 task in that slot; its pushed implementation remains assigned to him.
 Do not report a PR assignment as a running agent. Heavy installed native fixtures
 run serially while the resource check reports swap pressure.
 They communicate directly rather than routing routine handoffs through the parent.

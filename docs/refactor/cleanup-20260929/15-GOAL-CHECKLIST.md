@@ -37,13 +37,18 @@ retained under213/214; a median improvement alone does not close them.
 - [ ] Arendt425/211: finish one canonical turn lifecycle, rename-safe attachment
   scope, first native input publication and all UI status/goal consumers.
   Continuous installed workflow must pass; no local append or lifecycle mirror.
-- [ ] Schrodinger426/210: revalidate corrected original accepted registry/process
-  witness, then merge the recovery pair. Failed-load recovery passed before the
-  counter-domain correction; the expanded installed gate is still pending.
+- [x] Schrodinger426/210: corrected original accepted registry/process witness
+  passed the expanded installed gate in4.793 seconds; fresh reply painted,
+  no replay or repair-time provider call. Merged Cored306d0df/Toad6e56770d.
+  Parent stage uses the merged noneditable pair; actual comms428 load delivered
+  a27-event saved snapshot with no error/prompt and clean exit. Default activation
+  remains outstanding under the paired-install item below.
 - [ ] Einstein431: remove both whole-turn clocks and the300-second maximum,
   consume the shared lifecycle, and prove an actual95-second native tool turn
-  plus cancellation/EOF dispositions. Implementation is pushed; fixture setup
-  correction precedes the acceptance run. No total-turn deadline is allowed.
+  plus cancellation/EOF dispositions. Ready500429bd; actual installed acceptance
+  passed all three cases in106.04 seconds, with children retired and UNKNOWN/no
+  replay preserved. No total-turn deadline is allowed. Merge/activation requires
+  the211 public lifecycle consumer; the current default UI is incompatible.
 - [ ] Mendel430 / Schrodinger215: original sender chronology and recipient
   handling update in both open DM/IRC views without tab reopening. Delete
   synthetic sender publication and its consumers. Perform the derived-index
@@ -54,8 +59,9 @@ retained under213/214; a median improvement alone does not close them.
   and idle. Existing geometry test reproduces false follow on the old version
   and passes on the candidate; full installed workflow remains pending.
 - [ ] Kepler214: velocity/direction-dependent bounded preparation, End bottom
-  burst and shared background rendering. Implementation is pushed; worker is
-  interrupted. Resume without a competing owner and capture video correlated
+  burst and shared background rendering. Implementation49df55d9 is pushed;
+  Kepler resumed after Einstein finished, without expanding the active fleet.
+  Capture video correlated
   with the same-run CPU profile after the serial native fixture slot opens.
 - [ ] Merge useful tested checkpoints into the OpenHCSDev forks, stage matching
   Core/Toad/Textual/native pins, perform the declared quiet cutover, restart only
@@ -71,10 +77,11 @@ retained under213/214; a median improvement alone does not close them.
 
 ## Current fleet and resource constraint
 
-Five Codex workers were confirmed active: Heisenberg, Arendt, Schrodinger,
-Einstein and Mendel. Kepler's existing task is interrupted. Installed native
-fixtures run serially. The resource check reports14.9GiB available RAM,21.8GiB
-free home storage and13.9GiB swap used; its headroom assertion is still a warning.
+Five Codex workers now carry the active work: Heisenberg, Arendt, Schrodinger,
+Mendel and resumed Kepler. Einstein's completed agent was closed after431's
+children retired. Installed native fixtures run serially. The resource check
+reports15.5GiB available RAM,21.6GiB free home storage and13.9GiB swap used;
+its headroom assertion is still a warning.
 Do not launch a heavy parallel fixture fleet or delete unreviewed work/history.
 
 The next installation is prioritized for usage-blocking recovery, lifecycle,

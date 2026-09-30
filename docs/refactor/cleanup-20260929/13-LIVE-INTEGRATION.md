@@ -1,7 +1,7 @@
 # Current integration and remaining cleanup ownership
 
 Parent owns this continuation in `/home/ts/wt/comms-cleanup-live-integration-20260929`.
-Source base: main7fcf826a, including Core417/427/429. Preserve the original
+Source base: maind306d0df, including Core417/427/429/426. Preserve the original
 cleanup plans and their full acceptance scope. This checkpoint does not finish
 the persistent goal or redefine completion around the latest fixes.
 
@@ -12,7 +12,7 @@ the persistent goal or redefine completion around the latest fixes.
   emitted no error. There was no new input or paid call. The retained-history
   reader race remains a named213 defect, not a passed acceptance claim.
 - Core417 C1,427 C4 and429 native scheduling are merged to main. They are staged
-  as a noneditable Core7fcf826a / Toad43949ee installation. Actual staged launcher
+  first as a noneditable Core7fcf826a / Toad43949ee installation. Actual staged launcher
   loaded27 saved comms428 events without an error or input. Default Core workers
   still run ab3397a6/native7817.
 - Core427 deletes150 production lines, removes two cursor-publication maps and
@@ -46,16 +46,28 @@ replacement. Both counters used OwnerIdentity but answered different questions
 Core3e4e0c88 and Toad5d40d302 remove that queue comparison. Successful and failed
 loads use the original registry/process binding through one witnessed admission
 capability; the existing load-command record owns its response disposition.
-Parent source review confirms caller migration. Installed revalidation is pending,
-so426/210 are not merged or live despite their ready GitHub status. The expanded
-continuous journey checks the accepted original registry and ProcessIdentity
-after recovery, as well as no replay, no repair-time provider call and no owner
-start during strict read-only admission.
+Parent source review confirms caller migration. Installed revalidation passed:
+4.793-second recovery, unchanged accepted registry/process witness, no replay,
+no repair-time provider call, fresh reply painted and stopped-owner strict load
+refused. The receipt records Core3e4e0c88/Toad93dbb8a8 plus fixture5d40d302,
+native4ab and Textual412. No production delta was introduced after that run.
+Core426 is merged d306d0df and Toad210 is merged6e56770d.
+
+The unused parent stage now contains that noneditable merged pair, unchanged
+SDK0.12.1/Textual412 and native4ab. Its actual `toad-comms comms428` launch used
+the staged ACP process, completed session/load, received a snapshot of27 saved
+events, made no prompt and exited0. This staged attachment is not default
+activation or the new-input recovery acceptance above. Default launchers and
+native owners remain on the earlier pair.
 
 Arendt's current installed lifecycle journey also found a real first-input
 publication omission after removal of the local UI append: native start lacked
-the original input witness. He owns closing it through InputDispositions and
-OriginalTurnInput, rather than restoring a sender-local message copy.
+the original input witness. He closed its publication through InputDispositions
+and OriginalTurnInput. The next actual warm return exposed the same first input
+painted twice by live start and canonical snapshot. Arendt and Schrodinger own
+the shared original native identity/resource claim and snapshot retirement;
+no text deduplication or second seen-ID store. Its teardown also ended143,
+so a clean continuous installed exit remains required before211 readiness.
 
 The comms428 goal edit completed in6.283s; the next retained assistant action
 arrived41.805s later. Those timestamps show tool completion and subsequent wait,
@@ -77,10 +89,23 @@ original native lifecycle; do not invent a UI timer or another phase cache.
   PageUp and End, with the same-run UI/worker profiling. Preserve real failures.
   Ship useful checkpoints before final performance targets.
 
-Heisenberg is active on213. Kepler's214 worker is interrupted; implementation
-0db07e03 is pushed, and its installed recording remains pending. Einstein's431
-fixture first stopped at registration setup before native startup. The setup is
-being corrected; the95-second native tool-turn acceptance is not yet passed.
+Heisenberg is active on213. Einstein completed431; his agent was closed after
+the native children retired, and Kepler resumed in that fleet slot. Kepler's
+actual214 worktree is `/home/ts/wt/toad-viewport-demand-20260929`;49df55d9 is pushed.
+Its installed recording remains pending behind the current425 native gate.
+
+Einstein431 is ready at500429bd. The noneditable08ced729/native4ab test passed a
+real95-second bash tool followed by a native answer in98.006 seconds, cancellation
+in2.508 seconds and EOF in2.652 seconds. All children retired, each original input
+was retained once, UNKNOWN was preserved and nothing replayed. It deletes94
+production lines. This supersedes the earlier registration setup failure.
+
+431 inherits425's public TurnChangedUpdate/TurnState contract and deletes the old
+TurnStartedUpdate/TurnSettledUpdate classes. Current Toad43949/210 imports those
+old classes. Therefore431 requires the paired211 consumer; neither a Core-only
+installation nor activation with the current default UI is valid. NativePhaseChanged
+itself is internal. Parent keeps the working recovery stage until the lifecycle
+pair is ready, rather than publishing an incompatible default.
 
 ## Remaining original cleanup scope
 
