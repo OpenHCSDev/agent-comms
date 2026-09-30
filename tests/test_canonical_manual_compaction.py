@@ -92,7 +92,7 @@ async def test_explicit_manual_recovers_known_refusal_without_replaying_unknown(
                 "selected": {
                     "provider": "openai",
                     "modelId": "gpt-4.1-mini",
-                    "contextWindow": info.context_size,
+                    "contextWindow": info.model.context_window,
                 },
                 "settings": {"reserveTokens": 1000, "keepRecentTokens": 10},
             },
@@ -147,7 +147,7 @@ async def test_manual_does_not_retire_or_repeat_uncertain_provider(
                 "selected": {
                     "provider": "openai",
                     "modelId": "gpt-4.1-mini",
-                    "contextWindow": info.context_size,
+                    "contextWindow": info.model.context_window,
                 },
                 "settings": {"reserveTokens": 1000, "keepRecentTokens": 10},
             },

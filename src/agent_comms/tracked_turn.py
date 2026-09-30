@@ -28,8 +28,6 @@ from .native_pi import (
     NativePiTerminalFailure,
     NativePiUnavailable,
     NativeTurnResult,
-    _fresh_selected_revision,
-    _require_reviewed_selected_source_cli,
     _session_location,
     _verify_context,
 )
@@ -39,8 +37,6 @@ from .native_startup import NativeStartupAdmission
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
-from .pi_vocabulary import ThinkingLevel
-from .private_path import FileRevision
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .store_files import _store_lock
 
@@ -146,8 +142,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         model_wait_timeout,
         prompt_send_boundary,
         maintenance_root,
-        fresh_selected,
-        selected_revision: FileRevision | None,
+        startup: NativeStartupAdmission,
         selected_tool_mode,
         observe_event,
     ):
@@ -156,14 +151,12 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             command.message,
             session_file=launch.session_file,
             model_wait_timeout=model_wait_timeout,
-            startup=NativeStartupAdmission.for_launch(launch, root=maintenance_root),
+            startup=startup,
         )
         self.command = command
         self.provider, self.model = provider, model
         self.prompt_send_boundary = prompt_send_boundary
         self.maintenance_root = maintenance_root
-        self.fresh_selected = fresh_selected
-        self.selected_revision: FileRevision | None = selected_revision
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
         self.tool_socket: OwnerToolSocket | None = None
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
@@ -200,18 +193,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             not math.isfinite(model_wait_timeout) or model_wait_timeout <= 0
         ):
             raise ValueError("A model progress wait must be positive and finite")
-        selected_revision = None
-        if fresh_selected is not None:
-            if (
-                type(fresh_selected) is not FreshPrivateSession
-                or session_file != fresh_selected.path
-                or not ThinkingLevel.supports_selected(fresh_selected.selected_thinking_level)
-                or prompt_send_boundary is None
-                or maintenance_root is None
-            ):
-                raise NativePiUnavailable("Selected first source requires enrolled locked prewrite")
-            selected_revision = _fresh_selected_revision(fresh_selected)
-            _require_reviewed_selected_source_cli()
         launch = NativePiRpcLaunch.tracked(
             package,
             worktree=worktree,
@@ -233,8 +214,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             model_wait_timeout=model_wait_timeout,
             prompt_send_boundary=prompt_send_boundary,
             maintenance_root=maintenance_root,
-            fresh_selected=fresh_selected,
-            selected_revision=selected_revision,
+            startup=NativeStartupAdmission.for_launch(
+                launch, root=maintenance_root, fresh_selected=fresh_selected,
+                prompt_send_boundary=prompt_send_boundary,
+            ),
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
         )
@@ -356,21 +339,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             raise NativePiUnavailable("Native Pi rebound its session")
         self.native.attestation = observed
         self.startup.release()
-        if self.fresh_selected is not None:
-            self.attest_selected(state)
-
-    def attest_selected(self, state) -> None:
-        selected = self.fresh_selected
-        selected.require_runtime(state)
-        revision = _fresh_selected_revision(selected, started=True)
-        if revision.identity != self.selected_revision.identity:
-            raise NativePiUnavailable("Selected startup changed enrolled inode")
-        self.selected_revision = revision
+        self.startup.attest(state)
 
     def prompt_boundary(self):
-        if self.fresh_selected is not None:
-            return self.prompt_send_boundary(self.active_session_file, self.selected_revision)
-        return self.prompt_send_boundary(self.active_session_file)
+        return self.startup.prompt_boundary(self.prompt_send_boundary, self.active_session_file)
 
     async def admit_prompt(self) -> None:
         self.watchdog.await_input()

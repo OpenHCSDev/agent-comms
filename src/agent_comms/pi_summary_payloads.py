@@ -5,16 +5,12 @@ from __future__ import annotations
 import struct
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Literal, TYPE_CHECKING
+from typing import Literal
 
 from .field_codec import FieldCodec
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import PiCost, PiPayload, PiResponseData, PiUsage
-
-if TYPE_CHECKING:
-    from .runtime_info import AgentRuntimeInfo
-
 
 @dataclass(frozen=True)
 class SelectedModel(PiPayload):
@@ -32,18 +28,6 @@ class SelectedModel(PiPayload):
         if not 0 < self.context_window <= 2**53 - 1:
             raise ValueError("Exact bounded selected model required")
 
-    @classmethod
-    def from_runtime(cls, observation: AgentRuntimeInfo | None, configured_model: str | None) -> SelectedModel:
-        """Project observed model metadata, never grant current input authority."""
-        if observation is None:
-            raise ValueError("Selected native runtime observation is unavailable")
-        model = FieldCodec.decode(str, configured_model)
-        if observation.model != model:
-            raise ValueError("Selected native model observation differs from configuration")
-        provider, delimiter, model_id = model.partition("/")
-        if not delimiter:
-            raise ValueError("Configured model requires its provider identity")
-        return cls(provider, model_id, observation.context_size)
 
 
 @dataclass(frozen=True)

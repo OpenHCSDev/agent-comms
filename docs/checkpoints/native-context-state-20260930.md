@@ -59,3 +59,41 @@ failures. The same two fail on c5 baseline1.19s: their fake tracked turns change
 the captured native session and RegistrySessionRule refuses. The refusal and
 fixtures remain unchanged; no green-suite claim. Selected-start and prepared
 model source/native acceptance remain in progress in this draft.
+
+## Prepared state and selected startup checkpoint
+
+Parent granted only OwnedTurn.prepare_native, TurnRunner.prepare_selected_session
+and the manual bridge/manual/adaptive prepared-model callers. Einstein granted
+the selected constructor/startup/attestation seam; his tracked commit/terminal
+state contribution f83267e2 is normally merged here. Other OwnedTurn methods,
+admission, goals, cancellation and inherited tracked terminal/commit states are
+unchanged by this checkpoint.
+
+TurnRunner now returns original native StateData. Both summary callers obtain
+SelectedModel through StateData.model.for_compaction. SelectedModel.from_runtime
+and the AgentRuntimeInfo reconstruction are deleted. Adaptive compaction reads
+effective context/settings from its original retained child for every summary
+performer; the detached file/configuration/context mirror is deleted. The manual
+bridge's RuntimeInfo activity invalidation remains display-only. These changes
+close IDEN-3 and IMPL-10 at the existing model and observation owners.
+
+SelectedNativeStartupAdmission holds the original fresh enrollment and original
+FileRevision together. Ordinary startup and selected startup own their respective
+attestation/prewrite behavior. TrackedTurnSession no longer stores nullable
+fresh_selected/selected_revision fields or reconstructs their relationship.
+Selected first-source CLI remains refused by its existing reviewed trust gate;
+this checkpoint does not enable that path or mint enrollment from a stat value.
+
+The existing selected observation exchange now supports canonical GetState for
+real fixtures, retaining package/session identity, serialized child borrowing,
+and retirement after a transmitted uncertain probe. No new observation store,
+codec or source authority is introduced.
+
+Fifteen reference/selected-start controls pass0.64s. The affected native saved
+selection run already passed canonical model/Off preparation, two localhost
+provider calls, one new reply, unchanged original history prefix/proofs and
+native attestation. Its final obsolete active_turns test assertion failed after
+those checks; the fixture now reads canonical registry.active_turn. That
+completed run is preserved and not replayed. Twenty runtime/native argument
+checks passed in that invocation. The installed prepared-model/compaction proof
+remains pending; this is a source checkpoint, not installed or live readiness.
