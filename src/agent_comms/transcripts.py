@@ -17,7 +17,7 @@ from .messaging import Messaging
 from .native_entries import TranscriptProjection
 from .native_transcript import NativeTranscript
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
-from .bus_publication import stable_thread_lookup
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
@@ -189,6 +189,29 @@ class Transcripts:
         self.routes = TranscriptRoutes(root)
         self.page_reads = 0
 
+    def bind_page_read(
+        self,
+        name: str,
+        identity: TranscriptReadIdentity,
+        *,
+        before: TranscriptCursor | None = None,
+        after: TranscriptCursor | None = None,
+        through: TranscriptCursor | None = None,
+    ) -> TranscriptRead:
+        """Bind the original published witness to this actual source request."""
+        if identity.root != str(self.root):
+            raise StaleRevision("Transcript witness belongs to another root")
+        if (identity.before, identity.after, identity.through) != (before, after, through):
+            raise StaleRevision("Transcript witness belongs to another page window")
+        snapshot = self.registry.snapshot()
+        try:
+            requested = snapshot.owner_identity(name).incarnation
+        except KeyError as error:
+            raise StaleRevision("Transcript request has no current source") from error
+        if identity.thread.incarnation.resolved(snapshot) != requested:
+            raise StaleRevision("Transcript witness belongs to another original thread")
+        return TranscriptRead(self, identity)
+
     def capture_page_read(
         self,
         name: str,
@@ -197,22 +220,40 @@ class Transcripts:
         after: TranscriptCursor | None = None,
         through: TranscriptCursor | None = None,
     ) -> TranscriptRead:
+        read, _sources = self.capture_page_window(
+            name, before=before, after=after, through=through
+        )
+        return read
+
+    def capture_page_window(
+        self,
+        name: str,
+        *,
+        source_limit: int = 1,
+        before: TranscriptCursor | None = None,
+        after: TranscriptCursor | None = None,
+        through: TranscriptCursor | None = None,
+    ) -> tuple[TranscriptRead, tuple[CommittedDelivery, ...]]:
         """Expose the source owner's complete identity without parsing its page.
 
         Native bytes alone are insufficient: input display/routing and older
         bus receipts contribute to the same projection. Registry-owned thread
         metadata also carries inherited fork text and source selection.
         """
+        from .presentation import MessageNotification
+
+        if not 1 <= source_limit <= MessageNotification.window_limit:
+            raise ValueError("Transcript source capture requires a bounded window")
         thread, session_file, _ = self._thread_transcript_source(
             name,
             through.session_file if through is not None else None,
         )
         from .transcript_receipts import AssignedTranscriptSource
 
-        receipt_frontier = AssignedTranscriptSource.for_thread(
+        receipt_frontier, sources = AssignedTranscriptSource.for_thread(
             self.root, thread, self.bus.log
-        ).frontier
-        return TranscriptRead(
+        ).window(limit=source_limit)
+        read = TranscriptRead(
             self,
             TranscriptReadIdentity(
                 str(self.root),
@@ -240,6 +281,7 @@ class Transcripts:
                 through,
             ),
         )
+        return read, sources
 
     def thread_transcript(
         self, name: str, *, max_messages: int = 20, max_bytes: int = 64 * 1024
