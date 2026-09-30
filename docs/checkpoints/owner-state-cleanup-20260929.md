@@ -332,3 +332,52 @@ and consumer checkpoint is now merged at1f327fd0/000a31c5, not installed.
 Arendt FULL owns its old720 routing carry operator and actual original-format
 fixture; parent owns activation and single cutover custody. No competing builder,
 future-format mixture, goal-pause historical file cleanup or legacy reader here.
+
+## Normal436 integration and explicit activation dependency
+
+Normally merged authoritative main000a31c562b6d048e26e288b24fcd3f1ac64f803
+at5be2da9a699ad1ee6ee2cd2709681bd7c31b3aad. Git's normal ort merge required
+no textual conflict resolution. The affected intersection is history_views.py
+and test_acp.py. The only previously accepted C3 production file changed by
+main is HistoryViews, which carries the landed scoped source-window/notification
+read transaction together with this PR's complete pause projection deletion.
+There is no new C3 production change beyond the accepted20079652 changes and
+normal landed-main integration. The ACP side retains the landed ordinary native
+publication caller/fixture deletion with the typed GoalState precondition edits.
+
+24 focused provider-free source checks pass5.21s across history declaration,
+original outbound source, transcript read identity, owner pause and the existing
+mutation/deletion guard. Required ratchet versus000a31c5 has no positive delta.
+Evidence in named421 scratch: main436-intersection01.log,
+main436-required-ratchet.json and main436-integration-receipt.json. No native,
+paid, mounted gate or performance measurement was repeated. Earlier paired
+native615/menu acceptance remains exact to its originally recorded versions.
+
+Parent's read-only original720 registry reproducer rejects the removed
+Thread.last_goal_report_turn field under the new target schema. This is a future
+activation dependency, not a source merge blocker. Arendt FULL owns the single
+S14 crossing: original source admission, all-stop under that admitted source,
+one-shot format closure and target launch. Target decoding must not precede
+that closure. There is no default/legacy reader, silent dropping, FieldCodec
+subclass or separate conversion mechanism here.
+
+The stored Thread container census includes both RegistryStore's
+RegistryDocument.threads in registry.json and OwnerReleaseStore's
+dict[str, OwnerReleaseReceipt] in owner_release_receipts.json, whose receipt.thread
+is the exact retired owner. The same removed field must be closed in both under
+the original lock/admission/birth/process custody; retain before/after admission
+and original thread/incarnation/process equality. RegistrySnapshot.threads and
+saved registry preimages carried by the existing outside-src operator must keep
+the same declaration closure. Original preimages and historical release proofs
+remain evidence, not target-schema readers. Bounded presentation, transcript
+read and native/selected admission Thread objects are runtime projections from
+these originals; they rebuild through existing owners at the quiet boundary,
+not another semantic migration store. Preserve goal_history, native bytes,
+input/UNKNOWN, original frozen source/audience evidence and the historical
+goal_pause_events.json. Preserve any active old-field-only unjournaled report
+until the original idle boundary, as required by the unchanged14C0 rule.
+
+Merged436/430 with its current Thread schema may ship independently before
+this future C3 format activation. Parent owns live activation and single cutover
+custody; Arendt owns both the carry operator and actual old720 fixture. No
+public-root mutation or duplicate carry builder is introduced by this merge.
