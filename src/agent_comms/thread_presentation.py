@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     """A projection of the registry lease, never an alternative owner store."""
 
-    def replaces(self, owner: OwnerIdentity | None) -> bool:
+    def replaces(self, original: LiveThreadOwnerBinding) -> bool:
         return False
 
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
@@ -34,14 +34,17 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
     process: ProcessIdentity
 
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
-        return replacement.replaces(self.owner)
+        return replacement.replaces(self)
 
-    def replaces(self, owner: OwnerIdentity | None) -> bool:
-        # The attachment's original owner lease survives PID reuse. Only a
-        # later registry generation for the same thread permits read-only
-        # reattachment; process birth is revalidated at load admission.
-        return (owner is not None and self.owner.incarnation == owner.incarnation
-                and self.owner.generation > owner.generation)
+    def replaces(self, original: LiveThreadOwnerBinding) -> bool:
+        # Both operands are the ORIGINAL registry owner/process witnesses.
+        # Queue admission generations are a different allocation domain.
+        if self.owner.incarnation != original.owner.incarnation:
+            return False
+        if self.owner.generation < original.owner.generation:
+            return False
+        return self != original
+
 
 
 @dataclass(frozen=True, slots=True)

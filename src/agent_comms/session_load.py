@@ -8,7 +8,6 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_presentation import LiveThreadOwnerBinding, ThreadOwnerBinding
-from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .session_lifecycle import AttachedSessionLifecycle
@@ -23,8 +22,16 @@ class SessionLoadAdmission(DeclaredFamily, affix="SessionLoadAdmission"):
     def metadata(self) -> dict:
         return {"agentCommsLoad": FieldCodec.encode(self)}
 
-    def superseded_by(self, binding: ThreadOwnerBinding, attached_owner: OwnerIdentity | None) -> bool:
-        return binding.replaces(attached_owner)
+    @classmethod
+    def at_response(cls, metadata: object) -> "SessionLoadAdmission":
+        if not isinstance(metadata, dict):
+            return EnsuringSessionLoadAdmission()
+        witness = metadata.get("agentCommsLoad")
+        return (EnsuringSessionLoadAdmission() if witness is None
+                else FieldCodec.decode(ExistingSessionLoadAdmission, witness))
+
+    def superseded_by(self, binding: ThreadOwnerBinding) -> bool:
+        return False
 
     @abstractmethod
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread": ...
@@ -40,7 +47,17 @@ class EnsuringSessionLoadAdmission(SessionLoadAdmission):
 
 
 @dataclass(frozen=True, slots=True)
-class ExistingSessionLoadAdmission(SessionLoadAdmission):
+class WitnessedSessionLoadAdmission(SessionLoadAdmission):
+    """Original load command/response evidence, never current registry state."""
+
+    binding: ThreadOwnerBinding
+
+    def superseded_by(self, binding: ThreadOwnerBinding) -> bool:
+        return self.binding.superseded_by(binding)
+
+
+@dataclass(frozen=True, slots=True)
+class ExistingSessionLoadAdmission(WitnessedSessionLoadAdmission):
     binding: LiveThreadOwnerBinding
 
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
@@ -54,10 +71,8 @@ class ExistingSessionLoadAdmission(SessionLoadAdmission):
 
 
 @dataclass(frozen=True, slots=True)
-class FailedSessionLoadAdmission(SessionLoadAdmission):
+class FailedSessionLoadAdmission(WitnessedSessionLoadAdmission):
     """The original failed load command's witness; never an input permission."""
-
-    binding: ThreadOwnerBinding
 
     @classmethod
     def from_failure(cls, data: object) -> "FailedSessionLoadAdmission | None":
@@ -68,9 +83,6 @@ class FailedSessionLoadAdmission(SessionLoadAdmission):
 
     def failure_metadata(self) -> dict:
         return {"agentCommsLoadFailure": FieldCodec.encode(self)}
-
-    def superseded_by(self, binding: ThreadOwnerBinding, attached_owner: OwnerIdentity | None) -> bool:
-        return self.binding.superseded_by(binding)
 
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
         raise RelationViolationError("A failed load command cannot be replayed")

@@ -35,7 +35,7 @@ from .session_effects import SessionEffects
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .transcript_updates import TranscriptReplay
-from .session_load import SessionLoadAdmission, FailedSessionLoadAdmission
+from .session_load import SessionLoadAdmission, ExistingSessionLoadAdmission, FailedSessionLoadAdmission
 
 
 class SessionLifecycle:
@@ -210,7 +210,8 @@ class SessionLifecycle:
             ) from error
         self.proxies[session_id] = proxy
         return LoadSessionResponse(
-            config_options=metadata.pop("configOptions", []), field_meta=metadata
+            config_options=metadata.pop("configOptions", []),
+            field_meta={**metadata, **ExistingSessionLoadAdmission(binding).metadata()},
         )
 
     async def sync_identity(self, session_id: str) -> str:
