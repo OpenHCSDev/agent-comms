@@ -32,7 +32,30 @@ the persistent goal or redefine completion around the latest fixes.
 | Rename rejects authoritative input/queue updates | Arendt425/211 | Actual captured openhcs428→comms428 frames retain the same process/birth/admission but reject rev5–18 and three native starts. The scope owns logical attachment identity distinct from the mutable route name. Migrate every comparison; retain revision, process and incarnation fences; no aliases, reconnect or replay to hide rejection. |
 | Failed native inbox turn | Einstein431, coordinated with Arendt425 | Original seq228/inputc907fb439aa8de8b81f7e1b7456fa571 started in real native history. Tool results continued until four seconds before failure. The installed selected tool path imposes one90-second wall clock on the entire turn. Owner explicitly requires its removal: long turns are valid. Bound necessary operations through existing owned transport/wait contracts; retain custody, underlying causes and uncertain dispositions. No increased hard cap or automatic replay. |
 | Failed open-view owner attachment | Schrodinger426/210 | Same already-open view recovers from canonical owner replacement without input replay or owner start; strict read-only admission checks complete ProcessIdentity. Use the original trusted attachment lease to detect same-PID replacement, not a new PID/status cache. Normally integrate current SDK/retained-history main. |
-| Sender outbound rows, recipient handling and hot updates | Mendel430 backend; Schrodinger210 presentation | Existing certified source includes original frozen sender OR addressed recipient. Delete both synthetic tool-result sender copies. DM and IRC derive original message chronology and original recipient handling live while both views remain open. Parent resets/rebuilds only the derived checkpoint under the retained old-schema bus lock. Preserve original wire, frozen audiences, native sessions and UNKNOWN attempts. |
+| Sender outbound rows, recipient handling and hot updates | Mendel430 backend; Schrodinger215 presentation | Existing certified source includes original frozen sender OR addressed recipient. Delete both synthetic tool-result sender copies. DM and IRC derive original message chronology and original recipient handling live while both views remain open. Parent resets/rebuilds only the derived checkpoint under the retained old-schema bus lock. Preserve original wire, frozen audiences, native sessions and UNKNOWN attempts. |
+
+### Recovery review correction
+
+The first installed426/210 journey passed failed-load replacement and same-view
+recovery in4.628 seconds, but that did not cover the accepted attachment's
+identity domain. Parent review reproduced owner-generation950 versus admission914
+for the same live process: the accepted QueueScope comparison falsely declared
+replacement. Both counters used OwnerIdentity but answered different questions
+(IDEN-1); the queue is not the original registry load witness.
+
+Core3e4e0c88 and Toad5d40d302 remove that queue comparison. Successful and failed
+loads use the original registry/process binding through one witnessed admission
+capability; the existing load-command record owns its response disposition.
+Parent source review confirms caller migration. Installed revalidation is pending,
+so426/210 are not merged or live despite their ready GitHub status. The expanded
+continuous journey checks the accepted original registry and ProcessIdentity
+after recovery, as well as no replay, no repair-time provider call and no owner
+start during strict read-only admission.
+
+Arendt's current installed lifecycle journey also found a real first-input
+publication omission after removal of the local UI append: native start lacked
+the original input witness. He owns closing it through InputDispositions and
+OriginalTurnInput, rather than restoring a sender-local message copy.
 
 The comms428 goal edit completed in6.283s; the next retained assistant action
 arrived41.805s later. Those timestamps show tool completion and subsequent wait,
@@ -53,6 +76,11 @@ original native lifecycle; do not invent a UI timer or another phase cache.
 - Their continuous isolated st recording exercises held PageUp, PageDown,
   PageUp and End, with the same-run UI/worker profiling. Preserve real failures.
   Ship useful checkpoints before final performance targets.
+
+Heisenberg is active on213. Kepler's214 worker is interrupted; implementation
+0db07e03 is pushed, and its installed recording remains pending. Einstein's431
+fixture first stopped at registration setup before native startup. The setup is
+being corrected; the95-second native tool-turn acceptance is not yet passed.
 
 ## Remaining original cleanup scope
 

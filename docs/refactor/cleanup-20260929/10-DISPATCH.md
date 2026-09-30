@@ -38,7 +38,8 @@ closure. The repeated violation must be checked through the existing ownership
 guards with real-history evidence, without a new parallel checking framework.
 
 Sender outbound projection: Schrodinger owns the complete sender-chat workflow
-in Toad210; Mendel contributes the durable wire/routing/index/source closure.
+in Toad215; Mendel contributes the durable wire/routing/index/source closure in
+Core430. Toad210/Core426 retain attachment recovery and source-operation ownership.
 The pr159 reply at 19:27:10 to codex-bootstrap is visible in IRC but absent from
 its sender DM. Both views must project the same original durable record once,
 chronologically, through immediate updates, A/B/A and cold reopening. No second
@@ -68,7 +69,10 @@ recovery remains with Schrodinger; canonical lifecycle425/211 remains Arendt.
 
 ## Direct coordination and write ownership
 
-Six coding agents are active; each keeps one complete implementation assignment.
+Five coding agents were confirmed active at this checkpoint. Kepler's existing
+Toad214 task is interrupted; its pushed implementation remains assigned to him.
+Do not report a PR assignment as a running agent. Heavy installed native fixtures
+run serially while the resource check reports swap pressure.
 They communicate directly rather than routing routine handoffs through the parent.
 
 - Arendt ↔ Einstein: native summary accounting versus Pi/SummaryData boundary
@@ -97,6 +101,8 @@ noneditable installed artifact with Toad43949 and native4ab. Actual staged
 package trust and the next paired cutover remain separate gates; staged attachment
 does not prove that the default workers run the new Core or that inbox recovery
 works. See [current integration ownership](13-LIVE-INTEGRATION.md).
+The [full goal checklist](15-GOAL-CHECKLIST.md) separates original PR disposition,
+remaining plan scope, installed acceptance and the next paired activation.
 
 The older receipts below retain their historical verification boundaries.
 
