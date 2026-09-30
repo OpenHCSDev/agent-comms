@@ -64,8 +64,12 @@ python3 "$stack_root/patch-native-adaptive-settings.py" \
 completion_api=node_modules/@earendil-works/pi-ai/dist/api
 cp -- "$stack_root/native-context-budget.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$completion_api/agent-comms-context-budget.js"
+cp -- "$stack_root/native-request-input.mjs" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent/$completion_api/agent-comms-request-input.js"
 python3 "$stack_root/patch-native-context-budget.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$completion_api/openai-completions.js"
+patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
+    -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-generation-policy.patch"
 rpc=dist/modes/rpc/rpc-mode.js
 python3 "$stack_root/patch-native-selected-compaction-summary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"

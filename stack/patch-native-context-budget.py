@@ -15,10 +15,15 @@ def main(provider: Path) -> None:
     request = "const { data: openaiStream, response } = await retryProviderRequest(() => client.chat.completions.create(params, requestOptions).withResponse(), {"
     if source.count(anchor) != 1 or source.count(request) != 1:
         raise SystemExit("Native provider request boundary changed")
-    source = source.replace(anchor, anchor + '\nimport { ContextBudgetRequest } from "./agent-comms-context-budget.js";', 1)
+    source = source.replace(anchor, anchor + '\nimport { ContextBudgetRequest, BudgetAdmissionError } from "./agent-comms-context-budget.js";\nimport { chatInput } from "./agent-comms-request-input.js";', 1)
     source = source.replace(request,
-        "const budgetRequest = new ContextBudgetRequest(model, context, params, compat.maxTokensField, "
-        "payload => client.chat.completions.create(payload, requestOptions).withResponse());\n"
+        'if (params.max_tokens !== undefined && params.max_completion_tokens !== undefined) {\n'
+        '                throw new BudgetAdmissionError("Request declares two competing output allowances");\n'
+        '            }\n'
+        '            const budgetField = params.max_tokens !== undefined ? "max_tokens" : compat.maxTokensField;\n'
+        "            const budgetRequest = new ContextBudgetRequest(model, context, params, budgetField, "
+        "payload => client.chat.completions.create(payload, requestOptions).withResponse(), "
+        "chatInput(params), options?.signal);\n"
         "            const { data: openaiStream, response } = await retryProviderRequest(() => budgetRequest.send(), {", 1)
     provider.write_text(source)
 
