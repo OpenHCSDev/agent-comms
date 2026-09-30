@@ -173,8 +173,9 @@ scrolling, channel delivery, cancellation or warm return.
 
 **Scrolling failed on both the real fork and the original nra-architecture.**
 Held PageUp, PageDown, reverse PageUp, then End and15s stationary left the
-message viewport entirely blank. Before/after screenshots and the software
-compositor export agree. Original-history capture submitted zero prompts and
+message viewport entirely blank. Physical before/after screenshots establish blank terminal paint. The later
+software SVG export performs rendering and clears dirty regions; it can recover
+some chrome, so it is not a passive observation of the failed physical frame. Original-history capture submitted zero prompts and
 did not restart its owner. One initial24-event snapshot was observed; delayed
 inbound replay did not reproduce in this quiet cohort and remains unresolved.
 
@@ -276,3 +277,17 @@ reply wait is a secondary failure, not evidence to increase a turn timeout.
 Schrodinger/Einstein/Mendel own the shared read/admission custody correction;
 the original attempt, full wire, native journals and dispositions are retained.
 No original input is replayed, and the whole messaging gate is not ready.
+
+## September30 causal closure and real-test checkpoints
+
+- Textual13 now owns the independently reproduced central paint-admission defect: an actual asynchronous widget mount queues a Screen refresh while App batching is active, the compositor consumes dirty rectangles, then App rejects the frame. Heisenberg217 removes Toad's narrower batch guard and uses the native Screen preparation hook. Physical original-history scrolling acceptance remains required; the source reproducer alone does not close the global blank frame.
+- Sch215 real03 failed before native prompt bytes under the bus writer lock. Original Outbound/Inbound/IRC handling updated Responding to Failed in all three open views; no reply or full31-second idle/A-B/A success is claimed. The original uncertain attempt is preserved. The follow-on original41MB three-view read-only profile places checkpoint verification under the contested bus lock, with70469 samples and no sampling errors; these inclusive samples are not wall latency. Mendel430 owns the complete read-transaction correction.
+- Arendt436 and Einstein437 ran independently authorized actual large-history native forks. Their first failing cases identify compaction authority checks that compare the entire mutable Thread declaration, so their own CompactionStart/progress invalidates the capture. Einstein437 owns the existing original attestation/registry/check-family caller closure. NativeInputOwner.require_exact also has a fresh-session caller passing admission generation into the owner-generation parameter; this distinct-domain crossing is explicitly included in the ownership handoff. Original failure traces and journals are preserved, never retried.
+- Toad223 is Arendt's actual native/UI lifecycle fixture draft, paired with Core436. Passing resource-injection checks is not its acceptance. Whole cancel, goal settlement and next-input behavior still need the affected installed configured native journey.
+- Cleanup removed144 clean merged worktrees through parent plus four through Heisenberg;45 generated environments were initially removed. Free space rose from25 to approximately30GiB. Current source, open PRs, original journals and proofs remain protected. A borrowed TC2 test dependency was missed and restored at the original path from the unchanged lock; evidence/worktree-cleanup records that correction and exact affected paths. Cleanup receipts measure actual filesystem free space because hardlinked environment sizes overcount reclamation.
+
+None of these source diagnoses or failed actual journeys is called live readiness.
+The default remains the scoped verified222 disposal checkpoint. Shared global
+cutover awaits a coherent original-source/lifecycle/compaction candidate and the
+typed stopped-owner maintenance seam in438. Independent real tests can continue
+in three lanes; there is no recreated sole fixture slot or product turn cap.

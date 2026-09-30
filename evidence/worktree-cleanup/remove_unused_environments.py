@@ -7,7 +7,7 @@ for p in ['/home/ts/.agent-comms/registry.json','/var/tmp/agent-comms-live-20260
  except OSError: pass
 # Protect live launchers and editable installations as well as recorded agents.
 references=[]
-for base in ['/home/ts/.local/share/agent-comms','/home/ts/.local/bin','/home/ts/bin']:
+for base in ['/home/ts/.local/share/agent-comms','/home/ts/.local/bin','/home/ts/bin','/home/ts/wt']:
  for p in pathlib.Path(base).rglob('*'):
   try:
    if p.is_symlink(): references.append(str(p.resolve()))
