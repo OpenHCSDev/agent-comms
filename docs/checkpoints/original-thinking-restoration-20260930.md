@@ -1,64 +1,33 @@
-# Original configured thinking restoration
+# Applied original thinking restoration and retired operator
 
-Owner: Arendt. Parent authorizes preparation and private provider-free evidence;
-parent alone authorizes and executes a public restoration/restart. This scope
-is independent of Schrodinger238, Mendel450, Heisenberg236 and the default UI gate.
+Owner: Arendt prepared the outside-src member. Parent alone integrated and
+executed it in the one quiet retained13-owner450/452 cutover. No public writes,
+signals, provider calls or input replay were performed by this agent.
 
-Base: Core4295d680. Production source changes: zero. Current installed pair is
-already activated; this tool must not repeat the C3 projection or route carry.
+## Completed scope
 
-The original nine configured OFF selections were overwritten by read-side
-configuration fallback before merged448. Original native history does not
-replace this configured declaration. The protected original registry preimage
-alone supplies historical setting witnesses, decoded by its authentic original
-installed interpreter. Only typed identity/model/thinking witnesses cross in
-RAM; no credential/full registry is published or retained by this tool.
+Parent executed the frozen, reviewed source85586421feb719c2135b823a110b806b8742b2e1.
+The existing `StoppedOwnerInstallation` seam and canonical retained batch owned
+all-idle admission, all original process retirement, restoration and replacement
+launch. This was one operation; no separate restoration restart loop, registry
+reader, compatibility adapter or production setting authority was introduced.
 
-Use the existing `StoppedOwnerInstallation` seam and canonical retained all-owner
-batch. Prevalidate the entire exact original setting audience, current models,
-current selections and process/generation/admission proofs before any fence or
-signal. At acquired all-stopped custody, use one guarded `RegistryStore.editing`
-transaction to change only the nine current Thread thinking fields to OFF.
-Preserve all other current fields, UNKNOWN/input receipts, blocked goals, native
-journals and batch launch settings. Refuse changed/ambiguous evidence.
+Before any signal the member required the exact reviewed RootID/live audience,
+all original owner/admission/process witnesses and9 original incarnation/model/
+current-thinking matches. After all original processes exited it rechecked the
+same original identity/configuration relation under acquired wire custody, then
+used one guarded `RegistryStore.editing` transaction. Only9 current
+`Thread.thinking_level` members changed to OFF. Parent retained each exact
+original launch's credentials/env/args and owned the target/native/default CAS.
 
-No nested public setter call under the held wire lock; no raw registry writer,
-codec adapter, old registry rollback, second restart loop, prompt or replay.
-The existing batch supplies retained credentials in RAM and owns final launches.
-Old UI/ACP clients must be excluded by parent before the public operation.
-
-Patterns: IDEN-1 original configuration differs from native effective effort;
-BOUND-1/BOUND-2 original format decoded once by its installed declaration;
-IMPL-12/IMPL-13 existing restart/custody reused; TIME-1 one-shot outside-src
-maintenance, retired after accepted restoration and proof archival.
-
-## Prepared callable, no public mutation
-
-`tools/cutover/original_thinking_restore.py:prepare_off_restoration` returns the
-existing `StoppedOwnerInstallation` member `RestoreOriginalThinking`. It has no
-execute CLI, native call, alternate registry or restart implementation. The
-parent supplies it to the single existing quiet retained batch, alongside the
-parent's target runtime/default/route setup. Production source delta is zero.
-
-The authentic original C3 preimage is:
+The authentic original C3 preimage remains protected:
 `/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/c3-reviewed-pair-20260930/cutover.json.originals/registry.json`
-with SHA256 `976b3797e42d6c9edb2bfd41139e0cca58bc36c3680adf492182f1b3ba758983`.
-Decode it with original Core000:
-`/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/python`.
-This interpreter is for historical decoding ONLY. The earlier720 preimage has
-different thinking settings and must not substitute for this C3 OFF witness.
-The child checks owned private regular storage, stable opened descriptor and
-exact reviewed SHA; its stdout contains only requested incarnation/model data.
-All original bytes stay protected and only the bounded witness crosses in RAM.
+SHA256 `976b3797e42d6c9edb2bfd41139e0cca58bc36c3680adf492182f1b3ba758983`.
+The authentic Core000 interpreter decoded it once; only requested incarnation/
+model witnesses crossed in RAM. No full original registry or credentials were
+published or copied into this checkpoint.
 
-Read-only preparation completed in0.792s against actual public typed metadata:
-9 requested OFF preimages,13 exact current live owner selections, RootID
-`e206f3766e60451a989ca34df0e2a94b`. No restart/callback/write/provider operation
-was invoked. No extra test cohort is needed for this review request.
-
-### Exact reviewed selection
-
-| Thread | Model retained exactly | Current thinking guard | Restore |
+| Restored thread | Exact retained model | Reviewed before | After |
 |---|---|---|---|
 | agent-comms-ux | openai-codex/gpt-6.1-sol | medium | off |
 | nra-architecture | openai-codex/gpt-6.1-sol | medium | off |
@@ -70,59 +39,36 @@ was invoked. No extra test cohort is needed for this review request.
 | nominal-refactor-advisor-2 | openrouter/z-ai/glm-5.3-flash | low | off |
 | openhcs-helper2 | openrouter/z-ai/glm-5.3-flash | low | off |
 
-### Callable and custody contract
+## Actual parent receipt
 
-```python
-from original_thinking_restore import prepare_off_restoration
+Sanitized receipt: `evidence/original-thinking-restoration/parent-activation.json`,
+from parent's `evidence/cleanup-live-integration/managed-tool-bus-activation.json`.
+Parent's full private receipt remains `.artifacts/managed-tool-bus-release/activation.json`.
+All13 replacement owners report `OffThinkingLevel` and the reviewed native match;
+the other4 were already OFF. Original NRA source SHA remains
+`888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c`.
+Originalf39210bb4366844c3a898b0010ba9538 remains triage UNKNOWN with null native
+session, entry and verdict; it was not replayed or reclassified. Goals and all
+other original durable dispositions remain protected.
 
-installation = prepare_off_restoration(
-    comms,
-    original_python=original_core000_python,
-    preimage=protected_c3_registry_preimage,
-    expected_sha256="976b3797e42d6c9edb2bfd41139e0cca58bc36c3680adf492182f1b3ba758983",
-    reviewed={
-        "agent-comms-ux": "medium", "nra-architecture": "medium",
-        "openhcs-architecture-memory": "medium",
-        "openhcs-pr159-viewer-bind-owner": "medium", "openhcs-helper": "medium",
-        "comms428": "medium", "refactor-r1": "low",
-        "nominal-refactor-advisor-2": "low", "openhcs-helper2": "low",
-    },
-)
-# Parent-only execution at the existing reviewed target-runtime batch seam:
-results = comms.owners.restart_owners(
-    cutover=installation, runtime=target_runtime, source_interpreter=None,
-)
-```
+Restoration/cutover completion is scoped evidence, not a usable-TUI claim. The
+new default subsequently revealed a stale deleted-factory import in Toad launch
+admission. Toad241/b200 fixes that existing consumer, retaining owner validation.
+Sch stages the UI-only package and Einstein verifies the actual normal launcher
+before parent UI defaults. Neither that remaining UI gate nor performance239
+requires repeating451 restoration or restarting these13 owners again.
 
-Do not set `source_interpreter` from the current default symlink. `None` is the
-existing canonical per-owner capture: `RetainedOwnerLaunch.capture` reads each
-original `/proc/PID/cmdline`, exact process birth and launch env/args, validates
-original registry owner/admission and stores credentials only in RAM. Mixed
-original runtime prefixes remain valid. No shared args/env overwrite is added.
+## Tool retirement
 
-Before any fence/signal the member checks root identity, the complete live batch,
-all captured `OwnerRestartSelection` process/owner/admission witnesses and each
-original exact incarnation/model/current thinking. Changed model, thinking,
-name/birth, process, admission, generation or live audience refuses the whole
-restoration before signals. The existing batch independently enforces all-idle.
-After every original exits and under its acquired wire custody, a single guarded
-`RegistryStore.editing` transaction rechecks all original processes/incarnations,
-stopped/idle status and all9 setting guards before changing a cell. Only the9
-current `Thread.thinking_level` members change. The original post-stop admission
-proof and launch order remain with `StoppedOwnerBatch`/its canonical handoff;
-no counter arithmetic or private nested setter is used.
+Both used one-shot files are deleted before Ready:
+`tools/cutover/read_thinking_preimage.py` and
+`tools/cutover/original_thinking_restore.py`.
+Their reviewed executable source is preserved at85586421 in Git history.
+Current451 diff is docs/evidence only. Production source changes: zero.
+No runtime/lock/dependency/native/global-install delta and no rebuild are needed.
+Parent's distinct combined activation operator remains parent-owned and will be
+removed after its own actual UI acceptance. No extra tests were run for closure.
 
-Models, unrelated current configuration, native history, goals, reservations,
-UNKNOWN dispositions and immutable original release receipts are untouched by
-this member. Batch fencing/launch metadata is owned by the existing lifecycle.
-A failed guarded write keeps canonical uncertainty and stopped custody for
-review; the member does not roll back a whole registry or automatically restart.
-Old-client exclusion remains the parent's precondition.
-
-The exact named/current-value audience requires parent review. Equality alone
-cannot establish whether a user explicitly selected the same visible value;
-there is no per-setting edit-intent receipt here. The member never infers repair
-eligibility from historical differences or restores any extra OFF preimage.
-No differing current user model/thinking value is overridden. Execution remains
-unauthorized for this agent and has not occurred.
-
+Patterns: IDEN-1 configured thinking differs from native history/effective effort;
+BOUND-1/BOUND-2 original producer decodes provenance once; IMPL-12/IMPL-13 existing
+batch custody reused; TIME-1 used outside-src member retired in place.
