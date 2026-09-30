@@ -224,7 +224,6 @@ class TranscriptRoutes:
         reader = NativeTranscript(path)
         floor = checkpoint.offset if str(path) == checkpoint.session_file else 0
         try:
-            reader.require_session_id()
             final, user = reader.publication_input(after=floor, through=revision[1])
         except (ValueError, TypeError) as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
