@@ -31,6 +31,6 @@ bfcdccbbceac26cd561ead2009d645bd41d2e2b6608d2506babc73c1ff689d87  agent-comms-ex
 aec2f02b51690af1e1555fdf64241976155f4daac7e87a8e436784b719a408c3  dist/agent-comms-imports.json
 53aee60836c03960049d65d3f1525db6f2f33193463355d902d35fc97bde9a4d  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
 4e0130af62c940a1a610075d309fc45439a54117025c2f5b67052efadf78dbec  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
-a6fb5fbaf5c699f881d7d6bd4303d75b1d99b7cb1ac4c510e3e02fd0dc846532  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js
-e606bf1a31ab7ce72102dd5de66bca255ab37b5ff2fcf0b4860bad141413031d  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.d.ts
-# agent-comms-native-tree-v1 f418e9ce781f27eb9df63e1973f9831659a16684127a42989a58b90c68409a25
+e87b99fc294377e78a6bc6019a6b21816d9ba27012f109fb2626105e0c3f1ceb  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js
+21d23e4671b0d98af353253b4fcb33d4cabc018df9737a018660e29c72ebd333  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.d.ts
+# agent-comms-native-tree-v1 aebbebd9c2412071c3ae37e63c77f2922c37f5f38386216cae3df4bd838a61d5

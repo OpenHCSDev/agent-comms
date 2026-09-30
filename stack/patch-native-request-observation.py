@@ -56,10 +56,20 @@ def main(package):
     helper.write_bytes(Path(__file__).with_name("native-request-observation.mjs").read_bytes())
     helper.with_suffix(".d.ts").write_bytes(Path(__file__).with_name("native-request-observation.d.ts").read_bytes())
     retry = helper.with_name("provider-retry.js")
+    replace_once(retry, "const DEFAULT_MAX_RETRY_DELAY_MS",
+                 'import { observeRequest } from "./agent-comms-request-observation.js";\nconst DEFAULT_MAX_RETRY_DELAY_MS')
     replace_once(retry, "            return await request();",
                  "            return await request(maxRetries - retriesRemaining);")
+    replace_once(retry,
+        "            await abortableSleep(getRetryDelayMs(error, retryIndex, options.maxRetryDelayMs), options.signal);",
+        """            const delayMs = getRetryDelayMs(error, retryIndex, options.maxRetryDelayMs);
+            observeRequest(options, { stage: "retry", attempt: retryIndex + 1,
+                status: error.status, detail: `Provider retry waits ${Math.ceil(delayMs / 1000)}s` });
+            await abortableSleep(delayMs, options.signal);""")
     replace_once(retry.with_suffix(".d.ts"), "request: () => Promise<T>",
                  "request: (attempt: number) => Promise<T>")
+    replace_once(retry.with_suffix(".d.ts"), "    signal?: AbortSignal;",
+                 '    signal?: AbortSignal;\n    onRequestProgress?: import("./agent-comms-request-observation.js").RequestObserver;')
     declaration = '    onRequestProgress?: (progress: import("../../pi-ai/dist/utils/agent-comms-request-observation.js").NativeRequestProgress) => void;\n'
     for name in ("agent.d.ts", "types.d.ts"):
         path = core / name

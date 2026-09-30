@@ -13,6 +13,7 @@ import time
 from agent_comms.comms import Comms
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
 from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
@@ -187,6 +188,9 @@ async def run(arguments):
             rows = [json.loads(line) for line in native.read_text().splitlines()]
             originals = [row for row in rows if row.get("message", {}).get("role") == "user"]
             assert len(originals) == 2 and len(posts) == 2, "Original input or provider call replayed"
+            attempts = InputDispositions(service.root / InputDispositions.filename).read().rows
+            assert len(attempts) == 2 and all(row.has_started and not row.unresolved for row in attempts.values()), "Subscriber loss changed an accepted input's disposition"
+            report["original_dispositions"] = [row.public_status for row in attempts.values()]
             observations = [json.loads(line) for path in (service.root / "diagnostics").glob("*.requests.jsonl")
                             for line in path.read_text().splitlines()]
             assert observations, "No retained request measurements"
