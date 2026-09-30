@@ -37,6 +37,16 @@ class NotificationAssignment:
     activity: AssignmentActivity
 
     @classmethod
+    def database_path(cls, root: Path) -> Path:
+        return root / "coordination.sqlite3"
+
+    @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        """SQLite may publish original recipient changes only in its WAL."""
+        database = cls.database_path(root)
+        return database, database.with_name(database.name + "-wal")
+
+    @classmethod
     def select(
         cls,
         root: Path,
@@ -52,7 +62,7 @@ class NotificationAssignment:
         from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 
-        database = root / "coordination.sqlite3"
+        database = cls.database_path(root)
         failure = _preflight(database)
         if failure == "missing":
             return ()
