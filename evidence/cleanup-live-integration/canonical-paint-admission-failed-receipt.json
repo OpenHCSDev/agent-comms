@@ -1,0 +1,3554 @@
+{
+  "owner": "Heisenberg-PR217-paint-admission",
+  "purpose": "installed TUI physical interaction video review",
+  "output": "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture",
+  "command": [
+    "toad-comms",
+    "nra-architecture"
+  ],
+  "terminal_command": [
+    "st",
+    "-e",
+    "toad-comms",
+    "nra-architecture"
+  ],
+  "fps": 60,
+  "screen": [
+    1280,
+    900
+  ],
+  "profiling_requested": true,
+  "state_capture_requested": true,
+  "private_root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "capture_target": "existing_thread",
+  "physical_journey": "scroll",
+  "original_owner_before": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "nra-architecture",
+    "identity": {
+      "pid": 2126072,
+      "start_time": 20963438
+    },
+    "original_owner_alive": true
+  },
+  "recorder_argv": [
+    "/home/ts/wt/toad-retained-outer-history-first-paint-20260929/tests/tools/record_installed_tui.py",
+    "--output",
+    "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture",
+    "--owner",
+    "Heisenberg-PR217-paint-admission",
+    "--capture-target",
+    "existing_thread",
+    "--actions",
+    "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/actions.xdo",
+    "--scroll-idle-seconds",
+    "15",
+    "--profile",
+    "--profile-threads",
+    "gil",
+    "--profile-rate",
+    "25",
+    "--capture-state",
+    "--review-timing",
+    "deferred",
+    "--width",
+    "1280",
+    "--height",
+    "900",
+    "--fit-window",
+    "--startup-wait",
+    "12",
+    "--max-duration",
+    "65",
+    "--tail-seconds",
+    "3",
+    "--review-phase",
+    "down",
+    "--review-phase",
+    "reverse",
+    "--review-phase",
+    "end",
+    "--review-phase",
+    "idle",
+    "--",
+    "toad-comms",
+    "nra-architecture"
+  ],
+  "recorder_source_sha256": "dd3662e0dc5ea03a707092c18cc5689dcec15c04682c35eebf778ad69102f88b",
+  "started_utc": "2026-09-30T04:10:58.541484+00:00",
+  "assessment": "unreviewed",
+  "capture_completed": true,
+  "completed": true,
+  "review_timing": "deferred",
+  "review": {
+    "start_seconds": 0,
+    "seconds": 3,
+    "fps": 8,
+    "frames_limit": 24,
+    "slowdown": 8,
+    "timestamp_basis": "source video seconds"
+  },
+  "runtime_before": {
+    "selection": "AGENT_COMMS_RUNTIME_ROOT",
+    "bin_directory": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin",
+    "launcher": "/home/ts/.agent-comms/stack/bin/toad-comms",
+    "launcher_sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/bin/toad-comms",
+        "resolved_path": "/home/ts/.agent-comms/stack/bin/toad-comms",
+        "sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.local/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-acp",
+        "sha256": "e73c1e2e7e154e8cc14f1909b1da2160fba6794aee1671bd2b2cbfac0857d040"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/toad",
+        "sha256": "e75170ee71fe585301395226cbf82d32c17dd9113ffc5f231155e340821623d1"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/agent-comms-acp",
+        "sha256": "80f81c15fd612ca12c5aea0ac3be88b022c3d618698b1807d72deee7b8c1c5ec"
+      }
+    },
+    "activation_path": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/activation.json",
+    "activation_sha256": "74b1e6e48d2e08157f92086bca37ee315cb0a566c2fa3e539b1f9a204f0436f4",
+    "activation": {
+      "launcher_names": [
+        "agent-comms",
+        "agent-comms-acp",
+        "agent-comms-agent",
+        "agent-comms-nk-foreground",
+        "toad"
+      ],
+      "core": "72062939239b0f07707406309305a056a23f925f",
+      "toad": "4103c80b2121a1a1e35256ea9b5995faabd83037",
+      "textual": "65053c5a2df12249ef1c4193beeff7023c1f75d7",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+    },
+    "observed": {
+      "python": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python",
+      "prefix": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "e93279ea8a0d26c85b85c29a04c9de16f0c89d45d693d6b8953e1b7b6a26d831",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "4103c80b2121a1a1e35256ea9b5995faabd83037",
+              "requested_revision": "4103c80b2121a1a1e35256ea9b5995faabd83037"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "dd18483216975c850f6f09dcbb455d67cc0d9124e0213840a9559e51d348e9a2",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "65053c5a2df12249ef1c4193beeff7023c1f75d7",
+              "requested_revision": "65053c5a2df12249ef1c4193beeff7023c1f75d7"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "c00941441d844501e227f87db83b8e63e83cf76d0699c4a8bab547f7d666a569",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "72062939239b0f07707406309305a056a23f925f",
+              "requested_revision": "72062939239b0f07707406309305a056a23f925f"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "display": ":7038",
+  "profiler": {
+    "command": [
+      "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python",
+      "/home/ts/wt/toad-retained-outer-history-first-paint-20260929/tests/tools/record_installed_tui.py",
+      "--profile-launch",
+      "toad-comms",
+      "nra-architecture"
+    ],
+    "executable_sha256": "9b4d1f39b2a47ae44f4c6a46f615dcc0287d7755beba5065f32391951e07d594",
+    "launch_monotonic": 217098.633415051,
+    "launch": {
+      "terminal_pid": 2352192,
+      "terminal_start_ticks": 21709908,
+      "ui_pid": 2352193,
+      "ui_start_ticks": 21709914,
+      "profiler_command": [
+        "/home/ts/.local/bin/py-spy",
+        "record",
+        "--pid",
+        "2352193",
+        "--format",
+        "chrometrace",
+        "--subprocesses",
+        "--full-filenames",
+        "--gil",
+        "--rate",
+        "25",
+        "--duration",
+        "95",
+        "--output",
+        "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/cpu-profile.json"
+      ],
+      "sampling": "consistent",
+      "threads": "gil",
+      "profiler_exec_monotonic": 217099.662543767
+    },
+    "sampling_ready_observed_monotonic": 217099.700370771
+  },
+  "ui_identity": {
+    "pid": 2352193,
+    "start_ticks": 21709914
+  },
+  "window": "2097158",
+  "capture_launch_monotonic": 217100.046924963,
+  "terminal_pid": 2352192,
+  "state_captures": {
+    "before": {
+      "started_seconds": 12.27327103499556,
+      "manifest": {
+        "pid": 2352193,
+        "created": 1790741459.14,
+        "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+        "rss_before": 184332288,
+        "started_ns": 1790741473233853462,
+        "profile_seconds": 0,
+        "gil_only": false,
+        "native": false,
+        "receipts": {
+          "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/before-state": "complete",
+          "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/before-screen": "complete"
+        },
+        "finished_ns": 1790741473466424538
+      },
+      "finished_seconds": 12.734606032987358
+    },
+    "after": {
+      "started_seconds": 57.076655290991766,
+      "manifest": {
+        "pid": 2352193,
+        "created": 1790741459.14,
+        "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+        "rss_before": 218226688,
+        "started_ns": 1790741518006609674,
+        "profile_seconds": 0,
+        "gil_only": false,
+        "native": false,
+        "receipts": {
+          "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/after-state": "complete",
+          "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/after-screen": "complete"
+        },
+        "finished_ns": 1790741518139015668
+      },
+      "finished_seconds": 57.38545308198081
+    }
+  },
+  "terminal_processes": {
+    "2352192": {
+      "start_ticks": 21709908,
+      "command": "st -e toad-comms nra-architecture "
+    },
+    "2352193": {
+      "start_ticks": 21709914,
+      "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+    },
+    "2352228": {
+      "start_ticks": 21710034,
+      "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+    },
+    "2352265": {
+      "start_ticks": 21710235,
+      "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+    },
+    "2352311": {
+      "start_ticks": 21710521,
+      "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+    },
+    "2352427": {
+      "start_ticks": 21710662,
+      "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+    }
+  },
+  "driver_started_seconds": 12.763408237980912,
+  "driver_finished_seconds": 53.81301105199964,
+  "duration_seconds": 57.38545941398479,
+  "capture_returncode": 255,
+  "runtime_after": {
+    "selection": "AGENT_COMMS_RUNTIME_ROOT",
+    "bin_directory": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin",
+    "launcher": "/home/ts/.agent-comms/stack/bin/toad-comms",
+    "launcher_sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/bin/toad-comms",
+        "resolved_path": "/home/ts/.agent-comms/stack/bin/toad-comms",
+        "sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.local/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/bin/agent-comms-acp",
+        "sha256": "e73c1e2e7e154e8cc14f1909b1da2160fba6794aee1671bd2b2cbfac0857d040"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/toad",
+        "sha256": "e75170ee71fe585301395226cbf82d32c17dd9113ffc5f231155e340821623d1"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/agent-comms-acp",
+        "sha256": "80f81c15fd612ca12c5aea0ac3be88b022c3d618698b1807d72deee7b8c1c5ec"
+      }
+    },
+    "activation_path": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/activation.json",
+    "activation_sha256": "74b1e6e48d2e08157f92086bca37ee315cb0a566c2fa3e539b1f9a204f0436f4",
+    "activation": {
+      "launcher_names": [
+        "agent-comms",
+        "agent-comms-acp",
+        "agent-comms-agent",
+        "agent-comms-nk-foreground",
+        "toad"
+      ],
+      "core": "72062939239b0f07707406309305a056a23f925f",
+      "toad": "4103c80b2121a1a1e35256ea9b5995faabd83037",
+      "textual": "65053c5a2df12249ef1c4193beeff7023c1f75d7",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+    },
+    "observed": {
+      "python": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python",
+      "prefix": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "e93279ea8a0d26c85b85c29a04c9de16f0c89d45d693d6b8953e1b7b6a26d831",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "4103c80b2121a1a1e35256ea9b5995faabd83037",
+              "requested_revision": "4103c80b2121a1a1e35256ea9b5995faabd83037"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "dd18483216975c850f6f09dcbb455d67cc0d9124e0213840a9559e51d348e9a2",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "65053c5a2df12249ef1c4193beeff7023c1f75d7",
+              "requested_revision": "65053c5a2df12249ef1c4193beeff7023c1f75d7"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "c00941441d844501e227f87db83b8e63e83cf76d0699c4a8bab547f7d666a569",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "72062939239b0f07707406309305a056a23f925f",
+              "requested_revision": "72062939239b0f07707406309305a056a23f925f"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "runtime_unchanged": true,
+  "video": {
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+        "profile": "Constrained Baseline",
+        "codec_type": "video",
+        "codec_tag_string": "avc1",
+        "codec_tag": "0x31637661",
+        "mime_codec_string": "avc1.42c02a",
+        "width": 1280,
+        "height": 900,
+        "coded_width": 1280,
+        "coded_height": 900,
+        "has_b_frames": 0,
+        "pix_fmt": "yuv420p",
+        "level": 42,
+        "chroma_location": "left",
+        "field_order": "progressive",
+        "is_avc": "true",
+        "nal_length_size": "4",
+        "id": "0x1",
+        "r_frame_rate": "60/1",
+        "avg_frame_rate": "60/1",
+        "time_base": "1/15360",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 883968,
+        "duration": "57.550000",
+        "bit_rate": "937899",
+        "bits_per_raw_sample": "8",
+        "nb_frames": "3453",
+        "extradata_size": 38,
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.1.102 libx264"
+        }
+      }
+    ],
+    "format": {
+      "filename": "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/terminal.mp4",
+      "nb_streams": 1,
+      "nb_programs": 0,
+      "nb_stream_groups": 0,
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+      "format_long_name": "QuickTime / MOV",
+      "start_time": "0.000000",
+      "duration": "57.550000",
+      "size": "6761806",
+      "bit_rate": "939955",
+      "probe_score": 100,
+      "tags": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf63.1.102"
+      }
+    }
+  },
+  "events": [
+    {
+      "label": "focused",
+      "utc": "2026-09-30T04:11:14.150394+00:00",
+      "seconds_since_capture_launch": 13.280533047975041,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.11,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 8.99,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.03,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.65,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.64,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.51,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.16,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-focused.png",
+      "state_capture": {
+        "started_seconds": 13.566022593993694,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 186302464,
+          "started_ns": 1790741474495357483,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-focused-state": "complete"
+          },
+          "finished_ns": 1790741474627972413
+        },
+        "finished_seconds": 13.886279507976724
+      }
+    },
+    {
+      "label": "up",
+      "utc": "2026-09-30T04:11:16.357066+00:00",
+      "seconds_since_capture_launch": 15.487202811986208,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.11,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 10.51,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.03,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.66,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.79,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.51,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.56,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-up.png",
+      "state_capture": {
+        "started_seconds": 15.758373035991099,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 186753024,
+          "started_ns": 1790741476686522509,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-up-state": "complete"
+          },
+          "finished_ns": 1790741476819174228
+        },
+        "finished_seconds": 16.06381681197672
+      }
+    },
+    {
+      "label": "up-done",
+      "utc": "2026-09-30T04:11:21.543974+00:00",
+      "seconds_since_capture_launch": 20.674111672997242,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.23,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 15.41,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.03,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.67,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.89,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.51,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.68,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-up-done.png",
+      "state_capture": {
+        "started_seconds": 20.943028195993975,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 187629568,
+          "started_ns": 1790741481875075856,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-up-done-state": "complete"
+          },
+          "finished_ns": 1790741482007611585
+        },
+        "finished_seconds": 21.237924727000063
+      }
+    },
+    {
+      "label": "down",
+      "utc": "2026-09-30T04:11:22.708042+00:00",
+      "seconds_since_capture_launch": 21.83817776897922,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.23,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 16.43,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.03,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.67,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.93,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.52,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.68,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-down.png",
+      "state_capture": {
+        "started_seconds": 22.113732911995612,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 188952576,
+          "started_ns": 1790741483048280107,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-down-state": "complete"
+          },
+          "finished_ns": 1790741483180851684
+        },
+        "finished_seconds": 22.433795446995646
+      }
+    },
+    {
+      "label": "down-done",
+      "utc": "2026-09-30T04:11:27.890846+00:00",
+      "seconds_since_capture_launch": 27.020981743000448,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.33,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 21.43,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.04,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.69,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.94,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.52,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.7,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-down-done.png",
+      "state_capture": {
+        "started_seconds": 27.28560274798656,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 195665920,
+          "started_ns": 1790741488218444001,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-down-done-state": "complete"
+          },
+          "finished_ns": 1790741488350756738
+        },
+        "finished_seconds": 27.577977770997677
+      }
+    },
+    {
+      "label": "reverse",
+      "utc": "2026-09-30T04:11:29.045434+00:00",
+      "seconds_since_capture_launch": 28.17556843798957,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.33,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 22.35,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.04,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.69,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.95,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.52,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.71,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-reverse.png",
+      "state_capture": {
+        "started_seconds": 28.4429473989876,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 196108288,
+          "started_ns": 1790741489370951116,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-reverse-state": "complete"
+          },
+          "finished_ns": 1790741489503403107
+        },
+        "finished_seconds": 28.761332155001583
+      }
+    },
+    {
+      "label": "reverse-done",
+      "utc": "2026-09-30T04:11:34.245428+00:00",
+      "seconds_since_capture_launch": 33.375565982976696,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.42,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 27.19,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.04,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.7,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.95,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.53,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.71,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-reverse-done.png",
+      "state_capture": {
+        "started_seconds": 33.637256704998435,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 200720384,
+          "started_ns": 1790741494567767032,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-reverse-done-state": "complete"
+          },
+          "finished_ns": 1790741494700184537
+        },
+        "finished_seconds": 33.934783589997096
+      }
+    },
+    {
+      "label": "end",
+      "utc": "2026-09-30T04:11:35.423508+00:00",
+      "seconds_since_capture_launch": 34.55364776699571,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.43,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 28.31,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.04,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.7,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.95,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.53,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.71,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-end.png",
+      "state_capture": {
+        "started_seconds": 34.827828354988014,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 204984320,
+          "started_ns": 1790741495760007744,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-end-state": "complete"
+          },
+          "finished_ns": 1790741495892425109
+        },
+        "finished_seconds": 35.11817512498237
+      }
+    },
+    {
+      "label": "idle",
+      "utc": "2026-09-30T04:11:37.578776+00:00",
+      "seconds_since_capture_launch": 36.708915696974145,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.43,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 29.84,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.04,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.71,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.95,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.53,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.71,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-idle.png",
+      "state_capture": {
+        "started_seconds": 36.9789945629891,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 208670720,
+          "started_ns": 1790741497911321152,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-idle-state": "complete"
+          },
+          "finished_ns": 1790741498043643516
+        },
+        "finished_seconds": 37.30158875597408
+      }
+    },
+    {
+      "label": "idle-done",
+      "utc": "2026-09-30T04:11:53.763147+00:00",
+      "seconds_since_capture_launch": 52.89328726497479,
+      "cpu": {
+        "2352192": {
+          "start_ticks": 21709908,
+          "cpu_seconds": 0.44,
+          "command": "st -e toad-comms nra-architecture "
+        },
+        "2352193": {
+          "start_ticks": 21709914,
+          "cpu_seconds": 39.19,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        "
+        },
+        "2352228": {
+          "start_ticks": 21710034,
+          "cpu_seconds": 0.05,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "2352265": {
+          "start_ticks": 21710235,
+          "cpu_seconds": 0.75,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "2352427": {
+          "start_ticks": 21710662,
+          "cpu_seconds": 0.95,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork "
+        },
+        "2352272": {
+          "start_ticks": 21710268,
+          "cpu_seconds": 2.55,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp "
+        },
+        "2352311": {
+          "start_ticks": 21710521,
+          "cpu_seconds": 1.72,
+          "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-idle-done.png",
+      "state_capture": {
+        "started_seconds": 53.15429651597515,
+        "manifest": {
+          "pid": 2352193,
+          "created": 1790741459.14,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 214073344,
+          "started_ns": 1790741514080881646,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/toad-reader-217-paint-admission-20260930/capture/phase-idle-done-state": "complete"
+          },
+          "finished_ns": 1790741514213320592
+        },
+        "finished_seconds": 53.47529964498244
+      }
+    }
+  ],
+  "profile_review": {
+    "profiler": "py-spy",
+    "rate_hz": 25,
+    "sampling": "consistent",
+    "threads": "gil",
+    "trace": "cpu-profile.json",
+    "trace_origin_monotonic_estimate": 217099.681457269,
+    "trace_to_video_offset_seconds": -0.36546769400592893,
+    "ui_pid": 2352193,
+    "trace_origin_monotonic_bounds": [
+      217099.662543767,
+      217099.700370771
+    ],
+    "alignment": "profiler exec to sampling-ready observation bound; approximate midpoint",
+    "alignment_nominal_uncertainty_seconds": 0.05891350200457964,
+    "limits": [
+      "Scheduler delays and sampling errors can increase clock uncertainty",
+      "Consistent sampling briefly pauses Python; compare an unprofiled journey for observer overhead",
+      "GIL-owner samples cover Python execution; released-GIL/native work is omitted, so corroborate with kernel CPU counters",
+      "Stack spans are sampled wall activity, not exact call counts or CPU time",
+      "Kernel counter deltas give per-process CPU time at action boundaries",
+      "Sampled functions identify activation/preparation/layout/paint activity; no production event hook supplies exact phase timestamps",
+      "No automatic inference that a UI frame passed or a function is redundant"
+    ],
+    "processes": [
+      "2352193",
+      "2352228",
+      "2352265",
+      "2352272",
+      "2352311",
+      "2352427"
+    ],
+    "phases": [
+      {
+        "label": "focused",
+        "video_start_seconds": 13.280533047975041,
+        "video_end_seconds": 15.487202811986208,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 1.5199999999999996,
+            "average_cpu_percent": 68.882078541604
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0.40000000000000013,
+            "average_cpu_percent": 18.126862774106325
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0.15000000000000002,
+            "average_cpu_percent": 6.797573540289871
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.4531715693526584
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 358,
+            "inclusive_sampled_wall_seconds": 2.206669764011167,
+            "self_sampled_wall_seconds": 2.206669764011167
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_dict",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 413,
+            "inclusive_sampled_wall_seconds": 8.826679056044668,
+            "self_sampled_wall_seconds": 2.206669764011167
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 6.620009292033501,
+            "self_sampled_wall_seconds": 2.206669764011167
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 2.206669764011167,
+            "self_sampled_wall_seconds": 2.206669764011167
+          },
+          {
+            "pid": "2352427",
+            "function": "make_analysator",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/pygments/util.py",
+            "line": 137,
+            "inclusive_sampled_wall_seconds": 1.6073235059921362,
+            "self_sampled_wall_seconds": 1.6073235059921362
+          },
+          {
+            "pid": "2352311",
+            "function": "get_tokens_unprocessed",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/pygments/lexer.py",
+            "line": 714,
+            "inclusive_sampled_wall_seconds": 1.5789335059921363,
+            "self_sampled_wall_seconds": 1.5789335059921363
+          },
+          {
+            "pid": "2352193",
+            "function": "<genexpr>",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/declared_family.py",
+            "line": 128,
+            "inclusive_sampled_wall_seconds": 1.56331225801903,
+            "self_sampled_wall_seconds": 1.56331225801903
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode_row",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/typed_table.py",
+            "line": 320,
+            "inclusive_sampled_wall_seconds": 3.248512,
+            "self_sampled_wall_seconds": 1.3378569999999996
+          },
+          {
+            "pid": "2352193",
+            "function": "_representation",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 155,
+            "inclusive_sampled_wall_seconds": 1.2107592580190314,
+            "self_sampled_wall_seconds": 1.2107592580190314
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 362,
+            "inclusive_sampled_wall_seconds": 1.156441000000001,
+            "self_sampled_wall_seconds": 1.156441000000001
+          },
+          {
+            "pid": "2352193",
+            "function": "update",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/toad/widgets/comms_sidebar.py",
+            "line": 161,
+            "inclusive_sampled_wall_seconds": 0.9770519999999987,
+            "self_sampled_wall_seconds": 0.9770519999999987
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2504,
+            "inclusive_sampled_wall_seconds": 0.7595539999999996,
+            "self_sampled_wall_seconds": 0.7595539999999996
+          },
+          {
+            "pid": "2352193",
+            "function": "decode",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py",
+            "line": 346,
+            "inclusive_sampled_wall_seconds": 0.7532069999999997,
+            "self_sampled_wall_seconds": 0.7532069999999997
+          },
+          {
+            "pid": "2352193",
+            "function": "to_thread",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py",
+            "line": 25,
+            "inclusive_sampled_wall_seconds": 0.6409289999999999,
+            "self_sampled_wall_seconds": 0.6409289999999999
+          },
+          {
+            "pid": "2352193",
+            "function": "_str_normcase",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 202,
+            "inclusive_sampled_wall_seconds": 0.6276722580190306,
+            "self_sampled_wall_seconds": 0.6276722580190306
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2501,
+            "inclusive_sampled_wall_seconds": 0.5908890000000007,
+            "self_sampled_wall_seconds": 0.5908890000000007
+          },
+          {
+            "pid": "2352427",
+            "function": "__init_subclass__",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/dom.py",
+            "line": 625,
+            "inclusive_sampled_wall_seconds": 0.5149842580190302,
+            "self_sampled_wall_seconds": 0.5149842580190302
+          },
+          {
+            "pid": "2352193",
+            "function": "parent",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 389,
+            "inclusive_sampled_wall_seconds": 0.4278429999999993,
+            "self_sampled_wall_seconds": 0.4278429999999993
+          },
+          {
+            "pid": "2352193",
+            "function": "<genexpr>",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 217,
+            "inclusive_sampled_wall_seconds": 2.6781040220301957,
+            "self_sampled_wall_seconds": 0.3708352580190297
+          },
+          {
+            "pid": "2352193",
+            "function": "__init__",
+            "filename": "<string>",
+            "line": 3,
+            "inclusive_sampled_wall_seconds": 0.358746,
+            "self_sampled_wall_seconds": 0.358746
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      },
+      {
+        "label": "up",
+        "video_start_seconds": 15.487202811986208,
+        "video_end_seconds": 20.674111672997242,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 4.9,
+            "average_cpu_percent": 94.46859644734322
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0.12000000000000001,
+            "average_cpu_percent": 2.3135166476900384
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0.11999999999999988,
+            "average_cpu_percent": 2.3135166476900357
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0.09999999999999998,
+            "average_cpu_percent": 1.9279305397416977
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.19279305397417
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352193",
+            "function": "_iterencode_dict",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 413,
+            "inclusive_sampled_wall_seconds": 20.747635444044136,
+            "self_sampled_wall_seconds": 5.186908861011034
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 371,
+            "inclusive_sampled_wall_seconds": 5.186908861011034,
+            "self_sampled_wall_seconds": 5.186908861011034
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 15.560726583033102,
+            "self_sampled_wall_seconds": 5.186908861011034
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 5.186908861011034,
+            "self_sampled_wall_seconds": 5.186908861011034
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2503,
+            "inclusive_sampled_wall_seconds": 4.920441367003171,
+            "self_sampled_wall_seconds": 4.920441367003171
+          },
+          {
+            "pid": "2352193",
+            "function": "helper",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py",
+            "line": 305,
+            "inclusive_sampled_wall_seconds": 4.886398367003171,
+            "self_sampled_wall_seconds": 4.886398367003171
+          },
+          {
+            "pid": "2352193",
+            "function": "__post_init__",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/checkpoint_seals.py",
+            "line": 39,
+            "inclusive_sampled_wall_seconds": 3.527339999999999,
+            "self_sampled_wall_seconds": 3.527339999999999
+          },
+          {
+            "pid": "2352193",
+            "function": "<genexpr>",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/checkpoint_seals.py",
+            "line": 37,
+            "inclusive_sampled_wall_seconds": 3.1934673670031692,
+            "self_sampled_wall_seconds": 3.1934673670031692
+          },
+          {
+            "pid": "2352311",
+            "function": "get_tokens_unprocessed",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/pygments/lexer.py",
+            "line": 714,
+            "inclusive_sampled_wall_seconds": 3.1066724940078636,
+            "self_sampled_wall_seconds": 3.1066724940078636
+          },
+          {
+            "pid": "2352427",
+            "function": "make_analysator",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/pygments/util.py",
+            "line": 137,
+            "inclusive_sampled_wall_seconds": 2.8639234940078637,
+            "self_sampled_wall_seconds": 2.8639234940078637
+          },
+          {
+            "pid": "2352193",
+            "function": "_tail",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 364,
+            "inclusive_sampled_wall_seconds": 2.332463494007861,
+            "self_sampled_wall_seconds": 2.031952999999998
+          },
+          {
+            "pid": "2352427",
+            "function": "_optimize_charset",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_compiler.py",
+            "line": 283,
+            "inclusive_sampled_wall_seconds": 1.84567436700317,
+            "self_sampled_wall_seconds": 1.84567436700317
+          },
+          {
+            "pid": "2352311",
+            "function": "dumps",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/reduction.py",
+            "line": 51,
+            "inclusive_sampled_wall_seconds": 1.4285463670031717,
+            "self_sampled_wall_seconds": 1.4285463670031717
+          },
+          {
+            "pid": "2352193",
+            "function": "fdopen",
+            "filename": "<frozen os>",
+            "line": 1076,
+            "inclusive_sampled_wall_seconds": 1.250706000000001,
+            "self_sampled_wall_seconds": 1.250706000000001
+          },
+          {
+            "pid": "2352193",
+            "function": "raw_decode",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py",
+            "line": 361,
+            "inclusive_sampled_wall_seconds": 0.9346379999999996,
+            "self_sampled_wall_seconds": 0.9346379999999996
+          },
+          {
+            "pid": "2352193",
+            "function": "_identifier",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/typed_table.py",
+            "line": 36,
+            "inclusive_sampled_wall_seconds": 0.8173293670031718,
+            "self_sampled_wall_seconds": 0.8173293670031718
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 358,
+            "inclusive_sampled_wall_seconds": 0.7552624940078623,
+            "self_sampled_wall_seconds": 0.7552624940078623
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2504,
+            "inclusive_sampled_wall_seconds": 0.7448053670031705,
+            "self_sampled_wall_seconds": 0.7448053670031705
+          },
+          {
+            "pid": "2352311",
+            "function": "prepare_diff_line",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/toad/widgets/patch_diff.py",
+            "line": 132,
+            "inclusive_sampled_wall_seconds": 0.6040869999999998,
+            "self_sampled_wall_seconds": 0.6040869999999998
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 448,
+            "inclusive_sampled_wall_seconds": 0.5849989999999998,
+            "self_sampled_wall_seconds": 0.5849989999999998
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      },
+      {
+        "label": "up-done",
+        "video_start_seconds": 20.674111672997242,
+        "video_end_seconds": 21.83817776897922,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 1.0199999999999996,
+            "average_cpu_percent": 87.62389038910636
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0.040000000000000036,
+            "average_cpu_percent": 3.436230995651234
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0.010000000000000231,
+            "average_cpu_percent": 0.8590577489128276
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352193",
+            "function": "_store_lock",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/store_files.py",
+            "line": 38,
+            "inclusive_sampled_wall_seconds": 1.224948925970299,
+            "self_sampled_wall_seconds": 1.224948925970299
+          },
+          {
+            "pid": "2352193",
+            "function": "_identifier",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/typed_table.py",
+            "line": 36,
+            "inclusive_sampled_wall_seconds": 1.1640660959819797,
+            "self_sampled_wall_seconds": 1.1640660959819797
+          },
+          {
+            "pid": "2352311",
+            "function": "dumps",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/reduction.py",
+            "line": 51,
+            "inclusive_sampled_wall_seconds": 1.1640660959819797,
+            "self_sampled_wall_seconds": 1.1640660959819797
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 3.4921982879459392,
+            "self_sampled_wall_seconds": 1.1640660959819797
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 1.1640660959819797,
+            "self_sampled_wall_seconds": 1.1640660959819797
+          },
+          {
+            "pid": "2352193",
+            "function": "schema_objects",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/typed_table.py",
+            "line": 407,
+            "inclusive_sampled_wall_seconds": 1.1236724629851516,
+            "self_sampled_wall_seconds": 1.1236724629851516
+          },
+          {
+            "pid": "2352427",
+            "function": "_parse",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_parser.py",
+            "line": 880,
+            "inclusive_sampled_wall_seconds": 1.1145974629851523,
+            "self_sampled_wall_seconds": 1.1145974629851523
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 371,
+            "inclusive_sampled_wall_seconds": 0.8216556329968299,
+            "self_sampled_wall_seconds": 0.8216556329968299
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_list",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 298,
+            "inclusive_sampled_wall_seconds": 0.6984574629851501,
+            "self_sampled_wall_seconds": 0.6984574629851501
+          },
+          {
+            "pid": "2352193",
+            "function": "<genexpr>",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/checkpoint_seals.py",
+            "line": 37,
+            "inclusive_sampled_wall_seconds": 0.6835176329968284,
+            "self_sampled_wall_seconds": 0.6835176329968284
+          },
+          {
+            "pid": "2352193",
+            "function": "replace",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/dataclasses.py",
+            "line": 1770,
+            "inclusive_sampled_wall_seconds": 0.6374864629851515,
+            "self_sampled_wall_seconds": 0.6374864629851515
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_dict",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 413,
+            "inclusive_sampled_wall_seconds": 6.820969309898231,
+            "self_sampled_wall_seconds": 0.6330746329968306
+          },
+          {
+            "pid": "2352193",
+            "function": "__new__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 635,
+            "inclusive_sampled_wall_seconds": 0.610287462985152,
+            "self_sampled_wall_seconds": 0.610287462985152
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2503,
+            "inclusive_sampled_wall_seconds": 0.5537786329968277,
+            "self_sampled_wall_seconds": 0.5537786329968277
+          },
+          {
+            "pid": "2352193",
+            "function": "_value_representation",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 164,
+            "inclusive_sampled_wall_seconds": 0.43854299999999924,
+            "self_sampled_wall_seconds": 0.43854299999999924
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2508,
+            "inclusive_sampled_wall_seconds": 0.3413084629851504,
+            "self_sampled_wall_seconds": 0.3413084629851504
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2504,
+            "inclusive_sampled_wall_seconds": 0.31579263299682836,
+            "self_sampled_wall_seconds": 0.31579263299682836
+          },
+          {
+            "pid": "2352193",
+            "function": "_check_type",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/css/model.py",
+            "line": 72,
+            "inclusive_sampled_wall_seconds": 0.26187599999999733,
+            "self_sampled_wall_seconds": 0.26187599999999733
+          },
+          {
+            "pid": "2352193",
+            "function": "encode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 240,
+            "inclusive_sampled_wall_seconds": 0.15431600000000145,
+            "self_sampled_wall_seconds": 0.15431600000000145
+          },
+          {
+            "pid": "2352193",
+            "function": "_get_dispatch_methods",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/message_pump.py",
+            "line": 799,
+            "inclusive_sampled_wall_seconds": 0.06718400000000102,
+            "self_sampled_wall_seconds": 0.06718400000000102
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      },
+      {
+        "label": "down",
+        "video_start_seconds": 21.83817776897922,
+        "video_end_seconds": 27.020981743000448,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 5.0,
+            "average_cpu_percent": 96.47287501249265
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0.1,
+            "average_cpu_percent": 1.9294575002498533
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0.020000000000000018,
+            "average_cpu_percent": 0.38589150004997097
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0.019999999999999907,
+            "average_cpu_percent": 0.38589150004996886
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0.010000000000000002,
+            "average_cpu_percent": 0.19294575002498535
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0.009999999999999898,
+            "average_cpu_percent": 0.19294575002498335
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352193",
+            "function": "schema_objects",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/typed_table.py",
+            "line": 407,
+            "inclusive_sampled_wall_seconds": 5.182803974021226,
+            "self_sampled_wall_seconds": 5.182803974021226
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 15.548411922063679,
+            "self_sampled_wall_seconds": 5.182803974021226
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 5.182803974021226,
+            "self_sampled_wall_seconds": 5.182803974021226
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 359,
+            "inclusive_sampled_wall_seconds": 4.981788437006379,
+            "self_sampled_wall_seconds": 4.981788437006379
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_list",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 292,
+            "inclusive_sampled_wall_seconds": 4.719605437006376,
+            "self_sampled_wall_seconds": 4.719605437006376
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 428,
+            "inclusive_sampled_wall_seconds": 4.513382437006378,
+            "self_sampled_wall_seconds": 4.513382437006378
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 358,
+            "inclusive_sampled_wall_seconds": 3.8935624370063735,
+            "self_sampled_wall_seconds": 3.8935624370063735
+          },
+          {
+            "pid": "2352193",
+            "function": "get_args",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2529,
+            "inclusive_sampled_wall_seconds": 3.868177437006377,
+            "self_sampled_wall_seconds": 3.868177437006377
+          },
+          {
+            "pid": "2352311",
+            "function": "__getitem__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_parser.py",
+            "line": 171,
+            "inclusive_sampled_wall_seconds": 3.820270437006375,
+            "self_sampled_wall_seconds": 3.820270437006375
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 419,
+            "inclusive_sampled_wall_seconds": 3.744365437006376,
+            "self_sampled_wall_seconds": 3.744365437006376
+          },
+          {
+            "pid": "2352427",
+            "function": "_parse",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_parser.py",
+            "line": 880,
+            "inclusive_sampled_wall_seconds": 3.3875745370148493,
+            "self_sampled_wall_seconds": 3.3875745370148493
+          },
+          {
+            "pid": "2352193",
+            "function": "run",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/_writer_thread.py",
+            "line": 74,
+            "inclusive_sampled_wall_seconds": 2.9955164370063763,
+            "self_sampled_wall_seconds": 2.9955164370063763
+          },
+          {
+            "pid": "2352193",
+            "function": "materialize",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/toad/work_preparation.py",
+            "line": 76,
+            "inclusive_sampled_wall_seconds": 2.9445879999999995,
+            "self_sampled_wall_seconds": 2.9445879999999995
+          },
+          {
+            "pid": "2352427",
+            "function": "get",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/queues.py",
+            "line": 120,
+            "inclusive_sampled_wall_seconds": 1.7952294370063768,
+            "self_sampled_wall_seconds": 1.7952294370063768
+          },
+          {
+            "pid": "2352193",
+            "function": "_store_lock",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/store_files.py",
+            "line": 38,
+            "inclusive_sampled_wall_seconds": 1.7872610740297006,
+            "self_sampled_wall_seconds": 1.7872610740297006
+          },
+          {
+            "pid": "2352193",
+            "function": "__init__",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/private_registry_guard.py",
+            "line": 95,
+            "inclusive_sampled_wall_seconds": 1.4453724370063767,
+            "self_sampled_wall_seconds": 1.4453724370063767
+          },
+          {
+            "pid": "2352311",
+            "function": "dumps",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/reduction.py",
+            "line": 51,
+            "inclusive_sampled_wall_seconds": 1.3625335370148512,
+            "self_sampled_wall_seconds": 1.3625335370148512
+          },
+          {
+            "pid": "2352193",
+            "function": "__new__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 635,
+            "inclusive_sampled_wall_seconds": 1.1538585370148482,
+            "self_sampled_wall_seconds": 1.1538585370148482
+          },
+          {
+            "pid": "2352193",
+            "function": "verify_before_read_unlocked",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/wire_log.py",
+            "line": 458,
+            "inclusive_sampled_wall_seconds": 1.1765710740296988,
+            "self_sampled_wall_seconds": 1.1166885370148485
+          },
+          {
+            "pid": "2352193",
+            "function": "_get_dispatch_methods",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/message_pump.py",
+            "line": 811,
+            "inclusive_sampled_wall_seconds": 0.47141500000000036,
+            "self_sampled_wall_seconds": 0.47141500000000036
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      },
+      {
+        "label": "down-done",
+        "video_start_seconds": 27.020981743000448,
+        "video_end_seconds": 28.17556843798957,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 0.9200000000000017,
+            "average_cpu_percent": 79.68219311661743
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.8661107947458409
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.8661107947458409
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352193",
+            "function": "get_args",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2529,
+            "inclusive_sampled_wall_seconds": 1.1545866949891206,
+            "self_sampled_wall_seconds": 1.1545866949891206
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 419,
+            "inclusive_sampled_wall_seconds": 1.1545866949891206,
+            "self_sampled_wall_seconds": 1.1545866949891206
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 358,
+            "inclusive_sampled_wall_seconds": 1.1545866949891206,
+            "self_sampled_wall_seconds": 1.1545866949891206
+          },
+          {
+            "pid": "2352311",
+            "function": "__getitem__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_parser.py",
+            "line": 171,
+            "inclusive_sampled_wall_seconds": 1.1545866949891206,
+            "self_sampled_wall_seconds": 1.1545866949891206
+          },
+          {
+            "pid": "2352427",
+            "function": "get",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/queues.py",
+            "line": 120,
+            "inclusive_sampled_wall_seconds": 1.1545866949891206,
+            "self_sampled_wall_seconds": 1.1545866949891206
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 3.4637600849673618,
+            "self_sampled_wall_seconds": 1.1545866949891206
+          },
+          {
+            "pid": "2352193",
+            "function": "run",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/_writer_thread.py",
+            "line": 74,
+            "inclusive_sampled_wall_seconds": 1.1545866949891206,
+            "self_sampled_wall_seconds": 1.1545866949891206
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 1.1545866949891206,
+            "self_sampled_wall_seconds": 1.1545866949891206
+          },
+          {
+            "pid": "2352193",
+            "function": "schema_objects",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/typed_table.py",
+            "line": 407,
+            "inclusive_sampled_wall_seconds": 1.1339235629936226,
+            "self_sampled_wall_seconds": 1.1339235629936226
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 362,
+            "inclusive_sampled_wall_seconds": 1.0730472639909934,
+            "self_sampled_wall_seconds": 1.0730472639909934
+          },
+          {
+            "pid": "2352193",
+            "function": "__str__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 257,
+            "inclusive_sampled_wall_seconds": 0.8645741319954965,
+            "self_sampled_wall_seconds": 0.8645741319954965
+          },
+          {
+            "pid": "2352193",
+            "function": "_run",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py",
+            "line": 94,
+            "inclusive_sampled_wall_seconds": 1.1545866949891206,
+            "self_sampled_wall_seconds": 0.7969911319954974
+          },
+          {
+            "pid": "2352193",
+            "function": "dump",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/__init__.py",
+            "line": 182,
+            "inclusive_sampled_wall_seconds": 0.6876391319954962,
+            "self_sampled_wall_seconds": 0.6876391319954962
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 359,
+            "inclusive_sampled_wall_seconds": 0.6700485629936246,
+            "self_sampled_wall_seconds": 0.6700485629936246
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 428,
+            "inclusive_sampled_wall_seconds": 0.5660775629936232,
+            "self_sampled_wall_seconds": 0.5660775629936232
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_list",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 292,
+            "inclusive_sampled_wall_seconds": 0.4059605629936236,
+            "self_sampled_wall_seconds": 0.4059605629936236
+          },
+          {
+            "pid": "2352193",
+            "function": "__init__",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/private_registry_guard.py",
+            "line": 95,
+            "inclusive_sampled_wall_seconds": 0.2900125629936241,
+            "self_sampled_wall_seconds": 0.2900125629936241
+          },
+          {
+            "pid": "2352193",
+            "function": "invoke",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/_callback.py",
+            "line": 62,
+            "inclusive_sampled_wall_seconds": 0.14995899999999907,
+            "self_sampled_wall_seconds": 0.14995899999999907
+          },
+          {
+            "pid": "2352193",
+            "function": "has_any_rules",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/css/styles.py",
+            "line": 1527,
+            "inclusive_sampled_wall_seconds": 0.14092600000000033,
+            "self_sampled_wall_seconds": 0.14092600000000033
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_list",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 320,
+            "inclusive_sampled_wall_seconds": 0.06098700000000079,
+            "self_sampled_wall_seconds": 0.06098700000000079
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      },
+      {
+        "label": "reverse",
+        "video_start_seconds": 28.17556843798957,
+        "video_end_seconds": 33.375565982976696,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 4.84,
+            "average_cpu_percent": 93.07696702022157
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0.08999999999999997,
+            "average_cpu_percent": 1.7307700478966817
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.1923077830996315
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0.009999999999999787,
+            "average_cpu_percent": 0.19230778309962726
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 358,
+            "inclusive_sampled_wall_seconds": 8.029237544987126,
+            "self_sampled_wall_seconds": 8.029237544987126
+          },
+          {
+            "pid": "2352193",
+            "function": "materialize",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/toad/work_preparation.py",
+            "line": 76,
+            "inclusive_sampled_wall_seconds": 5.5139993539652465,
+            "self_sampled_wall_seconds": 5.5139993539652465
+          },
+          {
+            "pid": "2352311",
+            "function": "__getitem__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_parser.py",
+            "line": 171,
+            "inclusive_sampled_wall_seconds": 5.199997544987127,
+            "self_sampled_wall_seconds": 5.199997544987127
+          },
+          {
+            "pid": "2352427",
+            "function": "get",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/queues.py",
+            "line": 120,
+            "inclusive_sampled_wall_seconds": 5.199997544987127,
+            "self_sampled_wall_seconds": 5.199997544987127
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 15.599992634961382,
+            "self_sampled_wall_seconds": 5.199997544987127
+          },
+          {
+            "pid": "2352193",
+            "function": "run",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/_writer_thread.py",
+            "line": 74,
+            "inclusive_sampled_wall_seconds": 5.199997544987127,
+            "self_sampled_wall_seconds": 5.199997544987127
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 5.199997544987127,
+            "self_sampled_wall_seconds": 5.199997544987127
+          },
+          {
+            "pid": "2352193",
+            "function": "dump",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/__init__.py",
+            "line": 182,
+            "inclusive_sampled_wall_seconds": 5.169575544987129,
+            "self_sampled_wall_seconds": 5.169575544987129
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2508,
+            "inclusive_sampled_wall_seconds": 4.663440676982624,
+            "self_sampled_wall_seconds": 4.663440676982624
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode_row",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/typed_table.py",
+            "line": 321,
+            "inclusive_sampled_wall_seconds": 3.851086676982625,
+            "self_sampled_wall_seconds": 3.851086676982625
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 359,
+            "inclusive_sampled_wall_seconds": 2.976093000000006,
+            "self_sampled_wall_seconds": 2.976093000000006
+          },
+          {
+            "pid": "2352193",
+            "function": "mkdir",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 1011,
+            "inclusive_sampled_wall_seconds": 2.9304866769826248,
+            "self_sampled_wall_seconds": 2.9304866769826248
+          },
+          {
+            "pid": "2352193",
+            "function": "__str__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 257,
+            "inclusive_sampled_wall_seconds": 1.431711868004502,
+            "self_sampled_wall_seconds": 1.431711868004502
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2502,
+            "inclusive_sampled_wall_seconds": 1.3205910000000003,
+            "self_sampled_wall_seconds": 1.3205910000000003
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 393,
+            "inclusive_sampled_wall_seconds": 1.2141449999999985,
+            "self_sampled_wall_seconds": 1.2141449999999985
+          },
+          {
+            "pid": "2352193",
+            "function": "<genexpr>",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/declared_family.py",
+            "line": 125,
+            "inclusive_sampled_wall_seconds": 0.9489198680045021,
+            "self_sampled_wall_seconds": 0.9489198680045021
+          },
+          {
+            "pid": "2352193",
+            "function": "decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/declared_family.py",
+            "line": 112,
+            "inclusive_sampled_wall_seconds": 0.9357426769826276,
+            "self_sampled_wall_seconds": 0.9357426769826276
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 362,
+            "inclusive_sampled_wall_seconds": 0.7590777360090044,
+            "self_sampled_wall_seconds": 0.7590777360090044
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 419,
+            "inclusive_sampled_wall_seconds": 0.6749338680045014,
+            "self_sampled_wall_seconds": 0.6749338680045014
+          },
+          {
+            "pid": "2352193",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 0.6106569999999998,
+            "self_sampled_wall_seconds": 0.6106569999999998
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      },
+      {
+        "label": "reverse-done",
+        "video_start_seconds": 33.375565982976696,
+        "video_end_seconds": 34.55364776699571,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 1.1199999999999974,
+            "average_cpu_percent": 95.06980034774233
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.848837503104845
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352193",
+            "function": "materialize",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/toad/work_preparation.py",
+            "line": 76,
+            "inclusive_sampled_wall_seconds": 2.315347107036388,
+            "self_sampled_wall_seconds": 2.315347107036388
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2508,
+            "inclusive_sampled_wall_seconds": 1.1780817840190139,
+            "self_sampled_wall_seconds": 1.1780817840190139
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode_row",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/typed_table.py",
+            "line": 321,
+            "inclusive_sampled_wall_seconds": 1.1780817840190139,
+            "self_sampled_wall_seconds": 1.1780817840190139
+          },
+          {
+            "pid": "2352193",
+            "function": "decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/declared_family.py",
+            "line": 112,
+            "inclusive_sampled_wall_seconds": 1.1780817840190139,
+            "self_sampled_wall_seconds": 1.1780817840190139
+          },
+          {
+            "pid": "2352311",
+            "function": "__getitem__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_parser.py",
+            "line": 171,
+            "inclusive_sampled_wall_seconds": 1.1780817840190139,
+            "self_sampled_wall_seconds": 1.1780817840190139
+          },
+          {
+            "pid": "2352427",
+            "function": "get",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/queues.py",
+            "line": 120,
+            "inclusive_sampled_wall_seconds": 1.1780817840190139,
+            "self_sampled_wall_seconds": 1.1780817840190139
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 3.5342453520570416,
+            "self_sampled_wall_seconds": 1.1780817840190139
+          },
+          {
+            "pid": "2352193",
+            "function": "run",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/_writer_thread.py",
+            "line": 74,
+            "inclusive_sampled_wall_seconds": 1.1780817840190139,
+            "self_sampled_wall_seconds": 1.1780817840190139
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 1.1780817840190139,
+            "self_sampled_wall_seconds": 1.1780817840190139
+          },
+          {
+            "pid": "2352193",
+            "function": "mkdir",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 1011,
+            "inclusive_sampled_wall_seconds": 0.8900553230173784,
+            "self_sampled_wall_seconds": 0.8900553230173784
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 358,
+            "inclusive_sampled_wall_seconds": 0.7215433230173787,
+            "self_sampled_wall_seconds": 0.7215433230173787
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_dict",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 400,
+            "inclusive_sampled_wall_seconds": 0.7050874610016393,
+            "self_sampled_wall_seconds": 0.7050874610016393
+          },
+          {
+            "pid": "2352193",
+            "function": "process_selector_events",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/linux_driver.py",
+            "line": 439,
+            "inclusive_sampled_wall_seconds": 0.6254844610016406,
+            "self_sampled_wall_seconds": 0.6254844610016406
+          },
+          {
+            "pid": "2352193",
+            "function": "_get_box_model",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/widget.py",
+            "line": 2018,
+            "inclusive_sampled_wall_seconds": 0.5659244610016358,
+            "self_sampled_wall_seconds": 0.5659244610016358
+          },
+          {
+            "pid": "2352193",
+            "function": "__enter__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py",
+            "line": 139,
+            "inclusive_sampled_wall_seconds": 0.4412904610016355,
+            "self_sampled_wall_seconds": 0.4412904610016355
+          },
+          {
+            "pid": "2352193",
+            "function": "dump",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/__init__.py",
+            "line": 182,
+            "inclusive_sampled_wall_seconds": 0.38283632301737214,
+            "self_sampled_wall_seconds": 0.38283632301737214
+          },
+          {
+            "pid": "2352193",
+            "function": "__init__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 154,
+            "inclusive_sampled_wall_seconds": 0.2880264610016354,
+            "self_sampled_wall_seconds": 0.2880264610016354
+          },
+          {
+            "pid": "2352193",
+            "function": "__get__",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/css/_style_properties.py",
+            "line": 827,
+            "inclusive_sampled_wall_seconds": 0.18120399999999393,
+            "self_sampled_wall_seconds": 0.1521979999999985
+          },
+          {
+            "pid": "2352193",
+            "function": "__new__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/fractions.py",
+            "line": 240,
+            "inclusive_sampled_wall_seconds": 0.1336340000000007,
+            "self_sampled_wall_seconds": 0.1336340000000007
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_list",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 319,
+            "inclusive_sampled_wall_seconds": 0.07912900000000178,
+            "self_sampled_wall_seconds": 0.07912900000000178
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      },
+      {
+        "label": "end",
+        "video_start_seconds": 34.55364776699571,
+        "video_end_seconds": 36.708915696974145,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 1.5300000000000011,
+            "average_cpu_percent": 70.98885380878419
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.4639794366587203
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352193",
+            "function": "__init__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 154,
+            "inclusive_sampled_wall_seconds": 2.155267929978436,
+            "self_sampled_wall_seconds": 2.155267929978436
+          },
+          {
+            "pid": "2352193",
+            "function": "<genexpr>",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 421,
+            "inclusive_sampled_wall_seconds": 2.155267929978436,
+            "self_sampled_wall_seconds": 2.155267929978436
+          },
+          {
+            "pid": "2352311",
+            "function": "__getitem__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_parser.py",
+            "line": 171,
+            "inclusive_sampled_wall_seconds": 2.155267929978436,
+            "self_sampled_wall_seconds": 2.155267929978436
+          },
+          {
+            "pid": "2352427",
+            "function": "get",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/queues.py",
+            "line": 120,
+            "inclusive_sampled_wall_seconds": 2.155267929978436,
+            "self_sampled_wall_seconds": 2.155267929978436
+          },
+          {
+            "pid": "2352193",
+            "function": "process_selector_events",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/linux_driver.py",
+            "line": 439,
+            "inclusive_sampled_wall_seconds": 2.155267929978436,
+            "self_sampled_wall_seconds": 2.155267929978436
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 6.465803789935308,
+            "self_sampled_wall_seconds": 2.155267929978436
+          },
+          {
+            "pid": "2352193",
+            "function": "run",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/_writer_thread.py",
+            "line": 74,
+            "inclusive_sampled_wall_seconds": 2.155267929978436,
+            "self_sampled_wall_seconds": 2.155267929978436
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 2.155267929978436,
+            "self_sampled_wall_seconds": 2.155267929978436
+          },
+          {
+            "pid": "2352193",
+            "function": "__init__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 137,
+            "inclusive_sampled_wall_seconds": 1.778143,
+            "self_sampled_wall_seconds": 1.778143
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_list",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 304,
+            "inclusive_sampled_wall_seconds": 1.761319390980077,
+            "self_sampled_wall_seconds": 1.761319390980077
+          },
+          {
+            "pid": "2352193",
+            "function": "materialize",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/toad/work_preparation.py",
+            "line": 76,
+            "inclusive_sampled_wall_seconds": 1.7405775389983589,
+            "self_sampled_wall_seconds": 1.7405775389983589
+          },
+          {
+            "pid": "2352193",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 1.5025599999999955,
+            "self_sampled_wall_seconds": 1.5025599999999955
+          },
+          {
+            "pid": "2352193",
+            "function": "isdir",
+            "filename": "<frozen genericpath>",
+            "line": 51,
+            "inclusive_sampled_wall_seconds": 1.4536933909800709,
+            "self_sampled_wall_seconds": 1.4536933909800709
+          },
+          {
+            "pid": "2352193",
+            "function": "open",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 771,
+            "inclusive_sampled_wall_seconds": 1.4411350000000027,
+            "self_sampled_wall_seconds": 1.4411350000000027
+          },
+          {
+            "pid": "2352193",
+            "function": "_get_box_model",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/widget.py",
+            "line": 2018,
+            "inclusive_sampled_wall_seconds": 0.8977165389983597,
+            "self_sampled_wall_seconds": 0.8977165389983597
+          },
+          {
+            "pid": "2352193",
+            "function": "decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/declared_family.py",
+            "line": 112,
+            "inclusive_sampled_wall_seconds": 0.6344625389983634,
+            "self_sampled_wall_seconds": 0.6344625389983634
+          },
+          {
+            "pid": "2352193",
+            "function": "displayed_children",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/dom.py",
+            "line": 452,
+            "inclusive_sampled_wall_seconds": 0.556986000000002,
+            "self_sampled_wall_seconds": 0.556986000000002
+          },
+          {
+            "pid": "2352193",
+            "function": "_replace",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/dataclasses.py",
+            "line": 1794,
+            "inclusive_sampled_wall_seconds": 0.5063033909800723,
+            "self_sampled_wall_seconds": 0.5063033909800723
+          },
+          {
+            "pid": "2352193",
+            "function": "source",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/coordination_tables/assignments.py",
+            "line": 41,
+            "inclusive_sampled_wall_seconds": 0.44046800000000275,
+            "self_sampled_wall_seconds": 0.44046800000000275
+          },
+          {
+            "pid": "2352193",
+            "function": "_store_lock",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/store_files.py",
+            "line": 38,
+            "inclusive_sampled_wall_seconds": 0.39633239098007067,
+            "self_sampled_wall_seconds": 0.39633239098007067
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      },
+      {
+        "label": "idle",
+        "video_start_seconds": 36.708915696974145,
+        "video_end_seconds": 52.89328726497479,
+        "cpu": [
+          {
+            "pid": "2352193",
+            "command": "toad                                                                                                                                                                                                                                                                                                                                                                                        ",
+            "cpu_seconds": 9.349999999999998,
+            "average_cpu_percent": 57.771782862960194
+          },
+          {
+            "pid": "2352265",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork ",
+            "cpu_seconds": 0.040000000000000036,
+            "average_cpu_percent": 0.24715201224795835
+          },
+          {
+            "pid": "2352272",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -m agent_comms.acp ",
+            "cpu_seconds": 0.020000000000000018,
+            "average_cpu_percent": 0.12357600612397918
+          },
+          {
+            "pid": "2352192",
+            "command": "st -e toad-comms nra-architecture ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.06178800306198959
+          },
+          {
+            "pid": "2352311",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=21) --multiprocessing-fork ",
+            "cpu_seconds": 0.010000000000000009,
+            "average_cpu_percent": 0.06178800306198959
+          },
+          {
+            "pid": "2352228",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) ",
+            "cpu_seconds": 0.010000000000000002,
+            "average_cpu_percent": 0.06178800306198954
+          },
+          {
+            "pid": "2352427",
+            "command": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=25) --multiprocessing-fork ",
+            "cpu_seconds": 0,
+            "average_cpu_percent": 0.0
+          }
+        ],
+        "hot_sampled_frames": [
+          {
+            "pid": "2352311",
+            "function": "__getitem__",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/re/_parser.py",
+            "line": 171,
+            "inclusive_sampled_wall_seconds": 16.184371568000643,
+            "self_sampled_wall_seconds": 16.184371568000643
+          },
+          {
+            "pid": "2352427",
+            "function": "get",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/queues.py",
+            "line": 120,
+            "inclusive_sampled_wall_seconds": 16.184371568000643,
+            "self_sampled_wall_seconds": 16.184371568000643
+          },
+          {
+            "pid": "2352193",
+            "function": "process_selector_events",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/linux_driver.py",
+            "line": 439,
+            "inclusive_sampled_wall_seconds": 16.184371568000643,
+            "self_sampled_wall_seconds": 16.184371568000643
+          },
+          {
+            "pid": "2352272",
+            "function": "__subclasscheck__",
+            "filename": "<frozen abc>",
+            "line": 123,
+            "inclusive_sampled_wall_seconds": 48.55311470400193,
+            "self_sampled_wall_seconds": 16.184371568000643
+          },
+          {
+            "pid": "2352193",
+            "function": "run",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/textual/drivers/_writer_thread.py",
+            "line": 74,
+            "inclusive_sampled_wall_seconds": 16.184371568000643,
+            "self_sampled_wall_seconds": 16.184371568000643
+          },
+          {
+            "pid": "2352265",
+            "function": "<module>",
+            "filename": "<string>",
+            "line": 0,
+            "inclusive_sampled_wall_seconds": 16.184371568000643,
+            "self_sampled_wall_seconds": 16.184371568000643
+          },
+          {
+            "pid": "2352193",
+            "function": "_iterencode_list",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/encoder.py",
+            "line": 281,
+            "inclusive_sampled_wall_seconds": 15.763735958980718,
+            "self_sampled_wall_seconds": 15.763735958980718
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 358,
+            "inclusive_sampled_wall_seconds": 14.531377526981373,
+            "self_sampled_wall_seconds": 14.531377526981373
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 447,
+            "inclusive_sampled_wall_seconds": 6.592240958980717,
+            "self_sampled_wall_seconds": 6.592240958980717
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 425,
+            "inclusive_sampled_wall_seconds": 5.873524999999994,
+            "self_sampled_wall_seconds": 5.873524999999994
+          },
+          {
+            "pid": "2352193",
+            "function": "encode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 243,
+            "inclusive_sampled_wall_seconds": 5.474387999999998,
+            "self_sampled_wall_seconds": 5.474387999999998
+          },
+          {
+            "pid": "2352193",
+            "function": "_format_parsed_parts",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 264,
+            "inclusive_sampled_wall_seconds": 5.450804958980719,
+            "self_sampled_wall_seconds": 5.450804958980719
+          },
+          {
+            "pid": "2352193",
+            "function": "mkdir",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 1011,
+            "inclusive_sampled_wall_seconds": 4.601465609019925,
+            "self_sampled_wall_seconds": 4.601465609019925
+          },
+          {
+            "pid": "2352193",
+            "function": "get_origin",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2503,
+            "inclusive_sampled_wall_seconds": 4.458462999999995,
+            "self_sampled_wall_seconds": 4.458462999999995
+          },
+          {
+            "pid": "2352193",
+            "function": "is_dataclass",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/dataclasses.py",
+            "line": 1472,
+            "inclusive_sampled_wall_seconds": 4.376750000000001,
+            "self_sampled_wall_seconds": 4.376750000000001
+          },
+          {
+            "pid": "2352193",
+            "function": "_store_lock",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/store_files.py",
+            "line": 38,
+            "inclusive_sampled_wall_seconds": 4.208392609019924,
+            "self_sampled_wall_seconds": 4.208392609019924
+          },
+          {
+            "pid": "2352193",
+            "function": "_projections",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 359,
+            "inclusive_sampled_wall_seconds": 4.047275958980713,
+            "self_sampled_wall_seconds": 4.047275958980713
+          },
+          {
+            "pid": "2352193",
+            "function": "get_args",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/typing.py",
+            "line": 2535,
+            "inclusive_sampled_wall_seconds": 3.545414568000645,
+            "self_sampled_wall_seconds": 3.545414568000645
+          },
+          {
+            "pid": "2352193",
+            "function": "open",
+            "filename": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py",
+            "line": 771,
+            "inclusive_sampled_wall_seconds": 3.4857300000000038,
+            "self_sampled_wall_seconds": 3.481830000000002
+          },
+          {
+            "pid": "2352193",
+            "function": "_decode",
+            "filename": "/home/ts/.local/share/agent-comms/runtime-canonical-paint-admission-20260930/lib/python3.14/site-packages/agent_comms/field_codec.py",
+            "line": 407,
+            "inclusive_sampled_wall_seconds": 5.911266958980711,
+            "self_sampled_wall_seconds": 3.4117279589807126
+          }
+        ],
+        "visible_stall_assessment": "unreviewed; correlate with phase video and actual frames"
+      }
+    ],
+    "sample_count": 1041,
+    "sampling_errors": 0,
+    "sampling_quality": "no reported sampling errors"
+  },
+  "review_intervals": [
+    {
+      "label": "main",
+      "start": 0,
+      "seconds": 3
+    },
+    {
+      "label": "down",
+      "start": 21.83817776897922,
+      "seconds": 3
+    },
+    {
+      "label": "reverse",
+      "start": 28.17556843798957,
+      "seconds": 3
+    },
+    {
+      "label": "end",
+      "start": 34.55364776699571,
+      "seconds": 2.155267929978436
+    },
+    {
+      "label": "idle",
+      "start": 36.708915696974145,
+      "seconds": 3
+    }
+  ],
+  "artifacts": {
+    "terminal.mp4": {
+      "bytes": 6761806,
+      "sha256": "7929b7d35d004899248c6944411ea9a7b44b105ade5cd7c1302bdcaef75593a1"
+    },
+    "before.png": {
+      "bytes": 129848,
+      "sha256": "49c87f9bc7e0eead0855c175a681fff674a5313e2621b7b223388bc5268d3055"
+    },
+    "after.png": {
+      "bytes": 69128,
+      "sha256": "a1455e965d3cc674aecb391285c3604669596353cd1c4b35c148efe8e172b4d8"
+    },
+    "before-state.json": {
+      "bytes": 917629,
+      "sha256": "b9643ce16a70eaaad53fc0a3700cc5c2d08e625aef64220e45362f8c202eaffc"
+    },
+    "before-state.pickle": {
+      "bytes": 337842,
+      "sha256": "3349233341eb188698636baaefd185da256834b33e814c5da636514dc1708805"
+    },
+    "before-screen.svg": {
+      "bytes": 76042,
+      "sha256": "ca3b33616996514b0d7c55390c53f8d83bf2f1e2de712a704f56a71ec561727b"
+    },
+    "before-remote.py": {
+      "bytes": 834,
+      "sha256": "be982489d03de91ca23377b99f8ac49781822e000a2e9e22c46cb2563edb7b86"
+    },
+    "before-state-metadata.json": {
+      "bytes": 917602,
+      "sha256": "b1beac678d9c79aff0bf77e0c0e7659ae076b702edfecc997fca37f5441a0b00"
+    },
+    "before-manifest.json": {
+      "bytes": 555,
+      "sha256": "ede178cadb1c6a5a2e1df9e305bee487bea6b7ab5bcdb57e91afd41edfa36f20"
+    },
+    "before-screen.json": {
+      "bytes": 168,
+      "sha256": "2befdf30a6e09e0bde7811924f596d382ff87dd1c4ac46ef4e1118dd2dae4e07"
+    },
+    "before-capture.log": {
+      "bytes": 100,
+      "sha256": "b8592a21a8a870f13cd253374685ff991e3f0a85cd0cc77ec463072a69c4582b"
+    },
+    "after-screen.svg": {
+      "bytes": 58982,
+      "sha256": "29bcbb0e3b2f4ba83f987b948b04ce56b16ad175e8325ae1730c74e2c9ded342"
+    },
+    "after-state-metadata.json": {
+      "bytes": 762363,
+      "sha256": "c654afca6eb3bb6bc0967497ec61327166600467691f774e0c6b4008f7b0462d"
+    },
+    "after-remote.py": {
+      "bytes": 832,
+      "sha256": "efe855c1e69c22f1268df4ed3276d3b575c1be97caafb2ef9c31de4a02ec7b77"
+    },
+    "after-manifest.json": {
+      "bytes": 553,
+      "sha256": "bd7677ceaef21ff2b0951b40abfd1e6217dd5a78181d7f417ccd5696f3772aad"
+    },
+    "after-capture.log": {
+      "bytes": 99,
+      "sha256": "164c5d91af9a8b101549d78d8ffb2aceba60e9f66fe49014769041c70a10d884"
+    },
+    "after-state.json": {
+      "bytes": 762390,
+      "sha256": "e0e53626075f4619ba48e89e43204c8e6a1110359e93b9687e7c0a44b25dd7f6"
+    },
+    "after-state.pickle": {
+      "bytes": 319717,
+      "sha256": "d5649d63abdf288c19e172a6af2ce57e4dd989e84616361d3422aa23f8a9fb0f"
+    },
+    "after-screen.json": {
+      "bytes": 167,
+      "sha256": "1fa10db035683557d50d216ef61e0cabc6e3d8c63fb1ad1cc94acab7b3a1e040"
+    },
+    "phase-idle-done-remote.py": {
+      "bytes": 445,
+      "sha256": "3bada9993e9f62940b1b80e9f41f1591e03c240e8eb52e606ea19bd074c831df"
+    },
+    "phase-reverse.png": {
+      "bytes": 106890,
+      "sha256": "39076c5f0947fe40a42a58fc22a3e450f87d7fe7bb6ef785d7b8b3726b4c45b1"
+    },
+    "phase-focused-capture.log": {
+      "bytes": 107,
+      "sha256": "5374309412e6c5520e1a2aeb233ce592fe4e7f16383ac02b80ea18c05d307dce"
+    },
+    "phase-reverse-done.png": {
+      "bytes": 110244,
+      "sha256": "f7fdf6e0456eb8318673367fc60ebf6c63f669aac57ecb790e986e631c0421ed"
+    },
+    "phase-down-done.png": {
+      "bytes": 97055,
+      "sha256": "9ff30c82ba9e3fc46137cbad1e4fd9aa2e8f9f14efc2aeb7b6259a052be451a6"
+    },
+    "phase-reverse-manifest.json": {
+      "bytes": 450,
+      "sha256": "f8be309091930f81dfcdb225abf88ade279629849f2d1c38a7f89bfa4e373ce9"
+    },
+    "phase-reverse-done-state.pickle": {
+      "bytes": 446186,
+      "sha256": "fa2da3cc7cfb5d417c5a9d925e1f2dc011d260945493e3bcfabb3935a1155a48"
+    },
+    "phase-idle-done.png": {
+      "bytes": 69110,
+      "sha256": "d4178e35da1020c32a0182b5d5664928919ea0771f4dc5459c351c8cee261fc1"
+    },
+    "phase-down-state.json": {
+      "bytes": 1191185,
+      "sha256": "235fa0ad91795e6cc69cdfac5efb81323b4437046d6ca858a0081e2639c9252c"
+    },
+    "phase-up-done.png": {
+      "bytes": 108091,
+      "sha256": "56de526d63a7de1916af7f42a705955683a25516e2f365651b702c0fbed17fbc"
+    },
+    "phase-down-done-state-metadata.json": {
+      "bytes": 1427923,
+      "sha256": "fb3ae027b1ca3c7a50a0c728ea74b2ab88300558101da4291cf47d88616d7f89"
+    },
+    "phase-focused-manifest.json": {
+      "bytes": 450,
+      "sha256": "4a15d5e7d83a780036bde031273050a699bff619a86482757dfce80f3534e4dd"
+    },
+    "phase-up-manifest.json": {
+      "bytes": 445,
+      "sha256": "9e3af2676a298e1deb4ca49c0461c2251e59eec2fba3053e82bba35abd9ec6d9"
+    },
+    "phase-reverse-done-remote.py": {
+      "bytes": 448,
+      "sha256": "7a7334b0e2dc9fdc5192e0c55ad8bc929872bbf8080e96479f1c63abb2e86a85"
+    },
+    "phase-down-done-state.json": {
+      "bytes": 1427950,
+      "sha256": "8678ca689ba3f1932d927239c5b71696a9ff05df53e575285a1ff43773daa2d5"
+    },
+    "phase-end-state.pickle": {
+      "bytes": 475915,
+      "sha256": "88842fbfd72dfe0dd3935e4377d4e69e85d0f6371a7eea5a5a806d82df9f41f4"
+    },
+    "phase-down-state-metadata.json": {
+      "bytes": 1191158,
+      "sha256": "03ea4ae467f6cf8f674429c9e1f644065438f818b1cf0ea3239fe3c000678321"
+    },
+    "phase-end.png": {
+      "bytes": 110236,
+      "sha256": "a333c712ad7d73b00136102228a23f1cf16c669903b6595735d8d40e2a59c437"
+    },
+    "phase-up-state.json": {
+      "bytes": 819185,
+      "sha256": "e050d165daeff292b38824bb4db5199f6966f2b1f47e6fc21c0dac9356edd756"
+    },
+    "phase-end-manifest.json": {
+      "bytes": 446,
+      "sha256": "cb6d8bd308e72f0e37b58142a013399ad03b80a8bb381ae9546e16a3be8ea839"
+    },
+    "phase-up-done-manifest.json": {
+      "bytes": 450,
+      "sha256": "a685f1a3c300c05264aab9b7a987564feaf8a1bceebf4ed6a4e8f5bdfa928018"
+    },
+    "phase-down-done-manifest.json": {
+      "bytes": 452,
+      "sha256": "08eb74a770f369033d31a9df12b7dcf2c6260a183f1c906758efa275b62bbf46"
+    },
+    "phase-reverse-done-state-metadata.json": {
+      "bytes": 1013406,
+      "sha256": "fe0e82dcdbc66d34a0cec937cda851ee795ff38e77d87711c8c7e778124314a6"
+    },
+    "phase-down-done-capture.log": {
+      "bytes": 109,
+      "sha256": "a13c2f811716dfbbe1d0392511e474a9b629f8003022788ef22ae545d497f6de"
+    },
+    "phase-idle-capture.log": {
+      "bytes": 104,
+      "sha256": "6c4fcbda840017a0b7d45141bd699ee0fe726582e1996722ffb1e1d7f2d697ad"
+    },
+    "phase-up-done-capture.log": {
+      "bytes": 107,
+      "sha256": "4d1724fa1c323d544a9bd332820b0d3c9e91d12959a97e38bc4d37d1707a33ce"
+    },
+    "phase-focused-remote.py": {
+      "bytes": 443,
+      "sha256": "5c44378ecd57f9e8364917cb826ded1120a570d01e7b9427e26ecf06e446b82a"
+    },
+    "phase-up-done-state-metadata.json": {
+      "bytes": 1360225,
+      "sha256": "a73da515deaded08801d874c1ec317ab3d3a8ce72815c3d996dfb63083f7c665"
+    },
+    "phase-idle-done-manifest.json": {
+      "bytes": 452,
+      "sha256": "d52cb1b8968fb9121d6c419549628a280ed33684d58d08655961e0e93a100612"
+    },
+    "phase-up-done-state.json": {
+      "bytes": 1360252,
+      "sha256": "5db42ee93be74994baa68c4290464f3599d23a0462660d7e0fa07b79577bd13e"
+    },
+    "phase-idle-done-state.pickle": {
+      "bytes": 319717,
+      "sha256": "45b1331efd5b30ece1fdecaa4eab6f1a49a711326182d9800915cbfad4d0c316"
+    },
+    "phase-up-done-remote.py": {
+      "bytes": 443,
+      "sha256": "78ef62a40823773ceb9667a6a299a9b51c27a3c6f3b5c2c233cf3e1b5e67a92a"
+    },
+    "phase-idle-done-capture.log": {
+      "bytes": 109,
+      "sha256": "d5afe6d74ad1798ac59a00c535c66ab5f088052da5acc6a79d0f8589f613aff3"
+    },
+    "phase-idle-state.pickle": {
+      "bytes": 319717,
+      "sha256": "dcc6949634acb8cb18ddd4586d864bb45eee89c2601ee43519482f6a973c1123"
+    },
+    "phase-reverse-done-capture.log": {
+      "bytes": 112,
+      "sha256": "0bfe9692ca1d819f1f213e6963d74c8f43dfef06711c7480ed97ccca1aef67ba"
+    },
+    "phase-down-manifest.json": {
+      "bytes": 447,
+      "sha256": "21b0c458e68ec666426a65deef3a27843a6b048a2e7a29fbb7dad1c6f9e03e6e"
+    },
+    "phase-reverse-remote.py": {
+      "bytes": 443,
+      "sha256": "e45ff13088d35fdcae84857b60311393dd6b699cd72923e01946f19be9338c2d"
+    },
+    "phase-up-capture.log": {
+      "bytes": 102,
+      "sha256": "b3b46ca0969c663587a97e29ab12e7b061e81de52d6637648ac8174b0ceccd08"
+    },
+    "phase-idle.png": {
+      "bytes": 69128,
+      "sha256": "a1455e965d3cc674aecb391285c3604669596353cd1c4b35c148efe8e172b4d8"
+    },
+    "phase-idle-manifest.json": {
+      "bytes": 447,
+      "sha256": "75aa0a372832c4c3115d49bd720706f5a53b012661a9f127154c6e998a5f6e4e"
+    },
+    "phase-idle-state-metadata.json": {
+      "bytes": 762363,
+      "sha256": "f50b8ca2b3bdd2d2e14be953d7b858995374e8c32004e10d4be9b02cdcd27ba2"
+    },
+    "phase-end-state.json": {
+      "bytes": 1299004,
+      "sha256": "653e07f30ede82634674622004981791e299a449d0b83db009894101ee61b754"
+    },
+    "phase-reverse-state-metadata.json": {
+      "bytes": 1427923,
+      "sha256": "d1c15a2e3218e3c9600bae154095cfa87f27ccb2907b8b0139b16f5964593a7a"
+    },
+    "phase-end-capture.log": {
+      "bytes": 103,
+      "sha256": "15c4c5ba5c59f072209023b2eca18dbc795829aa3a85abf076e4c90a7ac21e74"
+    },
+    "phase-focused.png": {
+      "bytes": 129138,
+      "sha256": "487f145b5bbe99b05699cdb1f04ba0c5fba3b9d4bbf654887ae26f64db903310"
+    },
+    "phase-focused-state.json": {
+      "bytes": 819185,
+      "sha256": "a0eb7a129c3e0a5d0bfcd894d0a991e0985f8411b4c6c328eefab3e6728b2cae"
+    },
+    "phase-focused-state-metadata.json": {
+      "bytes": 819158,
+      "sha256": "880faa53c5a1236df874661335fc30a86c2012f72d470c1343e36c10c086de9c"
+    },
+    "phase-down-done-state.pickle": {
+      "bytes": 474814,
+      "sha256": "6b1817a85f3c1b7f82e5cd2700a60c11ee325687300a035ea3c1cc0d4b577ef3"
+    },
+    "phase-up-done-state.pickle": {
+      "bytes": 480605,
+      "sha256": "f7f1a0d1b214c43e81c6e9ae2f7a8115782d71523a9fea8573e4684a465704c0"
+    },
+    "phase-down-done-remote.py": {
+      "bytes": 445,
+      "sha256": "8e455846633b1162f1fe127bea7982f31c88cfc7ccbbfaa6e72b7ea31d24be96"
+    },
+    "phase-up-state-metadata.json": {
+      "bytes": 819158,
+      "sha256": "89e94a589f3633628370486c410bf528eee4b532fe20dcf0973ef3a6ea320a80"
+    },
+    "phase-reverse-state.pickle": {
+      "bytes": 474832,
+      "sha256": "b4389680202e05c91f1906a89f301d484855219607c107148f0b2ebf765aed36"
+    },
+    "phase-idle-done-state.json": {
+      "bytes": 762390,
+      "sha256": "5817bde9e4f8da444aa0159397fc5ff2eb8e4080fa2b3be317b3c45b15fe45b0"
+    },
+    "phase-reverse-done-state.json": {
+      "bytes": 1013433,
+      "sha256": "88beb4d09e0b0f990047c1304c68d3cfddb0625cc85b5b57f8628f9e3766f7d9"
+    },
+    "phase-up-state.pickle": {
+      "bytes": 326863,
+      "sha256": "9c08b0bdc8167ae6ad693e2fc2ff5452b80206a56820419e125304352e85478f"
+    },
+    "phase-reverse-capture.log": {
+      "bytes": 107,
+      "sha256": "90b1bbf298174845125290d851e9e8e6ca886dfb0dee376320a97d4aa6e99a82"
+    },
+    "phase-down-state.pickle": {
+      "bytes": 460387,
+      "sha256": "53bc16a0e4a2b143fefa0b03a86d3f32765d38b60446ba7017475d432196f174"
+    },
+    "phase-idle-state.json": {
+      "bytes": 762390,
+      "sha256": "24385ef61e3eb37dd5efe002ee9b079db551a43ca892e1ddffd9055f98c3d339"
+    },
+    "phase-reverse-state.json": {
+      "bytes": 1427950,
+      "sha256": "59a38507a2092c63dab86f7615262485b8efcb0cadf7682d97ea27cd123459f0"
+    },
+    "phase-end-remote.py": {
+      "bytes": 439,
+      "sha256": "0ac82a70378ae71e23cabc77f44531440719ff0731fc4496bdeacb92c1128c86"
+    },
+    "phase-idle-done-state-metadata.json": {
+      "bytes": 762363,
+      "sha256": "9257606f66b60e5c5ea99208218c9a53d694a4bf19b9cf05e4937de33796a1b6"
+    },
+    "phase-idle-remote.py": {
+      "bytes": 440,
+      "sha256": "23b7d9e72cc2c7f74025ff8bfc0859877638fbab4d6484cffc6d13f8de0721f5"
+    },
+    "phase-down-remote.py": {
+      "bytes": 440,
+      "sha256": "aefaea1573aa05226dbb965902daa29f3bf6f264a4ef588d5094dc9b5d27bddf"
+    },
+    "phase-reverse-done-manifest.json": {
+      "bytes": 455,
+      "sha256": "fa147ee7ed39506d39fcf69938779db39634bb5f4b1c5d9f3f4b30a885ba28ee"
+    },
+    "phase-down-capture.log": {
+      "bytes": 104,
+      "sha256": "7096a3c3a5fba92efe942bcbd036a934d1e992e6fc950692ed55535abd442762"
+    },
+    "phase-focused-state.pickle": {
+      "bytes": 326863,
+      "sha256": "ee0cdbde94e0fb2fabf2cc134cef1e760ed3a854313959d862abee2b658a0a57"
+    },
+    "phase-up-remote.py": {
+      "bytes": 438,
+      "sha256": "41dcaed27da5de01b27f4c4381b15b66a40a48fadd0bbb9c0add297d93eb34d5"
+    },
+    "phase-end-state-metadata.json": {
+      "bytes": 1298977,
+      "sha256": "4c5835d2491409dfc7871a5b9778f9ecdcf42c1dacee9684830623ced0036edb"
+    },
+    "phase-down.png": {
+      "bytes": 116004,
+      "sha256": "a6b99b0fcacbfd224a5d3ecbd60b99d603459933878f209e69bd46d5b65c2c0e"
+    },
+    "phase-up.png": {
+      "bytes": 129138,
+      "sha256": "487f145b5bbe99b05699cdb1f04ba0c5fba3b9d4bbf654887ae26f64db903310"
+    },
+    "cpu-profile.json": {
+      "bytes": 7885955,
+      "sha256": "8357527698ba7a5566104fddfc9ff4fbb3d232e80507e5f54450ca032e0fa39d"
+    },
+    "profile-review.json": {
+      "bytes": 89603,
+      "sha256": "ca02f007cdae83403f35f2598de84d6590652a4aa48d4510ececa5e357221833"
+    },
+    "profile-launch.json": {
+      "bytes": 499,
+      "sha256": "8205b2b2e12b48a02faa33acb8bd7d071606d5934d6cbb677e926c1d386e5b58"
+    },
+    "profile-terminal.json": {
+      "bytes": 96,
+      "sha256": "20623b288ee39b05d438f89ee8db814dba08fce86cd5ffa421f66e9ae0ecc5de"
+    },
+    "profiler.log": {
+      "bytes": 354,
+      "sha256": "01de6e807825e5b47c4c4efb9123d97398806707c6ea7139519ff9f463793b8a"
+    }
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 2352186,
+        "start_ticks": 21709774,
+        "returncode": 0
+      },
+      {
+        "pid": 2352188,
+        "start_ticks": 21709847,
+        "returncode": 0
+      },
+      {
+        "pid": 2352191,
+        "start_ticks": 21709863,
+        "returncode": 0
+      },
+      {
+        "pid": 2352192,
+        "start_ticks": 21709908,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 2352193,
+        "start_ticks": 21709914,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 2352200,
+        "start_ticks": 21709970,
+        "returncode": 0
+      },
+      {
+        "pid": 2352201,
+        "start_ticks": 21709981,
+        "returncode": 0
+      },
+      {
+        "pid": 2352202,
+        "start_ticks": 21709990,
+        "returncode": 0
+      },
+      {
+        "pid": 2352203,
+        "start_ticks": 21710002,
+        "returncode": 255
+      },
+      {
+        "pid": 2352574,
+        "start_ticks": 21711204,
+        "returncode": 0
+      },
+      {
+        "pid": 2352580,
+        "start_ticks": 21711232,
+        "returncode": 0
+      },
+      {
+        "pid": 2352585,
+        "start_ticks": 21711281,
+        "returncode": 0
+      },
+      {
+        "pid": 2353920,
+        "start_ticks": 21715686,
+        "returncode": 0
+      },
+      {
+        "pid": 2353993,
+        "start_ticks": 21715712,
+        "returncode": 0
+      },
+      {
+        "pid": 2353999,
+        "start_ticks": 21715776,
+        "returncode": 0
+      },
+      {
+        "pid": 2354001,
+        "start_ticks": 21715846,
+        "returncode": 0
+      },
+      {
+        "pid": 2354068,
+        "start_ticks": 21716078,
+        "returncode": 0
+      }
+    ]
+  },
+  "original_owner_after": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "nra-architecture",
+    "identity": {
+      "pid": 2126072,
+      "start_time": 20963438
+    },
+    "original_owner_alive": true
+  }
+}

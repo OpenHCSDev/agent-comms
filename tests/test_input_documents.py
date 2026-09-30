@@ -70,6 +70,88 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     assert row.unresolved  # prior snapshot is immutable and unchanged
 
 
+def test_original_native_user_receipts_include_group_and_corrected_final_only(tmp_path):
+    import os
+
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.registration import Registration
+    from agent_comms.thread_identity import ThreadIncarnation
+    from agent_comms.threads import Thread
+
+    registry = Registration(tmp_path / "registry.json")
+    registry.register(Thread(
+        "worker", frozenset(), str(tmp_path), created_at=123.0,
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    registry.lease_local_turn("worker", "turn")
+    lease = registry.require("worker").turn_lease
+    admission = lease.admission_generation
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    for key, sequence, text in (("bus:1", 1, "First original"), ("bus:2", 2, "Second original")):
+        assert store.record(key, seq=sequence, owner="worker", admission=admission,
+                            target="worker", text=text)
+        assert store.bind(key, admission=admission, turn_id="turn", native_id="a" * 32,
+                          text="Actual grouped native user")
+        assert store.started(key, turn_id="turn", native_id="a" * 32,
+                             text="Actual grouped native user")
+    registry.rename("worker", "renamed")
+    assert store.record("acp:correction", seq=None, owner="renamed", admission=admission,
+                        target="renamed", text="Distinct correction")
+    assert store.bind("acp:correction", admission=admission, turn_id="turn", native_id="b" * 32,
+                      text="Actual corrected native user")
+    assert store.started("acp:correction", turn_id="turn", native_id="b" * 32,
+                         text="Actual corrected native user")
+    document = store.read()
+    original_bytes = store.path.read_bytes()
+    snapshot = registry.snapshot()
+    group = document.started_for_native(
+        lease, "a" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert {row.key for row in group} == {"bus:1", "bus:2"}
+    assert all(row is document.rows[row.key] for row in group)
+    assert document.started_for_native(
+        lease.renamed("renamed"), "a" * 32, "Actual grouped native user", snapshot=snapshot
+    ) == group
+    assert document.started_for_native(
+        lease, "b" * 32, "Actual corrected native user", snapshot=snapshot
+    ) == (document.rows["acp:correction"],)
+    assert not document.started_for_native(
+        replace(lease, turn_id="foreign"), "a" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        replace(lease, admission_generation=admission + 1), "a" * 32,
+        "Actual grouped native user", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        lease, "a" * 32, "Foreign input body", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        lease, "c" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        replace(lease, identity=replace(
+            lease.identity, incarnation=ThreadIncarnation("foreign", 123.0)
+        )), "a" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert not document.started_for_native(
+        replace(lease, identity=replace(
+            lease.identity, incarnation=ThreadIncarnation("worker", 124.0)
+        )), "a" * 32, "Actual grouped native user", snapshot=snapshot
+    )
+    assert store.path.read_bytes() == original_bytes
+    registry.release_turn(lease)
+    registry.unregister("renamed")
+    registry.remove("renamed")
+    registry.register(Thread(
+        "renamed", frozenset(), str(tmp_path), created_at=321.0,
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    assert not document.started_for_native(
+        lease, "b" * 32, "Actual corrected native user", snapshot=registry.snapshot()
+    )
+    assert store.path.read_bytes() == original_bytes
+
+
 @pytest.mark.parametrize(
     "damage", [{}, {"rows": {}}, {"version": True, "rows": {}}, {"version": 1, "rows": []}]
 )
@@ -202,9 +284,9 @@ def test_current_reservation_wire_has_only_declared_fields(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "mismatch", [None, "owner", "admission", "turn", "sent", "original", "target", "bus"]
+    "mismatch", [None, "owner", "admission", "turn", "sent", "original"]
 )
-def test_only_exact_started_input_proves_original(mismatch):
+def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
     from agent_comms.text_digest import TextDigest
 
     from agent_comms.thread_identity import ThreadIncarnation, TurnId
@@ -236,8 +318,42 @@ def test_only_exact_started_input_proves_original(mismatch):
         proof["sent_digest"] = TextDigest.of("different wrapper")
     elif mismatch == "original":
         proof["original_digest"] = TextDigest.of("different original")
-    elif mismatch == "target":
-        started = replace(started, target="#channel")
-    elif mismatch == "bus":
-        started = replace(started, key="bus:1", sequence=1)
     assert started.proves_started(**proof) is (mismatch is None)
+
+
+@pytest.mark.parametrize(
+    ("key", "sequence", "target"),
+    [("acp:x", None, "owner"), ("acp:x", None, "#channel"), ("bus:1", 1, "#channel")],
+    ids=["owner", "channel", "bus"],
+)
+def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
+    tmp_path, key, sequence, target
+):
+    from selected_summary_cases import admission_identity
+
+    session = tmp_path / "session.jsonl"
+    session.write_text('{"type":"session","id":"source"}\n')
+    source = admission_identity(
+        str(session), text="wrapped input", original_text="original", key=key,
+        turn="turn", owner="owner",
+    ).source
+    store = InputDispositions(tmp_path / InputDispositions.filename)
+    assert store.record(
+        key, seq=sequence, owner="owner", admission=1, target=target, text="original"
+    )
+    assert store.bind(key, admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
+    assert store.started(key, turn_id="turn", native_id="a" * 32, text="wrapped input")
+    document = store.read()
+    assert source.original_has_started(document)
+    # A bus/channel delivery is still genuine native-start evidence. It cannot
+    # lend that evidence to a different selected source's original ingress.
+    assert not replace(source, ingress_key="acp:foreign").original_has_started(document)
+    original_bytes = store.path.read_bytes()
+    # Routing cannot be rewritten by recording another target at the original
+    # key. That ownership belongs to first durable acceptance, not start proof.
+    assert not store.record(
+        key, seq=sequence, owner="owner", admission=1, target="#foreign", text="original"
+    )
+    assert store.path.read_bytes() == original_bytes
+    assert store.read().lookup(key).target == target
+    assert source.original_has_started(store.read())

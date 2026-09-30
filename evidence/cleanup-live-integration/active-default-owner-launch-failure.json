@@ -1,0 +1,31 @@
+{
+  "log": "/home/ts/.local/state/toad/logs/Agent_Comms_2026-09-29T21_39_43_158439.txt",
+  "requests": [
+    {
+      "jsonrpc": "2.0",
+      "method": "session/load",
+      "params": {
+        "cwd": "/home/ts/wt/nra-refactor2-r1-20260928",
+        "mcpServers": [],
+        "sessionId": "refactor-r1",
+        "_meta": {
+          "agentCommsLoad": {
+            "kind": "ensuring"
+          }
+        }
+      },
+      "id": 2
+    },
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "error": {
+        "code": -32602,
+        "message": "Invalid params",
+        "data": {
+          "reason": "Session load not admitted for 'refactor-r1': private owner launch requires explicit matching root and package"
+        }
+      }
+    }
+  ]
+}

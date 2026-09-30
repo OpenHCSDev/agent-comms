@@ -17,17 +17,17 @@ import os
 import sqlite3
 import stat
 import tempfile
-from contextlib import closing, contextmanager, nullcontext
+from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, BinaryIO, Literal
 
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, file_revision
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .wire_metadata import WireMetadata
-from .wire_record import WireRecord
+from .wire_record import WireRecord, WireScan
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -56,6 +56,36 @@ class PrefixWitness(PrefixSeal):
 
     def seal(self) -> PrefixSeal:
         return FieldCodec.decode(PrefixSeal, FieldCodec.project(self, "seal"))
+
+    def require_marker(self, marker: WireMetadata) -> None:
+        if self.root_id != marker.root_id or self.through_seq != marker.last_seq:
+            raise RelationViolationError("Original certificate differs from its durable marker.")
+
+
+@dataclass(frozen=True)
+class CertifiedSourceRead:
+    """Opened resources borrowed from one canonical durability barrier."""
+
+    path: Path
+    marker: WireMetadata
+    connection: sqlite3.Connection
+    stream: BinaryIO
+    witness: PrefixWitness
+
+    def require_marker(self, marker: WireMetadata) -> None:
+        if self.marker != marker:
+            raise RelationViolationError("Original source marker changed within its lock.")
+
+    def require_current(self) -> None:
+        if self.stream.closed:
+            raise RelationViolationError("Certified source read has left its lock lifetime.")
+        self.marker.seal.check_final(self.witness, _path(self.path))
+        self.witness.require_marker(self.marker)
+        if (
+            file_revision(os.fstat(self.stream.fileno())) != self.witness.revision
+            or file_revision(self.path.stat()) != self.witness.revision
+        ):
+            raise RelationViolationError("Conversation source needs a current certificate.")
 
 
 class CheckpointTable:
@@ -369,102 +399,169 @@ def _recover_pending_unlocked(
     return expected
 
 
-def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
-    """Check an exact revision or cold-validate every old byte on a changed revision.
-
-    Caller holds the bus lock and has fsynced the bus inode and directory.
-    """
-    path = _path(bus.path)
-    try:
-        with closing(_connect(path)) as db, bus.path.open("rb") as stream:
-            saved = _saved(db)
-            info = os.fstat(stream.fileno())
-            if (
-                saved.root_id != marker.root_id
-                or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
-                or info.st_size < saved.offset
-            ):
-                raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
-            recovered = marker.seal.recover(bus, marker, db, path, saved, info)
-            if recovered is not None:
-                return recovered
-            if _tail(stream, saved.offset) != saved.tail:
-                raise RelationViolationError("Private bus checkpoint prefix tail changed.")
-            if saved.through_seq > marker.last_seq:
-                raise RelationViolationError(
-                    "Private bus checkpoint exceeds the durable sequence marker."
-                )
-            if file_revision(info) == saved.revision:
-                return saved
-            # Changed revision: a suffix alone cannot rule out an earlier in-place edit.
-            # Validate complete canonical history, compare digest at the saved offset,
-            # and collect only newly appended rows for one atomic index transaction.
-            digest = _SEED
-            observed_prefix = saved.offset == 0
-            prefix_seq = 0
-            additions: list[tuple[int, bytes, WireRecord]] = []
-            suffix_bytes = 0
-
-            def collect(
-                offset: int,
-                raw: bytes,
-                record: WireRecord,
-            ) -> None:
-                nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
-                digest = _chain(digest, raw)
-                end = offset + len(raw)
-                if end == saved.offset:
-                    observed_prefix = True
-                    prefix_seq = record.message.seq
-                    if digest.hex() != saved.digest or prefix_seq != saved.through_seq:
-                        raise RelationViolationError(
-                            "Private bus checkpoint certified prefix changed."
-                        )
-                elif end > saved.offset:
-                    if not observed_prefix or offset < saved.offset:
-                        raise RelationViolationError(
-                            "Private bus checkpoint offset is not a row boundary."
-                        )
-                    suffix_bytes += len(raw)
-                    if suffix_bytes > 16 * 1024 * 1024 or len(additions) >= 10_000:
-                        raise RelationViolationError(
-                            "Private bus checkpoint crash suffix exceeds recovery bound."
-                        )
-                    additions.append((offset, raw, record))
-
-            for _ in bus.verified_records_unlocked(marker, on_row=collect):
-                pass
-            if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
-                raise RelationViolationError("Private bus checkpoint prefix is unavailable.")
-            if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
-                bus.path.stat()
-            ) != file_revision(info):
-                raise RelationViolationError("Private bus changed during checkpoint validation.")
-            # Full parser above checked all cross-prefix response key duplicates.
-            last_seq = additions[-1][2].message.seq if additions else saved.through_seq
-            expected = PrefixWitness(
-                saved.root_id,
-                file_revision(info),
-                last_seq,
-                digest.hex(),
-                _tail(stream, info.st_size),
-            )
-            marker.seal_with(PendingSeal.capture(saved, expected, path))
-            bus.write_metadata_unlocked(marker)
-            with db:
-                for offset, raw, record in additions:
-                    _index_row(db, offset, raw, record)
-                PrefixCertificate.capture(
-                    saved.root_id, info, last_seq, digest, expected.tail
-                ).upsert(db)
-            _directory_sync(path)
-            marker.seal_with(FinalSeal.capture(expected, path))
-            bus.write_metadata_unlocked(marker)
-            return _saved(db)
-    except (sqlite3.Error, OSError) as error:
+def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWitness:
+    """The durability owner verifies its already opened source and certificate."""
+    saved = _saved(db)
+    info = os.fstat(stream.fileno())
+    if (
+        saved.root_id != marker.root_id
+        or (saved.device, saved.inode) != (info.st_dev, info.st_ino)
+        or info.st_size < saved.offset
+    ):
+        raise RelationViolationError("Private bus checkpoint root/inode/size changed.")
+    recovered = marker.seal.recover(bus, marker, db, path, saved, info)
+    if recovered is not None:
+        return recovered
+    if _tail(stream, saved.offset) != saved.tail:
+        raise RelationViolationError("Private bus checkpoint prefix tail changed.")
+    if saved.through_seq > marker.last_seq:
         raise RelationViolationError(
-            "Private bus checkpoint verification is unavailable."
-        ) from error
+            "Private bus checkpoint exceeds the durable sequence marker."
+        )
+    if file_revision(info) == saved.revision:
+        return saved
+    # Changed revision: a suffix alone cannot rule out an earlier in-place edit.
+    # Validate complete canonical history, compare digest at the saved offset,
+    # and collect only newly appended rows for one atomic index transaction.
+    digest = _SEED
+    observed_prefix = saved.offset == 0
+    prefix_seq = 0
+    additions: list[tuple[int, bytes, WireRecord]] = []
+    suffix_bytes = 0
+
+    def collect(
+        offset: int,
+        raw: bytes,
+        record: WireRecord,
+    ) -> None:
+        nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
+        digest = _chain(digest, raw)
+        end = offset + len(raw)
+        if end == saved.offset:
+            observed_prefix = True
+            prefix_seq = record.message.seq
+            if digest.hex() != saved.digest or prefix_seq != saved.through_seq:
+                raise RelationViolationError(
+                    "Private bus checkpoint certified prefix changed."
+                )
+        elif end > saved.offset:
+            if not observed_prefix or offset < saved.offset:
+                raise RelationViolationError(
+                    "Private bus checkpoint offset is not a row boundary."
+                )
+            suffix_bytes += len(raw)
+            if suffix_bytes > 16 * 1024 * 1024 or len(additions) >= 10_000:
+                raise RelationViolationError(
+                    "Private bus checkpoint crash suffix exceeds recovery bound."
+                )
+            additions.append((offset, raw, record))
+
+    for _ in bus.verified_records_unlocked(marker, on_row=collect):
+        pass
+    if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
+        raise RelationViolationError("Private bus checkpoint prefix is unavailable.")
+    if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
+        bus.path.stat()
+    ) != file_revision(info):
+        raise RelationViolationError("Private bus changed during checkpoint validation.")
+    # Full parser above checked all cross-prefix response key duplicates.
+    last_seq = additions[-1][2].message.seq if additions else saved.through_seq
+    expected = PrefixWitness(
+        saved.root_id,
+        file_revision(info),
+        last_seq,
+        digest.hex(),
+        _tail(stream, info.st_size),
+    )
+    marker.seal_with(PendingSeal.capture(saved, expected, path))
+    bus.write_metadata_unlocked(marker)
+    with db:
+        for offset, raw, record in additions:
+            _index_row(db, offset, raw, record)
+        PrefixCertificate.capture(
+            saved.root_id, info, last_seq, digest, expected.tail
+        ).upsert(db)
+    _directory_sync(path)
+    marker.seal_with(FinalSeal.capture(expected, path))
+    bus.write_metadata_unlocked(marker)
+    return _saved(db)
+
+
+@contextmanager
+def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata):
+    """Keep only this canonical lock's verified source/index resources open."""
+    path = _path(bus.path)
+    with ExitStack() as resources:
+        try:
+            db = resources.enter_context(closing(_connect(path)))
+            stream = resources.enter_context(bus.path.open("rb"))
+            saved = _verify_open_checkpoint_unlocked(bus, marker, db, stream, path)
+            db.execute("PRAGMA query_only=ON")
+        except (sqlite3.Error, OSError) as error:
+            raise RelationViolationError(
+                "Private bus checkpoint verification is unavailable."
+            ) from error
+        yield CertifiedSourceRead(bus.path, marker, db, stream, saved)
+
+
+@contextmanager
+def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata):
+    """The existing claim durability owner supplies this lock's opened source."""
+    with ExitStack() as resources:
+        try:
+            # This original fsynced marker and opened source remain under the
+            # canonical flock. Its resource is never valid across releases.
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                descriptor = os.open(bus.path, flags)
+            except FileNotFoundError:
+                descriptor = None
+            if descriptor is None and (
+                certificate_enabled(bus.path) or private_marker.requires_checkpoint
+            ):
+                raise RelationViolationError("Private checkpoint bus inode is missing.")
+            source = None
+            if descriptor is not None:
+                stream = resources.enter_context(os.fdopen(descriptor, "rb"))
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    raise RelationViolationError("Claim bus is not a regular file.")
+                os.fsync(stream.fileno())
+                if certificate_enabled(bus.path) or private_marker.requires_checkpoint:
+                    private_marker = bus._private_marker_unlocked()
+                    private_marker.seal
+                    directory_fd = os.open(
+                        bus.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                    )
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+                    source = resources.enter_context(
+                        opened_private_checkpoint_unlocked(bus, private_marker)
+                    )
+                else:
+                    scan = WireScan(private_marker)
+                    while line := stream.readline(scan.max_row_bytes + 1):
+                        scan.read(line)
+            if source is None:
+                directory_fd = os.open(
+                    bus.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                )
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+        except OSError as error:
+            raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
+        # Caller exceptions keep their own cause and disposition. Closing
+        # borrowed resources does not run another admission or proof check.
+        yield source
+
+
+def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
+    """Verify a standalone native/delivery/publication source witness."""
+    with opened_private_checkpoint_unlocked(bus, marker) as source:
+        return source.witness
 
 
 def append_private_bus_checkpoint_unlocked(
@@ -589,47 +686,28 @@ def certified_delivery_page_unlocked(
         raise RelationViolationError("Certified initial page is unavailable.") from error
 
 
-@contextmanager
-def conversation_read_unlocked(bus: WireLog, marker: WireMetadata):
-    """One opened source/index lifetime under the caller's canonical wire lock."""
-    path = _path(bus.path)
-    with closing(_connect(path, readonly=True)) as db, bus.path.open("rb") as stream:
-        saved = _saved(db)
-        marker.seal.check_final(saved, path)
-        if (
-            saved.root_id != marker.root_id
-            or saved.through_seq != marker.last_seq
-            or file_revision(bus.path.stat()) != saved.revision
-        ):
-            raise RelationViolationError("Conversation source needs a current certificate.")
-        yield db, stream, saved
-        marker.seal.check_final(saved, path)
-        if file_revision(bus.path.stat()) != saved.revision:
-            raise RelationViolationError("Conversation source changed during read.")
-
-
-def source_references_unlocked(bus: WireLog, marker: WireMetadata, references):
+def source_references_unlocked(source: CertifiedSourceRead, references):
     """Resolve a bounded window's original seq/id pairs in one certified read."""
-    with conversation_read_unlocked(bus, marker) as (db, stream, saved):
-        marks = ",".join("?" for _ in references)
-        rows = DeliverySources.select(
-            db, where=f"seq IN ({marks})", parameters=tuple(ref.seq for ref in references)
+    source.require_current()
+    db, stream, saved = source.connection, source.stream, source.witness
+    marks = ",".join("?" for _ in references)
+    rows = DeliverySources.select(
+        db, where=f"seq IN ({marks})", parameters=tuple(ref.seq for ref in references)
+    )
+    originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
+    messages = []
+    for reference in references:
+        original = next(
+            (item for item in originals if item.message.reference == reference), None
         )
-        originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
-        messages = []
-        for reference in references:
-            original = next(
-                (item for item in originals if item.message.reference == reference), None
-            )
-            if original is None:
-                raise RelationViolationError("Notification reference is not its original source")
-            messages.append(original.message)
-        return tuple(messages)
+        if original is None:
+            raise RelationViolationError("Notification reference is not its original source")
+        messages.append(original.message)
+    return tuple(messages)
 
 
 def conversation_sources_unlocked(
-    bus: WireLog,
-    marker: WireMetadata,
+    source: CertifiedSourceRead,
     lookup: str,
     predicate: str,
     parameters: tuple,
@@ -643,29 +721,30 @@ def conversation_sources_unlocked(
     name binding. Caller holds the bus lock. This read cannot install or repair
     a checkpoint, grant delivery, or advance any native-input cursor.
     """
-    with conversation_read_unlocked(bus, marker) as (db, stream, saved):
-        rows = DeliverySources.read(
-            db.execute(
-                f"SELECT w.* FROM {DeliverySources.declared_name} w JOIN ("
-                f"SELECT seq FROM (SELECT w.seq FROM {DeliverySources.declared_name} w "
-                f"WHERE w.sender_lookup=? AND ({predicate}) "
-                f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?) UNION "
-                f"SELECT seq FROM (SELECT a.seq FROM {Addressed.declared_name} a "
-                f"JOIN {DeliverySources.declared_name} w ON w.seq=a.seq "
-                f"WHERE a.lookup=? AND ({predicate}) "
-                f"ORDER BY a.seq {'ASC' if ascending else 'DESC'} LIMIT ?)"
-                ") membership ON membership.seq=w.seq "
-                f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?",
-                (lookup, *parameters, limit, lookup, *parameters, limit, limit),
-            )
+    source.require_current()
+    db, stream, saved = source.connection, source.stream, source.witness
+    rows = DeliverySources.read(
+        db.execute(
+            f"SELECT w.* FROM {DeliverySources.declared_name} w JOIN ("
+            f"SELECT seq FROM (SELECT w.seq FROM {DeliverySources.declared_name} w "
+            f"WHERE w.sender_lookup=? AND ({predicate}) "
+            f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?) UNION "
+            f"SELECT seq FROM (SELECT a.seq FROM {Addressed.declared_name} a "
+            f"JOIN {DeliverySources.declared_name} w ON w.seq=a.seq "
+            f"WHERE a.lookup=? AND ({predicate}) "
+            f"ORDER BY a.seq {'ASC' if ascending else 'DESC'} LIMIT ?)"
+            ") membership ON membership.seq=w.seq "
+            f"ORDER BY w.seq {'ASC' if ascending else 'DESC'} LIMIT ?",
+            (lookup, *parameters, limit, lookup, *parameters, limit, limit),
         )
-        originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
-        for original in originals:
-            if original.audience.sender_lookup != lookup and not any(
-                recipient.recipient_lookup == lookup for recipient in original.audience.recipients
-            ):
-                raise RelationViolationError("Conversation index differs from frozen membership.")
-        return originals
+    )
+    originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
+    for original in originals:
+        if original.audience.sender_lookup != lookup and not any(
+            recipient.recipient_lookup == lookup for recipient in original.audience.recipients
+        ):
+            raise RelationViolationError("Conversation index differs from frozen membership.")
+    return originals
 
 
 def addressed_source_pointers_unlocked(

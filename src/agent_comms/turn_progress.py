@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass, replace
 from typing import TYPE_CHECKING
 
@@ -19,6 +19,7 @@ from .channel_targets import is_channel_target
 from .comms import Comms
 from .diagnostics import record_terminal_failure
 from .messages import MessageType
+from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
@@ -27,6 +28,7 @@ if TYPE_CHECKING:
     from .session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
     from .turn_goal_account import TurnGoalAccount
+    from .turn_input_source import OriginalTurnInput
 
 
 @dataclass(kw_only=True)
@@ -56,11 +58,10 @@ class TurnProgress(events.AgentEventConsumer):
         emitted_errors,
         session_id,
         thread,
-        turn_id,
         turn_lease,
         routing,
+        original: OriginalTurnInput,
         checkpoint,
-        task,
         finish_event,
         goals: TurnGoalAccount,
         sync_goals,
@@ -69,8 +70,9 @@ class TurnProgress(events.AgentEventConsumer):
         self.sessions, self.inputs, self.effects = sessions, inputs, effects
         self.runtime, self.emitted_errors = runtime, emitted_errors
         self.session_id, self.thread = session_id, thread
-        self.turn_id, self.turn_lease = turn_id, turn_lease
-        self.routing, self.checkpoint, self.task = routing, checkpoint, task
+        self.turn_lease = turn_lease
+        self.routing, self.checkpoint = routing, checkpoint
+        self.original = original
         self.finish_event, self.goals = finish_event, goals
         self.reply_parts: list[str] = []
         self.result: events.Done | None = None
@@ -84,7 +86,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @property
     def origins(self):
-        return self.routing.requests
+        return self.original.origins
 
     @property
     def reply_targets(self):
@@ -102,7 +104,7 @@ class TurnProgress(events.AgentEventConsumer):
         """Attempt existing ACP error publication once without hiding the original fault."""
         prior = self.emitted_errors.get(self.session_id)
         diagnostic = record_terminal_failure(
-            self.comms.root, turn_id=self.turn_id, thread=self.thread_name,
+            self.comms.root, turn_id=self.turn_lease.turn_id, thread=self.thread_name,
             event=asdict(self.result) if self.result is not None else {},
             sequences=tuple(origin.seq for origin in self.routing.requests),
             source_error=error,
@@ -115,7 +117,7 @@ class TurnProgress(events.AgentEventConsumer):
             await self.effects._emit_event(
                 self.session_id,
                 events.Error(detail),
-                turn_id=self.turn_id,
+                turn_id=self.turn_lease.turn_id,
                 route=self.routing.reply,
             )
         except Exception as delivery_error:
@@ -239,26 +241,34 @@ class TurnProgress(events.AgentEventConsumer):
     async def consume(self, event: events.AgentEvent) -> None:
         event = await self.dispatch(event)
         await self.effects._emit_event(
-            self.session_id, event, turn_id=self.turn_id, route=self.routing.reply
+            self.session_id, event, turn_id=self.turn_lease.turn_id, route=self.routing.reply
         )
         await self.publication.dispatch(event)
 
-    async def publish_result(self):
-        if self.result is not None and self.result.ok:
-            if self.origins:
-                await asyncio.to_thread(
-                    self.comms.transcripts.record_turn_routing,
-                    self.thread_name,
-                    self.checkpoint,
-                    self.routing,
-                )
+    def publish_success(self) -> None:
+        """Join each acquired original send before releasing the turn lease."""
+        published: list[MessageReference] = []
+
+        def record_publication() -> None:
+            self.comms.transcripts.record_turn_publication(
+                lease=self.turn_lease,
+                checkpoint=self.checkpoint,
+                routing=self.routing,
+                published=tuple(published),
+            )
+
+        with ExitStack() as publications:
+            publications.callback(record_publication)
             if self.reply_parts:
                 for target in self.reply_targets:
-                    self.comms.messaging.send(
-                        self.thread_name,
-                        target,
-                        "".join(self.reply_parts),
+                    message = self.comms.messaging.send_message(
+                        self.thread_name, target, "".join(self.reply_parts)
                     )
+                    published.append(message.reference)
+
+    async def publish_result(self):
+        if self.result is not None and self.result.ok:
+            self.publish_success()
         else:
             # Streamed chunks were provisional. A failed or missing terminal
             # result cannot turn them into a completed wire reply. Keep the
@@ -267,7 +277,7 @@ class TurnProgress(events.AgentEventConsumer):
             # unrelated session. Persist only structural facts for headless owners.
             diagnostic_path = record_terminal_failure(
                 self.comms.root,
-                turn_id=self.turn_id,
+                turn_id=self.turn_lease.turn_id,
                 thread=self.thread_name,
                 event=asdict(self.result) if self.result is not None else {},
                 sequences=tuple(origin.seq for origin in self.origins),

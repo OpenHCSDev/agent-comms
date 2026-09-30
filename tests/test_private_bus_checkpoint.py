@@ -132,10 +132,8 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
         publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
         response = case.bus.log.read_keyed_response(intent)
         assert response.seq == claim.seq + 1
-        with comms.bus.log.locked():
-            marker = comms.bus.log._private_marker_unlocked()
-            witness = checkpoint.verify_private_bus_checkpoint_unlocked(comms.bus.log, marker)
-            assert witness.through_seq == response.seq
+        with comms.bus.log.certified_read() as source:
+            assert source.witness.through_seq == response.seq
         with sqlite3.connect(comms.root / "private_bus_checkpoint.sqlite3") as db:
             assert (
                 db.execute("SELECT key FROM response_keys").fetchone()[0] == intent.publication_key

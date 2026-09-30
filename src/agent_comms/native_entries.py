@@ -107,6 +107,17 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
     def tracked_user(self) -> MessageEntry | None:
         return None
 
+    def require_entry_id(self) -> str:
+        if not self.id:
+            raise ValueError("Native publication requires an original entry ID")
+        return self.id
+
+    def require_tracked_user(self) -> MessageEntry:
+        tracked = self.tracked_user
+        if tracked is None:
+            raise ValueError("Native publication requires an original tracked input")
+        return tracked
+
     @property
     def model_choice(self) -> tuple[str, str] | None:
         return None

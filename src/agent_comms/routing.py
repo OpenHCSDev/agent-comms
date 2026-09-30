@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .channel_targets import BuiltinChannel, is_channel_target
 from .messages import Message
+from .message_reference import MessageReference
+from .field_codec import FieldCodec
 from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
 from .wake import derive_exact_reply_target
 
@@ -39,26 +41,46 @@ class MessageRoute:
 
     @classmethod
     def from_wire(cls, data: Mapping) -> MessageRoute:
-        return cls(str(data["sender"]), tuple(str(target) for target in data["targets"]))
+        return FieldCodec.decode(cls, data)
 
 
 @dataclass(frozen=True, slots=True)
 class TurnRouting:
-    requests: tuple[Message, ...] = ()
+    requests: tuple[MessageReference, ...] = ()
     reply: MessageRoute | None = None
+    publications: tuple[MessageReference, ...] = field(
+        default=(), metadata={"wire_omit_default": True}
+    )
 
     def to_wire(self) -> dict[str, object]:
-        return {
-            "requests": [message.to_wire() for message in self.requests],
-            "reply": asdict(self.reply) if self.reply else None,
-        }
+        return FieldCodec.encode(self)
 
     @classmethod
     def from_wire(cls, data: Mapping) -> TurnRouting:
-        return cls(
-            tuple(Message.from_wire(item) for item in data.get("requests", [])),
-            MessageRoute.from_wire(data["reply"]) if data.get("reply") else None,
-        )
+        return FieldCodec.decode(cls, data)
+
+    def requires_annotation(self, published: tuple[MessageReference, ...]) -> bool:
+        return bool(self.requests or published)
+
+    def annotation_ids(self, reader, checkpoint, session_file: str, through: int):
+        return (reader.annotation_ids(checkpoint.offset, through)
+                if self.requests and session_file == checkpoint.session_file else ())
+
+    def require_publications(self, originals, owner_lookup: str) -> None:
+        """Only committed originals addressed by this reply intent can be joined."""
+        from .errors import RelationViolationError
+
+        if self.publications:
+            raise RelationViolationError("Turn intent cannot preclaim a publication")
+        if not originals:
+            return
+        if self.reply is None or len(originals) > len(self.reply.targets):
+            raise RelationViolationError("Publication exceeds this turn's reply intent")
+        for original in originals:
+            if original.audience.sender_lookup != owner_lookup:
+                raise RelationViolationError("Publication belongs to another original sender")
+            if original.message.target not in self.reply.targets:
+                raise RelationViolationError("Publication is outside this turn's reply targets")
 
 
 @dataclass(frozen=True, slots=True)
