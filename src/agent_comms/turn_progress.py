@@ -20,8 +20,6 @@ from .comms import Comms
 from .diagnostics import record_terminal_failure
 from .messages import MessageType
 from .mro_dispatch import MroDispatch, handles
-from .routing import MessageRoute
-from .transcript_updates import AgentTextTranscriptUpdate
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
 
@@ -43,18 +41,6 @@ class TurnEventPublication(MroDispatch):
     async def sync_goals(self, event: events.InputStarted) -> None:
         await self.sync_goal_execution(self.session_id, self.sessions.bindings[self.session_id])
 
-    @handles(events.ToolEnd)
-    async def tool_result(self, event: events.ToolEnd) -> None:
-        sent = await asyncio.to_thread(
-            self.comms.messaging.sent_tool_message, event.name, event.output, bool(event.ok)
-        )
-        if sent is not None:
-            await self.effects._emit_event(
-                self.session_id,
-                AgentTextTranscriptUpdate(
-                    text=sent.body, route=MessageRoute(sent.sender, (sent.target,))
-                ),
-            )
 
 
 class TurnProgress(events.AgentEventConsumer):
@@ -115,10 +101,20 @@ class TurnProgress(events.AgentEventConsumer):
     async def report_failure(self, error: Exception) -> None:
         """Attempt existing ACP error publication once without hiding the original fault."""
         prior = self.emitted_errors.get(self.session_id)
+        diagnostic = record_terminal_failure(
+            self.comms.root, turn_id=self.turn_id, thread=self.thread_name,
+            event=asdict(self.result) if self.result is not None else {},
+            sequences=tuple(origin.seq for origin in self.routing.requests),
+            source_error=error,
+        )
+        detail = prior.detail if prior is not None else (
+            "Native turn failed; original input was not retried. "
+            f"[Open diagnostic]({diagnostic.as_uri()})"
+        )
         try:
             await self.effects._emit_event(
                 self.session_id,
-                events.Error(prior.detail if prior is not None else str(error) or type(error).__name__),
+                events.Error(detail),
                 turn_id=self.turn_id,
                 route=self.routing.reply,
             )
@@ -126,6 +122,7 @@ class TurnProgress(events.AgentEventConsumer):
             self.effects._debug_log(
                 f"turn:error-publication failed: {delivery_error!r}; original: {error!r}"
             )
+
 
     @handles(events.SteeringInterrupted)
     async def steering_interrupted(self, event: events.SteeringInterrupted) -> None:

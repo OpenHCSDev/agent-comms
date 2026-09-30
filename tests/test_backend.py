@@ -335,14 +335,11 @@ for line in sys.stdin:
             + "print('[]', flush=True)\ntime.sleep(60)\n",
         )
         owner = asyncio.current_task()
-        events = [
-            event
-            async for event in backend.stream_agent_events(
+        with pytest.raises(ValueError, match="Pi RPC record has wrong type"):
+            async for _ in backend.stream_agent_events(
                 stub, [], "task", str(tmp_path), steering_queue=asyncio.Queue()
-            )
-        ]
-        assert events[-1].ok is False
-        assert events[-1].reason_code == "pi_invalid_rpc_event"
+            ):
+                pass
         assert pid_file.exists()
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
@@ -2016,13 +2013,11 @@ signal.signal(signal.SIGTERM, lambda *_: None)
 while True: time.sleep(0.1)
 """,
         )
-        events = [
-            event async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path))
-        ]
-        assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
-        assert events[-1].ok is False
-        assert events[-1].reason_code == "pi_invalid_rpc_event"
-        assert "NoneType" not in events[-1].text
+        observed = []
+        with pytest.raises(ValueError):
+            async for event in backend.stream_agent_events(stub, [], "work", str(tmp_path)):
+                observed.append(event)
+        assert not [event for event in observed if isinstance(event, ae.Done)]
         assert pid_file.exists()
         with pytest.raises(ProcessLookupError):
             os.kill(int(pid_file.read_text()), 0)
@@ -2063,9 +2058,10 @@ while True: time.sleep(0.1)
         stream = backend.stream_agent_events(stub, [], "work", str(tmp_path), steering_queue=queue)
         try:
             if exit_mode == "malformed":
-                async with asyncio.timeout(4):
-                    events = [event async for event in stream]
-                assert events[-1].reason_code == "pi_invalid_rpc_event"
+                with pytest.raises(ValueError):
+                    async with asyncio.timeout(4):
+                        async for _ in stream:
+                            pass
             else:
                 async with asyncio.timeout(4):
                     while not isinstance(await stream.__anext__(), ae.Chunk):

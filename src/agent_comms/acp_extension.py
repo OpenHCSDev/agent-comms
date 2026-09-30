@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, ClassVar
 from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
 from .agent_events import CompactionEvent, CompactionProgress
 from .compaction_states import CompactionPublishedMetadata
-from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .field_codec import FieldCodec
@@ -438,12 +437,8 @@ class TranscriptSnapshotUpdate(AgentCommsUpdate):
     @classmethod
     def capture(cls, transcripts, name):
         """Publish the page together with the source witness that read it."""
-        while True:
-            read = transcripts.capture_page_read(name)
-            try:
-                return cls(read.read(), read.identity)
-            except StaleRevision:
-                continue
+        read = transcripts.capture_page_read(name)
+        return cls(read.read(), read.identity)
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,6 @@ from typing import Self
 from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
 from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
-    COORDINATION_SNAPSHOT_VERSION,
     coordinator_schema,
 )
 from agent_comms.coordination_tables.metadata import SchemaMeta
@@ -83,19 +82,26 @@ class CoordinationStore:
             os.chmod(self.path, 0o600, follow_symlinks=False)
 
     def _initialize_schema(self) -> None:
-        # Inspect version/tables only after obtaining the write lock.  SQLite's
-        # executescript() implicitly commits an existing transaction; execute
+        # Existing immutable metadata needs only a consistent read. Opening an
+        # ordinary reader must never become a writer awaiting other readers'
+        # release, especially before the wire -> registry -> SQLite lock order.
+        self._connection.execute("BEGIN")
+        try:
+            version = self.schema_version
+            if not self._empty_schema(version):
+                SchemaMeta.require_current(self._connection, version)
+                return
+        finally:
+            self._connection.execute("ROLLBACK")
+
+        # Only installation owns a write transaction. Recheck after taking it:
+        # another initializer may have installed the schema since the read.
+        # SQLite's executescript() implicitly commits an existing transaction; execute
         # complete trigger-aware statements individually under this one lock.
         self._connection.execute("BEGIN IMMEDIATE")
         try:
             version = self.schema_version
-            tables = {
-                row.name
-                for row in _TableName.read(
-                    self._connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-                )
-            }
-            if version == 0 and not tables:
+            if self._empty_schema(version):
                 statement = ""
                 for line in coordinator_schema().splitlines(keepends=True):
                     statement += line
@@ -104,31 +110,20 @@ class CoordinationStore:
                         statement = ""
                 if statement.strip():
                     raise SchemaVersionError("coordination schema has an incomplete statement")
-                SchemaMeta(
-                    singleton=1,
-                    schema_version=COORDINATION_SCHEMA_VERSION,
-                    snapshot_version=COORDINATION_SNAPSHOT_VERSION,
-                ).insert(self._connection)
+                SchemaMeta.current().insert(self._connection)
                 self._connection.execute(f"PRAGMA user_version = {COORDINATION_SCHEMA_VERSION}")
             else:
-                if version != COORDINATION_SCHEMA_VERSION:
-                    raise SchemaVersionError(
-                        f"coordination schema {version} is unsupported; "
-                        f"expected {COORDINATION_SCHEMA_VERSION}"
-                    )
-                row = SchemaMeta.one(self._connection, singleton=1)
-                expected = SchemaMeta(
-                    singleton=1,
-                    schema_version=COORDINATION_SCHEMA_VERSION,
-                    snapshot_version=COORDINATION_SNAPSHOT_VERSION,
-                )
-                if row != expected:
-                    raise SchemaVersionError("coordination schema metadata is inconsistent")
+                SchemaMeta.require_current(self._connection, version)
             self._connection.execute("COMMIT")
         except BaseException:
             if self._connection.in_transaction:
                 self._connection.execute("ROLLBACK")
             raise
+
+    def _empty_schema(self, version: int) -> bool:
+        return version == 0 and not _TableName.read(
+            self._connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        )
 
     def _enforce_private_modes(self) -> None:
         if os.name == "nt":

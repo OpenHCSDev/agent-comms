@@ -409,9 +409,11 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(
         await owner.shutdown()
 
 
-async def test_recovery_failure_report_preserves_original_and_does_not_duplicate(
+async def test_failure_publication_preserves_private_cause_after_transport_disconnect(
     owner_turn, monkeypatch
 ):
+    import json
+
     execution, progress = owner_turn
     emitted = []
     emit = execution.runner.effects._emit_event
@@ -423,11 +425,15 @@ async def test_recovery_failure_report_preserves_original_and_does_not_duplicate
             raise ConnectionError("error notification transport closed")
 
     monkeypatch.setattr(execution.runner.effects, "_emit_event", disconnect_after_error)
-    original = ValueError("original failure")
+    original = ValueError("private original failure")
     await progress.report_failure(original)
-    await progress.report_failure(original)
-    assert [event.text for event in emitted] == ["original failure"]
-    assert progress.failure_reported
+    record = execution.runner.comms.root / "diagnostics" / (execution.turn_id + ".json")
+    diagnostic = json.loads(record.read_text())
+    assert "ValueError: private original failure" in diagnostic["source_error"]
+    assert len(emitted) == 1
+    assert "private original failure" not in emitted[0].text
+    assert record.as_uri() in emitted[0].text
+    assert diagnostic["outcome"] == "failed; inputs must not be replayed automatically"
 
 
 async def test_relay_entrypoint_terminal_publication_releases_real_wait(

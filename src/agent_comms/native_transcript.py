@@ -6,7 +6,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
 
-from .native_entries import NativeEntry
+from .native_entries import NativeEntry, SessionEntry
 
 
 def _reverse_records(
@@ -55,7 +55,7 @@ class NativeRecord:
 
     def project(self, projection):
         """A decoded record owns whether it can produce presentation events."""
-        return projection(self.entry) if self.entry is not None else ()
+        return projection(self) if self.entry is not None else ()
 
     def incomplete_tail(self, through: int) -> bool:
         return self.end == through and not self.complete and self.entry is None
@@ -68,6 +68,33 @@ class NativeRecord:
 class NativeTranscript:
     def __init__(self, path: Path):
         self.path = path
+
+    @property
+    def session_id(self):
+        with self.path.open("rb") as stream:
+            entry = NativeEntry.read(stream.readline())
+        return entry.id if isinstance(entry, SessionEntry) else None
+
+    def input_ancestor(self, record: NativeRecord):
+        """Follow original parent IDs to the input boundary, without an index.
+
+        The reverse reader visits each intervening record once, with fixed scan
+        buffers. A user boundary ends the walk even when it is not tracked.
+        Tool rounds and branches cannot lend another input's publication proof.
+        """
+        parent = record.entry.parent_id
+        if parent is None:
+            return None
+        for ancestor in self.reverse(record.start):
+            entry = ancestor.entry
+            if entry is None or entry.id != parent:
+                continue
+            if entry.input_boundary:
+                return entry
+            parent = entry.parent_id
+            if parent is None:
+                return None
+        return None
 
     def tail(self, *, max_bytes: int | None = None):
         try:

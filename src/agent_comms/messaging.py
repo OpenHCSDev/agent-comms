@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Sequence
 from pathlib import Path
@@ -119,21 +118,6 @@ class Messaging:
                 error.__class__.__name__,
             )
         return committed
-
-    def sent_tool_message(self, name: str, output: str, ok: bool) -> Message | None:
-        """Resolve a successful send receipt, including older ID-only tool results."""
-        if name != "comms_send" or not ok:
-            return None
-        try:
-            receipt = json.loads(output)
-            if not isinstance(receipt, dict) or not isinstance(receipt.get("id"), str):
-                return None
-            if isinstance(receipt.get("message"), dict):
-                message = Message.from_wire(receipt["message"])
-                return message if message.message_id == receipt["id"] else None
-            return self.bus.log.message_by_id(receipt["id"])
-        except (ValueError, KeyError, TypeError):
-            return None
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""

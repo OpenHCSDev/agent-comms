@@ -139,6 +139,23 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
                     seen.update(sequences)
         return frozenset(seen)
 
+    def displayed_recipient(self, message, recipient, snapshot, *, document=None):
+        """Return recorded human display evidence for this exact frozen recipient.
+
+        Processing, assignment acceptance and a reply cannot grant this fact.
+        A reused name with a different creation identity cannot inherit it.
+        """
+        from .bus_publication import stable_thread_lookup
+
+        for thread in snapshot.threads.values():
+            if (
+                self.human(thread.role)
+                and stable_thread_lookup(thread.created_at) == recipient.recipient_lookup
+                and message.seq in self.seen_sequences(thread.name, snapshot, document=document)
+            ):
+                return (thread.incarnation,)
+        return ()
+
     @staticmethod
     def _transcript_key(viewer: str, source: str, inode: int) -> str:
         return json.dumps([viewer, str(Path(source).resolve()), inode])

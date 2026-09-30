@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+from contextlib import closing
 from dataclasses import FrozenInstanceError, replace
 
 import pytest
@@ -494,6 +495,26 @@ def test_database_version_privacy_and_reopen(db):
             ]
             == "p"
         )
+
+
+def test_current_schema_open_is_read_only_while_readers_and_writer_are_live(db):
+    """Opening a coordinator must not demand a write COMMIT before wire exclusion."""
+    _, path = db
+    with (
+        closing(sqlite3.connect(path, isolation_level=None, timeout=0)) as reader,
+        closing(sqlite3.connect(path, isolation_level=None, timeout=0)) as writer,
+    ):
+        reader.execute("BEGIN")
+        reader.execute("SELECT * FROM schema_meta").fetchall()
+        writer.execute("BEGIN IMMEDIATE")
+        try:
+            with CoordinationStore(path, lock_timeout=0) as reopened:
+                assert reopened.schema_version == COORDINATION_SCHEMA_VERSION
+                assert not reopened._connection.in_transaction
+                assert reopened._connection.total_changes == 0
+        finally:
+            reader.execute("ROLLBACK")
+            writer.execute("ROLLBACK")
 
 
 def test_concurrent_fresh_initializers_serialize_and_reopen(tmp_path):

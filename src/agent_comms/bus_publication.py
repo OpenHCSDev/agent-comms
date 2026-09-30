@@ -206,7 +206,8 @@ class CommittedDelivery(WireRecord):
 
         if self.receipt is not None:
             yield ResponseKeys(self.receipt.publication_key)
-        yield DeliverySources(self.message.seq, self.message.message_id, offset, length)
+        yield DeliverySources(self.message.seq, self.message.message_id, offset, length,
+                              self.audience.sender_lookup)
         for recipient in self.audience.recipients:
             yield Addressed(recipient.recipient_lookup, self.message.seq)
 

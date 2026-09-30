@@ -8,7 +8,6 @@ import os
 import stat
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
@@ -35,7 +34,6 @@ from .store_files import (
     _iter_jsonl_records,
     _iter_jsonl_stream,
     _store_lock,
-    file_revision,
 )
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
@@ -343,39 +341,23 @@ class WireLog:
         with self._record_snapshot() as (through, records):
             yield through, (message for message, _ in records)
 
-    @staticmethod
-    @lru_cache(maxsize=4)
-    def _receipt_offsets(
-        path: Path, revision: tuple[int, int, int, int] | None
-    ) -> Mapping[str, int]:
-        offsets: dict[str, int] = {}
-        if revision is None:
-            return offsets
-        with path.open("rb") as stream:
-            while True:
-                offset = stream.tell()
-                raw = stream.readline()
-                if not raw:
-                    break
-                try:
-                    record = json.loads(raw)
-                except ValueError:
-                    if not raw.endswith(b"\n"):
-                        break
-                    raise
-                if isinstance(record, dict) and isinstance(record.get("id"), str):
-                    offsets[record["id"]] = offset
-        return offsets
-
     def message_by_id(self, message_id: str) -> Message | None:
-        """Look up a durable receipt without retaining the wire's message bodies."""
-        with _store_lock(self.path):
-            offset = self._receipt_offsets(self.path, file_revision(self.path)).get(message_id)
-            if offset is None:
-                return None
-            with self.path.open("rb") as stream:
-                stream.seek(offset)
-                return Message.from_wire(json.loads(stream.readline()))
+        """Resolve an ID-only request through the canonical opened wire stream.
+
+        Display callers carry original seq/id references and use their bounded
+        certified window. There is no second receipt-offset index or cache.
+        """
+        with self.full_history_snapshot() as (_, messages):
+            return next((message for message in messages if message.message_id == message_id), None)
+
+    def messages_for_references(self, references):
+        """One canonical lock/certificate lifetime for a visible source window."""
+        from .private_bus_checkpoint import source_references_unlocked
+
+        if not references:
+            return ()
+        with self.locked():
+            return source_references_unlocked(self, self._private_marker_unlocked(), references)
 
     def total_messages(self) -> int:
         with _store_lock(self.path):

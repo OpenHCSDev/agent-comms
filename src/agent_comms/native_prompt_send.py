@@ -33,14 +33,18 @@ def _enter_admission(
     deadline: float,
 ) -> ExitStack:
     """Wait only for pre-admission contention, using the existing writer budget."""
+    busy: PromptAdmissionBusy | None = None
     while True:
         budget = deadline - time.monotonic()
         if cancelled.is_set() or budget <= 0:
-            raise PromptSendUnknown("Native prompt admission ended before writing any bytes")
+            raise PromptSendUnknown(
+                "Native prompt admission ended before writing any bytes"
+            ) from busy
         scope = ExitStack()
         try:
             scope.enter_context(boundary())
-        except PromptAdmissionBusy:
+        except PromptAdmissionBusy as error:
+            busy = error
             scope.close()
             cancelled.wait(min(budget, 0.01))
         except BaseException:
