@@ -14,6 +14,9 @@ from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
+from .bus_publication import StableLookupText
+from .field_codec import FieldCodec
+from .wire_metadata import WireRootIdText
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_pi import NativeContextProof, NativePiUnavailable
@@ -77,18 +80,11 @@ def read_historical_native_inputs(
     current-owner cursor additionally verifies the canonical bus prefix and
     requires a just-settled input in the live admission epoch.
     """
-    if (
-        type(store) is not Coordination
-        or type(wire_root_id) is not str
-        or len(wire_root_id) != 32
-        or any(character not in "0123456789abcdef" for character in wire_root_id)
-        or type(recipient_lookup) is not str
-        or len(recipient_lookup) != 32
-        or any(character not in "0123456789abcdef" for character in recipient_lookup)
-        or type(source_seq) is not int
-        or source_seq <= 0
-    ):
-        raise ValueError("historical input requires exact trusted root, lookup, and sequence")
+    WireRootIdText.decode(wire_root_id)
+    StableLookupText.decode(recipient_lookup)
+    FieldCodec.decode(int, source_seq)
+    if source_seq <= 0:
+        raise ValueError("historical input requires a positive source sequence")
     if store.session._connection.in_transaction:
         raise IdentityConflict("historical native input view requires a committed snapshot")
     with store.session.read():
