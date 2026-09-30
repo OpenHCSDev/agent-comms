@@ -20,6 +20,7 @@ from .text_digest import TextDigest
 if TYPE_CHECKING:
     from .compaction_journal import CompactionJournal
     from .compaction_records import SelectedSummaryAttempt
+    from .compaction_records import CompactionOperation
     from .input_disposition import InputDocument
     from .selected_source import SessionRevision
 
@@ -42,6 +43,9 @@ def sql_names(family: type[DeclaredFamily], *, unresolved: bool = False) -> str:
 class OperationState(DeclaredFamily, LifecycleState, affix="Operation"):
     terminal: ClassVar[bool] = False
     committed: ClassVar[bool] = False
+    def represents_summary(self, operation: CompactionOperation,
+                           attempt: SelectedSummaryAttempt) -> bool:
+        return False
     def require_committed(self, commit_id: str) -> None:
         raise CompactionJournalError(
             f"Native compaction operation {commit_id} is {self.declared_name}; "
@@ -78,6 +82,11 @@ class CommittedOperation(TerminalOperation, OperationState):
     committed = True
     def require_committed(self, commit_id: str) -> None:
         return None
+    def represents_summary(self, operation: CompactionOperation,
+                           attempt: SelectedSummaryAttempt) -> bool:
+        operation.require_summary_link(attempt, admit_original=True)
+        operation.committed_outcome()
+        return True
 
 
 class RefusedOperation(TerminalOperation, OperationState):
