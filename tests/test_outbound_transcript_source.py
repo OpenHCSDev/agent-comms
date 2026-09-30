@@ -186,3 +186,38 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     comms.registry.declare(Thread("renamed", frozenset(), str(tmp_path)))
     with pytest.raises(StaleRevision, match="original thread"):
         comms.transcripts.bind_page_read("renamed", identity)
+
+
+def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_path, monkeypatch):  # noqa: F811
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    read = comms.transcripts.capture_page_read("beta")
+    verify = WireLog.verify_before_read_unlocked
+    barriers = []
+
+    def observed(log):
+        if log.path == comms.bus.log.path:
+            barriers.append(True)
+        return verify(log)
+
+    monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
+    page = read.read()
+    # Before admission, one bounded page query, and after admission. The original
+    # frontier is already certified: page preparation does not certify it again.
+    assert len(barriers) == 3
+    assert page.after.receipts == read.identity.receipt_frontier
+    assert tuple(event.source for event in page.events) == (initial.message.reference,)
+
+
+def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monkeypatch):  # noqa: F811
+    _path, _root_id, comms, _initial, _people = _root(tmp_path)
+    read = comms.transcripts.capture_page_read("beta")
+    prepare = comms.transcripts.thread_transcript_page
+
+    def append_after_page(*args, **kwargs):
+        page = prepare(*args, **kwargs)
+        comms.messaging.send_message("sender", "beta", "Original concurrent append")
+        return page
+
+    monkeypatch.setattr(comms.transcripts, "thread_transcript_page", append_after_page)
+    with pytest.raises(StaleRevision, match="during preparation"):
+        read.read()

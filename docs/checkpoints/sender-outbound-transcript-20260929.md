@@ -362,3 +362,21 @@ Read admission still rechecks the source around page projection; those remaining
 barriers are not claimed eliminated. Original41MB installed/native/ACP/physical
 UI acceptance remains UNREVIEWED. Parent432 integrates this source with434/436/437
 and Sch215's matching content_identity/public-witness consumer in one cohort.
+
+## Page preparation uses the captured original bound
+
+TranscriptRead now passes its already certified wire frontier and captured
+native byte bound to the existing page projection. The standalone page API
+still captures a frontier when no original witness was supplied. Existing
+before/after admission checks retain native, source, annotation and publication
+custody; the intermediate page no longer recertifies the same frontier.
+
+The original canonical source reproducer records four real barriers at e59ead3b
+and three here: admission before, bounded original page query, admission after.
+A relevant original append during page projection still rejects the read after
+preparation. All19 focused controls pass in3.77s. Baseline and candidate logs
+are captured-frontier-baseline.log and captured-frontier-run01.log under the
+same persistent430 scratch owner. This remains source evidence, not installed
+41MB wall latency or native delivery acceptance. Reusing the opened certificate
+within each canonical lock remains a separate read-transaction improvement;
+no retained proof/cache or alternate lock authority was introduced.
