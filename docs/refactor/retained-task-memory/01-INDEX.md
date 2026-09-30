@@ -47,12 +47,21 @@ state, not the team's unrecorded prioritization decisions.
 | --- | --- |
 | Task-aware probes and their provider overhead | Opt-in until matched measurements justify activation; hard-context protection unchanged |
 | Source of exact facts | Derive from existing owners with source revisions; no new authoritative memory database |
-| What to preserve first | Active goal/revision, latest correction, unresolved failure, exact source identifier/path/revision, input disposition |
+| What to preserve first | Verbatim applicable constraints; genuine choices with valid rejected alternatives; exact source-owned references; narrative only for remaining context |
+| Peer-message provenance | Project original wire/message identity and authority; never reconstruct another author's constraints or claims from injected transcript prose |
+| Decision provenance | Explicitly emitted nominal Decision under one canonical owner; no retrospective narrative inference or second memory store |
+| Revision/lock-in gates | Zero unauthorized constraint/Decision drift; sanctioned corrections separately reported; held-out probes require previously unnecessary distinctions |
+| CI queue | Does not hold progress or useful verified checkpoints; enforced merge rules still apply |
 | Unsupported cache route | Select bounded strategy before any provider work; never replay after an uncertain send |
 | Paid evaluation | No calls until Tristan authorizes model, sample count and spend cap |
 | Quality threshold | Exact-state/invalidation controls must pass; predeclare recall/cost/latency margins before seeing model results |
 
 No new provider model or automatic memory-mining policy is silently enabled.
+The user-supplied Paper4b retention/lock-in translation is incorporated in S2/S4
+as intended design and acceptance requirements. Formal proposition/notation
+references remain unverified; neither Decision emission nor revision-mass/lock-in
+measurement is implemented in this draft. The original table is pinned historical
+source evidence, not a fresh audit of the subsequently advanced remote main.
 
 Followthrough at source `452bc01f` is recorded in
 [05-AUDIT-REVIEW.md](05-AUDIT-REVIEW.md): all 85 detectors completed for the

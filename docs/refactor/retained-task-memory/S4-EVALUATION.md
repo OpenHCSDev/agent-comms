@@ -68,6 +68,56 @@ Predeclare quality/cost/latency margins. Require zero stale-authority or UNKNOWN
 mutation in exact-state controls; numerical recall margins need agreement before
 model results. External paid run authorization is a separate gate.
 
+## Revision mass and lock-in acceptance gates
+
+Add the four-class [S2 retention contract](S2-MEMORY.md) to the evaluation design.
+Retrieval accuracy alone does not test whether a summary discarded alternatives
+or enlarged the valid-action set. The existing fixture/scorer does not implement
+these additional metrics or probes.
+
+For each adjacent checkpoint pair, match constraints and Decisions by canonical
+owner identity, scope and original source reference. Derive **unauthorized revision
+mass** as the number whose effective value changed without an explicit authorized
+correction event in the original wire evidence, divided by the number of identities
+eligible for comparison. Report constraints and Decisions separately, numerator,
+denominator and round; do not store another authoritative set of retained values.
+An explicit correction must name the affected identity, have update authority and
+precede the checkpoint. An unrelated message, inferred intent or a summary edit
+is not a correction event. Authorized supersession is reported separately, not
+counted as drift or used to hide it.
+
+A disappeared required item counts as an unauthorized revision unless source
+scope/lifetime ended through a sanctioned event; otherwise loss would disappear
+from the denominator. Additions are reported separately and checked against their
+source; fabricated additions cannot pass merely because they lack a prior identity.
+If no identities are eligible, report not-applicable rather than a perfect zero.
+If source/correction evidence is absent, mark the comparison unevaluable and fail
+exact-retention acceptance rather than assuming no correction occurred.
+
+This operational metric is motivated by the user's `rec_P`/Paper4b proposal;
+formal equivalence to that notation remains unverified. Constraint drift target is
+zero, and zero unauthorized Decision revisions is the proposed exact-state gate.
+An authorized revision must preserve the original evidence and alternatives while
+projecting the new effective value. Forced artifact references can change with
+their source owners and must not be mislabeled constraint/Decision drift.
+
+Freeze **held-out distinction probes** before constructing summaries. Early goals
+should not require some declared valid-but-rejected alternatives; a later goal
+should require revisiting one of them. Score both the ability to name the retained
+alternative and the validity of the resulting revised action against the original
+constraints, with the same trace and authorized correction events for all controls.
+Include a forced-fact control, a dropped-prohibition case, an unsanctioned Decision
+rewrite, and a valid explicit correction. Keep oracle alternatives and acceptance
+labels out of provider prompts. Retrieval, authority preservation and lock-in
+resistance are separate reported outcomes, not one aggregate quality number.
+
+Add provider-free controls proving that an unchanged item scores zero drift,
+unauthorized change/deletion scores drift, authorized correction does not, unrelated
+correction cannot excuse drift, and missing provenance fails closed. Then exercise
+the actual saved-native/ACP projection path before making retention claims. Paid
+model probes still require authorization. No additional native/model adapter or
+metric implementation is claimed by this planning update.
+
 ## Negative tests, guards and done when
 
 Existing native/provider failures, stop, source change, goal replacement, restart
@@ -78,6 +128,9 @@ No internal-format golden or structural tests of removed runtime contracts.
 
 Done requires a runnable native evaluation entrypoint, representative frozen
 fixtures, authorized matched-model results and acceptance margins, reproducible
-reports, and guards separating measurements from authority. Current provider-free
+reports, and guards separating measurements from authority. Include the revision-mass
+and held-out lock-in gates above, not only retrieval questions. CI queue latency
+does not hold useful checkpoints: publish after focused local verification, while
+respecting enforced merge rules and reporting unexecuted CI accurately. Current provider-free
 checks verify only the oracle/scorer and exporter. No full-suite, native acceptance,
 model-quality or deployment claim is implied.

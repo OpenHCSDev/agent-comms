@@ -182,7 +182,7 @@ The remaining lead is `ScoredScenario.public:return` repeating the words
 condition/rounds. The method is on the determining class itself and exports a
 value-only condition name and each round's public projection; it does not maintain
 another record or state authority. This is an owner-local boundary projection,
-not the earlier internal raw consumer. Keep the lead visible for independent
+not the earlier internal raw consumer. Keep the lead visible in direct tool-driven
 review; do not suppress the detector or claim zero findings/global cleanliness.
 
 Ten provider-free tests pass. The added behavior checks prove totals change when

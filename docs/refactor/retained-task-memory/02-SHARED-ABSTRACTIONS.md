@@ -16,6 +16,25 @@ New names in the historical plan are sketches, not a mandate to add classes.
 | summary outcome, commit and original admission | `OwnerSummaryOutcome`, `NativeSummary`, `OwnerCompactionCommit` | Extend existing payload and outcome contracts; no separate memory commit |
 | publication | TurnProgress/event family and existing compaction outbox | UI derives view; no memory authority in Toad |
 
+## Newly requested provenance obligations
+
+[S2](S2-MEMORY.md) now requires four retention classes and a declared Decision
+owner. No Decision abstraction or storage is built by this planning PR. Existing
+message/wire and claim authorities must determine authored constraints; native
+transcript injection is only a representation. Their concrete identity/authority
+join requires fresh admission at implementation time.
+
+Audit existing richer decision authorities before introducing the proposed nominal
+Decision. If none supplies choice, valid rejected alternatives, scope, source turn
+and explicit correction lineage, add that fact family once under the existing
+durable ownership mechanism. Retention, summary packing/commit, UI and S4 metrics
+consume derived projections. Do not duplicate the Decision in a memory store,
+retrospective prose extractor, FieldCodec subclass, codec or second checkpoint.
+
+S2 is the receiving design surface; S4 owns measurement only. Wire/tool admission,
+source joining and native checkpoint files remain sequenced crossings with their
+existing implementation owners, not new delegated review tasks.
+
 ## Correct-factoring experiment
 
 Add one new fact kind, such as an exact artifact identity. Its owner should expose

@@ -45,6 +45,74 @@ be promoted blindly to structured authority. Bounded selection when facts exceed
 the budget, source concurrency, constructors/MRO, dynamic and alternate callers
 also require admission. Do not auto-enable a fact extractor to close a checklist.
 
+## Four retention classes and lock-in
+
+The user's Paper4b translation supplies the intended retention semantics below.
+Its proposition numbering, `D < K`, full signature `Y_T`, and `rec_P` terminology
+are user-supplied theoretical references, not independently verified paper
+citations in this checkpoint. Do not claim a formal result has been proved by
+this plan or the scorer. The practical distinction is between collapsing
+irrelevant narrative and deleting a constraint or a real choice distinction.
+
+1. **Constraints:** user corrections, prohibitions, scope limits and valid claims.
+   Preserve exact wording and original source references, never a paraphrase.
+   Accepted constraints intersect the applicable valid-action set. Removal can
+   enlarge that set and admit invalid actions. Preserve author, authority, scope
+   and correction/supersession lineage; retain superseded evidence without
+   presenting it as active. A compactor cannot resolve conflicting constraints.
+2. **Decisions among alternatives:** preserve the chosen alternative together
+   with the valid but rejected alternatives, scope and original source turn.
+   Spend this extra budget on genuine choice-resolving items, not every transcript
+   statement. Later tasks can need a distinction the current goal did not need.
+   Do not infer rejected alternatives or claim a complete signature when the
+   bounded admissible alternative set was not actually declared.
+3. **Forced facts:** preserve exact references for artifact identities, paths,
+   hashes, symbols and unresolved failures when their value identifies the fact.
+   If a path itself was selected among valid alternatives, preserve that choice
+   under class 2 as well; spelling alone does not establish it was forced.
+4. **Narrative:** use the lossy summary for contextual material around classes
+   1-3. Narrative is neither their authority nor a substitute when budget runs out.
+
+These are behavioral ownership obligations, not authorization for a repeated
+string-kind switch or independently maintained kind registry (MEMB-1, IMPL-5).
+Admit the projection/selection contracts and all consumers before implementing
+retention cases. If exact mandatory material exceeds the budget, refuse or change
+packing/strategy through the existing policy owner; do not silently summarize it.
+
+### Original message provenance, not transcript reconstruction
+
+Prompt-injected peer messages also appear in native history. Retention must read
+the original message/wire owner, keyed by original message identity, rather than
+extract another authoritative copy from that injected transcript. Preserve source
+revision, author, recipient and scope. The concrete join between canonical message
+identity, original wire evidence and current claims remains OPEN until refreshed
+source admission; a native transcript event ID is not interchangeable with a bus
+message ID (IDEN-5, BOUND-2).
+
+Exact retention does not promote every peer sentence into an instruction. Existing
+authority, trust, claim validity and scope rules determine applicability. A thread's
+summarizer cannot rewrite another author's constraint, adjudicate their claim,
+clear an unresolved delivery or elevate peer text above user instructions. Only
+an explicit authorized source correction changes the effective retained value.
+
+### Declared Decision owner
+
+A decision currently represented only as prose cannot be reconstructed losslessly
+by a compactor. Plan a nominal `Decision` record emitted through an explicit tool
+when the agent resolves an ambiguity: choice, valid rejected alternatives, scope
+and original source turn, with stable identity and correction lineage. The agent
+emits the record at decision time, not during summarization. The bounded alternative
+set and emission authority must be admitted; an incomplete record cannot certify
+full `Y_T` retention. Audit any existing richer decision authority before adding it.
+
+There must be one canonical Decision owner, integrated with the existing durable
+owner/ledger and declared tool/FieldCodec capabilities. A separate task-memory
+store, mirrored transcript extractor, parallel codec or second commit pipeline is
+forbidden. Retention, packing, UI and evaluation only project that owner's facts.
+The storage location, tool admission, native-turn/message join, update authority
+and all-callers closure are production design obligations, not implemented here.
+Decision emission and later correction must not authorize execution or input replay.
+
 ## New-case experiment, deletions and guards
 
 Add an exact artifact identity. Extend its determining owner's projection once;
@@ -60,7 +128,11 @@ Three real native checkpoints: preserve exact identity, correction spanning
 segments, rename, deletion, goal replacement, unresolved failure and queued input.
 Prove stale source refuses preparation/commit; unknown input is unchanged; exact
 facts fit with narrative and tool pairs; cancellation never commits partial data.
-Run S4's oracle separately on authoritative projection and model recall. Same
+Run S4's oracle separately on authoritative projection and model recall. Add
+verbatim-constraint and source-message identity checks, Decision emission and
+supersession checks, zero unauthorized revision mass, and held-out probes needing
+previously irrelevant alternatives. These new gates are planned, not supplied by
+the existing seven-question scaffold. Same
 history/questions/models for controls. Stored facts passing is not a model pass.
 Done means all intended consumers derive from the accepted source owners, guarded
 invalidation is complete, and native plus repeated recall gates pass. No owner is
