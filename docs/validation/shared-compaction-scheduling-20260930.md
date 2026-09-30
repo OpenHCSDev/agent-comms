@@ -96,13 +96,43 @@ installing or changing default packages. Prepared manifest:
 tree:`5ea25e3f9e88d073e5506ce97ceeca4c763b6da19f986ab032880d45f020f35c`.
 
 [Controlled receipt](../../evidence/shared-compaction-scheduling/controlled-native.json)
-is the source checkpoint evidence. Before readiness, the affected installed
-native/ACP acceptance must exercise this artifact's joined summary and original
-input boundary. No repeated paid437 gate or default installation is performed.
+records the source checkpoint and installed acceptance. A fresh noneditable
+candidate verifies the exact native full tree. Two original-large-source native
+RPC/accounting cases pass in15.93s: successful journal/once-only original custody,
+and retained-output overrun preserving UNKNOWN/source with no original binding.
+Continuous actual ACP journeys for ordinary and private sessions both pass in
+28.30s, with two compactions and two distinct originals started once per journey;
+publication precedes native binding. Fourteen unrelated parametrizations were
+deselected. No repeated paid437 gate or default installation is performed.
+
+The nested-source experiment uses a fresh SDK-created1,403,136-byte native
+session with both history and current turn requiring map/reduction. Twelve leaf
+requests share four slots, preserve ordered output and monotone source progress,
+then join and clean up. This generated-source case complements the original43MB
+case and establishes no independent real-model speed claim.
+
+Deleted the273-line obsolete `patch-native-compaction.py` builder and its two-line
+shell call. It injected the old batch scheduler, offsets and clock before a later
+patch removed them; those competing authored implementations are gone. The
+existing native storage patch now changes pinned stock compaction directly into
+the sole final implementation. Fresh standard preparation from the changed
+recipe passes zero-fuzz/full-tree verification and produces the **same** e36
+artifact already tested above. No repeated native journey for byte-identical
+code. These273 Python recipe lines and two shell lines are reported separately
+from the73 actual runtime JavaScript lines deleted.
+
+Remaining ownership limit: real03 source events identify provider-containing
+phase intervals, not isolated network/queue/reasoning durations. Completed native
+entries record aggregate input/output usage (automatic160385/15268,
+manual166312/15996); their reasoning field is0, which does not establish absence
+of reasoning on the selected high route. Provider/model/thinking, output/context
+budgets, task-aware triggers and retained-memory policy are unchanged. Real speed
+after activation must be measured from a new ordinary operation, without replaying
+these completed inputs. No Toad/ACP protocol change or consumer pin is required.
 
 Owned scratch: `/home/ts/.cache/agent-scratch/comms-shared-compaction-scheduling-20260930`
 contains provider-free receipt/index data and the disposable locked npm cache.
-The temporary copied-native stage is disposable after reproducible preparation;
+The temporary copied-native stage and npm-prime build tree have been retired;
 the prepared `stack/.pi-native-e36a1dde326b7017` artifact is protected review input.
 Resource preflight: home29.9GiB/RAM16.0GiB, accumulatedswap15.9GiB warning only;
 bounded source-only tests, no new native-owner fleet.

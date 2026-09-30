@@ -2,7 +2,7 @@
 // Controlled provider only: no network, credentials, session append or input replay.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -19,7 +19,23 @@ const usage = { input: 3, output: 2, reasoning: 0, cacheRead: 0, cacheWrite: 0, 
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const digest = () => createHash('sha256').update(readFileSync(savedSource)).digest('hex');
 const before = digest();
-const manager = SessionManager.open(savedSource);
+let manager;
+let nestedRoot;
+if (mode === 'nested') {
+    nestedRoot = resolve(process.env.AGENT_COMMS_SESSION_INDEX_DIR, '../nested-source');
+    mkdirSync(nestedRoot, { recursive: true, mode: 0o700 });
+    manager = SessionManager.create(nestedRoot, resolve(nestedRoot, 'sessions'));
+    const assistant = text => ({ role: 'assistant', content: [{ type: 'text', text }],
+        provider: model.provider, model: model.id, api: 'openai-codex-responses',
+        stopReason: 'stop', timestamp: 1, usage });
+    manager.appendMessage({ role: 'user', content: 'history '.repeat(80000), timestamp: 1 });
+    manager.appendMessage(assistant('earlier work'));
+    manager.appendMessage({ role: 'user', content: 'current prefix '.repeat(40000), timestamp: 2 });
+    for (let i = 0; i < 5; i++) manager.appendMessage(assistant('retained suffix '.repeat(2000)));
+} else manager = SessionManager.open(savedSource);
+const measuredSource = manager.getSessionFile();
+const measuredSourceBytes = readFileSync(measuredSource);
+const measuredSourceDigest = createHash('sha256').update(measuredSourceBytes).digest('hex');
 const prepareStarted = performance.now();
 const preparation = prepareCompaction(manager.entryStore, settings, model, manager.getLeafId());
 const preparationMs = performance.now() - prepareStarted;
@@ -84,7 +100,7 @@ const response = compact(preparation, model, undefined, undefined, 'SHARED_SOURC
         onSummaryText: (text, source) => { progress.push(source); chunks.push(text); },
         onSummaryResponse: (_usage, source) => { if (source) progress.push(source); },
     }, 'controlled-shared-compaction');
-if (mode === 'success' || mode === 'baseline') {
+if (mode === 'success' || mode === 'baseline' || mode === 'nested') {
     const result = await response;
     assert.ok(result.summary.indexOf('HISTORY_COMPLETE') < result.summary.indexOf('CURRENT_TURN_COMPLETE'));
     assert.equal(result.usage.totalTokens, requests.length * usage.totalTokens);
@@ -106,9 +122,11 @@ if (mode === 'success' || mode === 'baseline') {
 }
 assert.equal(active, 0, 'native source execution joins every provider request');
 assert.equal(digest(), before, 'saved source bytes remain unchanged; no original input replay');
+assert.equal(createHash('sha256').update(readFileSync(measuredSource)).digest('hex'), measuredSourceDigest);
 assert.equal(readdirSync(process.env.AGENT_COMMS_SESSION_INDEX_DIR).filter(name => name.startsWith('summary-')).length, 0);
-console.log(JSON.stringify({ mode, preparationMs, sourceBytes: readFileSync(savedSource).length,
+console.log(JSON.stringify({ mode, preparationMs, sourceBytes: measuredSourceBytes.length,
     sourceSelectedBytes: progress[0].sourceBytesTotal, peak, requests,
-    providerSpanMs: requests.at(-1).finishMs - requests[0].startMs,
+    providerSpanMs: Math.max(...requests.map(r => r.finishMs)) - Math.min(...requests.map(r => r.startMs)),
     observedProgress: progress.length, streamedChunks: chunks.length, sourceUnchanged: true,
     ownedProviderRequestsJoined: true }));
+if (nestedRoot) { manager.entryStore.close(); rmSync(nestedRoot, { recursive: true }); }
