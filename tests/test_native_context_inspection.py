@@ -66,7 +66,7 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
         assert fixture.saved_inputs() == []
 
 
-async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
+async def test_context_manifest_native_acp_and_cli_continuous(native_backend, receiving_only=False):
     """Actual Toad originals/followup, native Core tool and CLI on one source.
 
     The existing SDK source contract seeds real history/summary/image/resource
@@ -189,7 +189,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
             fixture.provider.response_gate.set()
 
         async with actual_s2_ingress(owner, thread, output) as observer:
-            for index, text in enumerate((inputs[0], inputs[2]), 1):
+            steps = (inputs[0],) if receiving_only else (inputs[0], inputs[2])
+            for index, text in enumerate(steps, 1):
                 if index == 2:
                     private_choice, = owner._comms.bus.log.full_history()
                     supersession = owner._comms.messaging.send_user_message('#team',
@@ -242,6 +243,23 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
                 user, = [entry for entry in entries if entry.input_id == item.native_id]
                 assert user.message.user
             (output / 'original-inputs.json').write_text(json.dumps(FieldCodec.encode(terminals)))
+        if receiving_only:
+            assert len(terminals) == 2
+            assert len({item.native_id for item in terminals}) == 2
+            assert fixture.provider.posts == 2
+            assert fixture.session.read_bytes().startswith(original_source)
+            print('S5_RECEIVING_INPUT_JOURNEY', json.dumps({
+                'elapsed_seconds': time.monotonic() - started,
+                'actual_toad_originals': 1, 'actual_controller_followups': 1,
+                'local_posts': fixture.provider.posts,
+                'original_inputs': FieldCodec.encode(terminals),
+                'original_scope_captured_by_queue_owner': True,
+                'source_render_bytes_identical': source['provider_bytes_identical'],
+                'manual_compactions': 0, 'public_inputs': 0,
+                'artifact_root': str(output), 'python': sys.executable,
+                'visual_limit': 'Compositor source and raw export only; readable physical pixels not claimed',
+            }), flush=True)
+            return
         # C's independent real SDK source was forked before private publication.
         # Drive the same production ACP manual selected writer through actual Toad.
         c_output = output / 'receiver'

@@ -11,7 +11,7 @@ from pathlib import Path
 import agent_comms
 
 
-async def run(root):
+async def run(root, receiving_only=False):
     from pytest import MonkeyPatch
     from test_backend_native_lifecycle import native_backend
     from test_native_context_inspection import test_context_manifest_native_acp_and_cli_continuous
@@ -26,7 +26,7 @@ async def run(root):
     try:
         original = await anext(fixture)
         async with asyncio.timeout(90):
-            await test_context_manifest_native_acp_and_cli_continuous(original)
+            await test_context_manifest_native_acp_and_cli_continuous(original, receiving_only=receiving_only)
         receipt["state"] = "SCOPED_PASS"
     except BaseException as error:
         receipt["state"] = "FAILED_NO_REPLAY"
@@ -268,6 +268,7 @@ if __name__ == "__main__":
     parser.add_argument('--configured-source-root', type=Path)
     parser.add_argument('--original-python', type=Path)
     parser.add_argument('--complete-goal-controls', action='store_true')
+    parser.add_argument('--receiving-only', action='store_true')
     options = parser.parse_args()
     if "site-packages" not in Path(agent_comms.__file__).parts:
         raise RuntimeError("This acceptance requires the paired installed Core wheel")
@@ -280,4 +281,5 @@ if __name__ == "__main__":
     if options.complete_goal_controls:
         complete_goal_controls(options.root)
     else:
-        asyncio.run(run_configured(options) if options.configured_source_root else run(options.root))
+        asyncio.run(run_configured(options) if options.configured_source_root
+                    else run(options.root, receiving_only=options.receiving_only))
