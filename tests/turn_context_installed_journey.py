@@ -37,6 +37,9 @@ async def run(root):
         monkey.undo()
         if original is not None:
             receipt["local_provider_posts"] = original.provider.posts
+            requests = root / 'original-provider-requests.json'
+            requests.write_text(json.dumps(original.provider.requests))
+            receipt['original_provider_requests'] = str(requests)
         receipt["elapsed_seconds"] = time.monotonic() - started
         (root / "terminal-receipt.json").write_text(json.dumps(receipt, indent=2))
         print(json.dumps(receipt), flush=True)

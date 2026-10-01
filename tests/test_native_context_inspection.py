@@ -192,7 +192,11 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
                 (output / f'recorded-turn-{index}.json').write_text(json.dumps(selected))
             contributors = tuple(part for manifest in manifests for segment in manifest.segments
                                  for part in segment.contributors)
-            assert {part.kind for part in contributors} >= {'coordination', 'goal', 'user_input', 'user_followup'}
+            # Manual owner inputs intentionally omit goal instructions unless
+            # an original goal permit owns this turn. The unchanged CLI preview
+            # above covers declared goal contributors; never inject new bytes
+            # merely to satisfy this manual-input oracle.
+            assert {part.kind for part in contributors} >= {'coordination', 'user_input', 'user_followup'}
             assert all(part.provenance for part in contributors)
             stored = InputDispositions(owner._comms.root / InputDispositions.filename).read()
             terminals = tuple(stored.lookup(original.key) for original in originals)
@@ -210,7 +214,9 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         difference = await cli("--diff")
         assert difference["turn"] != difference["previous_turn"]
         (output / "context-diff.json").write_text(json.dumps(difference))
-        assert fixture.provider.posts == 4
+        # Pi drains a queued followup after the tool result into the same next
+        # synthesis request; one request serves both originals in this turn.
+        assert fixture.provider.posts == 3
         assert owner._comms.bus.log.latest_sequence() == baseline_sequence + 1
         decision, = owner._comms.bus.log.full_history()
         assert decision.decision.chosen == choice
