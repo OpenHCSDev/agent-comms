@@ -221,6 +221,24 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         launcher,
         info,
     ):
+        from agent_comms.compaction_records import SelectedSummarySource
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.retained_task_facts import CurrentDecisionTaskFact, UserSourceTaskFact
+        from agent_comms.tools import invoke_tool
+
+        comms = Comms(tmp_path)
+        user = comms.messaging.send_user_message(
+            "owner", "Never replay UNKNOWN; preserve /artifacts/exact-root.",
+            worktree=str(tmp_path),
+        )
+        monkeypatch.setenv("PI_AGENT_ID", "owner")
+        declared = invoke_tool(comms, "comms_decision", {
+            "chosen": "/artifacts/exact-root",
+            "rejected": ["/scratch/guessed-root"],
+            "to": "owner",
+        })
+        choice = comms.bus.log.full_history()[-1]
+        assert FieldCodec.encode(choice.reference) == declared["reference"]
         admitted = []
         observed = []
 
@@ -250,6 +268,11 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         rows = journal.summaries.blocking(file)
         assert len(rows) == 1 and rows[0].state.declared_name == "linked"
+        captured = FieldCodec.decode(SelectedSummarySource, json.loads(rows[0].source_json))
+        assert tuple(fact.source for fact in captured.retained.facts
+                     if isinstance(fact, UserSourceTaskFact)) == (user,)
+        assert tuple(fact.source for fact in captured.retained.facts
+                     if isinstance(fact, CurrentDecisionTaskFact)) == (choice,)
         operation = journal.operations.get(rows[0].state.commit_id)
         assert operation.state.declared_name == "committed"
         intent = json.loads(operation.intent_json)
@@ -260,6 +283,8 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         )
         entries = [json.loads(line) for line in Path(file).read_text().splitlines()]
         assert sum(row["type"] == "compaction" for row in entries) == 1
+        committed = next(row for row in entries if row["type"] == "compaction")
+        captured.retained.require_summary(committed["summary"])
         assert len(journal.publications.pending(file)) == 1
         assert not persistent.available and persistent.custody.session_file == file
         assert not native_input_admitted(tmp_path, file)

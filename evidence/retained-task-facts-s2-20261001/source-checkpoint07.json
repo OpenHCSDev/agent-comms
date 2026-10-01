@@ -23,5 +23,11 @@
     "General constraints and original artifact/tool provenance",
     "Non-selected native automatic retention backstop and recent-window ownership",
     "S4 model recall separate budget"
-  ]
+  ],
+  "required_debt_gate": {
+    "exit": 0,
+    "positive_delta": {},
+    "raw_receipt": "ratchet-source07.json",
+    "scope": "whole changed production against original e191bcf base"
+  }
 }

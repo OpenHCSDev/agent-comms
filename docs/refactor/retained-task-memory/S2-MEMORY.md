@@ -8,9 +8,11 @@ main `e191bcf44c292dfedc5b8b62b2b503f06de3ae7b`. This scope implements original
 wire Decision emission/correction, declaration-owned retained classes, canonical
 fact projections and existing native compaction packing/commit closure. Einstein
 owns S5 context assembly separately; Mendel owns native execution identity in
-#472. Shared methods are coordinated directly before edits. No new native fixture
-will run alongside the current Kepler investigation. Paid recall evaluation is a
-separate budget; source and native acceptance remain distinct.
+#472. Shared methods are coordinated directly before edits. Parent authorizes one combined S2/S5 normal native package and matched installed
+cohort, with Schrodinger the sole native builder and Einstein the query acceptance
+owner. Parent alone owns paired Toad metadata, installation and public cutover.
+Paid recall evaluation is a separate budget; source and native acceptance remain
+distinct.
 
 **Source reviewed:** `4295d680`.
 **Rules:** [00-RULES.md](00-RULES.md). **Step 2. Origin:** PR48 proposal.
@@ -167,3 +169,20 @@ history/questions/models for controls. Stored facts passing is not a model pass.
 Done means all intended consumers derive from accepted source owners, guarded
 invalidation is complete, and native plus repeated recall gates pass. Complete
 S2's source contract before S1's shared changes.
+
+## Combined native package checkpoint — 2026-10-01
+
+The original stock recipe, exact 95 locked extension dependencies and canonical
+`prepare-pi-native` verification produced the combined S2/S5 package. Manifest
+`4519164ef97bb5ece65f98544179e544e0ac0b486d8976023b610f2397d937f8`, full
+tree `a2b40e1da14b8db418c4d950c703273942a51ced0021e1280dea9b1625fbcd9f`.
+The original full ancestor/layout/tree trust check passes; 49 diagnostic pins
+include the matching compaction declaration. Original public package is unchanged.
+
+Affected source: 22 passed in 2.11s on the normally integrated frozen-recipient
+reader. Required changed-source debt ratchet against the original base passes
+with zero positive deltas. Source-only controls do not establish installed native
+checkpoint or recall correctness; those remain pending. General constraints,
+artifact/tool provenance, non-selected native retention and recent-window
+reduction remain incomplete. See source-checkpoint07.json and
+native-canonical-ready04.json; original failed builds and UNKNOWN stay protected.
