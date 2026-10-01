@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .activity import Activity, ActivityState
+from .activity import ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex, DisplayCheckpoint, DisplayMetricScope
@@ -63,7 +63,7 @@ class MessageNotification:
 
     @classmethod
     def window(
-        cls, root: Path, registry: Registration, messages: Sequence[Message]
+        cls, root: Path, registry: Registration, log: WireLog, messages: Sequence[Message]
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Read one visible window's actual recipient outcomes; never schedule work.
 
@@ -71,11 +71,24 @@ class MessageNotification:
         A missing coordination store or absent row supplies no receipt. Errors remain
         visible to the caller instead of becoming false successful delivery.
         """
-        from .notification_assignment import NotificationAssignment
-
         if len(messages) > cls.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
-        keys = {(message.seq, message.message_id) for message in messages if message.seq > 0}
+        references = tuple(reference for message in messages
+                           for reference in message.notification_references())
+        sources = log.deliveries_for_references(references)
+        projected = cls.delivery_window(root, registry, sources)
+        return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
+                for message in messages}
+
+    @classmethod
+    def delivery_window(cls, root: Path, registry: Registration,
+                        sources: Sequence[CommittedDelivery]):
+        """Project the original frozen audience even before handling is recorded."""
+        from .notification_assignment import NotificationAssignment
+
+        if len(sources) > cls.window_limit:
+            raise ValueError("Notification reads require a bounded visible message window")
+        keys = {(source.message.seq, source.message.message_id) for source in sources}
         result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
         if not keys:
             return {}
@@ -84,20 +97,24 @@ class MessageNotification:
             root, f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
         )
         snapshot = registry.snapshot()
-        owners = NotificationAssignment.active_owners(snapshot)
+        from .agent_activity import AgentActivity
+
+        agents = AgentActivity(root, registry)
+        observations = agents.observe_recipients(
+            (recipient for source in sources for recipient in source.audience.recipients),
+            snapshot=snapshot,
+        )
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
-        originals = {message.reference: message for message in messages}
-        for receipt in rows:
-            notification = receipt.project(owners)
-            source = receipt.assignment.source
-            key = (source.seq, source.message_id)
-            if key in result:
+        for source in sources:
+            key = (source.message.seq, source.message.message_id)
+            for outcome in NotificationAssignment.for_delivery(source, rows):
+                notification = outcome.project(observations[outcome.recipient.recipient_lookup])
                 result[key].append(
                     replace(
                         notification,
                         displayed_to=reads.displayed_recipient(
-                            originals[source],
+                            source.message,
                             notification.recipient_identity,
                             snapshot,
                             document=document,
@@ -131,8 +148,7 @@ class MessageNotification:
         from .bus_publication import stable_thread_lookup
 
         lookup = stable_thread_lookup(owner.created_at)
-        messages = tuple(source.message for source in sources)
-        projected = cls.window(root, registry, messages)
+        projected = cls.delivery_window(root, registry, sources)
         return tuple(
             replace(notification, message=source.message)
             for source in sources
@@ -362,7 +378,7 @@ class ChannelView:
         channels: Mapping[str, Channel],
         pins: Mapping[str, frozenset[str]],
         order: ChannelSort,
-        activity: Mapping[str, Activity],
+        activity: Mapping[str, ObservedActivity],
         sent: Mapping[str, float],
         messages: Mapping[str, ChannelActivity],
         *,
@@ -426,7 +442,7 @@ class ChannelView:
 class ThreadView:
     thread: Thread
     status: ThreadStatus
-    activity: Activity
+    activity: ObservedActivity
     runtime: AgentRuntimeInfo | None
     last_seen: float
     goal_execution: GoalExecution | None = None
@@ -445,7 +461,7 @@ class ThreadView:
         cls,
         thread: Thread,
         snapshot: RegistrySnapshot,
-        activity: Activity,
+        activity: ObservedActivity,
         runtime: AgentRuntimeInfo | None,
         waits: dict[str, GoalWait],
     ) -> ThreadView:
@@ -477,7 +493,7 @@ class ThreadView:
             cls.capture(
                 thread,
                 snapshot,
-                activities.get(name, Activity(name, ActivityState.IDLE, timestamp=0)),
+                activities[name],
                 runtime.get(name),
                 waits,
             )
@@ -488,11 +504,12 @@ class ThreadView:
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
-        return replace(self._display_presentation(), binding=self.binding)
+        ordinary = self._display_presentation()
+        if self.status.active:
+            ordinary = self.activity.readiness.presentation(ordinary, busy=self.activity.state.busy)
+        return replace(ordinary, binding=self.binding)
 
     def _display_presentation(self) -> ThreadPresentation:
-        if self.status.active and self.activity.diagnostic is not None:
-            return self.activity.presentation(self.thread.title or self.thread.name)
         if self.status.active and self.thread.executing and not self.activity.state.busy:
             return ActivityState.WORKING.presentation(
                 self.thread.title or self.thread.name, "In a turn"

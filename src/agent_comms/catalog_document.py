@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from .channel_targets import BuiltinChannel, Tag
 from .channels import Channel, SavedView, ViewPredicate
 from .display_order import ChannelSort, ThreadSort
-from .threads import Thread
+from .thread_provenance import ThreadProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,10 +63,10 @@ class CatalogDocument:
                 visited.add(parent)
                 parent = self.preferences.get(parent, ChannelPreferences()).parent
 
-    def all_tags(self, threads: Mapping[str, Thread]) -> frozenset[str]:
+    def all_tags(self, threads: Mapping[str, ThreadProvenance]) -> frozenset[str]:
         return self.tags.union(*(thread.tags for thread in threads.values()))
 
-    def views(self, threads: Mapping[str, Thread]) -> dict[str, Channel]:
+    def views(self, threads: Mapping[str, ThreadProvenance]) -> dict[str, Channel]:
         tags = self.tags.union(*(thread.tags for thread in threads.values()))
         result = {kind.value: self.resolve(kind.value) for kind in BuiltinChannel}
         for tag in sorted(tags):
@@ -122,7 +122,7 @@ class CatalogDocument:
             raise ValueError(f"Name {name.removeprefix('#')!r} is reserved by a saved view.")
 
     def require_available_tag_name(
-        self, name: str, threads: Mapping[str, Thread], *, previous: str | None = None
+        self, name: str, threads: Mapping[str, ThreadProvenance], *, previous: str | None = None
     ) -> None:
         self.require_available_name(name)
         if name in self.all_tags(threads) and name != previous:
@@ -142,7 +142,7 @@ class CatalogDocument:
         for tag in tags:
             self.preferences.setdefault(f"#{tag}", ChannelPreferences(created_at=created_at))
 
-    def create_tag(self, tag: str, threads: Mapping[str, Thread]) -> None:
+    def create_tag(self, tag: str, threads: Mapping[str, ThreadProvenance]) -> None:
         self.require_available_name(tag)
         if tag in self.all_tags(threads):
             return
@@ -150,7 +150,7 @@ class CatalogDocument:
         self.tags |= {tag}
         self.remember_tags(frozenset({tag}), time.time())
 
-    def set_view(self, view: SavedView, threads: Mapping[str, Thread]) -> None:
+    def set_view(self, view: SavedView, threads: Mapping[str, ThreadProvenance]) -> None:
         unknown = view.predicate.tags - self.all_tags(threads)
         if unknown:
             raise ValueError(f"Unknown view tags: {', '.join(sorted(unknown))}")
@@ -178,7 +178,7 @@ class CatalogDocument:
         del self.saved_views[name]
         self.remove_channel(f"#{name}")
 
-    def set_preferences(self, name: str, threads: Mapping[str, Thread], **changes) -> Channel:
+    def set_preferences(self, name: str, threads: Mapping[str, ThreadProvenance], **changes) -> Channel:
         name = name if name.startswith("#") else f"#{name}"
         channel = self.views(threads).get(name)
         if channel is None:
@@ -188,7 +188,7 @@ class CatalogDocument:
         return self.resolve(name)
 
     def set_metadata(
-        self, name: str, threads: Mapping[str, Thread], *, parent: str | None, archived: bool
+        self, name: str, threads: Mapping[str, ThreadProvenance], *, parent: str | None, archived: bool
     ) -> Channel:
         name = name if name.startswith("#") else f"#{name}"
         current = self.views(threads)
@@ -208,7 +208,7 @@ class CatalogDocument:
         self.validate_parents()
         return result
 
-    def set_any_mode(self, name: str, enabled: bool, threads: Mapping[str, Thread]) -> Channel:
+    def set_any_mode(self, name: str, enabled: bool, threads: Mapping[str, ThreadProvenance]) -> Channel:
         if type(enabled) is not bool:
             raise ValueError("Channel any_mode must be boolean.")
         name = name if name.startswith("#") else f"#{name}"
@@ -266,7 +266,7 @@ class CatalogDocument:
         self.tags = changed(self.tags)
 
     def restore_missing(
-        self, source: CatalogDocument, source_threads: Mapping[str, Thread], *, existing: bool
+        self, source: CatalogDocument, source_threads: Mapping[str, ThreadProvenance], *, existing: bool
     ) -> tuple[str, ...]:
         missing = {
             name: channel
