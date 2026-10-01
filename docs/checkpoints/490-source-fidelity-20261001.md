@@ -95,3 +95,84 @@ No Ready/installed/whole-workflow claim. No public mutation, owner restart,
 unknown-input replay, new provider call or competing lifecycle/compaction edit.
 Sch owns 499/compaction; parent owns 284/cutover. Their source-fidelity receipt
 must cover their own complete required relation, not inherit this scoped census.
+
+## Coherent plural builder checkpoint (supersedes unfinished API above)
+
+Arendt transferred the complete plural builder to Kepler, including all normal
+publication and recovery callers. Native custody/session/context remains Arendt's
+independent ownership; Singer495 owns the stopped-owner preservation carry.
+No wait for all of #489 is needed to review this implementation.
+
+This increment changes 21 production files: **372 added / 435 deleted** against
+2e0d55bc. Against pinned baseline590c406c, the whole production branch is
+44 files, 965 added / 754 deleted. These are physical line counts, not proof
+that every semantic duplication has disappeared.
+
+| Required fact/algorithm | Existing declaration owner and consumers | Replaced independent decisions deleted |
+| --- | --- | --- |
+| Original input membership and committed route | ExecutionStore.create(sources=), WakeAssignment.require_committed_source and ExecutionAssignmentLink | Caller-supplied assignment IDs and execution-level exact_target; first-route selection/filter in SelectedParticipant |
+| Original answer obligations | Existing ResponseObligation keyed by execution plus original target | Scalar execution target and deferred single-obligation generated columns/FKs |
+| Freeze all answer bodies before any append | RecoverySnapshot.require_publishing_intent and existing prepare_fenced_response | Singleton intent assumptions; SelectedAttempt freezes all original route bodies before publishing |
+| Original append dispatch and receipt | Existing PublicationIntents, PublicationReceipts and PublicationAppendDispatches composite keys | Execution-only receipt/dispatch reads and updates, first-target fallback |
+| Complete one native attempt | RecoverySnapshot.finish_publications, existing execution/attempt families and declared SQL finality guard | Publisher-local terminal mutation algorithm; completing claims/pointer after only one route |
+| Receipt presence and original ID/sequence validity | ResponseState.validate_receipt shared default; PublishedResponse hook | Snapshot's copied ID/sequence comparison and projection's independently rederived published/presence relation |
+| Frozen intent envelope | PublicationIntents.validate_receipt, called by ResponseState.validate_publication | Snapshot-owned nine-field envelope comparison |
+| Recovery and projections | RecoverySnapshot plural original rows; recovery_reader; recovery_projection; existing family publication hooks | Scalar snapshot fields, SQL one-obligation join, 0/1 receipt count, scalar projected publication; duplicated unavailable-schema literal in recovery gateway |
+| Tool action grant | CodingToolOwner.for_original, used by existing BatchSelectedAction.mode/apply | Selecting an action grant against the first source's owner instead of the requested original |
+
+Read every validate_publication/validate_receipt implementation before changing
+the shared hook. Unpublished ResponseState members reject a receipt through the
+shared default; PublishedResponse supplies the irreducible original reference
+check. Snapshot calls the complete intent/receipt validation. The redacted
+projection calls the same receipt validation and translates IntegrityViolationError
+to its existing unavailable diagnostic; it does not read/fabricate intent payloads.
+Route membership checks remain a separate original-claim relation.
+
+Partial publication retains the original current attempt, engaged original
+claims, frozen bodies and route receipts. Only all-successful original
+obligations allow completion and pointer release. Retry authorization requires
+all original obligations to permit retry; no Started/UNKNOWN native retry or
+replay of an already appended route is introduced.
+
+### Source/caller searches
+
+Whole src/tools searches return no execution.exact_target, require_response_target,
+snapshot.obligation, snapshot.publication_intent, snapshot.publication_receipt or
+assignment_ids= create callers. SelectedAttempt, private_send_stage, attempt
+start/store/recovery, recovery reader/projection and optional awareness use the
+original plural rows. Normal CLI continues to serialize original receipt tuples;
+history, cursor and tool membership recover original ExecutionAssignmentLink
+through existing NativeInputExecution. No new registry or source family was added
+in this increment.
+
+One declaration each remains for NativeInputExecution, NativeInputRecord,
+SelectedSourceBatch, CoordinatedTurn, TriageNativeSources, ResponseObligation,
+ResponseState and PublicationIntents. Receipt identity comparison is declared
+only by PublishedResponse; envelope comparison only by PublicationIntents.
+ResponseState's shared algorithm invokes those hooks. Existing SQL constraints
+protect storage writes; they are not a second consumer-side algorithm.
+
+The tests tree still has obsolete scalar fixtures/create calls, including
+coordination_store, optional awareness and admission verifier. These remain
+explicit migration work, not a production compatibility alias or a clean
+whole-tree claim. Existing PublishedResponse receipt references remain stored
+under their original schema contract; this checkpoint centralizes their validity
+algorithm rather than silently dropping preserved data. Singer's carry must
+preserve all original IDs, outcomes, context, session and proof references.
+
+### Sanity evidence and release boundary
+
+Source imports initially exposed an execution_store -> selected_source_batch ->
+native/tool -> coordinator cycle; SelectedSource is now a type-only import.
+AST/import sanity and fresh declared SQLite schemas then passed. Existing real
+private bus + SQLite single-route Tx1/Tx2/lost-ack controls passed (2 cases, 0.87s).
+The new mixed-route source control passed (0.70s): missing second intent refuses
+the first append; one route receipt leaves the attempt active; final receipt
+completes all originals and releases the single pointer. These controls use the
+real bus and original accepted deliveries, not protocol/UI mocks.
+
+The last shared-receipt control run's output was not retained across compaction;
+it is not counted as an additional pass. No installed native/ACP/tool multi-route
+acceptance is claimed. Final consumer migration, preserved carry, coherent staged
+pair and actual configured continuous journey remain required before Ready.
+No public mutation, original replay or new provider call occurred.

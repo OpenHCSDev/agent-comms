@@ -45,7 +45,7 @@ class SelectedAction(ABC):
 
 
 class NoSelectedTools(SelectedAction):
-    instruction = "Answer the original message directly and concisely, using no tools. "
+    instruction = "Use no tools. "
 
 
 @dataclass(frozen=True)
@@ -59,8 +59,8 @@ class BatchSelectedAction(SelectedAction):
         return " ".join(dict.fromkeys(action.instruction for _, action in self.originals))
 
     def mode(self, owner):
-        return next((mode for _, action in self.originals
-                     if (mode := action.mode(owner)) is not None), None)
+        return next((mode for assignment, action in self.originals
+                     if (mode := action.mode(owner.for_original(assignment, action.operation_id()))) is not None), None)
 
     def apply(self, owner):
         for assignment, action in self.originals:
@@ -75,8 +75,7 @@ class CodingSelectedAction(SelectedAction):
         "Bash is cooperative: respect other agents' claims, stay in your worktree, "
         "and do not bypass a denied edit through shell. "
         "Never retry a tool or input with UNKNOWN outcome; report the concrete failure. "
-        "Your final answer is published automatically to the original reply target. "
-        "Return the answer directly; do not launch another agent or send a duplicate reply. "
+        "Do not send a duplicate reply or launch another agent. "
         "Finish with the actual result and tests, not a promise of later work. "
     )
 

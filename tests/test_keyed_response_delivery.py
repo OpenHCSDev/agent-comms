@@ -28,9 +28,9 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
             case.bus,
             case.fence,
             "Here is the answer @sender",
-            owner_witness=case.witness,
+            exact_target=case.reply_target, owner_witness=case.witness,
         ).value
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         response = case.bus.log.read_keyed_response(intent)
         delivery = case.bus.log.read_delivery_cohort(case.root_id, response.seq)
         assert delivery.audience.canonical_members == {"sender"}
@@ -65,7 +65,7 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
         assert [entry.source_seq for entry in page.entries] == [response.seq]
         assert page.entries[0].wake_mode == "bounded_triage"
         # Repeating the publisher/recipient poll does not duplicate the row or K.
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         _accept_visible_deliveries(
             case.bus, case.root_id, case.store, lookup, 0, owner_name="sender"
         )
@@ -99,9 +99,9 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
     case = _ready(tmp_path, direct=True)
     try:
         prepare_fenced_response(
-            case.store, case.bus, case.fence, "answer", owner_witness=case.witness
+            case.store, case.bus, case.fence, "answer", exact_target=case.reply_target, owner_witness=case.witness
         )
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         marker = case.bus.log._private_marker_unlocked()
         rows = [json.loads(line) for line in case.bus.log.path.read_bytes().splitlines()]
         rows[-1]["_agent_comms_private_v1"]["response"][field] = value
@@ -147,14 +147,14 @@ def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
     case = _ready(tmp_path, direct=True)
     try:
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "answer", owner_witness=case.witness
+            case.store, case.bus, case.fence, "answer", exact_target=case.reply_target, owner_witness=case.witness
         ).value
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         response = case.bus.log.read_keyed_response(intent)
         with case.bus.log.locked():
             snapshot = case.store.snapshots.get("exec")
             conversation = ResponseConversation.capture(
-                case.bus, snapshot, snapshot.require_wire_response()
+                case.bus, snapshot, snapshot.require_wire_response(case.reply_target)
             )
             duplicate = conversation.record(
                 case.root_id, replace(response, seq=response.seq + 1), intent
@@ -182,9 +182,9 @@ def test_delivery_requires_declaration_tag_not_field_shape(tmp_path, kind):
     case = _ready(tmp_path, direct=True)
     try:
         prepare_fenced_response(
-            case.store, case.bus, case.fence, "answer", owner_witness=case.witness
+            case.store, case.bus, case.fence, "answer", exact_target=case.reply_target, owner_witness=case.witness
         )
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         record = json.loads(case.bus.log.path.read_bytes().splitlines()[-1])
         private = record[PRIVATE_WIRE_FIELD]
         if kind is None:

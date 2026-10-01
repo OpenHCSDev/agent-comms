@@ -170,6 +170,7 @@ class _OpenObligation(_GenerationProvenance):
         execution: ExecutionRecord,
         link: ExecutionAssignmentLink,
         generation: AwarenessClaimGenerations,
+        assignment: WakeAssignment,
     ) -> _OpenObligation:
         if execution.origin is not ExecutionOrigin.WIRE:
             raise ProjectionUnavailableError("open obligation has no wire origin")
@@ -183,7 +184,12 @@ class _OpenObligation(_GenerationProvenance):
             owner_thread=generation.canonical_thread,
             generation=generation.owner_generation,
         )
-        if captured != expected or link.assignment_id != generation.claim_id:
+        if (
+            captured != expected or link.assignment_id != generation.claim_id
+            or link.assignment_id != assignment.assignment_id
+            or link.execution_id != obligation.execution_id
+            or assignment.lifecycle.exact_target != obligation.exact_target
+        ):
             raise ProjectionUnavailableError("open obligation has no exact owner provenance")
         return cls(generation, obligation)
 
@@ -599,8 +605,8 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("open obligations exceed the row budget")
         if not obligations:
             return []
-        executions = tuple(row.execution_id for row in obligations)
-        marks = ",".join("?" for _ in obligations)
+        executions = tuple(dict.fromkeys(row.execution_id for row in obligations))
+        marks = ",".join("?" for _ in executions)
         owners = {
             row.execution_id: row
             for row in ExecutionRecord.select(
@@ -611,14 +617,19 @@ class OptionalAwarenessProjection:
         }
         links = ExecutionAssignmentLink.select(
             db,
-            where=f"execution_id IN ({marks})",
-            parameters=executions,
+            where=f"execution_id IN ({marks}) ORDER BY execution_id,ordinal LIMIT ?",
+            parameters=(*executions, self.max_rows + 1),
         )
-        # A multi-claim execution is not a single exact source obligation.
-        if len({row.execution_id for row in links}) != len(links):
-            raise ProjectionUnavailableError("open obligation has multiple source claims")
-        by_execution = {row.execution_id: row for row in links}
+        if len(links) > self.max_rows:
+            raise ProjectionUnavailableError("open obligation sources exceed the row budget")
         claims = tuple(row.assignment_id for row in links)
+        if not claims:
+            raise ProjectionUnavailableError("open obligation has no original sources")
+        assignments = {
+            row.assignment_id: row for row in WakeAssignment.select(
+                db, where=f"assignment_id IN ({','.join('?' for _ in claims)})", parameters=claims,
+            )
+        }
         generations = {
             row.claim_id: row
             for row in AwarenessClaimGenerations.select(
@@ -631,8 +642,12 @@ class OptionalAwarenessProjection:
             _OpenObligation.capture(
                 row,
                 owners[row.execution_id],
-                by_execution[row.execution_id],
-                generations[by_execution[row.execution_id].assignment_id],
+                link,
+                generations[link.assignment_id],
+                assignments[link.assignment_id],
             )
             for row in obligations
+            for link in links
+            if link.execution_id == row.execution_id
+            and assignments[link.assignment_id].lifecycle.exact_target == row.exact_target
         ]

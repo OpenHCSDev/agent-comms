@@ -36,11 +36,13 @@ from agent_comms.coordination_response import (
 from agent_comms.coordination_results import AlreadyApplied
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
+from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wake import derive_exact_reply_target
@@ -67,7 +69,7 @@ class Fixture:
         self.store.close()
 
 
-def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
+def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ...] = ()) -> Fixture:
     comms = Comms(tmp_path / "wire", private_initial_writes=True)
     for name in ("sender", "owner"):
         comms.registry.declare(
@@ -99,6 +101,13 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     accepted = accept_delivery_cohort(comms.bus, root_id, original.seq, store)
     assert accepted.value.member_count == accepted.value.assignment_count == 1
     assignment = accepted.value.assignments[0]
+    sources = [SelectedSource(assignment, original_record)]
+    for extra_target in extra_targets:
+        message = comms.messaging.send_initial_cohort("sender", extra_target, "Another original question")
+        delivery = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+        receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+        (extra_assignment,) = receipt.assignments
+        sources.append(SelectedSource(extra_assignment, delivery))
     reply_target = derive_exact_reply_target(original)
     assert reply_target is not None
     store.executions.create(
@@ -107,8 +116,7 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
         recipient.recipient_lookup,
         "owner",
         1,
-        assignment_ids=(assignment.assignment_id,),
-        exact_target=reply_target,
+        sources=tuple(sources),
     )
     store.executions.mark_pending("exec", expected_revision=1)
     token = prepare_fence_token()
@@ -155,6 +163,51 @@ def _ready(tmp_path: Path, *, direct: bool = False) -> Fixture:
     )
 
 
+def test_original_routes_prepare_together_and_release_one_attempt_only_after_all_receipts(tmp_path: Path):
+    case = _ready(tmp_path, extra_targets=("owner",))
+    try:
+        batch = case.store.snapshots.get("exec")
+        routes = tuple(row.exact_target for row in batch.require_wire_responses())
+        assert set(routes) == {"#team", "sender"}
+        assert len(batch.assignments) == 2
+        first = prepare_fenced_response(
+            case.store, case.bus, case.fence, "Channel questions combined",
+            exact_target=routes[0], owner_witness=case.witness,
+        ).value
+        with pytest.raises(IdentityConflict, match="all original response bodies"):
+            publish_fenced_response(
+                case.store, case.bus, case.fence,
+                exact_target=routes[0], owner_witness=case.witness,
+            )
+        assert not case.store.snapshots.get("exec").publication_receipts
+        assert case.bus.log.read_keyed_response(first) is None
+        prepare_fenced_response(
+            case.store, case.bus, case.fence, "Direct questions combined",
+            exact_target=routes[1], owner_witness=case.witness,
+        )
+        partial = publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=routes[0], owner_witness=case.witness,
+        ).value
+        assert partial.execution.lifecycle.active and partial.is_current
+        assert len(partial.publication_receipts) == 1
+        assert all(row.lifecycle.require_engagement() for row in partial.assignments)
+        settled = publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=routes[1], owner_witness=case.witness,
+        ).value
+        assert settled.execution.lifecycle.completed and not settled.is_current
+        assert len(settled.publication_receipts) == 2
+        assert all(row.lifecycle.require_completion() for row in settled.assignments)
+        assert settled.current_execution_id is None
+        for route in routes:
+            intent, receipt = settled.require_published_evidence(route)
+            message = case.bus.log.read_keyed_response(intent)
+            assert message.reference == receipt.reference and message.target == route
+    finally:
+        case.close()
+
+
 @pytest.mark.parametrize("direct", [False, True])
 def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, direct: bool) -> None:
     case = _ready(tmp_path, direct=direct)
@@ -165,14 +218,14 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
             case.fence,
             "Response on the original route",
             timestamp=123.5,
-            owner_witness=case.witness,
+            exact_target=case.reply_target, owner_witness=case.witness,
         )
         intent = result.value
         assert intent.exact_target == case.reply_target
-        assert type(case.store.snapshots.get("exec").obligation.lifecycle) is PublishingResponse
+        assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
         assert case.bus.log.read_keyed_response(intent) is None
         with pytest.raises(PublicationUncertain):
-            resolve_existing_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
         assert isinstance(
             prepare_fenced_response(
@@ -181,33 +234,33 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
                 case.fence,
                 intent.payload,
                 timestamp=intent.timestamp,
-                owner_witness=case.witness,
+                exact_target=case.reply_target, owner_witness=case.witness,
             ),
             AlreadyApplied,
         )
         published = publish_fenced_response(
-            case.store, case.bus, case.fence, owner_witness=case.witness
+            case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
         ).value
         assert type(published.execution.lifecycle) is CompletedExecution
-        assert type(published.obligation.lifecycle) is PublishedResponse
-        assert published.publication_receipt is not None
+        assert type(published.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
+        assert ResponseObligation.response_record(published.publication_receipts, case.reply_target) is not None
         assert type(published.assignments[0].lifecycle) is CompletedAssignment
-        assert published.publication_receipt.seq == case.origin_seq + 1
+        assert ResponseObligation.response_record(published.publication_receipts, case.reply_target).seq == case.origin_seq + 1
         response = case.bus.log.read_keyed_response(intent)
         assert response is not None and response.target == case.reply_target
         assert "_agent_comms_private_v1" not in response.to_wire()
         assert isinstance(
-            resolve_existing_response(case.store, case.bus, case.fence, owner_witness=case.witness),
+            resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness),
             AlreadyApplied,
         )
         assert published == case.store.snapshots.get("exec")
         case.store.close()
         with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
             reread = resolve_existing_response(
-                reopened, case.bus, case.fence, owner_witness=case.witness
+                reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
             )
             assert isinstance(reread, AlreadyApplied)
-            assert reread.value.publication_receipt == published.publication_receipt
+            assert ResponseObligation.response_record(reread.value.publication_receipts, case.reply_target) == ResponseObligation.response_record(published.publication_receipts, case.reply_target)
     finally:
         case.close()
 
@@ -218,14 +271,14 @@ def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_p
         disabled = MessageBus(case.comms.root / "bus.jsonl", case.comms.registry)
         with pytest.raises(PublicationActivationBlocked):
             prepare_fenced_response(
-                case.store, disabled, case.fence, "not allowed", owner_witness=case.witness
+                case.store, disabled, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
         with (
             Coordination(str(case.comms.root / "other.sqlite3")) as wrong_database,
             pytest.raises(IdentityConflict, match="different trusted roots"),
         ):
             prepare_fenced_response(
-                wrong_database, case.bus, case.fence, "not allowed", owner_witness=case.witness
+                wrong_database, case.bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
         alien_registry = Registration(tmp_path / "foreign" / "registry.json")
         alien_bus = MessageBus(
@@ -233,9 +286,9 @@ def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_p
         )
         with pytest.raises(IdentityConflict, match="different trusted roots"):
             prepare_fenced_response(
-                case.store, alien_bus, case.fence, "not allowed", owner_witness=case.witness
+                case.store, alien_bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
-        assert type(case.store.snapshots.get("exec").obligation.lifecycle) is PendingResponse
+        assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PendingResponse
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
     finally:
         case.close()
@@ -247,7 +300,7 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
     case = _ready(tmp_path)
     try:
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
         ).value
 
         def crash_before_append(_intent, *, conversation, registry_snapshot=None):
@@ -257,7 +310,7 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
             case.bus.publisher, "_publish_keyed_response_unlocked", crash_before_append
         )
         with pytest.raises(OSError):
-            publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         assert case.bus.log.read_keyed_response(intent) is None
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
         assert (
@@ -268,11 +321,11 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
         )
         monkeypatch.undo()
         with pytest.raises(PublicationUncertain):
-            publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         with pytest.raises(PublicationUncertain):
-            resolve_existing_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
-        assert type(case.store.snapshots.get("exec").obligation.lifecycle) is PublishingResponse
+        assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
     finally:
         case.close()
 
@@ -283,7 +336,7 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
     case = _ready(tmp_path)
     try:
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
         ).value
         real_append = case.bus.publisher._publish_keyed_response_unlocked
 
@@ -295,19 +348,19 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
             case.bus.publisher, "_publish_keyed_response_unlocked", committed_then_lost_ack
         )
         with pytest.raises(OSError):
-            publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+            publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         assert case.bus.log.read_keyed_response(intent) is not None
-        assert type(case.store.snapshots.get("exec").obligation.lifecycle) is PublishingResponse
+        assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
         monkeypatch.undo()
         case.store.close()
         with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
             result = resolve_existing_response(
-                reopened, case.bus, case.fence, owner_witness=case.witness
+                reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
             )
-            assert type(result.value.obligation.lifecycle) is PublishedResponse
-            assert result.value.publication_receipt.seq == case.origin_seq + 1
+            assert type(result.value.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
+            assert ResponseObligation.response_record(result.value.publication_receipts, case.reply_target).seq == case.origin_seq + 1
             assert isinstance(
-                publish_fenced_response(reopened, case.bus, case.fence, owner_witness=case.witness),
+                publish_fenced_response(reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness),
                 AlreadyApplied,
             )
             assert case.comms.bus.log.latest_sequence() == case.origin_seq + 1
@@ -319,15 +372,15 @@ def test_stale_owner_and_conflicting_payload_cannot_publish(tmp_path: Path) -> N
     case = _ready(tmp_path)
     try:
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
         ).value
         with pytest.raises(IdentityConflict):
             prepare_fenced_response(
-                case.store, case.bus, case.fence, "DIFFERENT", owner_witness=case.witness
+                case.store, case.bus, case.fence, "DIFFERENT", exact_target=case.reply_target, owner_witness=case.witness
             )
         stale = replace(case.fence, revision=case.fence.revision - 1)
         with pytest.raises(StaleRevision):
-            publish_fenced_response(case.store, case.bus, stale, owner_witness=case.witness)
+            publish_fenced_response(case.store, case.bus, stale, exact_target=case.reply_target, owner_witness=case.witness)
         assert case.bus.log.read_keyed_response(intent) is None
         assert (
             case.store.session._connection.execute(
@@ -345,7 +398,7 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
     case = _ready(tmp_path)
     try:
         prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
         )
         entered, concurrent_done, wire_done = (
             threading.Event(),
@@ -389,7 +442,7 @@ def test_bus_append_fence_remains_current_until_sql_tx2_commit(
         wire_worker.start()
         try:
             settled = publish_fenced_response(
-                case.store, case.bus, case.fence, owner_witness=case.witness
+                case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
             )
         finally:
             worker.join(timeout=5)
@@ -409,7 +462,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
     child: subprocess.Popen[str] | None = None
     try:
         prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            case.store, case.bus, case.fence, "reply", exact_target=case.reply_target, owner_witness=case.witness
         )
         actual_append = case.bus.publisher._publish_keyed_response_unlocked
         env = os.environ.copy()
@@ -448,14 +501,14 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
 
         monkeypatch.setattr(case.bus.publisher, "_publish_keyed_response_unlocked", concurrent_stop)
         result = publish_fenced_response(
-            case.store, case.bus, case.fence, owner_witness=case.witness
+            case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
         )
         assert child is not None
         output, errors = child.communicate(timeout=5)
         assert child.returncode == 0, (output, errors)
         assert not case.comms.registry.status("owner").active
         assert type(result.value.execution.lifecycle) is CompletedExecution
-        assert type(result.value.obligation.lifecycle) is PublishedResponse
+        assert type(result.value.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
         assert case.comms.bus.log.latest_sequence() == case.origin_seq + 1
     finally:
         if child is not None and child.poll() is None:
@@ -493,6 +546,6 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
                 case.store, case.bus, case.fence, "must not publish", owner_witness=witness
             )
         assert case.bus.log.latest_sequence() == case.origin_seq
-        assert case.store.snapshots.get("exec").publication_intent is None
+        assert ResponseObligation.response_record(case.store.snapshots.get("exec").publication_intents, case.reply_target) is None
     finally:
         case.close()

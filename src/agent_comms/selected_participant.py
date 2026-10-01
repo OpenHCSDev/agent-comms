@@ -24,7 +24,6 @@ from .private_registry_guard import _require_no_private_owner_rename
 from .turn_phase import PreparingPhase, TurnPhase
 from .diagnostics import record_request_progress
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
-from .wake import derive_exact_reply_target
 
 
 @dataclass(frozen=True)
@@ -107,11 +106,7 @@ class SelectedParticipant(MroDispatch):
                 SelectedSource(row, cls.source(bus, store, root_id, row, identity))
                 for row in pending
             )
-            target = derive_exact_reply_target(sources[0].delivery.message)
-            batch = SelectedSourceBatch(tuple(
-                source for source in sources
-                if derive_exact_reply_target(source.delivery.message) == target
-            ))
+            batch = SelectedSourceBatch(sources)
             selected = cls(
                 comms,
                 bus,
