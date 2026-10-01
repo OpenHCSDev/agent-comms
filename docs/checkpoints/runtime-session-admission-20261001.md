@@ -93,3 +93,11 @@ Ready at this bounded source+actual installed CLI/socket strength. Production
 API is internal to the original Core runtime family; no Toad/wire/native/durable
 format change or reset requirement. Parent owns normal merge and later matched
 publication. CI deferred; no optional native/regression matrix was run.
+
+Parent reviewed the original installed runner/log and normal-merged Ready17944031
+as `65d6cfe965119f2f28f4a52c592f08929b116e7c` on2026-10-01 13:34:51UTC.
+The305 per-file source/installed byte commitments are retained in
+[installed-source-byte-proof.json](../../evidence/runtime-session-admission-20261001/installed-source-byte-proof.json).
+This final evidence contribution changes no tested production/fixture or gate;
+no repeated control was run. Frozen479 remains unchanged; next matched installed
+release includes482 through normal main integration, not a public backport here.
