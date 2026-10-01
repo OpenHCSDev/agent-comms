@@ -13,7 +13,6 @@ from agent_comms.coordinator import Coordination
 from agent_comms.native_prompt_binding import bind_expected_prompt, read_expected_prompt_binding
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_send_stage import TriageNativeSend
-from agent_comms.selected_native_sources import SelectedNativeSources
 from agent_comms.selected_participant import SelectedParticipant
 from agent_comms.selected_turn import SelectedPrompt
 from agent_comms.threads import Thread
@@ -62,8 +61,9 @@ def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pendi
             assert binding.input_id == input_id
             with store.session.read():
                 assert len(NativeRuntimeInput.select(store.session._connection)) == 1
-                membership = SelectedNativeSources.one(store.session._connection, input_id=input_id)
-                membership.require_members(snapshot)
+                assert stage.execution.source_assignment_ids(store.session._connection, input_id) == tuple(
+                    row.assignment_id for row in snapshot
+                )
                 stage.require_claim(store)
             # Binding does not establish a live native result. All 101 members
             # are now uncertain/nonreplayable; the late original is the next wave.

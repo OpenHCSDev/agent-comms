@@ -18,6 +18,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_input_record import FullNativeExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_admission_epoch import UnrecordedNativeAdmission
 from agent_comms.selected_actions import SelectedExistingFileWrite
@@ -57,11 +58,13 @@ def nominal_broker_stub(monkeypatch):
         with store.session.read():
             row = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
         assert row is not None
-        assert row.assignment_id == admission.wake_assignment_id
+        assert admission.wake_assignment_id in row.execution.source_assignment_ids(
+            store.session._connection, input_id
+        )
         assert row.owner_thread == owner
         assert row.owner_lookup == admission.recipient_lookup
         assert row.attempt_ordinal == admission.attempt_ordinal == 1
-        assert row.stage == "full" and row.sent_owner_admission_generation == UnrecordedNativeAdmission()
+        assert row.stage is FullNativeExecution and row.sent_owner_admission_generation == UnrecordedNativeAdmission()
         assert (
             comms.registry.snapshot().admission_generations[owner]
             == admission.owner_admission_generation

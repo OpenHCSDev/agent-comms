@@ -191,14 +191,6 @@ class NativeBindingRootRule(ReservationRule):
         return check.row.wire_root_id != check.wire_root_id
 
 
-class NativeBindingSourceRule(ReservationRule):
-    check_type = NativeBindingCheck
-    explanation = "The prelaunch binding names a different committed source message."
-
-    def violated(self, check: NativeBindingCheck) -> bool:
-        return check.row.source != check.stage.anchor.source
-
-
 class NativeBindingContentRule(ReservationRule):
     check_type = NativeBindingCheck
     explanation = "The native request digest differs from its durable prelaunch binding."

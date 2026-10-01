@@ -288,13 +288,12 @@ def verify_sent_full_input(
         row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
         if row is None:
             raise SelectedToolDenied("Selected tool has no reserved FULL input")
-        from .selected_native_sources import SelectedNativeSources
-
-        membership = SelectedNativeSources.one(scoped.session._connection, input_id=input_id)
-        if membership is None or admission.wake_assignment_id not in membership.assignment_ids:
+        if admission.wake_assignment_id not in row.execution.source_assignment_ids(
+            scoped.session._connection, input_id
+        ):
             raise SelectedToolDenied("Selected tool source was not included in this native input")
         expected = NativeInputIdentity(
-            input_id, row.assignment_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
+            input_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
             OwnerGenerations(owner_lookup=admission.recipient_lookup, owner_thread=owner_name, generation=admission.participant_generation),
         )
         if row.identity != expected:

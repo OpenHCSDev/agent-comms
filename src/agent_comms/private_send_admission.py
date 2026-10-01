@@ -112,7 +112,7 @@ class PrivateSendAdmission:
 
     @property
     def session_dir(self) -> Path:
-        return self.bus.log.path.parent / "native-sessions" / self.stage.anchor.recipient_lookup
+        return self.bus.log.path.parent / "native-sessions" / self.stage.recipient_lookup
 
     def verify(self, store: Coordination, context: NativeContextProof) -> None:
         self.stage.verify(
@@ -213,7 +213,7 @@ class PrivateSendAdmission:
             directory = (
                 self.bus.log.path.parent
                 / "native-sessions"
-                / self.stage.anchor.recipient_lookup
+                / self.stage.recipient_lookup
             ).resolve(strict=True)
         except OSError as error:
             raise IdentityConflict("native saved session unavailable before send") from error
@@ -252,7 +252,7 @@ class PrivateSendAdmission:
                 registry, "recipient registry owner changed before native send"
             )
             assert_native_runtime_schema(db)
-            self.participant.require(store, self.stage.anchor.recipient_lookup)
+            self.participant.require(store, self.stage.recipient_lookup)
             reserved = self.stage.require_reservation(
                 db, self.input_id, self.participant, self.token_digest
             )

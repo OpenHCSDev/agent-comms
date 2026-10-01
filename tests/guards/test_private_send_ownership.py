@@ -103,7 +103,7 @@ def test_native_execution_consumers_cannot_rebuild_stage_or_nullable_identity():
     from agent_comms.native_input_record import NativeInputIdentity
 
     assert {item.name for item in fields(NativeInputIdentity)} == {
-        "input_id", "assignment_id", "execution", "owner",
+        "input_id", "execution", "owner",
     }
     for module in (
         "private_send_stage", "historical_native_inputs", "source_proof_requirement",

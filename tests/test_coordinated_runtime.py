@@ -37,6 +37,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_private_inputs import PrivateInputs
 from agent_comms.compaction_records import SelectedSummaryAttempt
 from agent_comms.compaction_states import ReservedSummary
+from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
@@ -668,12 +669,12 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
     assert initial.message.body in calls[0][1]
     assert ("Selected source decisions through " in calls[0][1]) is available
     if available:
-        assert outcome.assignment_id in calls[0][1]
+        assert outcome.assignment_ids[0] in calls[0][1]
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
-                (outcome.assignment_id,),
+                f"SELECT COUNT(*) FROM ({NativeRuntimeInput.source_membership_sql()}) WHERE assignment_id=?",
+                (outcome.assignment_ids[0],),
             ).fetchone()[0]
             == 1
         )
@@ -713,8 +714,8 @@ async def test_slow_optional_awareness_omits_without_blocking_selected_original(
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_input WHERE assignment_id=?",
-                (outcome.assignment_id,),
+                f"SELECT COUNT(*) FROM ({NativeRuntimeInput.source_membership_sql()}) WHERE assignment_id=?",
+                (outcome.assignment_ids[0],),
             ).fetchone()[0]
             == 1
         )
@@ -1163,7 +1164,8 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
             "SELECT c.disposition,i.session_id FROM wake_claims c "
-            "JOIN native_runtime_input i ON i.assignment_id=c.assignment_id "
+            f"JOIN ({NativeRuntimeInput.source_membership_sql()}) m ON m.assignment_id=c.assignment_id "
+            "JOIN native_runtime_input i ON i.input_id=m.input_id "
             "WHERE c.recipient='alpha'"
         ).fetchone()
         assert tuple(row) == ("deferred", None)

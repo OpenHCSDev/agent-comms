@@ -82,11 +82,13 @@ class CodingToolOwner:
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
-        from .selected_native_sources import SelectedNativeSources
+        from .native_runtime_input import NativeRuntimeInput
 
         with self.store.session.read():
-            sources = SelectedNativeSources.one(self.store.session._connection, input_id=self.input_id)
-            if sources is None or assignment.assignment_id not in sources.assignment_ids:
+            native = NativeRuntimeInput.one(self.store.session._connection, input_id=self.input_id)
+            if native is None or assignment.assignment_id not in native.execution.source_assignment_ids(
+                self.store.session._connection, self.input_id
+            ):
                 raise SelectedToolDenied("Tool original is absent from the reserved native batch")
         return replace(self, admission=replace(
             self.admission,

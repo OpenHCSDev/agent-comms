@@ -11,7 +11,6 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
@@ -39,7 +38,7 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         install_native_runtime_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[4]
+    version: Literal[5]
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
 
     @classmethod
@@ -63,6 +62,12 @@ class PublishedReplyRevision(TypedRow):
 
 @dataclass(frozen=True)
 class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
+    @classmethod
+    def source_membership_sql(cls) -> str:
+        return " UNION ALL ".join(
+            member.source_membership_sql() for member in NativeInputExecution.members_with(NativeInputExecution)
+        )
+
     def __post_init__(self):
         self.execution
 
@@ -180,9 +185,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         }
     )
     stage: type[NativeInputExecution] = field(metadata={"sql": Column(check=NativeInputExecution.sql_constraint("stage"))})
-    assignment_id: str = field(
-        metadata={"sql": Column(references=(WakeAssignment, "assignment_id"))}
-    )
     execution_id: str | None = field(
         metadata={"sql": Column(references=(ExecutionRecord, "execution_id"))}
     )
@@ -208,7 +210,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     )
 
     without_rowid = True
-    unique = (("stage", "assignment_id"), ("execution_id", "attempt_ordinal"))
+    unique = (("execution_id", "attempt_ordinal"),)
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
@@ -257,7 +259,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             f"{name}_identity_guard": f"""CREATE TRIGGER {name}_identity_guard
             BEFORE UPDATE ON {name}
             WHEN NEW.input_id IS NOT OLD.input_id OR NEW.stage IS NOT OLD.stage
-                OR NEW.assignment_id IS NOT OLD.assignment_id
                 OR NEW.execution_id IS NOT OLD.execution_id
                 OR NEW.attempt_ordinal IS NOT OLD.attempt_ordinal
                 OR NEW.owner_lookup IS NOT OLD.owner_lookup
@@ -310,16 +311,15 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     input_id: str | None = field(
         metadata={"sql": Column(references=(NativeRuntimeInput, "input_id")), "native_context": str}
     )
-    assignment_id: str | None = field(metadata={"native_context": str})
     stage: type[NativeInputExecution] | None = field(metadata={"sql": Column(check=NativeInputExecution.sql_constraint("stage")), "native_context": type[NativeInputExecution]})
     session_id: str | None = field(metadata={"native_context": str})
     request_generation: int | None = field(metadata={"native_context": int})
 
     without_rowid = True
     checks = (
-        "(injected_seq=0 AND input_id IS NULL AND assignment_id IS NULL AND stage IS NULL "
+        "(injected_seq=0 AND input_id IS NULL AND stage IS NULL "
         "AND session_id IS NULL AND request_generation IS NULL) OR "
-        "(injected_seq>0 AND input_id IS NOT NULL AND assignment_id IS NOT NULL "
+        "(injected_seq>0 AND input_id IS NOT NULL "
         "AND stage IS NOT NULL "
         "AND session_id IS NOT NULL AND request_generation>0)",
     )

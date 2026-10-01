@@ -28,7 +28,6 @@ from .native_input_record import NativeInputRecord, NativeInputReference, Native
 from .message_reference import MessageReference
 from .selected_triage import SelectedTriage
 from .typed_table import TypedRow
-from .selected_native_sources import SelectedNativeSources
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -121,13 +120,11 @@ def read_historical_native_inputs(
         db = store.session._connection
         assert_cohort_schema(db)
         assert_native_runtime_schema(db)
-        SelectedNativeSources.require_schema(db)
         sources = _HistoricalSource.read(
             db.execute(
                 "SELECT n.input_id,c.assignment_id,c.wire_seq,c.message_id FROM native_runtime_input n "
-                "JOIN selected_native_sources s ON s.input_id=n.input_id "
-                "JOIN json_each(s.assignment_ids) member "
-                "JOIN wake_claims c ON c.assignment_id=member.value "
+                f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+                "JOIN wake_claims c ON c.assignment_id=member.assignment_id "
                 "JOIN claim_batch_members m ON m.claim_id=c.assignment_id "
                 "AND m.recipient_lookup=c.recipient_lookup "
                 "JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id "
@@ -180,12 +177,8 @@ def read_historical_native_inputs(
             # corruption, not a failed equality join.
             if binding.identity != row.identity:
                 raise IdentityConflict("prelaunch binding does not match this live proof")
-            anchor = store.assignments.get(row.assignment_id)
-            membership = SelectedNativeSources.one(store.session._connection, input_id=row.input_id)
-            if membership is None or source.assignment_id not in membership.assignment_ids:
-                raise IdentityConflict("historical native source is absent from the sealed input batch")
-            if binding.wire_root_id != wire_root_id or binding.source != anchor.source:
-                raise IdentityConflict("prelaunch binding names another canonical source")
+            if binding.wire_root_id != wire_root_id:
+                raise IdentityConflict("Prelaunch binding names another canonical wire root")
             equality = expected_prompt_matches_journal(session_file, binding)
         else:
             equality = False

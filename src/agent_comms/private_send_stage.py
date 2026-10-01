@@ -35,7 +35,6 @@ from .private_sidecar import native_request_digest
 from .reservation_rules import ReservationViolationError
 from .selected_triage import SelectedTriage
 from .text_digest import TextDigest
-from .selected_native_sources import SelectedNativeSources
 
 
 @dataclass(frozen=True)
@@ -43,9 +42,12 @@ class NativeSendStage(ABC):
     assignments: tuple[WakeAssignment, ...]
 
     @property
-    def anchor(self) -> WakeAssignment:
-        """Physical native input identity; every source is fenced separately."""
-        return self.assignments[0]
+    def recipient_lookup(self) -> str:
+        """All original sources belong to the same admitted participant."""
+        lookups = {row.recipient_lookup for row in self.assignments}
+        if len(lookups) != 1:
+            raise IdentityConflict("Native batch requires one original participant")
+        return next(iter(lookups))
 
     @property
     @abstractmethod
@@ -69,24 +71,23 @@ class NativeSendStage(ABC):
         input_id = secrets.token_hex(16)
         with store.session.transaction() as db:
             assert_native_runtime_schema(db)
-            owner.require(store, self.anchor.recipient_lookup)
+            owner.require(store, self.recipient_lookup)
             self.reserve_claim(store, db)
             NativeRuntimeInput(
                 input_id=input_id,
                 stage=type(self.execution),
                 **self.execution.binding_fields(),
-                assignment_id=self.anchor.assignment_id,
-                owner_lookup=self.anchor.recipient_lookup,
+                owner_lookup=self.recipient_lookup,
                 owner_thread=owner.thread.name,
                 owner_generation=owner.generation,
                 owner_token_digest=token_digest,
             ).insert(db)
-            SelectedNativeSources(input_id, tuple(row.assignment_id for row in self.assignments)).insert(db)
+            self.execution.record_sources(db, input_id, self.assignments)
         return input_id
 
     def identity(self, input_id: str, owner) -> NativeInputIdentity:
         return NativeInputIdentity(
-            input_id, self.anchor.assignment_id, self.execution, owner,
+            input_id, self.execution, owner,
         )
 
     def pending_input(
@@ -95,7 +96,7 @@ class NativeSendStage(ABC):
         """Read current durable ownership inside the caller's read/write transaction."""
         db = store.session._connection
         assert_native_runtime_schema(db)
-        owner.require(store, self.anchor.recipient_lookup)
+        owner.require(store, self.recipient_lookup)
         row = NativeRuntimeInput.one(db, input_id=input_id)
         if row is None:
             raise StaleFence("native input reservation is missing")
@@ -104,7 +105,7 @@ class NativeSendStage(ABC):
             NativeIdentityCheck(
                 row=row,
                 stage=self,
-                owner=owner.coordinator_identity(self.anchor.recipient_lookup),
+                owner=owner.coordinator_identity(self.recipient_lookup),
             ).require_valid()
         except ReservationViolationError as error:
             raise StaleFence(f"native dispatch identity changed: {error}") from error
@@ -164,7 +165,7 @@ class NativeSendStage(ABC):
             NativeReservationCheck(
                 row=reserved,
                 stage=self,
-                owner=owner.coordinator_identity(self.anchor.recipient_lookup),
+                owner=owner.coordinator_identity(self.recipient_lookup),
                 token_digest=token_digest,
             ).require_valid()
         except ReservationViolationError as error:
@@ -172,11 +173,10 @@ class NativeSendStage(ABC):
         return reserved
 
     def require_sources(self, db, input_id) -> None:
-        SelectedNativeSources.require_schema(db)
-        sources = SelectedNativeSources.one(db, input_id=input_id)
-        if sources is None:
-            raise IdentityConflict("Native input has no sealed original-source membership")
-        sources.require_members(self.assignments)
+        if self.execution.source_assignment_ids(db, input_id) != tuple(
+            row.assignment_id for row in self.assignments
+        ):
+            raise IdentityConflict("Native input changed its original source membership")
 
     def require_binding(
         self,
@@ -211,7 +211,7 @@ class NativeSendStage(ABC):
             NativeBindingCheck(
                 row=binding,
                 stage=self,
-                owner=owner.coordinator_identity(self.anchor.recipient_lookup),
+                owner=owner.coordinator_identity(self.recipient_lookup),
                 wire_root_id=wire_root_id,
                 prompt_digest=TextDigest(native_request_digest(prompt)),
             ).require_valid()
@@ -251,14 +251,13 @@ class TriageNativeSend(NativeSendStage):
         return None
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
-        SelectedNativeSources.require_schema(db)
         for captured in self.assignments:
             current = store.assignments.get(captured.assignment_id)
             if current != captured or not current.lifecycle.triage_pending:
                 raise IdentityConflict("triage claim changed before native batch reservation")
             if db.execute(
-                "SELECT 1 FROM selected_native_sources s, json_each(s.assignment_ids) member "
-                "WHERE member.value=? LIMIT 1", (captured.assignment_id,),
+                f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
+                "WHERE members.assignment_id=? LIMIT 1", (captured.assignment_id,),
             ).fetchone():
                 raise IdentityConflict("triage source was previously reserved; no retry")
             # All original CASes and the one reserved input commit before Pi.
@@ -347,9 +346,10 @@ class FullNativeSend(NativeSendStage):
         with store.session.transaction() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             snapshot, _ = store.attempts.require_fence(self.fence)
-            engagement = self.anchor.lifecycle.require_engagement()
-            if snapshot.execution.exact_target != engagement.exact_target:
-                raise StaleFence("full-turn proof lost its exact reply target")
+            for assignment in self.assignments:
+                engagement = assignment.lifecycle.require_engagement()
+                if snapshot.execution.exact_target != engagement.exact_target:
+                    raise StaleFence("full-turn proof lost an original exact reply target")
             row.commit_context(db, context)
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:

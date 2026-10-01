@@ -221,7 +221,7 @@ async def test_native_full_four_tools_publish_and_release(
         if not selected_write:
             assert not comms.bus.log.claim_projection()
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            assignment = store.assignments.get(outcome.assignment_id)
+            assignment = store.assignments.get(outcome.assignment_ids[0])
             snapshot = store.snapshots.get(assignment.lifecycle.require_completion().execution_id)
             assert snapshot.execution.lifecycle.completed
             assert (

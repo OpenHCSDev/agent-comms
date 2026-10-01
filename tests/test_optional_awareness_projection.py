@@ -254,7 +254,7 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
             native_package=root,
         ).run()
         assert outcome is not None and outcome.response_message_id
-        assert outcome.assignment_id == assignment.assignment_id and len(calls) == 1
+        assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1
         assert initial.message.body in calls[0][1]
         assert "Selected source decisions through " not in calls[0][1]
 
@@ -514,7 +514,7 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
             root=comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
         ).run()
         assert outcome is not None and outcome.response_message_id
-        assert outcome.assignment_id == assignment.assignment_id and len(calls) == 1
+        assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1
         assert current.message.body in calls[0][1]
         assert "Selected source decisions through " in calls[0][1]
         assert assignment.assignment_id in calls[0][1]

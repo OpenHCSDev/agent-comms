@@ -118,8 +118,8 @@ class NotificationAssignment(NotificationSource):
             rows = WakeAssignment.joined(
                 connection.execute(
                     f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
-                    "JOIN selected_native_sources s ON s.input_id=n.input_id "
-                    "JOIN json_each(s.assignment_ids) member WHERE member.value=w.assignment_id "
+                    f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+                    "WHERE member.assignment_id=w.assignment_id "
                     "AND n.stage='triage' AND n.session_id IS NULL) "
                     "AS triage_inflight, c.execution_id AS current_execution_id "
                     f"FROM {WakeAssignment.declared_name} w "

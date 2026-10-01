@@ -31,9 +31,20 @@ that owned relation coherently; do not bolt a serial per-message loop around it.
 Existing ChannelInputBatch proof and original collector/assignment types must
 be reused/extended where applicable (BOUND-2, IMPL-13, IDEN-5).
 
+## Required implementation order
+
+Semantic owner and whole-caller analysis first. Extend existing nominal owners,
+delete replaced authority and consumers in the same change, then batch source
+sanity and the continuous installed journey at the very end. No TDD, test-first
+reasoning or discriminator-first design. Historical results below are retained;
+they do not establish readiness of changed source.
+
 ## Parallel seams
 
-Arendt489 owns request budget, paused native compaction and original continuation.
+Arendt owns the runtime lifecycle fact map and integration; Schrodinger alone
+owns compaction. Payload budget belongs to the existing retained-context payload
+type across reservation, intent and recovery. This PR adds no parallel budget,
+context, lifecycle, session, custody or cursor family.
 Kepler owns batch collection/selection/source/handling/response integration;
 request shared native/source methods before overlap. Singer owns read-only
 batch/amplification timing. Agenttools currently absent: parent relay or existing
@@ -52,7 +63,7 @@ UNKNOWN nonreplay. Existing private roots/localhost provider boundary only;
 real Core/native/ACP/application path, no UI/protocol substitutes. Keep resource
 budget bounded and publish working checkpoints before optional broad tests.
 
-## First source-bearing checkpoint
+## Historical first prototype checkpoint
 
 Canonical pending collection crosses the existing 100-row page boundary in one
 read snapshot. The selected participant captures original receipts together;
@@ -82,3 +93,115 @@ across channel/DM audiences or loop singleton native calls to hide this gap.
 Existing native inputs require explicit operator source-membership attestation
 before activating this new relation. No old-record fallback reader or automatic
 rewrite is provided; original native rows/journals remain unchanged.
+
+## Canonical source relation correction (current, source only)
+
+Patterns IDEN-5, BOUND-2 and IMPL-13. Delete `SelectedNativeSources` and its
+independent installer. Delete the scalar source assignment from
+`NativeRuntimeInput`, `PromptBinding`, `NativeInputIdentity`,
+`NativeInputReference`, `NativeInputContext` and `CurrentNativeCursor`, plus
+`NativeBindingSourceRule` and stage `anchor`. These fields cannot truthfully
+identify an input containing several originals.
+
+Existing `NativeInputExecution` owns membership projection and reservation.
+FULL derives it from the existing `ExecutionAssignmentLink`; it stores nothing
+new. TRIAGE records the pre-execution input relation in `NativeRuntimeTable`,
+through the single native schema. History, notifications and selected tool grants
+query that same declared family. Query results decode existing `WakeAssignment`
+rows; an additional source-member DTO was removed during source review.
+
+### Existing-owner search and why triage needs a relation
+
+Actual source searches performed before retaining a new table:
+
+```
+rg -n '^class (InputBatch|ChannelInputBatch|ScheduledTurn|ClaimBatchReceipts|ClaimBatchMembers|ExecutionAssignmentLink)' src/agent_comms
+rg -n 'ScheduledTurn|InputBatch.capture|ChannelInputBatch|read_historical_native_inputs|_selected_proven' src/agent_comms
+rg -n '^class (NativeInputExecution|TriageNativeExecution|FullNativeExecution|NativeRuntimeInput|CurrentNativeCursor|CursorOwner|SourceCoverage|TriageNativeSources)' src/agent_comms
+rg -n 'SelectedNativeSources|selected_native_sources|NativeBindingSourceRule|reference.assignment_id|cursor.assignment_id|binding.assignment_id' src tests tools
+```
+
+The first two searches found and led to reading these owners:
+
+- `routing.ScheduledTurn.take_batch`: transient ordinary input grouping, with
+  per-route grouping; it owns no selected native reservation identity.
+- `channel_input_batch.InputBatch.capture` / `ChannelInputBatch`: proof of
+  ordinary InputStore keys plus assembled prompt, captured by `OwnedTurn`.
+  It is not a durable selected-native input-to-assignment relation.
+- `cohort_schema.ClaimBatchReceipts` / `ClaimBatchMembers`: frozen recipients
+  and claims for one committed wire message. A pending wave has many of these
+  cohorts; cohort membership cannot identify a single triage input snapshot.
+- `ExecutionAssignmentLink`: original many-to-one execution membership, reused
+  by FULL. TRIAGE has no execution yet and must not invent one to record an
+  IGNORE or uncertain outcome.
+
+Only the missing relation, `TriageNativeSources`, is new. It records input ID and
+ordered original assignment IDs, with immutable insert/update/delete ownership,
+one-owner membership, and rejection of previously reserved originals. It copies
+no disposition, source body, audience, current cursor or FULL membership.
+The native stage family is declared once in `native_input_record.py`, the full
+membership once in `coordination_tables/assignments.py`, and the triage relation
+once in `triage_native_sources.py`. The final search finds no replaced class,
+installer or singleton binding/reference consumer in source/tests/tools.
+
+### Coverage and cursor crossing
+
+`read_historical_native_inputs` joins each original through the stage relation
+to its original `WakeAssignment` and sealed cohort delivery. It returns a
+per-original proof pointing at the SAME original native input/context.
+`SourceCoverage._selected_proven` still validates that original assignment
+against its frozen recipient and inherited `SourceProofRequirement`.
+`CursorOwner._matches_input`, `matches_prefix` and `admits` compare original
+physical input reference, participant identity and send admission. Removing the
+copied assignment makes the reference source-independent; `injected_seq` stays
+the actual last proven original source. No separate live execution, seen list,
+coverage algorithm or proof cache is introduced. Arendt/493 owns integration of
+its retained evidence/custody reader changes against this relation.
+
+### Explicit schema carry required before activation
+
+Native schema 4 becomes 5. Live originals cannot be reset or dropped. Kepler
+owns the one-shot source-format export/writer contract, Arendt reviews the
+lifecycle/source relation, and the parent stopped-owner installer alone executes.
+The carry must freeze after the remaining response-route relation is settled:
+
+1. The original interpreter validates its own schema and reads original inputs,
+   cursors and prompt bindings. Preserve DBs, sidecars, journals and UNKNOWN
+   witnesses as originals; the target never decodes old journals.
+2. Old FULL membership must equal the originally proven scalar source and its
+   existing execution membership. Reject extra unproven members rather than
+   silently promoting their coverage. Old TRIAGE membership is that original
+   singleton source, even when unproven or uncertain.
+3. Stage a copied target DB and binding sidecar. Project only removed source
+   fields out of the new records. Preserve every input/execution/attempt ID,
+   owner/token/admission, outcome/verdict, context/session/reference,
+   expected-prompt digest and clock exactly. Cursor input and source sequence
+   must still join the original membership; no proof or admission is generated.
+4. Attest all surviving cells, all original memberships, and all non-native
+   coordinator state before the installer publishes the coherent pair. Keep
+   original DB/journal hashes. No restart between DB and sidecar publication.
+
+The carry is not implemented or activation-ready yet. No runtime old reader,
+compatibility alias, automatic rewrite or reset is provided. Parent and Arendt
+received the concrete contract on PR493; no acknowledgment is assumed.
+
+### Remaining route ownership, not hidden by same-route PASS
+
+All-pending mixed-route answers require one execution/attempt with original
+response obligations per route. `ResponseObligation` already owns route,
+`canonical_publication_key` already identifies `(execution, target)`, and
+`ResponseConversation` already owns original audiences. Current
+`ExecutionRecord.exact_target`, singular `RecoverySnapshot` response fields,
+execution-link target triggers and terminal checks duplicate/enforce one route.
+Request Arendt's lifecycle integration/extension at that seam. Kepler owns
+response publication and caller closure. Do not add an alternate batch execution
+registry, send the same response body into different audiences, or loop native
+calls per original. Same-route prototype evidence stays historical, not Ready.
+
+### Validation status
+
+No test, build or native journey has run on this source-shape correction.
+Complete the nominal family/route/carry implementation first; batch validation
+and the actual affected installed native/ACP journey last. The earlier five
+originals plus late-arrival installed native PASS (21.199 s) belongs to source
+`3e14c2ee`, whose wheel and original fixture remain preserved separately.

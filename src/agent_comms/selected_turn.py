@@ -158,7 +158,7 @@ class SelectedAttempt:
     def tool_owner(self, session, input_id, action) -> CodingToolOwner:
         participant = self.participant
         turn = participant.owner.require_active_turn()
-        assignment = self.stage.anchor
+        assignment = self.stage.assignments[0]
         admission = WakeAdmission(
             wire_root_id=participant.root_id,
             source_seq=assignment.wire_seq,

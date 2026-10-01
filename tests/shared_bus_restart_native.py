@@ -35,7 +35,6 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
-from agent_comms.selected_native_sources import SelectedNativeSources
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.bus_publication import stable_thread_lookup
 
@@ -334,8 +333,8 @@ async def run(arguments):
                                                  '?mode=ro',uri=True)) as db:
                         reserved = NativeRuntimeInput.select(db)
                         assert len(reserved) == 1
-                        membership = SelectedNativeSources.one(db,input_id=reserved[0].input_id)
-                        assert len(membership.assignment_ids) == arguments.wave_size
+                        members = reserved[0].execution.source_assignment_ids(db, reserved[0].input_id)
+                        assert len(members) == arguments.wave_size
                     sender = service.registry.require('human')
                     late_original = service.bus.publisher.publish_ordinary(Message(
                         sender.name, '#team', 'Batch wave late original: compute 20+3.', MessageType.INFO),
@@ -403,9 +402,9 @@ async def run(arguments):
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 inputs = NativeRuntimeInput.select(store.session._connection)
                 assert len(inputs) == 4
-                memberships = [SelectedNativeSources.one(store.session._connection,input_id=row.input_id)
+                memberships = [row.execution.source_assignment_ids(store.session._connection, row.input_id)
                                for row in inputs]
-                assert sorted(len(row.assignment_ids) for row in memberships) == [1,1,arguments.wave_size,arguments.wave_size]
+                assert sorted(len(members) for members in memberships) == [1,1,arguments.wave_size,arguments.wave_size]
                 for original in (*cutover.originals, late_original):
                     evidence = read_historical_native_inputs(store, wire_root_id=root_id,
                         recipient_lookup=lookup,source_seq=original.seq)
