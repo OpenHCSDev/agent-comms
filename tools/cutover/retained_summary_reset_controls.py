@@ -100,7 +100,7 @@ checks.append('existing preimages refuse reuse of the original attempt')
 artifact = ReviewedArtifact(base / 'approved-artifact', '0' * 64)
 cohort = ReviewedRetainedSummaryCohort(base / 'future-target', Path(sys.executable),
     base / 'current', ActiveRoute(base, 'f' * 32, base / 'native'), base / 'native',
-    {'agent_comms':'a' * 40, 'toad':'b' * 40, 'textual':'c' * 40}, artifact, artifact, ())
+    artifact, artifact, ())
 assert FieldCodec.decode(ReviewedRetainedSummaryCohort, FieldCodec.encode(cohort)) == cohort
 checks.append('reviewed cohort uses original FieldCodec/PathText roundtrip; no format alias or raw fallback')
 

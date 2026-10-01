@@ -63,9 +63,16 @@ attested s5final01 bus rows; live point-in-time census is not future admission.
 
 ## Remaining execution dependencies
 
-- A foundation-only475 target retains original Message.decision format, as parent
-  reviewed. Its carry capability is the EXISTING PreserveOwnerRuntime member:
-  unchanged source needs no conversion. No new no-op/default/fallback member is
+- Foundation4345 ADDS Message.decision with NoDecision default and wire omission;
+  it is not an identical declaration. Actual original installedcac7 acquired one
+  certified readonly source snapshot268 rows/230 frozen attested deliveries,
+  zero authored choices. Prospective4345 original WireScan decoded and attested
+  every row in0.804s, with original FileRevision unchanged at readback. Its added
+  silent observation family does not reinterpret an original message as an input
+  or allocate a message sequence. No old compaction row was decoded. This is a
+  point-in-time source-format proof, not future audience admission. Foundation
+  needs no populated task-field conversion. Its carry capability is the EXISTING
+  PreserveOwnerRuntime member. No new no-op/default/fallback member is
   added. A later changed481 task-wire target requires Sch's accepted typed carry;
   Sch has not yet published that member. The caller and reviewed source proof
   own this selection, not a format guess or partial decode at execution time.
@@ -88,3 +95,34 @@ attested s5final01 bus rows; live point-in-time census is not future admission.
 
 Frozen479 is untouched. Parent reports its original thirteen-owner publication
 complete on cac7/7572; this future journal/task cutover is a separate operation.
+
+## Original package artifact boundary corrected
+
+Parent found the initial prepared comparator expected three proof rows because
+activation.pins has three entries; verify.py emits FOUR source-proof rows, with
+Diff's revision in activation.textual_diff_view. The operator now decodes this
+ORIGINAL external artifact format through FieldCodec/CohortActivation and
+InstalledSourceProof. CohortActivation owns the complete dependency relation.
+The duplicate caller pins field is deleted; no proof row is dropped. Typed
+source records verify their direct_url commit and native artifact relation too.
+Original existing4345/0dd9/4e/8fa metadata passed; missing Diff, changed Diff,
+duplicate source module, source overlay and wrong native artifact each refuse.
+No stagebuilder/product change, alternate registry or tolerant decode was added.
+
+Exact existing metadata (not public activation):
+
+- Prefix /home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-s5-receiving61-20261001
+- Core4345bfc8aac0e4717450d4f79e6fe53e331f3ccf;
+  Toad0dd9de96083126d37eb1534a62a91df9674ee120;
+  Text4e9016c1a8f3592eb652efc39ada493a41ee9206;
+  Diff8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9
+- Activation SHA a5de6d6b9b342f8aa5420589320c93489f6308fc9ccc0ea8303d6d483ee815a3
+- Source-proof SHA72b3bca2ac204d3b317a2f8bee4f969b833bcdfb9169a76f5db2367ab0e7c931
+- Native manifest0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1
+
+Sanitized original observations: stage-boundary01.json and
+foundation-source-proof01.json in evidence/retained-summary-cutover-20261001.
+Raw original wire/metadata crossed only RAM/stdin between original and target
+readers; no user content is published or persisted in this evidence. Runtime
+journal reset strength remains private installed file/SQL custody; actual future
+cohort/native/UI gates and parent execution approval remain required.

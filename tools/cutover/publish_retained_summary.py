@@ -41,13 +41,98 @@ class ReviewedArtifact:
 
 
 @dataclass(frozen=True)
+class CohortActivation:
+    """The existing verify.py artifact format, including its fourth dependency."""
+    stage: Annotated[Path, PathText]
+    pins: dict[str, str]
+    sdk: str
+    textual_diff_view: str
+    native_package: Annotated[Path, PathText]
+    state: str
+    staging_receipt: Annotated[Path, PathText]
+    bins: dict[str, str]
+    native_cli: str
+    native_manifest: str
+    native_tree: str
+    native_configuration_note: str
+
+    def source_heads(self):
+        # This scalar is the ORIGINAL producer's declared fourth dependency,
+        # not an inferred omission, alternate pin list or dropped proof row.
+        return {**self.pins, 'textual_diff_view': self.textual_diff_view}
+
+
+@dataclass(frozen=True)
+class PackageVcsInfo:
+    vcs: str
+    commit_id: str
+    requested_revision: str
+
+
+@dataclass(frozen=True)
+class PackageDirectUrl:
+    url: str
+    vcs_info: PackageVcsInfo
+
+
+@dataclass(frozen=True)
+class InstalledSource:
+    module: str
+    head: str
+    location: str
+    files: int
+    python_files: int
+    byte_equal: bool
+    direct_url: PackageDirectUrl
+    inventory_sha256: str
+
+
+@dataclass(frozen=True)
+class InstalledSourceProof:
+    state: str
+    prefix: Annotated[Path, PathText]
+    sources: tuple[InstalledSource, ...]
+    native_package: Annotated[Path, PathText]
+    native_cli: str
+    native_manifest: str
+    native_tree: str
+    native_full_trust: bool
+    sdk: str
+    package_count: int
+    packages: tuple[tuple[str, str], ...]
+    requirements_sha256: str
+    protected_old_prefix_files: int
+    protected_old_prefix_files_unchanged: bool
+    public_install_changed: bool
+    new_native_build: bool
+    source_overlay: bool
+    dependency_bypass: bool
+    journey_owners: tuple[str, ...]
+    journey_assessment: str
+
+    def require_activation(self, activation: CohortActivation):
+        actual = {source.module: source.head for source in self.sources}
+        if len(actual) != len(self.sources) or actual != activation.source_heads():
+            raise RuntimeError('Source proof differs from the complete activation dependencies')
+        if self.prefix != activation.stage or self.sdk != activation.sdk:
+            raise RuntimeError('Source proof names another prefix/SDK')
+        if (self.native_package, self.native_manifest, self.native_tree) != (
+                activation.native_package, activation.native_manifest, activation.native_tree):
+            raise RuntimeError('Source proof names another native artifact')
+        for source in self.sources:
+            if not source.byte_equal or source.direct_url.vcs_info.commit_id != source.head:
+                raise RuntimeError('Unverified source/native proof')
+        if not self.native_full_trust or self.source_overlay or self.dependency_bypass:
+            raise RuntimeError('Package/source/native trust is incomplete')
+
+
+@dataclass(frozen=True)
 class ReviewedRetainedSummaryCohort:
     target: Annotated[Path, PathText]
     source_interpreter: Annotated[Path, PathText]
     current_prefix: Annotated[Path, PathText]
     original_route: ActiveRoute
     native: Annotated[Path, PathText]
-    pins: dict[str, str]
     activation: ReviewedArtifact
     source_proof: ReviewedArtifact
     actual_gates: tuple[ReviewedArtifact, ...]
@@ -63,18 +148,15 @@ class ReviewedRetainedSummaryCohort:
         self.source_proof.require_original()
         if self.activation.path != self.target / 'activation.json':
             raise RuntimeError('Activation is not the selected immutable target')
-        activation = json.loads(self.activation.path.read_text())
-        if activation['stage'] != str(self.target) or activation['pins'] != self.pins:
+        activation = FieldCodec.decode(CohortActivation, json.loads(self.activation.path.read_text()))
+        if activation.stage != self.target:
             raise RuntimeError('Activation names another source cohort')
-        if activation['sdk'] != '0.12.1' or activation['native_package'] != str(self.native):
+        if activation.sdk != '0.12.1' or activation.native_package != self.native:
             raise RuntimeError('Activation names another SDK/native pair')
-        if activation['staging_receipt'] != str(self.source_proof.path):
+        if activation.staging_receipt != self.source_proof.path:
             raise RuntimeError('Activation names another source proof')
-        proof = json.loads(self.source_proof.path.read_text())
-        if {row['module']: row['head'] for row in proof['sources']} != self.pins:
-            raise RuntimeError('Source proof names another cohort')
-        if not all(row['byte_equal'] for row in proof['sources']) or not proof['native_full_trust']:
-            raise RuntimeError('Package/source/native trust is incomplete')
+        proof = FieldCodec.decode(InstalledSourceProof, json.loads(self.source_proof.path.read_text()))
+        proof.require_activation(activation)
         gates = {gate.path for gate in self.actual_gates}
         if len(gates) < 2 or gates.intersection((self.activation.path, self.source_proof.path)):
             raise RuntimeError('Distinct reviewed actual installed journey gates are required')

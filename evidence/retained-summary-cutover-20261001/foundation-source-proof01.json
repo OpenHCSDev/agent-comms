@@ -1,0 +1,26 @@
+{
+  "state": "original-certified-source-target-decode-attestation-pass",
+  "rows": 268,
+  "messages": 268,
+  "attested_deliveries": 230,
+  "silent_observations": 0,
+  "authored_choice_messages": 0,
+  "final_sequence": 268,
+  "wire_sha256": "311b340044da876c06f5c9703d04010d6336317c39d0d9256bca02cd41ec1c89",
+  "original_interpreter": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/runtime-openhcs-recovery-cohort-20261001/bin/python",
+  "prospective_interpreter": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-s5-receiving61-20261001/bin/python",
+  "original_revision": {
+    "identity": {
+      "device": 2083,
+      "inode": 4606680
+    },
+    "size": 892366,
+    "mtime_ns": 1790863743348433223,
+    "ctime_ns": 1790863743348433223
+  },
+  "original_snapshot_unchanged_at_readback": true,
+  "elapsed_seconds": 0.8037972149904817,
+  "public_writes": 0,
+  "prompt_count": 0,
+  "note": "Point-in-time certified snapshot; actual cutover must revalidate current sources. No original compaction journal decode."
+}
