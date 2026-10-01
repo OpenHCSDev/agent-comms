@@ -157,6 +157,30 @@ Kepler's scalar closure has already landed here. His exact implementation/delete
 site census must reach both PR bodies before parent review. Native6 and broader
 saved custody work do not hold that independently coherent batching checkpoint.
 
+### Normal builder integration
+
+`d15362ba` publishes this scope's source implementation and refreshed NRA
+fingerprints; 194 production lines deleted / 324 added in 25 files. It is not
+Ready. The native source/schema transition and configured custody obligations
+above remain unfinished. No tests or native inputs ran in this source pass.
+
+`146388dc` normally merges Kepler's full plural builder `369b10be`, preserving
+both branches. The only explicit conflict was `AttemptStore._resume_retry`:
+existing `ReplayAssessments.revoke_for_retry` retains the replay decision,
+while every original obligation resumes through the plural exact-target update.
+The automatically joined UNKNOWN path similarly retains `ReplayAssessments.accumulate`
+and the complete publication-intent tuple. No copied replay flags are restored.
+
+Source search after integration has no production `snapshot.obligation`,
+`snapshot.publication_intent`, `execution.exact_target` or `require_response_target`
+consumer. Shared selected continuation still receives `result.context`; original
+native source verification and observed-attestation publication survive the merge.
+Kepler's `490-source-fidelity-20261001.md` supplies the complete builder census.
+The NRA artifact here fingerprints the **premerge d15362ba source**, not the
+expanded integration; its exact/open edges are not silently relabeled current.
+Configured multi-route and saved-custody validation remain final obligations,
+not claims supplied by these searches.
+
 ## Boundary ownership and final validation
 
 - Arendt: complete selection/custody/admission/history/recovery/raw-coverage and
