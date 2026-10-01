@@ -23,3 +23,29 @@ Validation LAST: focused resource exception checks plus an installed continuous
 private journey with at least three actual native owners simultaneously finishing
 triage, cursor advancement and bus publication. Provider only may be controlled.
 No acceptance result claimed at this work-start checkpoint.
+
+## Source closure
+
+Existing owners, no new type/store/policy: PrivateEvidenceRead now translates only
+its open/fstat/read/parse/snapshot operations. Its yielded rows and open resource
+propagate caller exceptions unchanged while closing. NativeContextJournal's
+indexed acquisition and post-observation inode check likewise own only their
+operations, retaining query-only/schema/private-file/inode checks. All public
+readers continue through NativeEntry/NativeEvidenceRead/Scope; their ExitStack
+closes descriptors but does not reinterpret consumer bus errors.
+
+Bounded authored source AST inventory found translating yield scopes also in
+NativeTranscript.tail and BusPageIndex.iterate: tolerant decode/index failure is
+now scoped to iterator advancement/decoding; yielded consumer exceptions stay
+consumer exceptions. Their original display tolerance and malformed-index refusal
+remain. GoalHistory._transaction deliberately owns its private write transaction
+and commit/fsync uncertainty (only internal goal SQL callers); backend.run owns
+turn-level completion/failure events. CompactionJournal/CoordinationSession and
+NativeCustody catch BaseException only for rollback/cleanup and rethrow unchanged.
+Those are legitimate operation/cleanup owners, not native-file classification.
+
+Unchanged NativeSourceCursor.advance already retries only BlockingIOError from
+its original auxiliary cursor transaction, bounded by its existing two-second
+policy. This change restores that declared behavior; no new retry/timeout,
+provider input replay, acquisition bypass, cursor mirror or fleet reduction.
+Storage/wire/native formats and current private-file/prefix proof checks unchanged.
