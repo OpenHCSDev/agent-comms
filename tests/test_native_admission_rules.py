@@ -12,6 +12,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.goals import Goal
 from agent_comms.native_prompt_binding import read_expected_prompt_binding
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_admission_epoch import RecordedNativeAdmission
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.text_digest import TextDigest
@@ -90,7 +91,7 @@ async def test_durable_private_admission_names_each_changed_authority(
             ),
             rules.NativeTokenRule: replace(reservation, token_digest="0" * 64),
             rules.NativeAlreadyAdmittedRule: replace(
-                reservation, row=replace(row, sent_owner_admission_generation=1)
+                reservation, row=replace(row, sent_owner_admission_generation=RecordedNativeAdmission(1))
             ),
             rules.NativeAlreadyProvenRule: replace(
                 reservation, row=replace(row, session_id="returned")

@@ -41,4 +41,36 @@ Reuse existing installed controlled-native cancellation/recovery fixture for the
 changed original producer and readers. No failed/UNKNOWN original is replayed.
 Source checks alone do not establish installed readiness. CI is deferred.
 
-No implementation or gate is claimed by this initial scope checkpoint.
+## Working source checkpoint
+
+NativeRuntimeInput now holds a nonoptional NativeAdmissionEpoch. Original
+FieldCodec decodes SQLite NULL/positive integer exactly once to explicit
+UnrecordedNativeAdmission/RecordedNativeAdmission members. Shared471 contributes
+only Column(nullable=True), a physical NULL declaration separate from semantic
+optionality. IntegerStorage and the original schema/column/checks are unchanged;
+no property adapter, nullable scalar shadow, codec subclass or new SQL state.
+
+Members own reservation refusal, the original one-use CAS, admission matching
+and recorded/unrecorded release obligations. PrivateSendStage returns its original
+validated row; PrivateSendAdmission records its epoch after durable UNKNOWN and
+inside the same held exclusion. OwnerReleaseReceipt retains common exact
+incarnation/dead-process/idle/advanced-admission requirements. The unrecorded
+member requires the exact stopped release; recorded requires its original sending
+admission to be fenced by the release. Neither grants retry or unwritten proof.
+All cursor/rule/tool readers consume that original state.
+
+Forty-nine unique affected source controls pass across the preserved runs;
+source02 has41pass/eight fixture failures, followed by all nine admitted-epoch
+cases passing after the single leftover fake early-throw was removed (one
+already-passed case overlaps). Three representative pre-repair failures are also
+reproduced on unchanged main. Recovery fixtures now revoke the real original
+owner before failure settlement rather than patch a deleted hook; cursor and
+wrong-input fixtures retain correct passive coverage/valid foreign identity.
+The typed preflight refusal still asserts fresh NotSent, while existing historical
+UNKNOWN checks and exact row bytes remain unchanged.
+
+NativeRuntimeInput declaration SQL is byte-for-byte equal to original970.
+No table/version/store/runtime reset or public change is required. Source proof
+is recorded in `evidence/native-admission-epoch/source-checkpoint.json`.
+The changed original producer/recovery installed native journey remains pending;
+this source checkpoint is not installed or live readiness. CI remains deferred.

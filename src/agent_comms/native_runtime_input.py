@@ -17,8 +17,9 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .coordination_errors import StaleFence
+from .native_admission_epoch import NativeAdmissionEpoch, UnrecordedNativeAdmission
 from .native_input_record import NativeInputRecord, NativeInputContext
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -183,8 +184,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     owner_thread: str
     owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
     owner_token_digest: str = field(metadata={"sql": Column(check="length(owner_token_digest)=64")})
-    sent_owner_admission_generation: int | None = field(
-        default=None, metadata={"sql": Column(check="sent_owner_admission_generation>0")}
+    sent_owner_admission_generation: NativeAdmissionEpoch = field(
+        default_factory=UnrecordedNativeAdmission,
+        metadata={"sql": Column(check="sent_owner_admission_generation>0",
+                                 storage=IntegerStorage, nullable=True)},
     )
     session_id: str | None = field(default=None, metadata={"native_context": str})
     session_file: str | None = field(default=None, metadata={"native_context": str})
