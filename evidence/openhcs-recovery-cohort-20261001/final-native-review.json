@@ -1,0 +1,74 @@
+{
+  "assessment": "PASS installed final-cohort private cancellation-before-grant and independent channel-reply crossing; not external UI/public catalog carry acceptance",
+  "pins": {
+    "agent_comms": "cac7bdf337d9e4dba888ce7c2093ddcc55802bc3",
+    "toad": "7572b7b7856b1ac99f7bda5dac760c87c586a73d",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "sdk": "0.12.1",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "raw_receipt": "/home/ts/wt/ac476-final-native02/receipt.json",
+  "raw_receipt_sha256": "68c000b95ac097db84d281e7e4b00c30003a161aef7cdc103d2f59c4ee203064",
+  "fixture": "/home/ts/wt/comms-openhcs-channel-delivery-20261001/tests/shared_bus_restart_native.py",
+  "fixture_sha256": "89b3da367454a67cc3a4c148b62017c059c277c855f9733e2478a96d17e186ca",
+  "controlled_provider_sha256": "ab9333e0405920803432bebe52a386f2659bb497a04f0f74c72021d4140f8826",
+  "elapsed_seconds": 18.591693811991718,
+  "owners": 1,
+  "history_rows": 220,
+  "unrelated_registry_declarations": 120,
+  "cancellation": {
+    "cancelled_input": "4c318588b6545662366ab34ea3732d20",
+    "localhost_posts_at_joined_cancel": 0,
+    "writer_wait_observed": true
+  },
+  "localhost_provider_posts": 2,
+  "native_originals": [
+    {
+      "session": "wire/native-sessions/199be98ed500bea843f182e54c4b6a2b/2026-10-01T07-52-46-750Z_01a0f673-9b9d-766c-8564-83577de468a7.jsonl",
+      "entry_id": "d4a4dc73"
+    },
+    {
+      "session": "wire/native-sessions/199be98ed500bea843f182e54c4b6a2b/2026-10-01T07-52-46-750Z_01a0f673-9b9d-766c-8564-83577de468a7.jsonl",
+      "entry_id": "9c560ca4"
+    }
+  ],
+  "canonical_channel_reply_count": 1,
+  "canonical_channel_reply_sequence": 223,
+  "acp_notification_count": 11,
+  "acp_fact_counts": {
+    "CoordinationChangedUpdate": 1,
+    "CursorAdvancedUpdate": 2,
+    "GoalChangedUpdate": 2,
+    "InputDeliveryChangedUpdate": 3,
+    "QueueChangedUpdate": 1,
+    "TranscriptSnapshotUpdate": 2,
+    "TurnChangedUpdate": 2
+  },
+  "all_owned_workers_retired": true,
+  "failure": null,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "source_crossing": "477 changes original live Thread/registry provenance declarations and channel history source readers after476; original native send/admission mechanism reused.",
+  "limits": [
+    "Provider-only localhost fixture responses; actual worker, selected Pi native input/proof, registry, ACP, real reader/writer contention and cancellation.",
+    "This gate does not import the Toad UI; Toad pin is paired composition identity, not visual acceptance.",
+    "Public saved-source catalog carry remains parent-owned; no originalpublic pending-input replay."
+  ],
+  "source_proof": {
+    "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.artifacts/staging-openhcs-recovery-cohort-20261001/source-proof.json",
+    "sha256": "da2323382c6e6eeb83d74aea41299f5fd10e29bd90a26fd4a713b10ceb1908da",
+    "boundary": "Parent verified immutable final cohort; exact Git source bytes, native593 trust and SDK12.1."
+  },
+  "caller": {
+    "log": "/home/ts/wt/toad-retained-history-buffer-20260930/.artifacts/native-final-cohort-20261001/caller.log",
+    "log_sha256": "68c000b95ac097db84d281e7e4b00c30003a161aef7cdc103d2f59c4ee203064",
+    "invocation": "/home/ts/wt/ac476-final-native02/final-cohort-invocation.json",
+    "invocation_sha256": "ce18e9bcaeff7931a10b7e603afdbf43dac34afc0545a5feda11324136f17e09"
+  },
+  "measurement_labels": {
+    "acp_notification_count": "11 session_update notification packets retained by original ACP observer",
+    "acp_fact_counts": "13 typed authoritative facts decoded from packet metadata; one packet may contain multiple facts"
+  },
+  "typed_acp_fact_count": 13
+}

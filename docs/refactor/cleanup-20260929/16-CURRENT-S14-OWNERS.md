@@ -25,7 +25,7 @@ Receipt: evidence/openhcs-recovery-cohort-20261001/source-proof.json.
 
 Fresh original activity observations, fenced to current registry owners,
 confirm architecture-memory, PR159 and helper still have NativePiUnavailable:
-native admission ended before writing bytes. Their drains are stopped.
+native admission ended before writing bytes. Their drains are stopped. Final installed native crossing passes18.5917s: joined cancellation0providerPOST, independent channel reply2native originals/2localhostPOST; workers retired.
 Core476 separates cancellation-aware admission custody from the write budget;
 notification and receiver views derive original readiness. No second status
 store, increased whole-turn deadline or old-input replay. Original262 UNKNOWN
@@ -45,13 +45,13 @@ Full live channel acceptance follows quiet history carry, not before it.
 | Workflow | Owner | Current result and remaining work |
 | --- | --- | --- |
 | Receiver admission and DM/IRC readiness | Arendt476/267; parent installation | Both merged. Native cancel-before-grant and independent reply pass; actual DM readiness passes. Quiet installation and post-carry channel acceptance remain. |
-| Original archived history | Mendel477/268 | Both merged. Physical Saved→native41MB history→End→IRC passes36.43s. Final combined private ArchiveJourney hit45s deadline during action settling; timing/cleanup assessment pending, not full combined acceptance. Original source/index carry prepared, not published. |
+| Original archived history | Mendel477/268 | Both merged. Physical Saved→native41MB history→End→IRC passes36.43s. Final combined private ArchiveJourney PASSES36.23s under SAME45s deadline: actual Saved/native41MB history/focus/End/IRC personally reviewed. Failed05 observer export preserved; optional unused selector DTO skipped in merged273, retaining its PNG/time. Original source/index carry prepared, not published. |
 | Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271; Kepler profiles |269 merged: body constructions275→119; actual41MB journey16 checks pass91.07s. CPU remains high. Current DiffView native Resize change removes2 mount-induced full-scene arrangements; full consumer/installed gate unfinished. Original TC1/T9/buffer/velocity/End/focus/resource scope remains. |
 | S5 phase1 context ownership | Einstein473 | Installed native/ACP/context --turn/--diff journey19 passes26.408s on frozen private270/451; no paid calls. Current3948 coherent source includes476/477 and nominal S2 changes. Full logical attribution and byte-identical actual user/provider acceptance remain DRAFT. |
 | S2 retained facts and provenance | Schrodinger475; Toad pair272 | Selected installed native retention passes9.59s. Authenticated ingress origin extends original PromptRequest/reservation/StoredInput; unproven historical inputs stay neutral. General constraints/artifact proofs/three checkpoints unfinished. Explicit controller producer methods granted; Einstein coordinates context API. |
 | S5 phase2 authored retained operations | Einstein474 | Dependency: S2 retained classes. Pin/supersede/drop/export and real compaction/fresh-thread journeys remain. |
 | Shared FieldCodec family schema | Parent478 |21 production lines added/3 deleted; no builtin handler or alternate codec.38 checks and receiving full tool catalog pass. Installed receiving evidence exists; full feature scopes remain with473/475. |
-| Quiet release | Arendt prepares; parent sole executor | Existing StoppedOwnerInstallation batch only. Exact next operator pending acceptance hashes/review. Fresh audience/config/client fences; old close authorization is not assumed for reopened clients. |
+| Quiet release | Arendt prepares; parent sole executor | Existing StoppedOwnerInstallation batch only. Exact next operator reviewed and invocation frozen with actual UI/archive hashes. Readback stays under the original wire custody. Fresh guard finds13idle original owners and openToad519107; SAVE/CLOSE question pending before execution. |
 | Original closure and storage | Parent432 | Original T2/C0/round-two/T4/checklist remains active. Current C0 census has no separate unclaimed family site. Toad50 current real Chromium serving/ACP/settings/security/download acceptance passes without provider calls. Preserve protected prefixes, sessions, uncertain inputs and private owners. |
 
 ## Quiet history carry
