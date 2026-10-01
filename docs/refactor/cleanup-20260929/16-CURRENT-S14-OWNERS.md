@@ -160,6 +160,25 @@ not CPU or physical warm-agent acceptance. Failed observer01 timeout preserved.
 Frozen receiver release still uses Textual6b; this independent checkpoint does
 not change it or hold its quiet switch.
 
+### Native width checkpoint merged
+
+Textual17 is merged ce9aa336 at reviewed8a0f52; textual-diff-view2 is merged
+388dd69c at reviewedfa625. The heads add only evidence to the installed products
+4e9016c1 and8fa7d4d0. Production deletions:22 Textual lines and1 native diff line.
+Width dependency now uses the existing measurement family instead of a separate
+native-width boolean and repeated consumer checks. LineAnnotations declares its
+width/height behavior; its original numbers producer requests layout invalidation.
+
+Parent reviewed original width-installed01 and its source: all10 native diff/tool
+flow containers reuse1 arrangement across8 available heights; unknown width
+overrides retain context-dependent geometry, declared independent ones reuse.
+Changing numbers moves the original region3x1 to9x6. Wide/narrow/wide actual
+Toad mount/Resize, relative dimensions, padding, member changes and unknown hooks
+remain correct. This is installed native component acceptance, not physical CPU,
+saved41MB or warm current-agent acceptance. No new provider calls or public effects.
+Toad271 carries the two decorator lines and pins; full performance work continues.
+Neither library merge changes the frozen receiver release or public default.
+
 Both original archive locks/seals passed read-only with authentic installed720.
 Existing writer constructs WireLog directly and hands the SAME opened descriptor
 to current installer. No retired registry decoder or separate archive owner batch.
