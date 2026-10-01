@@ -48,6 +48,7 @@ class RuntimeCompactionReset:
 
     def retain_and_remove(self, destination: Path):
         """Retain EVERY present named member before removing ANY runtime file."""
+        PrivateDirectoryRole.require(destination.parent.lstat())
         destination.mkdir(mode=0o700)
         PrivateDirectoryRole.require(destination.lstat())
         with ExitStack() as acquired:

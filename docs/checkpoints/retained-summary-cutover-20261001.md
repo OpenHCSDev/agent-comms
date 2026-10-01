@@ -63,11 +63,26 @@ attested s5final01 bus rows; live point-in-time census is not future admission.
 
 ## Remaining execution dependencies
 
-- Sch481 has not yet published the accepted typed carry member. This dependency
-  is explicit and required by publish; no no-op member/default carry exists.
+- A foundation-only475 target retains original Message.decision format, as parent
+  reviewed. Its carry capability is the EXISTING PreserveOwnerRuntime member:
+  unchanged source needs no conversion. No new no-op/default/fallback member is
+  added. A later changed481 task-wire target requires Sch's accepted typed carry;
+  Sch has not yet published that member. The caller and reviewed source proof
+  own this selection, not a format guess or partial decode at execution time.
 - Parent must supply the new reviewed frozen cohort and accepted actual gate
   artifacts. No future target values or execution approval are inferred here.
-- Source AST checks passed; bounded private journal custody controls follow.
+- Source AST checks passed. Original installed Corecac7/SDK declarations created
+  a genuine private SQLite journal and a canonical ReservedInput UNKNOWN. Seven
+  controls passed in0.47s: all four named runtime files retained/removal with
+  UNKNOWN/native/proof byte invariance; wrong mode, hardlink, symlink and orphan
+  refusal before removal; old-attempt reuse refusal; FileCodec/PathText reviewed
+  cohort roundtrip. Acquired descriptors closed on success and each refusal.
+  Original setup01 key mismatch refused in the input owner before admission,
+  reset or native launch; retained separately and no input replay occurred.
+  Runnable source is tools/cutover/retained_summary_reset_controls.py (--output
+  fresh persistent private directory), receipt evidence/retained-summary-cutover-
+  20261001/private-runtime-reset02.json. This is installed SQL/file-custody
+  acceptance, not a whole retained restart, actual future pair or public UI gate.
   No live root read/preflight, public input, process signal, reset, link/route
   publication or owner launch has been performed by this preparation.
 
