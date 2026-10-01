@@ -522,3 +522,27 @@ Queue receiving remains frozen4345bfc8/25d8e602/Text4e9016c1/Diff8fa7d4d0/native
 new Text work does not block it or silently replace those pins. Einstein owns
 the continuous two-request installed receiving check, including the original
 mounted queue-to-chat visibility assertion before claiming that UI behavior.
+
+Parent read the new public diagnostic33eb1cf2b240ff09d37689a4a5450b51 for
+PR159 sequence267: the old native-applied package fails the outer wire-lock
+nonblocking admission, exhausts its pregrant deadline and reports PromptSendUnknown
+before writing bytes. This is the same476 scope, not a new-candidate failure.
+The old default254 and actual Toad519107 remain live; frozen publication is still
+absent. This input stays uncertain and has not been replayed.
+
+The receiving driver is now published as Core3a56684f and Toad60bbc6ce, without
+changing either frozen product source. Parent read the complete observer delta:
+while the original provider gate is held, the original queued submission must
+paint in mounted QueueSummary's actual compositor region, remain unstarted and
+have no native chat claim. After delivery, its exact native-ID UserInput claim
+and chat text occur once and the queue caption clears. Receipt preparation64
+is driver readiness only, not a successful installed run.
+
+The remote PR270 headf99dce78 still has the old frontend input-capture chain;
+accepted25d8e602 is on the separate published integration branch. Einstein and
+sole metadata owner Mendel are normally integrating it into270 before any merge;
+they must not force-push or restore the older producer. Parent caught the actual
+source difference rather than treating branch labels as source equivalence.
+Arendt now owns preparation of a separate next475 stopped-owner journal-reset
+operator through the existing installation/batch owners. Frozen479 remains
+unchanged and awaits normal client closure.
