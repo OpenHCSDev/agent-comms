@@ -247,6 +247,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         c_output = output / 'receiver'
         c_output.mkdir(mode=0o700)
         journal = CompactionJournal(owner._comms.root / 'compaction-commits.sqlite3')
+        await owner.load_session(str(project), receiver.name)
         async with actual_s2_ingress(owner, receiver, c_output) as observer:
             async def compact_receiver():
                 app = observer.observer.app
@@ -297,7 +298,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         assert replacement.id != goal.id
         assert not original_origin.applies(owner._comms.registry.require(thread.name),
             owner._comms.registry.snapshot())
-        assert stored.lookup(originals[-1].key).origin == original_origin
+        assert InputDispositions(owner._comms.root / InputDispositions.filename).read().lookup(
+            originals[-1].key).origin == original_origin
         (output / 'goal-boundaries.json').write_text(json.dumps({
             'absent': FieldCodec.encode(absent_origin.goal), 'present': FieldCodec.encode(original_origin.goal),
             'replacement': FieldCodec.encode(owner._comms.registry.require(thread.name).goal_checkpoint),
