@@ -55,7 +55,7 @@ Full live channel acceptance follows quiet history carry, not before it.
 | Original archived history | Mendel477/268 | Both merged. Physical Saved→native41MB history→End→IRC passes36.43s. Final combined private ArchiveJourney PASSES36.23s under SAME45s deadline: actual Saved/native41MB history/focus/End/IRC personally reviewed. Failed05 observer export preserved; optional unused selector DTO skipped in merged273, retaining its PNG/time. Original source/index carry prepared, not published. |
 | Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271; Kepler profiles |269 merged: body constructions275→119; actual41MB journey16 checks pass91.07s. CPU remains high. Native library PR1 merged f6d3cdd0: Resize owns sizing;5 production lines deleted. Actual installed four-consumer check removes4 mount-triggered full layouts and preserves ordinary/prepared/fixed/padded resize behavior. Full original41MB comparison and TC1/T9/buffer/velocity/End/focus/resource scope remain. Not yet the public default. |
 | Original TC1 terminal execution lifecycle | Arendt274 implementation; Kepler actual PTY/ACP journey | Independent continuation of the original TC1 plan, tracked in new draft274. One execution owner, all terminal ACP/controller/widget consumers; no changes to Heisenberg's session/transcript/viewport files without direct agreement. Installed journey pending; no product readiness claim. |
-| S5 phase1 context ownership | Einstein473 | Installed native/ACP/context --turn/--diff journey19 passes26.408s on frozen private270/451; no paid calls. Current3948 coherent source includes476/477 and nominal S2 changes. Full logical attribution and byte-identical actual user/provider acceptance remain DRAFT. |
+| S5 phase1 context ownership | Einstein473 | Latest installed continuous journey39 passes48.995s on private270/0064: actual Toad originals/image, queued controller followup, native nested Core tool, three text-free manifests and context --turn/--diff. Parent read its original inputs/provider requests and CLI artifacts. Configured-provider saved-session acceptance and full phase1 closure remain; no public installation claim. |
 | S2 retained facts and provenance | Schrodinger475; Toad pair272 | Selected installed native retention passes9.59s. Authenticated ingress origin extends original PromptRequest/reservation/StoredInput; unproven historical inputs stay neutral. General constraints/artifact proofs/three checkpoints unfinished. Explicit controller producer methods granted; Einstein coordinates context API. |
 | S5 phase2 authored retained operations | Einstein474 | Dependency: S2 retained classes. Pin/supersede/drop/export and real compaction/fresh-thread journeys remain. |
 | Shared FieldCodec family schema | Parent478 |Merged464b05dc:3 production lines deleted/21 added; no builtin handler or alternate codec.38 source checks and receiving catalog22 pass. Parent reviewed original installed34's actual33-tool SDK catalog/hash,2 recorded manifests, native nested-family tool call/nonerror result and matching canonical decision. Complete codec is byte-identical to installed3f0. This closes the shared schema boundary; failed whole-run reply oracle and full473/475 scopes remain separate. Not yet default-installed. |
@@ -64,12 +64,12 @@ Full live channel acceptance follows quiet history carry, not before it.
 
 The next S2/S5 private pair is independent of the frozen receiver release.
 Mendel owns its single normal69-package stage in parent270; Schrodinger and
-Einstein own the shared installed journey. Source pins are Core3f0af494
-(includes context d7c2cf3d), Toad2727f32d8ec and verified nativef1178500.
-The receiving checkpoint38614c38 is pushed; source-proof d4c921e8 confirms
-all323 Core/305 Toad/266 Textual Git code and asset files,69 normal packages,
-entrypoint and full native trust. All4157 files in the old pair remain unchanged.
-The actual shared journey is pending. No second native builder,
+Einstein own the shared installed journey. Current source pins are Core43df95f0, Toad89655a17 and verified native0064a96b.
+The older Core3f0/Toad38614/f117 stage remains immutable.
+Receiving proof1cc84de8 confirms the new0064 pair's323 Core/305 Toad/266
+Textual Git code and asset files,69 normal packages, entrypoints and full native
+trust. All4166 observed files in its protected prior pair remain unchanged.
+The corrected actual shared journey39 passed on the new0064 pair. No second native builder,
 public package change or readiness claim. This journey must exercise the Core
 declared tool catalog/nested-family tool and actual Toad original/followup
 ingress/context, unlike earlier19's four stock SDK tools.
@@ -186,3 +186,23 @@ Einstein explicitly undid that revert in current473; ordinary ancestry alone
 would not restore the hunks. Preserve provenance, notification references and
 nominal facts when merging complete retained-context work. Parent restored only
 the owner-approved S5 plan/index/dispatch documents.
+
+### Current terminal receiving review
+
+Core480 f8ae4f52 extends ORIGINAL AttachedChild launch stdio through ChildStdio
+and identity-bound force;10 production lines deleted/42 added. The existing
+stop and cancellation join algorithms remain. Source22 controls and real PTY
+exited-leader retirement passed. The whole installed receiving gate is pending.
+
+Parent found the receiving ACP launcher still supplied removed input_enabled
+and limit parameters at maintenance_ingress.py169. This would raise TypeError
+on normal launch, so staging is held for Arendt's full caller migration: typed
+StreamingChildStdio through admitted_spawn and AgentProcess's existing10MiB
+stream limit. No compatibility kwargs or alternate spawn path. Kepler's
+continuous native ACP/PTY journey must cross that launcher before acceptance.
+
+S2/S5 journey39's original negative32–35 attempts remain preserved. The fresh
+0064 run at /home/ts/wt/s5i08 used3 localhost POSTs and0 paid calls; original
+inputs were not retried. Both original logical turns are distinct, while the
+first turn contains its original queued followup. Configured-provider saved
+acceptance remains Einstein's next action, independent of public quiet carry.
