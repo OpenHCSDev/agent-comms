@@ -1,3 +1,30 @@
+## 19:26UTC urgent491 global source pairing repair default-installed
+
+Core491 merged eae8818e, receivingToad281 merged37e7867b; paired d077/457 source
+with nativec4d4/tree87f nowdefault. The user helper NotSent failure exposed an
+actual verification gap: old managed fixture explicitly loadedcompiledproject,
+while actualglobal discovery rejectedoldshared source. Sourcebindingnowtargets
+installedglobal source.ts; olddirtysharedsource preserved. Existing stoppedowner
+batch activated both reviewedglobalfiles and verified4automaticglobals/noerrors
+plushelper42.9MBsavednativeget_state/inputattestation BEFOREroutepublication.
+17originalowners/configurations retained, sameformatruntimepreserved,noinputretry.
+Default physicalhelperattachment verifiedactualst/normalPATH: retainedhistory +
+Ready in sidebar/session details; before/afterPNGindividuallyreviewed. Original
+helperowner unchanged/alive, testchildrenretired. No newmodelanswerclaim.
+Receipt/evidence: evidence/native491-global-source-default-20261001/.
+
+Latestparallel concreteprogress: Arendt controlledsame42MBgreeting47.32→18.09s
+with shared acquiredjournal/source readers;45corruption/replacement/UNKNOWN
+controlsPASS. Publishingusefulreadercheckpointwithoutwaitingfull489paused
+compaction, remaininghistorical45.83phasecauseopen. Keplerpendingbatch6648
+source snapshot+singleinputfenceimplemented; historicalmembership/alltargets
+publicationclosure inprogress, notlive. Heis27544e4integrates8229:1pageextension,
+0duplicatepageradmissions versus12/12baseline; actualmatchedinstalledbusyvideo
+gatepending. CorrectedstaleclosedMendeldependency: Heisownsstagingnow. Einstein
+474mainintegration1d73/2d81 complete, Schresumesonecombinedartifactincluding491
+sourcebinding. Singercompletedreadonly25/35missed-batchcensus and nowreviews
+batchoriginalsource/proof/audiencesforKepler, nocleanupactive.
+
 ## 2026-10-01 bundled485/487/488/278 now default-installed
 
 Parent merged receivingToad279 (`6fa34d91`) and published the normal69 paired
