@@ -163,9 +163,9 @@ class StoredInput(InputAttempt):
         return TextDigest.of(self.source_text)
 
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
-        # The selected source must separately match the live full incarnation.
-        # Historical rows never recorded creation time and cannot attest it.
-        return self.owner == source_owner.name
+        # Attributed original inputs own their recorded birth; neutral historical
+        # rows have only a name and never acquire an inferred incarnation.
+        return self.origin.matches_owner(self.owner, source_owner)
 
     def matches_admission(self, admission: int) -> bool:
         return self.admission == admission

@@ -11,6 +11,7 @@ from .errors import RelationViolationError
 from .goals import GoalRevision
 from .message_reference import MessageReference
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from .turn_context import Provenance
 
 if TYPE_CHECKING:
     from .messages import Message
@@ -433,24 +434,27 @@ class HumanConstraintPin(ScopedTaskDeclaration):
             raise RelationViolationError("USER pin must address its original recipient")
 
     def require_publication(self, sender, registry, original_source):
-        from .private_bus_checkpoint import delivery_references_unlocked
-        from .bus_publication import stable_thread_lookup
-
         registry.require(sender).role.require_user()
         self.require_user_revision(sender, registry)
         if original_source is None:
             raise RelationViolationError("USER pin requires the certified original message")
+        self.require_wording_publication(registry, original_source)
+        if not self.recipient.current(registry):
+            raise RelationViolationError("USER pin recipient was replaced")
+        owner = registry.require(self.recipient.resolved(registry).name)
+        self.scope.require_human_context(owner)
+        self.change.require_publication(self, registry, original_source)
+
+    def require_wording_publication(self, registry, original_source):
+        from .private_bus_checkpoint import delivery_references_unlocked
+        from .bus_publication import stable_thread_lookup
+
         delivery, = delivery_references_unlocked(original_source, (self.subject,))
         delivery.message.sender_role.require_user()
         if delivery.audience.sender_lookup != stable_thread_lookup(self.source_user.created_at):
             raise RelationViolationError("USER pin differs from its original human author")
         if not delivery.audience.includes_lookup(stable_thread_lookup(self.recipient.created_at)):
             raise RelationViolationError("USER pin recipient did not receive its original message")
-        if not self.recipient.current(registry):
-            raise RelationViolationError("USER pin recipient was replaced")
-        owner = registry.require(self.recipient.resolved(registry).name)
-        self.scope.require_human_context(owner)
-        self.change.require_publication(self, registry, original_source)
 
     def user_task_facts(self, message):
         from .retained_task_facts import HumanConstraintTaskFact
@@ -459,6 +463,34 @@ class HumanConstraintPin(ScopedTaskDeclaration):
 
     def retained_task_facts(self, message):
         return ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeInputConstraintPin(HumanConstraintPin):
+    """The same USER pin relation, addressed to an original direct ACP input."""
+
+    subject: Provenance
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.subject.require_human_input()
+
+    def require_wording_publication(self, registry, original_source):
+        from .input_disposition import InputDispositions
+
+        original_source.require_current()
+        with InputDispositions(original_source.path.parent / InputDispositions.filename).reading() as inputs:
+            row = self.subject.require_human_input().require_original(inputs)
+        origin = row.origin.require_human()
+        if origin.root_id != original_source.witness.root_id:
+            raise RelationViolationError("USER input pin belongs to another wire root")
+        original_author = ThreadIncarnation(origin.author.sender, origin.author.created_at)
+        if original_author.resolved(registry) != self.source_user.resolved(registry):
+            raise RelationViolationError("USER input pin differs from its original human author")
+        if origin.admission.incarnation.resolved(registry) != self.recipient.resolved(registry):
+            raise RelationViolationError("USER input pin recipient did not receive its original input")
+        if origin.project != self.scope.project:
+            raise RelationViolationError("USER input pin belongs to another project")
 
 
 @dataclass(frozen=True, kw_only=True)

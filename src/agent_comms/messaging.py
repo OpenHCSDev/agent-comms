@@ -21,7 +21,7 @@ from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
 from .task_sources import TaskAttachment, NoTaskAttachment
-from .task_sources import HumanConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
+from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
 from .task_sources import TaskChange, OriginalTaskChange
 from .message_reference import MessageReference
 
@@ -158,14 +158,25 @@ class Messaging:
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
                             change: TaskChange = OriginalTaskChange()) -> Message:
         """Pin a certified original USER message; never replay it or lease a turn."""
+        return self._pin_constraint(recipient, subject, HumanConstraintPin,
+                                    worktree=worktree, scope=scope, change=change)
+
+    def pin_input_constraint(self, recipient: str, subject, *, worktree: str,
+                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
+                             change: TaskChange = OriginalTaskChange()) -> Message:
+        """Pin the original input provenance, not a reconstruction of its text."""
+        return self._pin_constraint(recipient, subject, NativeInputConstraintPin,
+                                    worktree=worktree, scope=scope, change=change)
+
+    def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change):
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
             owner = self.registry.require(recipient)
-            task = HumanConstraintPin(scope=scope.select_human(owner), subject=subject,
-                                      source_user=user.incarnation, recipient=owner.incarnation,
-                                      change=change)
+            task = declaration(scope=scope.select_human(owner), subject=subject,
+                               source_user=user.incarnation, recipient=owner.incarnation,
+                               change=change)
             committed = self._publish_user_under_wire_lock(
-                user, owner.name, f"Pinned constraint from original message {subject.seq}:{subject.message_id}",
+                user, owner.name, "Pinned constraint from its original source",
                 task, notice=True)
         return self._notify_user_commit(committed)
 

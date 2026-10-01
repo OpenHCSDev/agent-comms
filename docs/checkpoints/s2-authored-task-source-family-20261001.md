@@ -259,3 +259,36 @@ controls are summary-baseline52/typed53/source-final55/related56/child57 and
 user-484-54. The latest audit archive100fbe8e was reread. Direct peer delivery
 remains unconfirmed because multi_agent_v1 is absent from this session catalog;
 publication in481 is the available handoff. Parent owns the next installation.
+
+## Direct native input pin: original-source extension
+
+NativeInputConstraintPin extends the existing HumanConstraintPin declaration,
+not a second constraint registry. Its subject is the original InputProvenance
+(key plus its original HumanInputOrigin), resolved through InputDispositions
+under the existing certified wire barrier. The shared USER author/recipient/
+scope/change/lineage machinery owns repeat pin, correction and drop; this
+member owns only its original input relation. No wording is copied to the pin,
+no model lease is borrowed, and pin publication never attempts the input.
+
+ExactTaskFact.original_sources provides the original Message or StoredInput at
+the same immutable captured cut. Active declarations must resolve their wording
+within that cut before classification: missing/future input material cannot be
+packed merely because the pin row exists. Recorded human input birth survives
+owner rename through the original origin; neutral rows retain only their
+recorded name. No birth is invented for old evidence (IDEN-8/IMPL-12/TIME-9).
+
+The existing source publisher/ingress family passes22 in5.95s, including the
+continuous new direct-input case: original queued human input, USER pin without
+new turn, exact source/codec, repeated same input, distinct equal-body inputs,
+foreign recipient/key/origin refusal, rename, correction/drop and unchanged
+original UNKNOWN disposition. Original60 negative was a narrower refusal
+message mismatch, preserved;61 and62 controls pass. This is source acceptance,
+not a new actual-native three-compaction or installed UI claim.
+
+Frozen79d3 remains the published wire-only checkpoint for Einstein474 b4e80.
+No native package/manifest change is required by this source-only extension.
+Native direct pin export needs S5's original-source renderer to consume
+StoredInput.source_text/context_provenance and the recorded human author rather
+than assume every wording source is Message. That downstream integration is
+explicit, not an alias or fabricated wire subject. Full three native compactions
+and separately budgeted S4 model recall remain open.
