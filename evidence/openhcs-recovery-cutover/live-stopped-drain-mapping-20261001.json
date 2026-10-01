@@ -1,0 +1,74 @@
+{
+  "assessment": "All three current stopped-drain displays map to the already diagnosed original sequence262 failure; no distinct uncovered cause established",
+  "reviewer": "Arendt",
+  "original_diagnostics": [
+    {
+      "thread": "openhcs-architecture-memory",
+      "diagnostic_id": "cf3c25ea2ef4eeaa789f0156ea95efd4",
+      "diagnostic_path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/cf3c25ea2ef4eeaa789f0156ea95efd4.json",
+      "diagnostic_sha256": "7b6856b0bc9587dfb62219e8901c451d04bfa26d5652b01f655c3ec71d7a331e",
+      "original_sequence": 262,
+      "reason": "backend_failed",
+      "diagnostic_mtime_utc": "2026-10-01T04:18:42.790140+00:00",
+      "source_interpreter_prefix": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001",
+      "cause": "Original outer wire exclusion flock LOCK_NB errno11 -> PromptAdmissionBusy -> old pre-admission five-second budget -> PromptSendUnknown before prompt bytes -> NativePiUnavailable",
+      "historical_lock_holder": "Not retained; not attributed",
+      "native_stderr": "empty",
+      "historical_input_disposition": "UNKNOWN preserved; no reclassification or replay"
+    },
+    {
+      "thread": "openhcs-pr159-viewer-bind-owner",
+      "diagnostic_id": "89741936b9843717207fcb9cf84e86a9",
+      "diagnostic_path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/89741936b9843717207fcb9cf84e86a9.json",
+      "diagnostic_sha256": "90c80ff99f3b267d0d43ee81b1b0c8394888d10e555ee26b92d27f234e42bba0",
+      "original_sequence": 262,
+      "reason": "backend_failed",
+      "diagnostic_mtime_utc": "2026-10-01T04:18:42.575107+00:00",
+      "source_interpreter_prefix": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001",
+      "cause": "Original outer wire exclusion flock LOCK_NB errno11 -> PromptAdmissionBusy -> old pre-admission five-second budget -> PromptSendUnknown before prompt bytes -> NativePiUnavailable",
+      "historical_lock_holder": "Not retained; not attributed",
+      "native_stderr": "empty",
+      "historical_input_disposition": "UNKNOWN preserved; no reclassification or replay"
+    },
+    {
+      "thread": "openhcs-helper",
+      "diagnostic_id": "2c92067dc74837a50f9818c39e59d14c",
+      "diagnostic_path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/2c92067dc74837a50f9818c39e59d14c.json",
+      "diagnostic_sha256": "bf4af40f2b1e6c2032dd3e0990db3b7a0238433d95b9ce7d05f1fcb0e9f0334b",
+      "original_sequence": 262,
+      "reason": "backend_failed",
+      "diagnostic_mtime_utc": "2026-10-01T04:18:42.550904+00:00",
+      "source_interpreter_prefix": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001",
+      "cause": "Original outer wire exclusion flock LOCK_NB errno11 -> PromptAdmissionBusy -> old pre-admission five-second budget -> PromptSendUnknown before prompt bytes -> NativePiUnavailable",
+      "historical_lock_holder": "Not retained; not attributed",
+      "native_stderr": "empty",
+      "historical_input_disposition": "UNKNOWN preserved; no reclassification or replay"
+    }
+  ],
+  "frozen_receiver_fix": {
+    "core": "cac7bdf337d9e4dba888ce7c2093ddcc55802bc3",
+    "toad": "7572b7b7856b1ac99f7bda5dac760c87c586a73d",
+    "pr_family": "476/267",
+    "relation": "Original raw writer waits for cancellable admission without spending the irreversible-write budget; the unchanged five-second byte-write clock starts only after grant. Pregrant cancel/pipe closure has original unwritten proof. Historical UNKNOWN remains protected."
+  },
+  "accepted_final_native_gate": {
+    "path": "/home/ts/wt/ac476-final-native02/receipt.json",
+    "sha256": "68c000b95ac097db84d281e7e4b00c30003a161aef7cdc103d2f59c4ee203064",
+    "elapsed_seconds": 18.591693811991718,
+    "proof": "Actual writer waiting before grant; joined cancel zeroPOST; unchanged deferred input; independent triageFULL and canonical reply from two native originals/two localhost POSTs; notification publication; all workers retired."
+  },
+  "existing_long_contention_receipt": {
+    "path": "evidence/openhcs-channel-delivery/native-gates/ac476-d04.json",
+    "original_exit_code": 1,
+    "exact_limit": "The original test assertion used obsolete scalar Python stage/verdict names. The completed three native inputs were not rerun. Existing readonly completion joins their original PromptBindings and journal digests.",
+    "readonly_completion_path": "evidence/openhcs-channel-delivery/native-gates/ac476-d04-readonly-completion.json",
+    "hold_seconds": 12.000106166000478,
+    "lock_domain_limit": "Controlled holder was original certified bus-reader custody. Live failures were at outer wire custody; historical holder remains unknown. No attribution of the historical lock owner or new gate."
+  },
+  "protected": "Original UNKNOWN reservations and independent saved sequence266 remain unchanged; no restart/drain clear/admission/default/route publication",
+  "public_mutations": 0,
+  "provider_calls": 0,
+  "input_replays": 0,
+  "additional_tests": 0,
+  "remaining_delivery": "Parent-owned reviewed frozen publication after current public client normal close and fresh canonical quiet guard."
+}
