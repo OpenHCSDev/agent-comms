@@ -277,3 +277,34 @@ Heisenberg owns teardown/export budget in the existing recording/profiler owner,
 then actual current-agent A/B/scroll acceptance. Einstein supplied the existing
 CurrentTypedCapture/saved-fork recipe; public history carry is not assumed to
 block this independent private current-agent journey.
+
+## Foundation source review before merge
+
+Reviewed475 source16fd59e9 normally integrates main480; its only production
+delta from tested43df before the new corrections is child_process.py42+/10-.
+Draft481 was opened before the foundation merge and preserves full S2 scope.
+The final paired receiving source must include Toad274's ChildStdio callers;
+Einstein owns this ordinary270 integration while Schrodinger owns475/272.
+
+Two concrete findings prevent claiming the current foundation Ready:
+
+- InputOrigin's new goal scope uses GoalRevision|None and reconstructs absence
+  from Thread.goal. The original Thread boundary itself already exposes a
+  nullable checkpoint; GoalState models only a present goal. Schrodinger owns
+  a named absent/present checkpoint projection at the existing declarations,
+  with every new provenance consumer migrated and no mutable goal mirror.
+- Kepler found a cross-audience lineage failure. CommittedDelivery admits only
+  addressed messages or the owner's authored choices to compaction. A correction
+  can legitimately reach C even though its original choice was a private A→B
+  message. RetainedTaskFacts.current_decisions resolves the missing original
+  unconditionally before owner applicability, so HeldCompaction.capture raises.
+  Parent read the producer filter, lineage resolver and capture caller directly.
+  Schrodinger owns correction through the certified source and declared family;
+  exposing the original private text, copying root metadata or a second index
+  is not an acceptable fix. This source finding is not a claim of an observed
+  failure on Tristan's original thread.
+
+Original39/41 installed evidence remains valid for its exact immutable source,
+but does not cover these new corrections. The next proportional receiving check
+must exercise their actual changed boundary; no extra paid repeat is assumed.
+Source review and physical/profile work continue independently of quiet release.
