@@ -51,11 +51,7 @@ class InputProvenance(Provenance):
 
     def require_original(self, inputs):
         """Resolve the recorded author and key in the original input document."""
-        row = inputs.lookup(self.key)
-        if not row.exists or row.context_provenance() != self:
-            raise RelationViolationError("Constraint lacks its original input provenance")
-        row.origin.require_human()
-        return row
+        return inputs.lookup(self.key).require_original_provenance(self)
 
 
 @dataclass(frozen=True)

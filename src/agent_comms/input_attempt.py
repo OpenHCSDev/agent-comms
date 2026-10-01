@@ -63,6 +63,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
         return False
 
+    def require_original_provenance(self, source: InputProvenance):
+        raise RelationViolationError("Constraint lacks its original input provenance")
+
     def matches_admission(self, admission: int) -> bool:
         return False
 
@@ -122,6 +125,12 @@ class StoredInput(InputAttempt):
 
     def context_provenance(self) -> InputProvenance:
         return InputProvenance(self.key, self.origin)
+
+    def require_original_provenance(self, source: InputProvenance):
+        if self.context_provenance() != source:
+            raise RelationViolationError("Constraint lacks its original input provenance")
+        self.origin.require_human()
+        return self
     key: str = field(metadata={"public_exclude": True})
     sequence: int | None
     owner: str = field(metadata={"public_exclude": True})
