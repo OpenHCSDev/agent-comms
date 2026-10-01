@@ -1,66 +1,66 @@
 # Native source and queue quiet cutover preparation
 
-Arendt prepares this one-use operator in the existing Core456 persistent WT.
-Parent alone reviews and executes publication. This updates the same existing
-operator for the reviewed660/e191/6b freeze; no second restart mechanism is added.
-The prior85 operator SHAac3d3bab and exact audit remain in committed history
-(cdf081e8), followed by original client classification atd8c53e3d.
-Coree191 includes merged468,470 and471. The previous atomic-page-handoff
-preparation is superseded and preserved in committed history2e9fb193; no earlier
-cohort gate is reused as admission for this target.
+Arendt owns the same one-use469 operator in the persistent Core456 worktree.
+Parent alone reviews and executes public publication. No lifecycle source or
+second restart mechanism is added. Rejected259/660 preparation is preserved in
+historya1d20a71; its gate is not reused. This update targets accepted262's exact
+1edd/e191/6b/native593 freeze.472's schema5 is excluded from this critical pair.
 
-## Exact release and evidence
+## Exact release and original artifacts
 
 - Original owners SOURCE: `runtime-native-budget-request-progress-20260930/bin/python`
-  (Core6feb); capture their fresh credentials/arguments/settings only in RAM.
+  (Core6feb); original credentials/arguments/settings are captured only in RAM.
 - CURRENT five defaults: `runtime-body-readiness-20260930`.
-- TARGET: `runtime-native-publication-joined-20261001`.
+- TARGET: `runtime-native-applied-cohort-20261001`.
 - Coree191bcf44c292dfedc5b8b62b2b503f06de3ae7b,
-  Toad66098518c4850e8e0bf83ed983383538f993c4ef,
+  Toad1edd96c0cfa011a69782cdeb67138ceea98e227b,
   Textual6b5895fa0a72aeec2aeaef7206d5debfa0c1803c, SDK0.12.1.
 - Native/root unchanged: native593b978a717ae8f6, wireRoot
   e206f3766e60451a989ca34df0e2a94b,
   `/var/tmp/agent-comms-live-20260927-wzjtqhza`.
-- Activation SHA `7c887479390742c051bea1c05adf142fbdcb10b1e39ae1bac9a67a8d24d4b093`.
-- Staging SHA `d27f064e32d93d0b008f5884635a39317f6baddca69cf50d69f27e0c6d9e82a0`.
-- Package-ready SHA `be54103798654ae136b491a4a3a1f3729d524acb4afb5f81e287b568c931574d` at
-  `/home/ts/.cache/agent-scratch/native-publication-joined-stage-20261001/paired-ready-receipt.json`.
-- These original artifacts were read and hashes/pins/stage/SDK verified.
-  Packaging is separate from actual joint-native/UI and bus acceptance.
-  Older cohort receipts cannot admit this target.
+- Activation SHA `f03e2370464094408d2a8cd3eb90966d55f8dcb6c75829e90cd86ab34ecfb043`.
+- Staging SHA `5a6a82b04d68ab1436a323eb7678c010d28925b22433a63402bff70330d94b82`.
+- Package-ready SHA `19dcbaa6e5fb770828e908b8e9a130abba3545ff77f2ef26a90e2cba32ae2fad`.
+- Source-freeze SHA `67e9d7b65cdc5e26b21c707eb0a541d15a50e1e1f298605a5894e5bdc1e2a90c`.
+- Stage artifacts directory:
+  `/home/ts/.cache/agent-scratch/native-applied-cohort-stage-20261001`.
 
-Both original same-cohort Einstein joint-native/UI and Sch bus/hot-view gates
-are **mandatory and unfilled**. The660/e191 joint UI target is now REJECTED: six
-duplicate source-counter frames appeared while a later original UIUpdate was
-held. Heisenberg258 owns the source/read/application-cut closure. This packaged
-target is retained only as rejected preparation, never Ready for activation. Packaging cannot substitute for them.
-No complete public operator preflight, stop, client retirement, reset, publication
-or restart was run by this preparation.
+Original artifacts were read and hashes/stage/pins/SDK checked. Target-only
+require_stage verifies hashes/native trust without invoking public main.
+Packaging is not an actual gate. Both reviewed actual gate path/hash arguments
+remain mandatory at execution; no package, staging or activation file substitutes.
 
-Earlier observations below are retained historical evidence only. They are
-not current owner count, idle admission, client absence or a reserved quiet window.
-Fresh canonical preflight must recapture original configurations and full process
-identities and refuse changed/active/unretired originals before any signal.
+## Actual gate and current quiet condition
 
-Read-only original guarded registry/process observations at 2026-10-01
-00:06:36 UTC found thirteen live executable owners, all idle and on the exact
-SOURCE interpreter. Registry bytes were stable across the observation. All
-five links still point at CURRENT; route/root/native are unchanged. Four
-unretired-or-unclassified client candidates remain in this observation; this
-is not a no-client admission. The observation preserves exact process IDs and
-birth values in `evidence/native-input-custody/current-release-observation.json`,
-with no captured environments/credentials or command arguments published.
-Fresh quiet preflight must recapture current configurations, identities,
-interpreters, count and clients. Changed observations receive routine review;
-this dated observation is neither a reservation nor a quiet schedule.
+Parent accepts BUSu09:137.64s,7583ANSI,zero duplicate frames. Its exact original
+sanitized receipt is
+`/home/ts/wt/toad-native-applied-cohort-pair-20261001/evidence/native-applied-cohort-pair-20261001/bus-u09/receipt.json`,
+SHA `4f46d689436fa5f962d399b1c42dc148aa560405572255182bc513c39cb5091b`.
+This artifact and pins were read and hash-verified. It does not substitute for
+native acceptance. Parent accepts Einstein g458j/u03:113.94s,2731ANSI,zero
+replay/duplicate frames, five physical pending-before-Started frames and
+stationary canonical+emitted Ready. Final native receipt is
+`/home/ts/wt/comms-c1-terminal-data-20260930/evidence/c1-terminal-data-20260930/installed34/ready-receipt.json`,
+SHA `a6031469f494fdaa4aac5e77497514f1638f9c66a27daed27abfab7a869b68f3`.
+It was read and exact hash/pins/empty cleanup/public-effects verified. Native
+source41MB, five physical submissions, cancel then canonical+emitted Ready are
+accepted at the original receipt strength; full performance is not claimed.
 
-Read-only follow-up at00:12:46 UTC classified all four original candidates:
-Toad4091704/birth28109492 remains alive under shell4091211; its three exact
-ACP children4091743/4095946/4096144 each explicitly bind AGENT_COMMS_ROOT to
-the original public root and run body-readiness Python. The sanitized original
-process/root/parent observations are in `original-client-classification.json`.
-They require parent-owned graceful client retirement at cutover; the no-client
-guard remains unchanged. No signal was sent and no UI draft disposition inferred.
+Authorized readonly census at1790825689.127788 found13 live executable owners,
+13idle, all exact SOURCE interpreters via original RetainedOwnerLaunch.capture.
+Registry SHA stayed `a08b5f6e5e3f6ecf30332d37cb823b343cadd2b1eb483b48c83b123c3c0f56f2`.
+The concrete remaining public client blocker is Toad4091704/birth28109492 under
+shell4091211, plus its exact public-root ACP children4091743/birth28109737,
+4095946/birth28113066 and4096144/birth28113514. Process evidence does not establish
+editor draft custody; graceful retirement belongs to parent review. No signal,
+X0 interaction, public store write, reset/default/route publication or input was
+performed. The sanitized census is
+`evidence/native-input-custody/applied-cohort-current-public-observation.json`.
+
+This observation is not a reservation or quiet schedule. The canonical batch
+must freshly recapture owner configuration/count/full ProcessIdentity/incarnation/
+admission/interpreter and client state before the first signal. A changed count
+or source receives routine checkpoint review; no guessed admission.
 
 ## Existing acquired custody
 
@@ -124,7 +124,8 @@ private receipt path. Execution must additionally provide:
 --bus-gate-sha256 <reviewed exact SHA256>
 ```
 
-No values are supplied while gates are pending. Receipt parents must be0700;
+Both actual artifact paths/hashes are now reviewed below. Public execution still
+requires parent-controlled client/draft disposition and fresh canonical admission. Receipt parents must be0700;
 receipts/preimages are0600. Existing receipt/preimage or publication temporary
 refuses automatic rerun. Failure after all-stop leaves explicit phase and private
 preimages for parent review. It cannot silently relaunch or replay originals.
@@ -132,37 +133,45 @@ After actual release closure, preserve reviewed source/hash and remove the
 one-use executable. This checkpoint is prepared only.
 
 
-## Native-publication joined cohort preparation
-
-The same operator is retargeted to package259's exact e191/660/6b/native593
-freeze. Activation, staging and paired-ready bytes match the parent-reviewed
-hashes above. Target-only require_stage checks original artifacts, pins, SDK and
-native trust; it does not instantiate public Comms, acquire public route/wire
-custody, capture owners, stop clients, or invoke main. Both actual journey gate
-artifact/hash arguments remain mandatory and unfilled until parent acceptance.
-No current public preflight, signal, reset, link/route write or input occurred.
-
-The 468 SessionRevision journal representation belongs to the already-declared
-runtime CompactionJournal reset, including only its named physical companions.
-470's nominal NativeAdmissionEpoch keeps the original input SQL declaration
-byte-identical; it does not authorize deletion or reclassification of UNKNOWN.
-InputDocument and original native/binding/context/input-proof/wire/goals/decisions
-remain protected unchanged. No old journal decode/carry or alternate reader.
-
-The conditional thirteen SOURCE owners remain the reviewed one-use batch
-precondition. The sole executor must recapture actual owner configs/count/full
-ProcessIdentity/incarnation/interpreter and client condition at quiet admission.
-A changed count/source receives routine checkpoint review, never guessed
-admission or an invented schedule. Historical client4091704 evidence remains
-historical; graceful retirement and draft custody belong to parent review.
 
 
-### Rejected target retained, no release authority
+## Store obligations for this exact pair
 
-Parent rejected259/660 after the original held-UIUpdate source-cut observation.
-The exact packaged pins/hashes and audit are preserved at prepared/negative
-strength; they are not rewritten into an accepted gate or executed. The existing
-bus gate may finish normally, but cannot substitute for the rejected joint gate.
-No new package/native build, public preflight, owner/client signal or reset was
-started. Further retargeting waits for Heisenberg's meaningful replacement source
-freeze and parent-reviewed actual acceptance. This remains draft469.
+468's complete SessionRevision representation belongs to the already-declared
+runtime CompactionJournal reset and only its named physical companions.470's
+NativeAdmissionEpoch preserves the original native input SQL declaration; it
+cannot delete or reclassify original UNKNOWN.472's separate schema5 is absent.
+InputDocument/native/binding/context/.input-proof/wire/goals/decisions remain
+protected unchanged. No old journal decode/carry, alternate reader, local
+release loop, thinking restoration or proof mirror. Existing runtime reset
+owners and original complete-barrier custody above remain unchanged.
+
+
+## Exact parent-only invocation after client retirement
+
+Parent asked the user to save drafts and close the existing Toad normally.
+That required action is pending. No stop/signal/default/route/reset action is
+permitted by this prepared checkpoint. Fresh complete idle/identity/client and
+preimage checks still happen inside the same canonical operator; this readonly
+census is not admission. Reuse no receipt from a previous attempt.
+
+The operator at the following exact path and the committed audit both hash to
+`eebb84b981da9bdf308cae5d4bc05671a286b79f8e097f9ff66574176127a5e3`.
+The parent chooses a fresh0700 receipt directory; no contents are published.
+Only the parent may execute after reviewed client/draft and admission conditions:
+
+```sh
+/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/python \
+  /home/ts/wt/comms-native-input-custody-s14-20260930/.observations/quiet-cutover/publish_native_custody.py \
+  --execute \
+  --receipt /home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/native-applied-cohort-20261001/cutover.json \
+  --joint-gate-artifact /home/ts/wt/comms-c1-terminal-data-20260930/evidence/c1-terminal-data-20260930/installed34/ready-receipt.json \
+  --joint-gate-sha256 a6031469f494fdaa4aac5e77497514f1638f9c66a27daed27abfab7a869b68f3 \
+  --bus-gate-artifact /home/ts/wt/toad-native-applied-cohort-pair-20261001/evidence/native-applied-cohort-pair-20261001/bus-u09/receipt.json \
+  --bus-gate-sha256 4f46d689436fa5f962d399b1c42dc148aa560405572255182bc513c39cb5091b
+```
+
+For parent readonly preflight, omit --execute and both gate argument pairs;
+the fresh receipt must remain nonexistent. No operator preflight or execution
+was invoked by Arendt in this preparation. The independent authorized census
+used original source registry/process/capture owners and recorded zero effects.

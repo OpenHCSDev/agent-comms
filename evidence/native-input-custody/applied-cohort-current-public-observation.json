@@ -1,0 +1,180 @@
+{
+  "observed_at_unix": 1790825689.127788,
+  "scope": "READONLY original typed registry/RetainedOwnerLaunch and exact /proc boundaries; not admission/reservation",
+  "owners": [
+    {
+      "name": "agent-comms-ux",
+      "process": {
+        "pid": 3697835,
+        "start_time": 26677070
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "nra-architecture",
+      "process": {
+        "pid": 3697925,
+        "start_time": 26677204
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "nra-class-first-name-review",
+      "process": {
+        "pid": 3697928,
+        "start_time": 26677343
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "nra-domain-mapping",
+      "process": {
+        "pid": 3697958,
+        "start_time": 26677478
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "nra-ordered-branch-call-review",
+      "process": {
+        "pid": 3697972,
+        "start_time": 26677620
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "nra-roster-heuristic-map",
+      "process": {
+        "pid": 3697982,
+        "start_time": 26677763
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "refactor-r1",
+      "process": {
+        "pid": 3697985,
+        "start_time": 26677904
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "openhcs-architecture-memory",
+      "process": {
+        "pid": 3698056,
+        "start_time": 26678044
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "openhcs-pr159-viewer-bind-owner",
+      "process": {
+        "pid": 3698145,
+        "start_time": 26678185
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "nominal-refactor-advisor-2",
+      "process": {
+        "pid": 3698148,
+        "start_time": 26678319
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "openhcs-helper",
+      "process": {
+        "pid": 3698150,
+        "start_time": 26678458
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "openhcs-helper2",
+      "process": {
+        "pid": 3698159,
+        "start_time": 26678599
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    },
+    {
+      "name": "comms428",
+      "process": {
+        "pid": 3698182,
+        "start_time": 26678740
+      },
+      "idle": true,
+      "source_interpreter_exact": true
+    }
+  ],
+  "owner_count": 13,
+  "idle_count": 13,
+  "all_source_exact": true,
+  "clients": [
+    {
+      "process": {
+        "pid": 4091704,
+        "start_time": 28109492
+      },
+      "parent_pid": 4091211,
+      "module": "",
+      "program": "toad",
+      "explicit_public_root": false,
+      "drafts_preserved": "not established by process evidence"
+    },
+    {
+      "process": {
+        "pid": 4091743,
+        "start_time": 28109737
+      },
+      "parent_pid": 4091704,
+      "module": "agent_comms.acp",
+      "program": "python",
+      "explicit_public_root": true,
+      "drafts_preserved": "not established by process evidence"
+    },
+    {
+      "process": {
+        "pid": 4095946,
+        "start_time": 28113066
+      },
+      "parent_pid": 4091704,
+      "module": "agent_comms.acp",
+      "program": "python",
+      "explicit_public_root": true,
+      "drafts_preserved": "not established by process evidence"
+    },
+    {
+      "process": {
+        "pid": 4096144,
+        "start_time": 28113514
+      },
+      "parent_pid": 4091704,
+      "module": "agent_comms.acp",
+      "program": "python",
+      "explicit_public_root": true,
+      "drafts_preserved": "not established by process evidence"
+    }
+  ],
+  "uncertain_process_reads": [],
+  "registry_sha256_before": "a08b5f6e5e3f6ecf30332d37cb823b343cadd2b1eb483b48c83b123c3c0f56f2",
+  "registry_sha256_after": "a08b5f6e5e3f6ecf30332d37cb823b343cadd2b1eb483b48c83b123c3c0f56f2",
+  "registry_stable": true,
+  "signals": 0,
+  "public_mutations": 0,
+  "credentials_published": false,
+  "native_inputs": 0
+}

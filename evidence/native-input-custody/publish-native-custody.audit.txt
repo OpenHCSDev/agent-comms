@@ -37,7 +37,7 @@ from agent_comms.store_files import _atomic_write_text
 
 SOURCE = Path('/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930')
 CURRENT = Path('/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930')
-TARGET = Path('/home/ts/.local/share/agent-comms/runtime-native-publication-joined-20261001')
+TARGET = Path('/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001')
 NATIVE = Path('/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent')
 OLD_NATIVE = Path('/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent')
 ROOT = Path('/var/tmp/agent-comms-live-20260927-wzjtqhza')
@@ -46,13 +46,13 @@ LINKS = Path('/home/ts/.local/bin')
 COMMANDS = ('agent-comms', 'agent-comms-acp', 'agent-comms-agent', 'agent-comms-nk-foreground', 'toad')
 PINS = {
     'agent-comms': 'e191bcf44c292dfedc5b8b62b2b503f06de3ae7b',
-    'batrachian-toad': '66098518c4850e8e0bf83ed983383538f993c4ef',
+    'batrachian-toad': '1edd96c0cfa011a69782cdeb67138ceea98e227b',
     'textual': '6b5895fa0a72aeec2aeaef7206d5debfa0c1803c',
 }
-ACTIVATION_SHA = '7c887479390742c051bea1c05adf142fbdcb10b1e39ae1bac9a67a8d24d4b093'
-STAGING_SHA = 'd27f064e32d93d0b008f5884635a39317f6baddca69cf50d69f27e0c6d9e82a0'
-PAIR_READY = Path('/home/ts/.cache/agent-scratch/native-publication-joined-stage-20261001/paired-ready-receipt.json')
-PAIR_READY_SHA = 'be54103798654ae136b491a4a3a1f3729d524acb4afb5f81e287b568c931574d'
+ACTIVATION_SHA = 'f03e2370464094408d2a8cd3eb90966d55f8dcb6c75829e90cd86ab34ecfb043'
+STAGING_SHA = '5a6a82b04d68ab1436a323eb7678c010d28925b22433a63402bff70330d94b82'
+PAIR_READY = Path('/home/ts/.cache/agent-scratch/native-applied-cohort-stage-20261001/paired-ready-receipt.json')
+PAIR_READY_SHA = '19dcbaa6e5fb770828e908b8e9a130abba3545ff77f2ef26a90e2cba32ae2fad'
 
 
 def digest(path):
