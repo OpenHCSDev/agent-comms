@@ -43,6 +43,35 @@ def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path, direct): 
     assert current.state=='Pending'
 
 
+def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
+    from agent_comms.activity import StoppedDrainDiagnostic
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+
+    root, _root_id, comms, _initial, _people = _root(tmp_path)
+    owner = comms.registry.snapshot().owner_identity('beta')
+    diagnostic = StoppedDrainDiagnostic(owner, 'NativePiUnavailable', 'Original uncertain outcome')
+    assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
+    message = comms.messaging.send_user_message('#team', 'Independent saved original',
+                                               worktree=str(tmp_path))
+    with Coordination(str(root/'coordination.sqlite3')) as store:
+        before = WakeAssignment.select(store.session._connection)
+    wire_before = comms.bus.log.path.read_bytes()
+    notices = comms.views.message_notifications((message,))[message.seq,message.message_id]
+    beta = next(notice for notice in notices if notice.recipient=='beta')
+    assert beta.state=='Waiting for recovery' and diagnostic.summary in beta.detail
+    assert beta.recipient_identity.recipient_lookup==stable_thread_lookup(
+        comms.registry.require('beta').created_at)
+    with Coordination(str(root/'coordination.sqlite3')) as store:
+        assert WakeAssignment.select(store.session._connection)==before
+    assert not any(row.wire_seq==message.seq for row in before)
+    assert comms.bus.log.path.read_bytes()==wire_before
+    # The immutable source's recipient survives rename; current readiness must
+    # join its original birth rather than manufacture a new membership/claim.
+    comms.registry.rename('beta','renamed')
+    renamed = comms.views.message_notifications((message,))[message.seq,message.message_id]
+    assert {item.recipient_identity for item in renamed}=={item.recipient_identity for item in notices}
+
+
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
     from dataclasses import replace
     from agent_comms.field_codec import FieldCodec
@@ -298,17 +327,17 @@ def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatc
 
 def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noqa: F811
     import sqlite3
-    from agent_comms.private_bus_checkpoint import source_references_unlocked
+    from agent_comms.private_bus_checkpoint import delivery_references_unlocked
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     with comms.bus.log.certified_read() as source:
         assert source.connection.execute("PRAGMA query_only").fetchone()[0] == 1
-        assert source_references_unlocked(source, (initial.message.reference,)) == (initial.message,)
+        assert delivery_references_unlocked(source, (initial.message.reference,)) == (initial,)
     assert source.stream.closed
     with pytest.raises(sqlite3.ProgrammingError):
         source.connection.execute("SELECT 1")
     with pytest.raises(RelationViolationError, match="lock lifetime"):
-        source_references_unlocked(source, (initial.message.reference,))
+        delivery_references_unlocked(source, (initial.message.reference,))
 
 
 def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811

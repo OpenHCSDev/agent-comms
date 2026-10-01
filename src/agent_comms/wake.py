@@ -50,6 +50,10 @@ class NoWakeDecision:
         if type(self.reason) is not NoWakeReason:
             raise TypeError("no-wake reason must be a NoWakeReason.")
 
+    def initial_notification(self, recipient, *, observation):
+        return PassiveWake.initial_state()().notification(
+            recipient, observation=observation)
+
 
 @dataclass(frozen=True, slots=True)
 class WakeDecision:
@@ -62,6 +66,10 @@ class WakeDecision:
             raise ValueError("decision recipient requires a stable lookup.")
         if type(self.audience) is not MessageAudience or not isinstance(self.wake_mode, WakePolicy):
             raise TypeError("wake decision requires MessageAudience and a nominal WakePolicy.")
+
+    def initial_notification(self, recipient, *, observation):
+        return self.wake_mode.initial_state()().notification(
+            recipient, observation=observation)
 
 
 def _require_stored(message: Message) -> None:

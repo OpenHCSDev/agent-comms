@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+from abc import abstractmethod
+from .declared_family import DeclaredFamily
 
 from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .audience_manifest import FrozenRecipient
@@ -14,10 +15,10 @@ from .coordination_tables.executions import CurrentExecutions
 from .typed_table import SQLiteUserVersion, TypedRow
 
 if TYPE_CHECKING:
-    from .agent_activity import AgentActivity
+    from .agent_activity import RecipientActivity
+    from .bus_publication import CommittedDelivery
+    from .wake import WakeDecision, NoWakeDecision
     from .presentation import MessageNotification
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -32,10 +33,39 @@ class AssignmentActivity(TypedRow):
         )
 
 
+class NotificationSource(DeclaredFamily, affix="NotificationSource"):
+    """Original frozen delivery or handling receipt, never an execution authority."""
+
+    @abstractmethod
+    def project(self, observation: RecipientActivity) -> MessageNotification: ...
+
+
 @dataclass(frozen=True)
-class NotificationAssignment:
+class UnrecordedNotificationSource(NotificationSource):
+    recipient: FrozenRecipient
+    decision: WakeDecision | NoWakeDecision
+
+    def project(self, observation: RecipientActivity):
+        return self.decision.initial_notification(self.recipient, observation=observation)
+
+
+@dataclass(frozen=True)
+class NotificationAssignment(NotificationSource):
     assignment: WakeAssignment
     activity: AssignmentActivity
+
+    @classmethod
+    def for_delivery(cls, original: CommittedDelivery, records) -> tuple[NotificationSource, ...]:
+        """Classify receipt absence at the original read boundary, without minting one."""
+        sources = []
+        for recipient, decision in zip(original.audience.recipients, original.decisions, strict=True):
+            matching = tuple(record for record in records
+                if record.assignment.source == original.message.reference
+                and record.assignment.recipient_lookup == recipient.recipient_lookup)
+            if len(matching) > 1:
+                raise ValueError("Original notification recipient has multiple handling receipts")
+            sources.append(matching[0] if matching else UnrecordedNotificationSource(recipient, decision))
+        return tuple(sources)
 
     @classmethod
     def database_path(cls, root: Path) -> Path:
@@ -102,29 +132,15 @@ class NotificationAssignment:
             )
             return tuple(cls(assignment, activity) for assignment, activity in rows)
 
-    def project(
-        self, owners: Mapping[str, Thread], agents: AgentActivity, snapshot: RegistrySnapshot
-    ) -> MessageNotification:
-        owner = owners.get(self.assignment.recipient_lookup)
-        recipient = FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
+    @property
+    def recipient(self) -> FrozenRecipient:
+        return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
+
+    def project(self, observation: RecipientActivity) -> MessageNotification:
         return self.assignment.lifecycle.notification(
-            recipient,
-            readiness=agents.drain_readiness(owner, snapshot=snapshot),
-            owner_active=owner is not None,
-            current_turn=(
-                owner.turn_started_by(self.assignment.updated_at_ms) if owner is not None else False
-            ),
+            self.recipient,
+            observation=observation,
+            updated_at_ms=self.assignment.updated_at_ms,
             triage_inflight=self.activity.triage_inflight,
             blocked_by_prior=self.activity.blocks(self.assignment),
-            prior_turn_active=owner.executing if owner is not None else False,
         )
-
-    @staticmethod
-    def active_owners(registry: RegistrySnapshot) -> Mapping[str, Thread]:
-        from .bus_publication import stable_thread_lookup
-
-        return {
-            stable_thread_lookup(thread.created_at): thread
-            for name, thread in registry.threads.items()
-            if registry.statuses[name].active and thread.process_alive
-        }

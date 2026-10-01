@@ -165,3 +165,43 @@ checks that reader's exact original incarnation and compares common presentation
 Original e05 native acceptance remains intact; the coupled installed TUI paint
 gate is the remaining affected boundary, with no need to repeat its completed
 native cancellation/input proof.
+
+
+## Current receiver closure after actual UI failure
+
+The actual installed u06 journey painted an ordinary native reply, then the
+controlled localhost 503 stopped the original drain. An independent channel
+message was committed with its original frozen audience but had no wake_claims
+row. The claim-only projection returned no outcome; the UI recovery paint gate
+failed. Preserve that failed run, diagnostic and uncertain native input at
+/home/ts/wt/ac476-u06. No completed input is replayed to fix this assertion.
+
+Read the original CommittedDelivery through the existing CertifiedSourceRead
+resource. NotificationSource classifies original handling-row absence once at
+the read boundary. Unrecorded delivery consumes its original WakeDecision's
+initial AssignmentState; it does not mint a handling receipt or assignment.
+Both recorded and unrecorded sources consume AgentActivity.observe_recipient:
+LiveRecipientActivity owns the original required Thread and acquired activity;
+UnavailableRecipientActivity owns the stopped presentation. Delete the separate
+active_owners map, optional-owner readiness helper and consumer recombination of
+owner_active/current_turn/prior_turn_active. The original full process identity,
+registry presence, frozen birth and diagnostic owner generation still fence this
+observation. No availability cache, timer or copied status store is introduced.
+
+Mendel's f802244c contribution is integrated as 913d2c77: the HistoricalMessage
+ancestor capability supplies no current notification references. Archived source
+rows remain outside current certified delivery/recipient handling authority.
+The rich read retains exact pointer/certificate/missing-reference refusal; altered
+message bytes now explicitly refuse instead of silently returning no outcomes.
+
+Receiving patterns: IDEN-3 (foreign absence probes), IMPL-10 (piecewise owner
+flags), BOUND-2 (stripping original delivery before its consumer), TIME-3 (archived
+rows admitted through current authority). New cases change the observation or
+assignment declaration, not parallel consumer state logic.
+
+Focused affected controls: 31 pass in 5.57 seconds. This source checkpoint is
+still Draft; one fresh installed continuous UI journey must prove first reply,
+actual native failure, a newly committed unhandled channel source visibly waiting
+for recovery, physical DM/return clicks and unchanged uncertain input, with exactly
+two controlled localhost POSTs. The completed e05 cancellation/native acceptance
+is retained without repetition. Public installation remains parent-owned.

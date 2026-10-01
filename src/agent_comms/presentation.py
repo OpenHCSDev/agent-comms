@@ -63,7 +63,7 @@ class MessageNotification:
 
     @classmethod
     def window(
-        cls, root: Path, registry: Registration, messages: Sequence[Message]
+        cls, root: Path, registry: Registration, log: WireLog, messages: Sequence[Message]
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Read one visible window's actual recipient outcomes; never schedule work.
 
@@ -71,11 +71,24 @@ class MessageNotification:
         A missing coordination store or absent row supplies no receipt. Errors remain
         visible to the caller instead of becoming false successful delivery.
         """
-        from .notification_assignment import NotificationAssignment
-
         if len(messages) > cls.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
-        keys = {(message.seq, message.message_id) for message in messages if message.seq > 0}
+        references = tuple(reference for message in messages
+                           for reference in message.notification_references())
+        sources = log.deliveries_for_references(references)
+        projected = cls.delivery_window(root, registry, sources)
+        return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
+                for message in messages}
+
+    @classmethod
+    def delivery_window(cls, root: Path, registry: Registration,
+                        sources: Sequence[CommittedDelivery]):
+        """Project the original frozen audience even before handling is recorded."""
+        from .notification_assignment import NotificationAssignment
+
+        if len(sources) > cls.window_limit:
+            raise ValueError("Notification reads require a bounded visible message window")
+        keys = {(source.message.seq, source.message.message_id) for source in sources}
         result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
         if not keys:
             return {}
@@ -84,23 +97,20 @@ class MessageNotification:
             root, f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
         )
         snapshot = registry.snapshot()
-        owners = NotificationAssignment.active_owners(snapshot)
         from .agent_activity import AgentActivity
 
         agents = AgentActivity(root, registry)
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
-        originals = {message.reference: message for message in messages}
-        for receipt in rows:
-            notification = receipt.project(owners, agents, snapshot)
-            source = receipt.assignment.source
-            key = (source.seq, source.message_id)
-            if key in result:
+        for source in sources:
+            key = (source.message.seq, source.message.message_id)
+            for outcome in NotificationAssignment.for_delivery(source, rows):
+                notification = outcome.project(agents.observe_recipient(outcome.recipient, snapshot=snapshot))
                 result[key].append(
                     replace(
                         notification,
                         displayed_to=reads.displayed_recipient(
-                            originals[source],
+                            source.message,
                             notification.recipient_identity,
                             snapshot,
                             document=document,
@@ -134,8 +144,7 @@ class MessageNotification:
         from .bus_publication import stable_thread_lookup
 
         lookup = stable_thread_lookup(owner.created_at)
-        messages = tuple(source.message for source in sources)
-        projected = cls.window(root, registry, messages)
+        projected = cls.delivery_window(root, registry, sources)
         return tuple(
             replace(notification, message=source.message)
             for source in sources

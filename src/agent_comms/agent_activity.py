@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import logging
 import time
+from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .registration import Registration
 
 if TYPE_CHECKING:
-    pass
+    from .presentation import MessageNotification
 from .activity import (
     Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
-    DrainReadiness, ReadyDrainReadiness,
 )
+from .declared_family import DeclaredFamily
+from .audience_manifest import FrozenRecipient
+from .errors import RelationViolationError
 from .registry_document import RegistrySnapshot
 from .routing import TurnRouting
 from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
@@ -27,6 +30,45 @@ from .turn_lease import FinishedTurnFence, TurnLeaseFence
 from .turn_phase import PreparingPhase, TurnPhase
 
 _LOG = logging.getLogger(__name__)
+
+
+class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
+    """Acquired recipient availability; no assignment, start or retry authority."""
+
+    def turn_started_by(self, updated_at_ms: int) -> bool:
+        return False
+
+    @abstractmethod
+    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification: ...
+
+
+@dataclass(frozen=True)
+class UnavailableRecipientActivity(RecipientActivity):
+    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
+        from .presentation import MessageNotification
+
+        return MessageNotification(notification.recipient_identity, "Waiting for agent",
+            "Agent is stopped; this message has not been checked.", priority=4)
+
+
+@dataclass(frozen=True)
+class LiveRecipientActivity(RecipientActivity):
+    thread: Thread
+    activity: ObservedActivity
+
+    def turn_started_by(self, updated_at_ms: int) -> bool:
+        return self.thread.turn_started_by(updated_at_ms)
+
+    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
+        from .presentation import MessageNotification
+
+        if blocked_by_prior:
+            notification = MessageNotification(notification.recipient_identity,
+                "Queued behind current turn" if self.thread.executing else "Blocked by earlier turn",
+                "The agent is finishing an earlier turn; this message has not started."
+                if self.thread.executing else "An earlier turn has an unresolved outcome. This message "
+                "is saved and has not started; the earlier turn needs recovery, not a resend.")
+        return self.activity.readiness.pending_notification(notification)
 
 
 class AgentActivity:
@@ -60,15 +102,23 @@ class AgentActivity:
             for name in snapshot.threads
         }
 
-    def drain_readiness(self, owner: Thread | None, *, snapshot: RegistrySnapshot) -> DrainReadiness:
-        """Observe a selected registry owner; an absent owner has no drain event.
+    def observe_recipient(self, recipient: FrozenRecipient, *, snapshot: RegistrySnapshot) -> RecipientActivity:
+        """Join the frozen birth to the original registry/process and activity sources."""
+        from .bus_publication import stable_thread_lookup
 
-        This is not an owner/start capability. Assignment presence still derives
-        independently from the original registry lease/process relation.
-        """
-        if owner is None:
-            return ReadyDrainReadiness()
-        return self.activity_of(owner.name, snapshot=snapshot).readiness
+        snapshot.require_unambiguous_ownership()
+        for thread in snapshot.threads.values():
+            if stable_thread_lookup(thread.created_at) != recipient.recipient_lookup:
+                continue
+            try:
+                snapshot.require_active(thread.name)
+                process = thread.require_process()
+            except RelationViolationError:
+                return UnavailableRecipientActivity()
+            if not process.alive():
+                return UnavailableRecipientActivity()
+            return LiveRecipientActivity(thread, self.activity_of(thread.name, snapshot=snapshot))
+        return UnavailableRecipientActivity()
 
     def _emit_activity(self, activity: Activity) -> None:
         current = self.activity_of(activity.thread)
