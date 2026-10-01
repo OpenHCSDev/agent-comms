@@ -60,7 +60,7 @@ class CoordinatedTurn:
             CompletedAssignment,
             input_id,
             receipt.message_id,
-            published.execution.exact_target,
+            receipt.exact_target,
             cls.cursor_status_for(participant, input_id),
             session.creation,
         )

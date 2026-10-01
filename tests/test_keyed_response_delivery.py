@@ -152,7 +152,10 @@ def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
         publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
         response = case.bus.log.read_keyed_response(intent)
         with case.bus.log.locked():
-            conversation = ResponseConversation.capture(case.bus, case.store.snapshots.get("exec"))
+            snapshot = case.store.snapshots.get("exec")
+            conversation = ResponseConversation.capture(
+                case.bus, snapshot, snapshot.require_wire_response()
+            )
             duplicate = conversation.record(
                 case.root_id, replace(response, seq=response.seq + 1), intent
             )

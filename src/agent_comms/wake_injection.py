@@ -45,6 +45,8 @@ def render_selected_batch_frame(sources, owner: Thread, *, obligation=None) -> s
             "target": initial.message.target,
             "audience": assignment.audience.value,
             "wake_mode": assignment.lifecycle.mode.declared_name,
+            "expectation": expectation,
+            "response_obligation": obligation_line,
             "body": initial.message.body,
         })
     selected_line = json.dumps(
@@ -75,7 +77,6 @@ def render_selected_batch_frame(sources, owner: Thread, *, obligation=None) -> s
         f"── comms: {len(selected)} selected ──\n"
         f"selected: {selected_line}\n"
         "── your state ──\n"
-        f"{obligation_line}\n"
         f"work_context: {work_context}\n"
         "Judge relevance using your current goal, thread role/title, channel tags and the "
         "new request. The original assignment records how the thread started; an old "
