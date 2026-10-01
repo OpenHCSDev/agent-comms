@@ -14,8 +14,9 @@ from .agent_events import AgentEvent, CompactionSkipped, CompactionStart
 from .backend import PersistentPiSession
 from .compaction_records import CompactionOperation, SelectedSummaryAttempt
 from .compaction_source import CompactionSource
+from .compaction_result import CompactionResult, RefusedCompactionResult
 from .owner_compaction_commit import OwnerCompactionCommit
-from .owner_compaction_prepare import NativePreparation
+from .owner_compaction_prepare import NativePreparation, prepare_native_source
 from .owner_compaction_provider import NativeSummary, OwnerSummaryOutcome
 from .owner_compaction_settings import PiCompactionSettings
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
@@ -66,6 +67,9 @@ class SelectedSummaryDecline(OwnerSummaryOutcome):
     ) -> None:
         return None
 
+    def compaction_result(self, operation: CompactionOperation | None) -> RefusedCompactionResult:
+        return RefusedCompactionResult(self.completion_event.explanation)
+
     def admit_original(
         self,
         bridge: OwnerCompactionCommit,
@@ -92,7 +96,7 @@ async def compact_owner_once(
     settings_paths: tuple[str, ...] | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
     on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
-) -> CompactionOperation | None:
+) -> CompactionResult:
     """Exactly one native writer attempt, without input or summary replay.
 
     Pre-summary capture and final commit each recheck owner/ingress/native
@@ -100,38 +104,47 @@ async def compact_owner_once(
     can mutate the saved file. Its next prompt must pass strict fresh reopen.
     The caller may not hide a COMMIT UNKNOWN or trigger a second summary/write.
     """
-    prepared_source = await asyncio.to_thread(
-        bridge.prepare_source,
-        owner,
-        owner_generation,
+    preparation = await asyncio.to_thread(
+        prepare_native_source,
+        bridge.native.package_dir,
+        owner.require_saved_session(),
         settings=settings,
         context_window=context_window,
-        pending_input_key=pending_input_key,
-        settings_paths=settings_paths,
     )
-    if prepared_source is None:
-        return None
-    prepared, source = prepared_source
-    if on_event is not None:
-        await on_event(CompactionStart(reason="adaptive"))
-    await asyncio.to_thread(bridge.require_source_current, owner, owner_generation, source)
-    result = await summarize(prepared, source)
 
-    async def write(summary: NativeSummary) -> CompactionOperation:
-        return await _commit_native_summary(
-            bridge, owner, owner_generation, persistent, prepared, source, summary
+    async def perform(prepared: NativePreparation) -> CompactionResult:
+        prepared, source = await asyncio.to_thread(
+            bridge.prepare_source,
+            owner,
+            owner_generation,
+            prepared=prepared,
+            settings=settings,
+            context_window=context_window,
+            pending_input_key=pending_input_key,
+            settings_paths=settings_paths,
         )
+        if on_event is not None:
+            await on_event(CompactionStart(reason="adaptive"))
+        await asyncio.to_thread(bridge.require_source_current, owner, owner_generation, source)
+        result = await summarize(prepared, source)
 
-    operation = await result.commit_with(write)
-    admission = result.admit_original(bridge, owner, owner_generation, operation, source)
-    if admission is not None:
-        if on_admission is None:
-            admission.invalidate()
-            raise ValueError("Selected summary requires its original-input owner")
-        on_admission(admission)
-    if on_event is not None:
-        await on_event(result.completion_event)
-    return operation
+        async def write(summary: NativeSummary) -> CompactionOperation:
+            return await _commit_native_summary(
+                bridge, owner, owner_generation, persistent, prepared, source, summary
+            )
+
+        operation = await result.commit_with(write)
+        admission = result.admit_original(bridge, owner, owner_generation, operation, source)
+        if admission is not None:
+            if on_admission is None:
+                admission.invalidate()
+                raise ValueError("Selected summary requires its original-input owner")
+            on_admission(admission)
+        if on_event is not None:
+            await on_event(result.completion_event)
+        return result.compaction_result(operation)
+
+    return await preparation.compact_owner(perform)
 
 
 async def _commit_native_summary(

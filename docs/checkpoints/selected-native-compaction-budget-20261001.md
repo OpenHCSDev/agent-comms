@@ -37,3 +37,53 @@ configured real-provider journey is explicitly authorized; no additional
 approval is needed. Do not substitute Loopback, explicit SelectedExecution,
 fabricated protocol, startup-only or kernel-denied evidence for this acceptance,
 or choose another model/route. Never replay the original failed input.
+
+## Existing-family Python API closure after the frozen079 candidate
+
+This checkpoint changes Python source only. Frozen079/native5184 remains the
+original configured-fork journey; it does not qualify this later installed API.
+
+- `NativePreparationResult.checked()` retains the original ready/skip member.
+  Existing members own `compact_owner()` participation and `require_ready()`.
+  No new result class, enum, state field, alias or registry was added.
+- `compact_owner_once()` reads the initial original preparation, then invokes
+  its family hook. A ready member enters the one existing source capture/write
+  algorithm. Skip returns the existing refused compaction result without
+  summary/provider work, source capture or native mutation.
+- `OwnerCompactionCommit.prepare_source()` requires the original ready witness
+  and returns a nonnullable preparation/source pair. The second original
+  allocation consumes `require_ready()`; losing that captured native cut is
+  still an error, never a request to replay or re-prepare through another route.
+- Existing `OwnerSummaryOutcome` implementations derive the existing
+  `CompactionResult` from the original outcome. A native summary preserves its
+  original text and requires the original operation's committed proof; a clean
+  selected decline supplies the existing refused result. No commit record or
+  summary is reconstructed from UI status. The journal writer/CAS is unchanged.
+- Manual compaction directly returns that result. Adaptive compaction asks that
+  same result's behavior whether compaction occurred. Both production callers
+  use the same `compact_owner_once()`; neither reconstructs preparation state.
+  The manual `summary_text` variable and its second assignment were deleted.
+  The manual selected-summary commit guard delegates to `OperationState`.
+
+Deleted nullable preparation decisions: checked skip-to-None, initial
+prepared-is-None, allocated-is-None, runtime prepared-source-is-None, manual
+outer operation-is-None, adaptive outer operation-is-None. The internal selected
+summary decline retains its existing no-writer outcome inside its owning
+family; that value no longer escapes as the manual/adaptive result API. Optional
+original-input admission remains a separate existing capability, not a skip
+state or permission to replay an input.
+
+Consumer census: helper `NativePreparationResult` decode; initial runtime
+preparation; captured-source allocation; both manual/adaptive runtime callers;
+all existing native/declined summary implementations; existing manual/committed
+ACP result consumers; four direct source-capture fixture callers and the
+preparation ready/skip/lifetime controls. Existing family declarations alone
+own ready/skip and committed/refused behavior; no status dispatch was added.
+
+Final focused source sanity uses the unchanged candidate69 dependency graph
+and system pytest tooling, with source explicit for this source-only check:
+5 controls passed in4.11s (native helper ready/skip/read-only source, original
+worker cancellation/retirement, unresolved native-write refusal). This is not
+updated-wheel or real-provider acceptance. The frozen079 prefix/native package
+were not edited. Updated-wheel ordinary manual/adaptive path qualification
+remains required after this coherent source checkpoint is published.

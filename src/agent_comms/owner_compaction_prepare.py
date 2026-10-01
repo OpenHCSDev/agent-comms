@@ -12,8 +12,10 @@ import asyncio
 import os
 import stat
 from abc import abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields
 from pathlib import Path
+from typing import TYPE_CHECKING, Self
 
 from .declared_family import DeclaredFamily
 from .native_package import verify_native_package
@@ -21,6 +23,9 @@ from .owner_compaction_settings import PiCompactionSettings
 from .pi_helper import PiHelper, SessionHelperRequest
 from .native_revision_text import NativeRevisionText
 from .private_path import FileRevision
+
+if TYPE_CHECKING:
+    from .compaction_result import CompactionResult, RefusedCompactionResult
 
 
 class NativePreparationError(ValueError):
@@ -64,18 +69,36 @@ class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
     family_discriminator = "status"
 
     @abstractmethod
-    def checked(self, file: Path, revision: str) -> NativePreparation | None:
+    def checked(self, file: Path, revision: str) -> Self:
         """Bind an observed cutpoint to the already captured native revision."""
+
+    @abstractmethod
+    def require_ready(self) -> NativePreparation:
+        """A captured source must retain a ready native cut, never a skip."""
+
+    @abstractmethod
+    async def compact_owner(
+        self, perform: Callable[[NativePreparation], Awaitable[CompactionResult]]
+    ) -> CompactionResult:
+        """Only a ready preparation enters the existing owner operation."""
 
 
 @dataclass(frozen=True)
 class SkipPreparationResult(NativePreparationResult):
     session_id: str = field(metadata={"wire_name": "sessionId"})
 
-    def checked(self, file: Path, revision: str) -> None:
+    def checked(self, file: Path, revision: str) -> Self:
         if not self.session_id:
             raise NativePreparationError("Native session identity missing")
-        return None
+        return self
+
+    def require_ready(self) -> NativePreparation:
+        raise NativePreparationError("Captured compaction source lost its native preparation")
+
+    async def compact_owner(self, perform) -> RefusedCompactionResult:
+        from .compaction_result import RefusedCompactionResult
+
+        return RefusedCompactionResult("Selected native history has no complete safe compaction cut")
 
 
 @dataclass(frozen=True)
@@ -92,6 +115,12 @@ class NativePreparation(NativePreparationResult, declared_name="ready"):
         if self.witness.session_file != str(file) or self.witness.revision != revision:
             raise NativePreparationError("Invalid native witness")
         return self
+
+    def require_ready(self) -> NativePreparation:
+        return self
+
+    async def compact_owner(self, perform):
+        return await perform(self)
 
 
 @dataclass(frozen=True)
@@ -114,7 +143,7 @@ class PrepareCompactionHelper(PiHelper):
 def prepare_native_source(
     package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int,
     retained_text: str = "",
-) -> NativePreparation | None:
+) -> NativePreparationResult:
     """Derive Pi's actual cut point without a model call or a session mutation.
 
     The caller supplies the actual selected window and effective settings.
