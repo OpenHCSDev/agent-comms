@@ -363,3 +363,46 @@ from490. The sole carry remains495's existing installer extension, which retains
 ordered multiple FULL execution links and attests all unrelated schema/rows.
 The earlier unexecuted prototype tool and its assumptions remain historical
 source evidence, not an alternate installer or release requirement.
+
+## Mandatory prompt versus optional awareness resource
+
+Normal main integration: `590c406c` into this branch at `0ac0727e`.
+Code checkpoint `8ea90edc` removes the competing mandatory 32 KiB model bound.
+This closure deletes 26 production lines across the existing SelectedPrompt and
+OptionalAwarenessProjection owners, including the former constant, remaining()
+calculation, triage/full rejection calls and caller-supplied remaining capacity.
+No new budget class, model catalog, truncation, lifecycle algorithm or codec.
+
+Declaration and consumer search:
+
+- One SelectedPrompt declaration, in selected_turn.py. Its triage() and full()
+  preserve every captured original; neither estimates model capacity.
+- One OptionalAwarenessProjection declaration, with its existing max_text_bytes
+  resource bound of 16 KiB, max_rows and reader deadline. Its only production
+  render caller is SelectedPrompt.full(); two direct timeout fixture calls were
+  migrated. The projection supplies its own bound to OptionalAwarenessResult
+  family render hooks. Read and rendered forms use the same resource limit.
+  Oversized optional context is omitted whole; original content is untouched.
+- One ContextBudget declaration in stack/native-context-budget.mjs. Existing
+  ContextBudgetRequest applies the selected model's contextWindow/maxTokens and
+  serialized provider input; native provider adapters are the consumers. These
+  owners and native SessionContext/CompactionPolicy are unchanged.
+- Existing PrivateSendAdmission and PromptBinding retain and digest the complete
+  original prompt/request. No byte budget or narrowed subset is added there.
+  Searches for _MAX_PROMPT_BYTES, remaining_prompt_bytes and the removed
+  require_context_budget name return no source consumers. Image attachment
+  size limits describe a separate existing attachment resource, not model admission.
+
+Validation at the end of this source closure: three existing optional resource
+controls passed. The 101-original SQL-page-boundary batch is now over 100 KiB of
+original UTF-8 content and verifies every JSON-escaped original, one exact native
+reservation/binding, late-arrival exclusion and nonreplay. It passed in 3.19s.
+The initial combined run had 3 passes and a fixture assertion failure because
+the test searched raw Unicode inside the declared ASCII-escaped JSON frame; that
+raw failure is retained, and only the original-text representation assertion was
+corrected. No production frame change or oracle weakening.
+
+Logs: .artifacts/prompt-resource-bound/{batch01.log,source-batch02.log}.
+These are bounded provider-free source checks, not an installed mixed-route gate.
+Arendt retains the sources= tuple/plural-target lifecycle API and urgent498
+priority; full490 installed validation follows that coherent owner integration.

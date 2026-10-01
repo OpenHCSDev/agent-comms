@@ -775,7 +775,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
 
 
 @pytest.mark.parametrize("kind", ["complete", "incomplete", "oversize"])
-async def test_optional_awareness_requires_complete_binding_and_prompt_budget(
+async def test_optional_awareness_requires_complete_binding_and_resource_budget(
     tmp_path: Path, monkeypatch, kind: str
 ) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)

@@ -1,5 +1,6 @@
 """Canonical original-bus batch capture and one-use native reservation."""
 
+import json
 import os
 
 from unittest import TestCase
@@ -51,7 +52,7 @@ def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pendi
             # Mandatory original content belongs to native selected-model admission,
             # not a Python-wide byte cap or the optional awareness resource bound.
             assert len(prompt.encode("utf-8")) > 32 * 1024
-            assert all(original.body in prompt for original in originals)
+            assert all(json.dumps(original.body, ensure_ascii=True) in prompt for original in originals)
             late = send("Arrived after work-start capture")
             assert late.seq not in tuple(row.wire_seq for row in selected.batch.assignments)
             stage = TriageNativeSend(selected.batch.assignments)

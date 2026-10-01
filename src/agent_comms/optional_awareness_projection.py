@@ -362,7 +362,7 @@ class OptionalAwarenessProjection:
         """Return complete SQL-backed rows, or omit the entire supplement.
 
         No selected decision or open obligation is ranked away. A stale WAL,
-        unsealed candidate, different owner, excess row count, or prompt budget
+        unsealed candidate, different owner, excess row count, or resource budget
         exhausts the optional path without changing original delivery.
         """
         try:
