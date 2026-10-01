@@ -19,8 +19,16 @@ from contextlib import AbstractContextManager, ExitStack, suppress
 _MAX_SEND_SECONDS = 5.0
 
 
-class PromptSendUnknown(RuntimeError):  # noqa: N818 - nominal UNKNOWN outcome
+class PromptSendFailure(RuntimeError):  # noqa: N818 - original writer failure
+    """Failure from the one owning raw writer, never permission to replay."""
+
+
+class PromptSendUnknown(PromptSendFailure):  # noqa: N818 - nominal UNKNOWN outcome
     """The prompt send has no successful completion receipt; never resend."""
+
+
+class PromptSendNotWritten(PromptSendFailure):  # noqa: N818 - original prebyte refusal
+    """The writer never acquired its original admission or wrote this payload."""
 
 
 class PromptAdmissionBusy(RuntimeError):  # noqa: N818 - nominal pre-admission outcome
@@ -28,25 +36,32 @@ class PromptAdmissionBusy(RuntimeError):  # noqa: N818 - nominal pre-admission o
 
 
 def _enter_admission(
+    fd: int,
     boundary: Callable[[], AbstractContextManager[None]],
     cancelled: threading.Event,
-    deadline: float,
 ) -> ExitStack:
-    """Wait only for pre-admission contention, using the existing writer budget."""
+    """Acquire cancellable admission without spending an irreversible-write budget.
+
+    Every refused probe closes its partial custody. Only the successful original
+    boundary can admit this payload; cancellation here proves no prompt write.
+    """
     busy: PromptAdmissionBusy | None = None
+    pipe = select.poll()
+    pipe.register(fd, select.POLLERR | select.POLLHUP | select.POLLNVAL)
     while True:
-        budget = deadline - time.monotonic()
-        if cancelled.is_set() or budget <= 0:
-            raise PromptSendUnknown(
-                "Native prompt admission ended before writing any bytes"
+        if cancelled.is_set():
+            raise PromptSendNotWritten(
+                "Native prompt admission cancelled before writing any bytes"
             ) from busy
+        if pipe.poll(0):
+            raise PromptSendNotWritten("Native pipe closed before prompt admission")
         scope = ExitStack()
         try:
             scope.enter_context(boundary())
         except PromptAdmissionBusy as error:
             busy = error
             scope.close()
-            cancelled.wait(min(budget, 0.01))
+            cancelled.wait(0.01)
         except BaseException:
             scope.close()
             raise
@@ -59,13 +74,14 @@ def _write_fenced(
     payload: bytes,
     boundary: Callable[[], AbstractContextManager[None]],
     cancelled: threading.Event,
-    deadline: float,
+    timeout: float,
 ) -> None:
     # The dedicated thread has no asyncio loop. Its timeout progresses even if
     # the owner loop is synchronously waiting to stop this registry incarnation.
     written = 0
     try:
-        with _enter_admission(boundary, cancelled, deadline):
+        with _enter_admission(fd, boundary, cancelled):
+            deadline = time.monotonic() + timeout
             remaining = memoryview(payload)
             while remaining:
                 budget = deadline - time.monotonic()
@@ -99,30 +115,32 @@ async def send_fenced_prompt(
     payload: bytes,
     boundary: Callable[[], AbstractContextManager[None]],
     *,
-    timeout: float,
+    timeout: float = _MAX_SEND_SECONDS,
 ) -> None:
     """Own a duplicated nonblocking pipe fd until the writer has stopped.
 
     Cancellation is signalled to the independent writer and joined before this
     function exits. A dedicated thread avoids default-executor queue starvation.
     Each admission probe is nonblocking and uses thread-local database connections.
-    Contention can wait within this writer's budget, without retaining partial
-    locks or depending on callbacks on the owner loop. No admitted send is retried.
+    Contention waits for original admission without retaining partial locks or
+    depending on owner-loop callbacks. The write budget begins only after grant.
+    Cancellation or a closed original pipe before grant proves no bytes. No
+    admitted send is retried.
     """
     if os.name != "posix" or not payload or timeout <= 0:
-        raise PromptSendUnknown("Fenced prompt requires a live bounded POSIX pipe")
+        raise PromptSendNotWritten("Fenced prompt requires a live bounded POSIX pipe")
     pipe = stdin.get_extra_info("pipe")
     transport = stdin.transport
     if pipe is None or transport.get_write_buffer_size() != 0:
-        raise PromptSendUnknown("Native stdin is not an empty raw pipe; no prompt sent")
+        raise PromptSendNotWritten("Native stdin is not an empty raw pipe; no prompt sent")
     fd = os.dup(pipe.fileno())
     if os.get_blocking(fd):
         os.close(fd)
-        raise PromptSendUnknown("Native stdin must be nonblocking; no prompt sent")
+        raise PromptSendNotWritten("Native stdin must be nonblocking; no prompt sent")
     loop = asyncio.get_running_loop()
     done: asyncio.Future[None] = loop.create_future()
     cancelled = threading.Event()
-    deadline = time.monotonic() + min(timeout, _MAX_SEND_SECONDS)
+    write_timeout = min(timeout, _MAX_SEND_SECONDS)
 
     def finish(error: BaseException | None) -> None:
         # Completion is posted only after admission and the raw fd are closed;
@@ -136,7 +154,7 @@ async def send_fenced_prompt(
     def worker() -> None:
         error: BaseException | None = None
         try:
-            _write_fenced(fd, payload, boundary, cancelled, deadline)
+            _write_fenced(fd, payload, boundary, cancelled, write_timeout)
         except BaseException as caught:
             error = caught
         finally:

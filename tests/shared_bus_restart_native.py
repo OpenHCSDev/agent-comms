@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import time
 import subprocess
+import threading
 
 from compaction_loopback import LoopbackProvider
 from agent_comms.comms import Comms
@@ -138,6 +139,28 @@ async def run(arguments):
     attachment = CommsClient(service, runtime_enabled=True,
         private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
+    contention_release = threading.Event()
+    contention_held = threading.Event()
+    contention_observations = []
+
+    def hold_original_reader():
+        deadline = time.monotonic()+30
+        while time.monotonic()<deadline and not contention_release.is_set():
+            with closing(sqlite3.connect((service.root/'coordination.sqlite3').as_uri()+
+                                        '?mode=ro',uri=True)) as db:
+                reserved = NativeRuntimeInput.select(db)
+            if reserved:
+                # Observe the original reservation, then acquire a real reader.
+                with service.bus.log.certified_read():
+                    begun = time.monotonic()
+                    contention_held.set()
+                    contention_release.wait(arguments.contention_seconds)
+                    contention_observations.append({'held_seconds':time.monotonic()-begun,
+                        'original_reserved_input':reserved[0].input_id})
+                return
+            contention_release.wait(.01)
+
+    contender = None
     try:
         for name in names:
             await asyncio.to_thread(service.owners.start,name,
@@ -147,11 +170,15 @@ async def run(arguments):
         assert provider.posts == 0
         originals = [service.registry.require(name) for name in names]
         cutover = PublishOriginalsAtStoppedBatch(service,names,collective=arguments.collective)
+        if arguments.contention:
+            contender = threading.Thread(target=hold_original_reader,name='original-wire-reader')
+            contender.start()
         result = await asyncio.to_thread(service.owners.restart_owners,names,cutover=cutover)
         assert len(result)==len(names)
         assert all(not owner.process_alive for owner in originals)
-        await asyncio.gather(*(attachment.load_session(
-            cwd=str(project), session_id=name) for name in names))
+        if not arguments.contention:
+            await asyncio.gather(*(attachment.load_session(
+                cwd=str(project), session_id=name) for name in names))
         diagnosed = False
         concurrent_native = False
         async with asyncio.timeout(45):
@@ -201,14 +228,21 @@ async def run(arguments):
                 assert all(row.stage=='triage' and row.verdict=='ignore' for row in inputs)
         else:
             assert {reply.sender for reply in replies}==set(names)
-        assert {packet['session_id'] for packet in packets} == set(names)
         facts = [fact for packet in packets
                  for fact in decode_updates(packet['update'].get('_meta'))]
-        assert facts, 'No authoritative ACP notifications observed'
+        if arguments.contention:
+            assert contention_held.is_set() and contention_observations
+        else:
+            assert {packet['session_id'] for packet in packets} == set(names)
+            assert facts, 'No authoritative ACP notifications observed'
     except BaseException as error:
         failure = f'{type(error).__name__}: {error}'
         raise
     finally:
+        contention_release.set()
+        if contender is not None:
+            await asyncio.to_thread(contender.join,35)
+            assert not contender.is_alive()
         await attachment.shutdown()
         for name in reversed(names):
             await asyncio.to_thread(service.owners.stop,name)
@@ -230,7 +264,7 @@ async def run(arguments):
                 not service.registry.require(name).process_alive for name in names),
             'public_mutations':0,'paid_provider_calls':0,'original_replays':0,
             'installed_interpreter':sys.executable,
-            'acp_notification_count':len(packets),
+            'acp_notification_count':len(packets),'contention':contention_observations,
             'all_native_turns_active_before_provider_release':concurrent_native if failure is None else False,
             'acp_fact_counts':{kind:sum(type(fact).__name__ == kind for fact in facts)
                 for kind in sorted({type(fact).__name__ for fact in facts})} if failure is None else {}}
@@ -246,4 +280,6 @@ if __name__=='__main__':
     parser.add_argument('--history',type=int,default=259)
     parser.add_argument('--collective',action='store_true')
     parser.add_argument('--registry-size',type=int,default=0)
+    parser.add_argument('--contention',action='store_true')
+    parser.add_argument('--contention-seconds',type=float,default=12)
     asyncio.run(run(parser.parse_args()))

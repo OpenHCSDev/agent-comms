@@ -60,3 +60,28 @@ localhost provider. The initial setup attempt refused before publication due to
 a fixture constructor error, retired all workers and made zero provider calls;
 its original receipt/root remain retained. The corrected fresh-root run is in
 progress. No production fix or installed acceptance is claimed yet.
+
+## Granted writer and clock checkpoint
+
+The installed collective baseline completed three genuine native triages and
+ACP notifications with 220 retained wire rows and 120 unrelated registry threads.
+It did not reproduce the original failure; the historical holder remains unknown.
+
+The existing writer now separates cancellable exclusion acquisition from its
+unchanged five-second irreversible pipe-write bound. Every busy probe drops its
+partial locks. Cancellation or original pipe closure before grant is a typed
+unwritten failure. The existing UnwrittenPrompt/attestation owns Not sent; no
+historical UNKNOWN is reconsidered and no reservation becomes replayable.
+
+TurnSession.grant_prompt owns dispatch plus the original input-start clock. The
+managed, untracked and selected/raw write seams call it only inside their actual
+granted write boundary. Delete the earlier input-clock/dispatch sites: lock wait
+must not consume either the raw write bound or native input-start clock. The
+preflight clock remains readiness-only. No new lifecycle state/store or phase ABI.
+
+27 focused raw-pipe/exclusion/revocation/partial-write/cancellation/cleanup and
+ownership controls passed. Two obsolete fixture contracts were corrected in
+place: reply to the original get_state request ID, and use the current model-wait
+budget instead of the deleted whole-turn timeout. No production trust relaxation.
+Original source deletion counts and affected installed contention/cancel proof
+will be published after the continuous gate, before claiming Ready.
