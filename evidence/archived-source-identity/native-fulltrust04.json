@@ -1,0 +1,6 @@
+{
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "verification": "installed canonical verify_native_package passed",
+  "manifest": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/lib/python3.14/site-packages/agent_comms/_native/pi-native.sha256",
+  "manifest_sha256": "593b978a717ae8f6ab4300a1a107b615c8ced52e767ef4cad0596f827041a218"
+}
