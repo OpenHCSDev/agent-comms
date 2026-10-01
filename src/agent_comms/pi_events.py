@@ -13,6 +13,7 @@ from .declared_family import DeclaredFamily
 from .compaction_progress import CompactionSourceProgress
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
+from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
     AbsentMessage,
@@ -302,6 +303,14 @@ class ContextCommitted(PiEvent):
         default=None, metadata={"wire_name": "requestGeneration"}
     )
     llm_context_digest: str | None = field(default=None, metadata={"wire_name": "llmContextDigest"})
+
+
+@dataclass(frozen=True, kw_only=True)
+class TurnContextObserved(PiEvent):
+    context: NativeContextManifestData
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        yield events.ContextObserved(self.context)
 
 
 class ExtensionUiChoice(ABC):

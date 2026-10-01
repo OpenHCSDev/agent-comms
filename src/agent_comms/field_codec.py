@@ -313,10 +313,26 @@ class FieldCodec(Sealed):
         return cast(T, cls._decode(target, data))
 
     @classmethod
+    def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
+        """Instance values carry their selector inside the encoded object."""
+        alternatives = []
+        for member in target.members_with(target):
+            tag = member.family_discriminator
+            alternatives.append(cls._record_schema(
+                member, {tag: {"type": "string", "const": member.declared_name}}, [tag]
+            ))
+        return {"oneOf": alternatives} if alternatives else {"not": {}}
+
+    @classmethod
     def record_schema(cls, target: type) -> dict[str, Any]:
-        """JSON Schema for named external request fields; family selection is separate."""
-        properties = {}
-        required = []
+        """Named request fields; external tool/CLI selection remains separate."""
+        return cls._record_schema(target, {}, [])
+
+    @classmethod
+    def _record_schema(
+        cls, target: type, properties: dict[str, Any], required: list[str]
+    ) -> dict[str, Any]:
+        """Build fields once, including an internally supplied family selector."""
         hints = cls._types(target)
         for declared, key in cls._fields(target):
             annotation = hints[declared.name]
@@ -374,6 +390,8 @@ class FieldCodec(Sealed):
         }
         if annotation in primitive:
             return {"type": primitive[annotation]}
+        if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
+            return cls._family_schema(annotation)
         if isinstance(annotation, type) and is_dataclass(annotation):
             return cls.record_schema(annotation)
         raise TypeError(f"No declared JSON schema for {annotation}")

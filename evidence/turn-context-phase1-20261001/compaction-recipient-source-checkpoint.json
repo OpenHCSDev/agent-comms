@@ -1,0 +1,31 @@
+{
+  "status": "source-verified-no-installed-claim",
+  "required_relation": "Only the original frozen recipient incarnation or original decision author supplies applicable compaction messages; current names/channel membership are not admission",
+  "patterns": [
+    "IDEN-6",
+    "BOUND-2",
+    "IDEN-5"
+  ],
+  "production": {
+    "added": 28,
+    "deleted": 22,
+    "paths": [
+      "src/agent_comms/audience_manifest.py",
+      "src/agent_comms/bus_publication.py",
+      "src/agent_comms/compaction_boundary.py",
+      "src/agent_comms/relationships.py",
+      "src/agent_comms/wire_log.py",
+      "src/agent_comms/wire_record.py"
+    ]
+  },
+  "source_checks": "22 pass7.13s +2 affected silent tail/wire checks",
+  "canonical_owner": "WireRecord -> CommittedDelivery -> FrozenAudience, existing stable_thread_lookup; Message owns original fact projection",
+  "new_case": "same-name deletion/recreation and channel newcomer refuse prior constraints, cold reopen preserves exact original/new applicable sources",
+  "silent_tail": "existing bounded recent-byte resource truncates actualMessage count, no silent observation charges",
+  "negative_controls": [
+    "compaction-recipient-source12.log wrong executable-only sender fixture",
+    "compaction-recipient-source13.log unregister stops original identity instead of deleting it; corrected to original remove API"
+  ],
+  "durable_or_runtime_changes": [],
+  "remaining": "single installed combined S2/S5 native/ACP journey; no public activation"
+}

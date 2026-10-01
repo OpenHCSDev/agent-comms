@@ -7,7 +7,7 @@ does not create a new historical thread; a new turn does not change its owner.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -15,7 +15,7 @@ from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,13 +35,13 @@ class ThreadIncarnation:
         if self.created_at <= 0:
             raise ValueError("Thread incarnation requires a positive recorded birth")
 
-    def resolved(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
+    def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
         if self.created_at == -1.0 or not self.current(snapshot):
             return self
         return snapshot.threads[snapshot.aliases.get(self.name, self.name)].incarnation
 
-    def current(self, snapshot: RegistrySnapshot) -> bool:
+    def current(self, snapshot: RegistryProvenance) -> bool:
         thread = snapshot.threads.get(snapshot.aliases.get(self.name, self.name))
         return (
             thread is None
@@ -49,7 +49,7 @@ class ThreadIncarnation:
             else thread is not None and thread.created_at == self.created_at
         )
 
-    def matches_recorded_name(self, name: str, snapshot: RegistrySnapshot) -> bool:
+    def matches_recorded_name(self, name: str, snapshot: RegistryProvenance) -> bool:
         """Relate a partial stored name to this original current incarnation.
 
         The registry owns aliases and birth. A stored name does not supply or
@@ -102,6 +102,10 @@ class TurnIdentity:
     incarnation: ThreadIncarnation
     generation: int
 
+    def resolved(self, snapshot: RegistrySnapshot) -> TurnIdentity:
+        """Resolve the original incarnation; retain this turn allocation."""
+        return replace(self, incarnation=self.incarnation.resolved(snapshot))
+
 
 @dataclass(slots=True)
 class GenerationCounter:
@@ -150,6 +154,10 @@ class ThreadRole(StrEnum):
     def require_executable(self) -> None:
         if not self.executable:
             raise RelationViolationError("thread role does not execute owner turns")
+
+    def require_user(self) -> None:
+        if self is not self.USER:
+            raise RelationViolationError("A user correction requires the original human sender")
 
 
 @dataclass(frozen=True, slots=True)

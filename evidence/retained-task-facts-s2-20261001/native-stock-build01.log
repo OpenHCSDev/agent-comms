@@ -1,0 +1,24 @@
+patching file node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
+patching file node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/azure-openai-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/google-generative-ai.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/google-vertex.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/mistral-conversations.js
+patching file node_modules/@earendil-works/pi-ai/dist/api/pi-messages.js
+patching file dist/core/session-manager.js
+Hunk #25 FAILED at 1267.
+Hunk #26 FAILED at -94.
+Hunk #27 FAILED at -90.
+Hunk #28 FAILED at 21.
+Hunk #29 FAILED at 169.
+Hunk #30 FAILED at 210.
+Hunk #31 FAILED at 364.
+Hunk #32 FAILED at 390.
+Hunk #33 FAILED at 399.
+Hunk #34 FAILED at 513.
+patch: **** malformed patch at line 1978: \ No newline at end of file
+

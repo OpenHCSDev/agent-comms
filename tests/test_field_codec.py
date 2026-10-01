@@ -46,7 +46,7 @@ def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter():
 def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
     from datetime import UTC, datetime
     from pathlib import Path
-    from agent_comms.typed_table import Column, SqlStorage, TypedTable
+    from agent_comms.typed_table import Column, TextStorage, TypedTable
     import sqlite3
 
     class HexInteger(TextRepresentation):
@@ -81,20 +81,9 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
     with pytest.raises(TypeError):
         FieldCodec.encode(value.timestamp)
 
-    class HexStorage(SqlStorage):
-        sql_type = "TEXT"
-
-        @classmethod
-        def accepts(cls, annotation):
-            return False
-
-        @classmethod
-        def to_sql(cls, value):
-            return FieldCodec.encode(value, Annotated[int, HexInteger])
-
     @dataclass(frozen=True)
     class ScalarRow(TypedTable, declared_name="field_representation_rows"):
-        count: Annotated[int, HexInteger] = field(metadata={"sql": Column(storage=HexStorage)})
+        count: Annotated[int, HexInteger] = field(metadata={"sql": Column(storage=TextStorage)})
 
     with sqlite3.connect(":memory:") as db:
         ScalarRow.create(db)
@@ -231,3 +220,60 @@ def test_request_schema_preserves_nullable_fields_and_owned_nonnull_constraint()
     properties = FieldCodec.record_schema(Request)["properties"]
     assert properties["nullable"] == {"anyOf": [{"type": "string"}, {"type": "null"}]}
     assert properties["nonnull"] == {"type": "string"}
+
+
+def test_family_instance_schema_tracks_decode_members_and_custom_discriminator():
+    class Scope(DeclaredFamily, affix="Scope"):
+        family_discriminator = "selection"
+
+    @dataclass(frozen=True)
+    class CurrentScope(Scope):
+        pass
+
+    @dataclass(frozen=True)
+    class ExplicitScope(Scope):
+        project: str = field(metadata={"wire_name": "externalProject"})
+
+    @dataclass(frozen=True)
+    class Request:
+        scope: Scope
+
+    def alternatives():
+        return FieldCodec.record_schema(Request)["properties"]["scope"]["oneOf"]
+
+    for value in (CurrentScope(), ExplicitScope("/project")):
+        encoded = FieldCodec.encode(value)
+        schema, = [item for item in alternatives()
+                   if item["properties"]["selection"]["const"] == encoded["selection"]]
+        assert set(schema["required"]) <= encoded.keys()
+        assert encoded.keys() <= schema["properties"].keys()
+        assert schema["additionalProperties"] is False
+        assert FieldCodec.decode(Scope, encoded) == value
+        assert FieldCodec.decode(Request, {"scope": encoded}) == Request(value)
+
+    assert FieldCodec.value_schema(type[Scope])["enum"] == list(Scope.names())
+    # Named APIs select a declaration outside their payload; nested values
+    # select it inside the object. Both use the same declared field metadata.
+    assert FieldCodec.record_schema(ExplicitScope)["required"] == ["externalProject"]
+    assert "selection" not in FieldCodec.record_schema(ExplicitScope)["properties"]
+
+    @dataclass(frozen=True)
+    class NewScope(ExplicitScope):
+        reason: str
+
+    new = NewScope("/project", "new declaration")
+    encoded = FieldCodec.encode(new)
+    schema, = [item for item in alternatives()
+               if item["properties"]["selection"]["const"] == encoded["selection"]]
+    assert set(schema["required"]) == {"selection", "externalProject", "reason"}
+    assert FieldCodec.decode(Scope, encoded) == new
+    assert len(FieldCodec.value_schema(ExplicitScope)["oneOf"]) == 2
+
+
+def test_uninhabited_family_schema_rejects_every_value_without_a_manual_roster():
+    class Empty(DeclaredFamily, affix="Empty"):
+        pass
+
+    assert FieldCodec.value_schema(Empty) == {"not": {}}
+    with pytest.raises(ValueError, match="Unknown"):
+        FieldCodec.decode(Empty, {"kind": "unregistered"})

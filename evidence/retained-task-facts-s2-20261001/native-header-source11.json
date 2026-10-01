@@ -1,0 +1,16 @@
+{
+  "status": "ORIGINAL_SDK_NATIVE_HEADER_SOURCE_PROVENANCE_PASS",
+  "file": "/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-installed03/test_selected_native_summary_c0/sessions/2026-10-01T07-00-17-657Z_01a0f643-8e79-71d4-a6df-af93d55482b8.jsonl",
+  "original_session_id": "01a0f643-8e79-71d4-a6df-af93d55482b8",
+  "original_cwd": "/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-installed03/test_selected_native_summary_c0",
+  "original_parent_session": null,
+  "parentSession_present": false,
+  "original_file_sha256": "05f36af5fcda9d263f48d706a4e6317c128842aa0335994f22a6e97fb069b99f",
+  "file_unchanged": true,
+  "provider_calls": 0,
+  "native_process_starts": 0,
+  "changed_source": "SessionEntry two typed SDK fields; existing read/decode/encode owner retains values, no source/authority fabricated",
+  "affected_source_checks": "15 passed in0.57s; source only",
+  "baseline_existing_failures": "8 same regex-only failures reproduced on immutable installed270, no guards or assertions weakened",
+  "remaining": "No originaltool artifact semantic extraction or direct historicalhuman-role proof; accepted installed270 unchanged"
+}

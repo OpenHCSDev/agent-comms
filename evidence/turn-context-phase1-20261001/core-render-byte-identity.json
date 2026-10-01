@@ -1,0 +1,77 @@
+{
+  "scope": "source-render comparison on one captured original NRA owner/peer snapshot; no installed/native/provider acceptance",
+  "baseline": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+  "original_thread": {
+    "name": "nra-architecture",
+    "created_at": 1790049182.3907015
+  },
+  "peer_count": 112,
+  "cases": [
+    {
+      "goal": false,
+      "automatic_title": false,
+      "reply_route": false,
+      "utf8_bytes": 6130,
+      "sha256": "b98726f34577807e1bb06f4bcc7494f31857f7ecf43df7280b5bd216c6aeb8ca",
+      "equal": true
+    },
+    {
+      "goal": false,
+      "automatic_title": false,
+      "reply_route": true,
+      "utf8_bytes": 6239,
+      "sha256": "0007c78001c754f4cb7da2f5ad223bbe14791eabdd1c5c54bf12c81e408c78f6",
+      "equal": true
+    },
+    {
+      "goal": false,
+      "automatic_title": true,
+      "reply_route": false,
+      "utf8_bytes": 6424,
+      "sha256": "ea517bac739d6f60d5a20abce122cc52dc2418f4c03d5e054726ccc4b7e00137",
+      "equal": true
+    },
+    {
+      "goal": false,
+      "automatic_title": true,
+      "reply_route": true,
+      "utf8_bytes": 6533,
+      "sha256": "db75d9ec05b0778420775802d40a83e9c31274430288fcabc84793ec3f706f09",
+      "equal": true
+    },
+    {
+      "goal": true,
+      "automatic_title": false,
+      "reply_route": false,
+      "utf8_bytes": 6858,
+      "sha256": "05ba9def870be635b8a2e1490c6656872e71709ff42ed4c29e925c4322b974c2",
+      "equal": true
+    },
+    {
+      "goal": true,
+      "automatic_title": false,
+      "reply_route": true,
+      "utf8_bytes": 6967,
+      "sha256": "8bb58a69992713ecf5cdb981fe290d938e0b505ebf34cb5f2ec79ac13e35a7f0",
+      "equal": true
+    },
+    {
+      "goal": true,
+      "automatic_title": true,
+      "reply_route": false,
+      "utf8_bytes": 7152,
+      "sha256": "cf4bc81723014f58d8511141c7525cd3ec31bc1bbd669518ba9052665dfb5466",
+      "equal": true
+    },
+    {
+      "goal": true,
+      "automatic_title": true,
+      "reply_route": true,
+      "utf8_bytes": 7261,
+      "sha256": "53ccdd0139939c29dda5d7b8ed71a6ae349e1d2a469733915ac8330e10d3513b",
+      "equal": true
+    }
+  ],
+  "source_before_sha256": "da94b35d5879b397cf6f61782df6c3f5c7050bdb67f577bd485e695974233c56",
+  "comparison_implementation_removed_after_evidence": true
+}

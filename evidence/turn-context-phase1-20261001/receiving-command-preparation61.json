@@ -1,0 +1,44 @@
+{
+  "state": "COMMAND_PREPARED_NOT_LAUNCHED; parent resource restoration and reviewed Mendel immutable prefix required",
+  "product_core": "104d603921f4dbb09fe58a4be84ffa15e098b190",
+  "product_toad_receiving": "25d8e60207c457cc480dff6ed1c5cf1e0fa77193",
+  "native_package": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "fixture": "/home/ts/wt/s5recv01",
+  "fixture_exists": false,
+  "working_directory": "/home/ts/wt/comms-turn-context-phase1-20261001",
+  "command": "env -u PYTHONPATH PI_COMPACTION_TEST_PACKAGE=/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent \"$S5_RECEIVING_PREFIX/bin/python\" tests/turn_context_installed_journey.py /home/ts/wt/s5recv01 --test-support-site /home/ts/wt/toad-cleanup-tc2-sdk-20260929/.venv/lib/python3.14/site-packages --toad-driver-dir /home/ts/wt/toad-s5-receiving-coherence-20261001/tests --receiving-only > evidence/turn-context-phase1-20261001/installed-receiving61.log 2>&1",
+  "prefix_environment": "S5_RECEIVING_PREFIX must be exact Mendel published immutable runtime, not a source checkout/current default override",
+  "scope": [
+    "existing actual SDK seed preserving rendered context",
+    "real Toad editor input with image",
+    "same-turn original followup through original controller/native tool path",
+    "original queue-family human capture and scope freshness",
+    "two unique original native user IDs, two localhost POSTs",
+    "text-free context manifests and actual recorded CLI",
+    "owned shutdown and persistent terminal receipt"
+  ],
+  "excluded": [
+    "compaction repeated",
+    "configured paid41 repeat",
+    "public owner/root mutation or restart",
+    "unknown input replay",
+    "whole five-POST49 journey",
+    "new builder or protocol/UI mocks"
+  ],
+  "limits": [
+    "compositor text/raw SVG does not prove readable physical pixels",
+    "does not claim full S2/S4/three-cycle acceptance"
+  ],
+  "launch_dependencies": [
+    "Mendel restores resource headroom with scoped safe cleanup",
+    "parent reviewed metadata and immutable paired prefix",
+    "parent exact affected gate grant"
+  ],
+  "resources_observed": {
+    "assert_headroom_exit": 2,
+    "home_free_gib": 7.8,
+    "ram_available_gib": 17.8,
+    "swap_used_gib": 13.6
+  }
+}

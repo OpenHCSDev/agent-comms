@@ -1,0 +1,181 @@
+{
+  "name": "comms_decision",
+  "label": "Record Decision",
+  "description": "Record a chosen alternative and its valid rejected alternatives on one original wire message. Author and source turn come from your admitted execution. Defaults to the current project and active goal revision, or current turn. A correction must name the original message reference; recording grants no execution.",
+  "parameters": {
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "tool": {
+            "type": "string",
+            "const": "comms_decision"
+          },
+          "chosen": {
+            "type": "string",
+            "description": "Chosen alternative, preserving exact wording"
+          },
+          "rejected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Nonempty unique valid rejected alternatives"
+          },
+          "to": {
+            "type": "string",
+            "description": "Thread or channel receiving the original declaration"
+          },
+          "scope": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "current"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "explicit"
+                  },
+                  "scope": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "goal"
+                          },
+                          "project": {
+                            "type": "string"
+                          },
+                          "goal": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "revision": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "revision"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "project",
+                          "goal"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "turn"
+                          },
+                          "project": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "project"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "scope"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "Current project/goal or explicit scope",
+            "default": {
+              "kind": "current"
+            }
+          },
+          "change": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "original"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "correction"
+                  },
+                  "original": {
+                    "type": "object",
+                    "properties": {
+                      "seq": {
+                        "type": "integer"
+                      },
+                      "message_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "seq",
+                      "message_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "kind",
+                  "original"
+                ],
+                "additionalProperties": false
+              }
+            ],
+            "description": "Original declaration or correction naming its original reference",
+            "default": {
+              "kind": "original"
+            }
+          }
+        },
+        "required": [
+          "tool",
+          "chosen",
+          "rejected",
+          "to"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

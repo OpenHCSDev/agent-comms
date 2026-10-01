@@ -1,0 +1,42 @@
+{
+  "status": "ACTUAL_CANONICAL_NATIVE_SELECTED_RETENTION_PASS_SOURCE_ENV",
+  "tested_source": "99b783fffe6404aebdae985f738e35f53a7c0d86",
+  "source_delta": "single fixture message target corrected from invalid self-DM to original channel; no production delta",
+  "native_manifest": "4519164ef97bb5ece65f98544179e544e0ac0b486d8976023b610f2397d937f8",
+  "native_tree": "a2b40e1da14b8db418c4d950c703273942a51ced0021e1280dea9b1625fbcd9f",
+  "fixture": "/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-retention02/test_selected_native_summary_c0",
+  "native_session": "/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-retention02/test_selected_native_summary_c0/sessions/2026-10-01T06-43-59-602Z_01a0f634-a1f1-7066-bc98-b86635f50ae3.jsonl",
+  "native_entry_id": "e7f98940",
+  "native_summary_sha256": "37846babb1d67d3ee3b1c574fd551350af018bf485a663b522f0dbd8ff743be7",
+  "selected_operation_id": "1d3c295c4a954fc6b495278d01969c7d",
+  "commit_id": "eb3a27d70b6f43b08ae01d8ca67f0e07",
+  "operation_state": "committed",
+  "retained_fact_kinds": [
+    "user_source",
+    "current_decision",
+    "goal",
+    "input"
+  ],
+  "original_wire_facts": [
+    {
+      "kind": "user_source",
+      "source": {
+        "seq": 1,
+        "message_id": "dfc83f61addf"
+      }
+    },
+    {
+      "kind": "current_decision",
+      "source": {
+        "seq": 2,
+        "message_id": "533b79191422"
+      }
+    }
+  ],
+  "result": "1 passed in9.19s; original exact source prefix native committed; one-use original input admission tested twice, only first accepted; fixture child retired by original context manager",
+  "provider_calls": 1,
+  "transport": "controlled localhost only; no paid calls",
+  "public_changes": [],
+  "preserved_failure": "native-selected-retention01.txt self-DM refusal before0provider requests",
+  "remaining": "not normal installed-wheel/ACP/UI/cohort readiness; not3continuousnativecheckpoints/model recall"
+}

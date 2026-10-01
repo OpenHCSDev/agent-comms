@@ -66,11 +66,7 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
         name = owner.name
         if owner.pid != os.getpid() or not server.agent._comms.registry.status(name).running:
             raise RuntimeError("This process no longer owns the thread.")
-        session_id = next(
-            key
-            for key, value in server.agent.sessions.bindings.items()
-            if server.agent._comms.registry.canonical_name(value) == name
-        )
+        session_id = server.agent.sessions.require_owned_session(owner)
         return RuntimeRequestContext(server, reader, client, session_id, name)
 
 
@@ -285,3 +281,12 @@ class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         goal = await ctx.server.agent.turns.goals.set_goal(ctx.session_id, self.text)
         return {"goal": goal.to_wire()}
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextRuntimeRequest(ResultRuntimeRequest):
+    async def result(self, ctx):
+        agent=ctx.server.agent
+        owner=agent._comms.registry.require(ctx.name)
+        context=await agent.turns.inspect_context(ctx.session_id,owner)
+        return FieldCodec.encode(context)

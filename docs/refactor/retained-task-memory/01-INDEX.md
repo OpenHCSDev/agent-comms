@@ -3,6 +3,12 @@
 **Source reviewed:** `4295d680`.
 **Rules:** [00-RULES.md](00-RULES.md). **Evidence:** [04-EVIDENCE.md](04-EVIDENCE.md).
 
+**2026-10-01 checkpoint:** this table is the original reviewed-head baseline.
+#475 delivers the named partial S2 foundation and paired S5 source and removes
+the dormant prototypes; full S2 remains open in #481. See
+`docs/checkpoints/s2-foundation-s5-source-20261001.md` for delivered scope and
+actual acceptance boundaries. S1 is not completed by deleting its prototype.
+
 ## Current versus intended behavior
 
 | Surface | Original intended answer | Source-backed state at this head | Completion target |

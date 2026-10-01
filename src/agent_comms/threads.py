@@ -7,12 +7,14 @@ import time
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING
 
-from .channel_targets import Tag
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
+from .thread_provenance import ThreadProvenance
 from .pi_vocabulary import ThinkingLevel
-from .goals import Goal, GoalRevision
+from .goals import (
+    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
+)
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
     ThreadIncarnation,
@@ -38,24 +40,25 @@ def _thread_creation_time() -> float:
 
 
 @dataclass(frozen=True, slots=True)
-class Thread:
+class Thread(ThreadProvenance):
     """Declares one agent thread's identity and provenance."""
 
-    name: str
-    tags: frozenset[str] = field(metadata={"registration_inheritance": InheritEmpty})
-    worktree: str
+    name: str = field(kw_only=False)
+    tags: frozenset[str] = field(kw_only=False, metadata={"registration_inheritance": InheritEmpty})
+    worktree: str = field(kw_only=False)
     parent: str | None = None
     task: str | None = None
     process_identity: ProcessIdentity | None = None
     session_file: str | None = field(
-        default=None, metadata={"registration_inheritance": InheritMissing}
+        default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
     )
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     thinking_level: type[ThinkingLevel] | None = field(
         default=None, metadata={"registration_inheritance": InheritMissing}
     )
     goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
-    created_at: float = field(default_factory=_thread_creation_time)
+    created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
+                              metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
     previous_worktrees: tuple[str, ...] = field(
         default=(), metadata={"registration_inheritance": InheritEmpty}
@@ -63,7 +66,8 @@ class Thread:
     auto_title_pending: bool = field(
         default=False, metadata={"registration_inheritance": InheritPrevious}
     )
-    title: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
+    title: str | None = field(default=None, kw_only=True,
+                             metadata={"registration_inheritance": InheritMissing})
     role: ThreadRole = ThreadRole.AGENT
     active_turn: ActiveTurn | None = None
     channel_scope_generation: int = 0
@@ -79,6 +83,7 @@ class Thread:
         object.__setattr__(self, "_generated_created_at", generated)
         if generated:
             object.__setattr__(self, "created_at", float(self.created_at))
+        super(Thread, self).__post_init__()
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None:
             if self.active_turn.owner_pid != self.pid:
@@ -102,17 +107,8 @@ class Thread:
             or self.turn_generation == 0
         ):
             raise ValueError("Finished turn requires a prior turn generation and ID.")
-        for tag in self.tags:
-            Tag(tag)
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        if not self.name or not set(self.name) <= allowed:
-            raise ValueError(
-                f"Thread name {self.name!r} must be alphanumeric with hyphens/underscores."
-            )
         if self.parent == self.name:
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
-        if not self.worktree:
-            raise ValueError("Thread worktree cannot be empty.")
         if self.model is not None and not self.model.strip():
             raise ValueError("Thread model cannot be empty.")
         if self.thinking_level is not None:
@@ -194,7 +190,7 @@ class Thread:
             raise RelationViolationError("live owner does not hold the requested turn")
 
     def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
-        if self.goal_checkpoint != checkpoint:
+        if self.goal_checkpoint != PresentGoalCheckpoint(checkpoint):
             raise ValueError("The goal changed before this action; the action was not applied.")
         assert self.goal is not None
         return self.goal
@@ -204,6 +200,26 @@ class Thread:
         """Project the original goal's declaration; retain no activity copy."""
         goal = self.goal
         return goal if goal is not None and goal.state.active else None
+
+    @property
+    def decision_scope(self):
+        from .task_decisions import GoalDecisionScope, TurnDecisionScope
+
+        goal = self.active_goal
+        return (GoalDecisionScope(project=self.worktree, goal=goal.checkpoint)
+                if goal is not None else TurnDecisionScope(project=self.worktree))
+
+    def context_goal_segments(self):
+        """Project this declaration's active goal without a second goal state."""
+        from .turn_context import GoalSegment
+
+        goal = self.active_goal
+        return (GoalSegment.capture(self, goal),) if goal is not None else ()
+
+    def retained_task_facts(self):
+        from .retained_task_facts import GoalTaskFact
+
+        return (GoalTaskFact(self.goal),) if self.goal is not None else ()
 
     def continuation_goal(self, original: Thread) -> Goal | None:
         """The current active goal still belongs to this captured project/goal."""
@@ -224,8 +240,9 @@ class Thread:
         return goal
 
     @property
-    def goal_checkpoint(self) -> GoalRevision | None:
-        return self.goal.checkpoint if self.goal is not None else None
+    def goal_checkpoint(self) -> GoalCheckpoint:
+        return (PresentGoalCheckpoint(self.goal.checkpoint)
+                if self.goal is not None else AbsentGoalCheckpoint())
 
     @property
     def has_process(self) -> bool:
@@ -285,10 +302,6 @@ class Thread:
         return self if resolved == self else resolved
 
     @property
-    def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.name, self.created_at)
-
-    @property
     def turn_identity(self) -> TurnIdentity | None:
         turn = self.active_turn
         if turn is None or turn.admission_generation is None or turn.turn_generation is None:
@@ -308,6 +321,16 @@ class Thread:
             turn_id=self.active_turn.id,
             admission_generation=self.active_turn.admission_generation,
         )
+
+    def require_turn_lease(self) -> TurnLeaseFence:
+        lease = self.turn_lease
+        if lease is None:
+            raise RelationViolationError("An admitted original turn is required")
+        return lease
+
+    def has_decision_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        lease = self.turn_lease
+        return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 
     def observed_turn(self, admission: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""

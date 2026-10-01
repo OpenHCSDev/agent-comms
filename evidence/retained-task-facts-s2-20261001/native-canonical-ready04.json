@@ -1,0 +1,12 @@
+{
+  "status": "CANONICAL_STOCK_PACKAGE_TRUST_PASS",
+  "native_manifest_sha256": "4519164ef97bb5ece65f98544179e544e0ac0b486d8976023b610f2397d937f8",
+  "tree_sha256": "a2b40e1da14b8db418c4d950c703273942a51ced0021e1280dea9b1625fbcd9f",
+  "package": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-4519164ef97bb5ec/node_modules/@earendil-works/pi-coding-agent",
+  "cli": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-4519164ef97bb5ec/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "canonical_build_log": "native-canonical-build04.txt",
+  "build_exit": 0,
+  "provider_calls": 0,
+  "public_changes": [],
+  "remaining": "installed paired native/S2/S5 checkpoint acceptance not yet run"
+}

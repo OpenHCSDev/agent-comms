@@ -99,6 +99,7 @@ async def test_native(retained_native_acp_owner):
     from agent_comms.coordinator import Coordination
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.historical_native_inputs import read_historical_native_inputs
+    from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.tools import invoke_tool
 
     native, comms, agent, sid = retained_native_acp_owner
@@ -175,7 +176,7 @@ async def test_native(retained_native_acp_owner):
                 recipient_lookup=stable_thread_lookup(owner.created_at),
                 source_seq=original.seq,
             )
-            assert len(proofs) == 1 and proofs[0].stage == "full"
+            assert len(proofs) == 1 and isinstance(proofs[0].execution, FullNativeExecution)
             assert proofs[0].expected_prompt_equality_established
         comms.agents.finish_turn(peer_lease)
         assert await agent.inputs.drain_inbox(sid) == 0

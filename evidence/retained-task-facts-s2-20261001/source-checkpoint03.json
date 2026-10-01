@@ -1,0 +1,20 @@
+{
+  "status": "SOURCE_CHECKPOINT_NOT_READY",
+  "source_base": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+  "shared_source": "normal merge of S5 275a7847; original WireRecord and PiHelper consumer closure retained",
+  "selection": "Original wire reference determines each lineage. Equal body originals have separate roots. Correction keeps its original root and scope; a new turn cannot revive a finished turn-scoped choice.",
+  "packing_relation": "HeldCompaction.capture classifies current/historical DecisionTaskFact from the same certified wire and RegistrySnapshot cut. Every original Message remains intact. Source revalidation repeats this derivation; no current-choice store, seen list, text filter or independent update lifecycle.",
+  "rename_relation": "TurnIdentity resolves only its original ThreadIncarnation through existing registry aliases, retaining original turn generation and TurnId. Deleted incarnation has no current applicability.",
+  "evidence": {
+    "effective_source03": "20 passed, 1 failed at parent-owned missing DeclaredFamily tool JSONschema. Emission, correction, equal-text independent identities, rename, turn end, goal replacement, deletion, canonical frozen source and worker custody checks passed. This is source-only evidence."
+  },
+  "remaining": [
+    "Parent shared generic family JSONschema contribution and full tool_catalog gate",
+    "Explicit authorized user corrections and current constraint applicability",
+    "Canonical completed tool/artifact provenance projection",
+    "Matched reviewed native package manifest and installed native checkpoint journeys",
+    "Non-selected native compaction retention and recent-window shrinking with tool pair custody",
+    "Separate S4 recall budget"
+  ],
+  "protected": "u05 classification remains unproven. Source01 interrupted correction and source02 original prior-format proof remain protected; none were replayed or decoded with a compatibility reader."
+}
