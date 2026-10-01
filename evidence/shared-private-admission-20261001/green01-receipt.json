@@ -1,0 +1,38 @@
+{
+  "elapsed_seconds": 23.736166883958504,
+  "owners": 3,
+  "history_rows": 30,
+  "bus_bytes": 98398,
+  "localhost_provider_posts": 3,
+  "native_originals": [
+    {
+      "session": "wire/native-sessions/eeaa082359aea51ae55ed9cc29d5fb7e/2026-10-01T15-21-10-920Z_01a0f80e-2205-7447-af37-ff429c98a9f2.jsonl",
+      "entry_id": "04537e36"
+    },
+    {
+      "session": "wire/native-sessions/688443828232112d067213f578bb1e39/2026-10-01T15-21-11-960Z_01a0f80e-2617-75f7-91cf-dc112f8f33b4.jsonl",
+      "entry_id": "643f4ae5"
+    },
+    {
+      "session": "wire/native-sessions/dbcda9eea152d26ab620161a8b2389d0/2026-10-01T15-21-11-127Z_01a0f80e-22d6-7228-b1fd-9d16bee962fe.jsonl",
+      "entry_id": "e238fc36"
+    }
+  ],
+  "failure": null,
+  "all_owned_workers_retired": true,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "installed_interpreter": "/home/ts/wt/comms-shared-private-admission-custody-20261001/.artifacts/runtime-admission484/bin/python",
+  "acp_notification_count": 0,
+  "contention": [
+    {
+      "held_seconds": 3.0001043069642037,
+      "original_reserved_input": "40f4ef5b6e4c4761f70116f9c4a55158",
+      "resource": "binding"
+    }
+  ],
+  "cancellation": {},
+  "all_native_turns_active_before_provider_release": true,
+  "acp_fact_counts": {}
+}
