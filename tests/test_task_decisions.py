@@ -70,6 +70,10 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     assert "text" not in FieldCodec.encode(original.task)
     assert "decision" not in original.to_wire()
     assert Message.from_committed_wire(original.to_wire()) == original
+    retired_format = original.to_wire()
+    retired_format["decision"] = retired_format.pop("task")
+    with pytest.raises(ValueError, match="Unknown fields"):
+        Message.from_committed_wire(retired_format)
     first_bytes = (comms.root / "bus.jsonl").read_bytes()
     monkeypatch.setenv("PI_AGENT_ID", "beta")
     with pytest.raises(RelationViolationError, match="another author's"):

@@ -1,0 +1,102 @@
+# Original authored task family: source checkpoint
+
+Owner: Schrodinger, Core #481. Production source checkpoint `92096124` follows
+the reviewed artifact checkpoint `d1e6c4bb` and normally merges main #482
+`65d6cfe9`. The artifact publisher, native recipe, generated artifact schema and
+revision representation retain their reviewed bytes. No native build, provider
+input, installed package or public store is changed by this checkpoint.
+
+## Determining relation and implementation
+
+An explicit authored declaration belongs to its enclosing original Message and
+admitted author/turn. The same source determines project/goal or turn scope and
+authorized correction lineage. Exact constraint wording belongs only to
+`Message.body`. A fact is a frozen projection of that source, never an editable
+memory record. Ordinary human input remains its original source evidence; neither
+the tool nor compaction infers constraint membership from prose.
+
+`TaskAttachment` replaces the choice-only `DecisionAttachment` on `Message.task`.
+`ScopedTaskDeclaration` owns capture from the original turn lease, author proof,
+scope, original-reference correction admission and current applicability.
+`Decision` retains its chosen/rejected signature; `Constraint` supplies explicit
+restriction membership without another text field. `CommsAuthoredTaskTool` owns
+the original publication path. The catalog derives `comms_decision` and
+`comms_constraint` from their concrete declarations; the abstract parent is not
+advertised. The new constraint tool records its own admitted author's statement
+and cannot manufacture human authorship.
+
+`AuthoredTaskFact` owns the common current/historical projection operation for
+choices, constraints and original human supersession. `current_authored_sources`
+resolves the existing captured original-reference lineage. A user supersession
+can retire either declared source; later peer corrections cannot supersede that
+human source in the effective projection. Historical evidence remains present.
+Renaming resolves the same incarnation; a replaced goal invalidates its original
+goal scope. Foreign authors, wrong declaration categories and ambiguous/missing
+original references do not acquire correction authority.
+
+This is capability-based factoring rather than a new task ledger. BOUND-2 and
+IDEN-5 keep facts with original messages; IMPL-4 moves shared declaration policy
+to its ancestor; MEMB-1 keeps catalog and retention membership derived. No
+kind/type switch, copied wording, separate seen registry or retained-state store
+was introduced. `task_decisions.py` and its old generic APIs are removed rather
+than retained as aliases.
+
+## Consumer crossing
+
+| Consumer | Current determining declaration |
+| --- | --- |
+| Message writer, strict decoder and publication identity | `Message.task: TaskAttachment`; original seq/ID/body and routing retain their own owners |
+| Agent/user publication | `Messaging` passes that declaration to the existing publisher; `Publisher` still validates under the original certified publication read |
+| Tool/CLI/native catalog | Concrete `ToolRequest` declarations through the same dispatcher/catalog; common authored tool captures one original admitted lease |
+| Sender retained-source selection | `CommittedDelivery.compaction_messages_for` queries the message's declared authored-task capability |
+| Wire/source capture | Existing certified wire traversal obtains member-projected facts; `HeldCompaction` still owns the original source fence |
+| Packing and commit | The same `RetainedTaskFacts` payload and exact-prefix validation; no second summary/commit path |
+| Context/render/export consumers | Original `fact.source`, `Message.reference`, `Message.body`, `Message.task` and member hooks; Einstein #474 owns consuming operations |
+
+## Evidence and strength
+
+`authored-source16.log`: 13 source cases pass in 3.10 seconds, including the
+original decision journey, new exact-wording constraint/correction journey,
+human precedence, rename, goal replacement, cross-author refusal, captured wire
+lineage and the artifact-source control. These execute the actual source
+dispatcher, private publisher and certified source read on owned fixtures.
+They are not installed native/ACP/UI acceptance.
+
+The first run's two failures remain in `authored-source15.log`: older compaction
+fixtures fabricated revision strings and contained no witnessed retained branch.
+They now use real private saved-source bytes, an original entry/branch and the
+same `NativeRevisionText`/`FileRevision` witness; production fences were not
+weakened. The required committed-source ratchet against `65d6cfe9` exits zero
+with no positive numeric delta. The separate boundary case checks that the
+retired populated `decision` field is refused, rather than decoded by a fallback.
+
+## Durable-format scope and remaining work
+
+The original wire field is promoted from `decision` to `task`; this changes an
+owned format, so this checkpoint is **not format-ready or install-ready**.
+`authored-source-format-census14.json` records a read-only observation of the
+public bus: 266 rows, zero populated decision attachments. That is not permission
+to modify the active root or an assumption that a later cutover has zero rows.
+The preserved original `s5final01` wire has seven rows, including three affected
+choice/user-supersession attachments with their seq/IDs recorded. Neither original
+store was changed.
+
+Before an affected source is reopened with this decoder, the existing outside-src
+cutover must validate its old typed preimage and carry populated declarations
+once. Preserve original message IDs, references, exact body, author, frozen
+audience, handling and UNKNOWN inputs. Changed envelope representation must
+recertify its declared audience/content relation and reset only derived indexes
+through the existing writer-owned custody. An empty default, raw field rename,
+new runtime reader or copied signature is insufficient. The private original
+fixtures, old packages and their proofs remain protected until that acceptance.
+
+Original HUMAN pin/correction/drop membership and source admission still need
+their own member of this same family. A model's scoped declaration cannot stand
+in for an original USER source or require that user to have a model-turn lease.
+Einstein's #474 commands/render/export depend on that declared source relation;
+no competing ledger or inferred HumanInputTaskFact classification is authorized.
+
+Full S2 constraints, artifact repository/symbol provenance, automatic retention,
+three genuine native compactions and S4 recall remain open. This source slice
+does not delay independent release of the reviewed partial foundation or artifact
+checkpoint. Native build remains withheld under the parent's disk-budget rule.
