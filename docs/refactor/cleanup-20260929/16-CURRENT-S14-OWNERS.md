@@ -46,13 +46,23 @@ Full live channel acceptance follows quiet history carry, not before it.
 | --- | --- | --- |
 | Receiver admission and DM/IRC readiness | Arendt476/267; parent installation | Both merged. Native cancel-before-grant and independent reply pass; actual DM readiness passes. Quiet installation and post-carry channel acceptance remain. |
 | Original archived history | Mendel477/268 | Both merged. Physical Saved→native41MB history→End→IRC passes36.43s. Final combined private ArchiveJourney PASSES36.23s under SAME45s deadline: actual Saved/native41MB history/focus/End/IRC personally reviewed. Failed05 observer export preserved; optional unused selector DTO skipped in merged273, retaining its PNG/time. Original source/index carry prepared, not published. |
-| Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271; Kepler profiles |269 merged: body constructions275→119; actual41MB journey16 checks pass91.07s. CPU remains high. Current DiffView native Resize change removes2 mount-induced full-scene arrangements; full consumer/installed gate unfinished. Original TC1/T9/buffer/velocity/End/focus/resource scope remains. |
+| Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271; Kepler profiles |269 merged: body constructions275→119; actual41MB journey16 checks pass91.07s. CPU remains high. Native library PR1 merged f6d3cdd0: Resize owns sizing;5 production lines deleted. Actual installed four-consumer check removes4 mount-triggered full layouts and preserves ordinary/prepared/fixed/padded resize behavior. Full original41MB comparison and TC1/T9/buffer/velocity/End/focus/resource scope remain. Not yet the public default. |
 | S5 phase1 context ownership | Einstein473 | Installed native/ACP/context --turn/--diff journey19 passes26.408s on frozen private270/451; no paid calls. Current3948 coherent source includes476/477 and nominal S2 changes. Full logical attribution and byte-identical actual user/provider acceptance remain DRAFT. |
 | S2 retained facts and provenance | Schrodinger475; Toad pair272 | Selected installed native retention passes9.59s. Authenticated ingress origin extends original PromptRequest/reservation/StoredInput; unproven historical inputs stay neutral. General constraints/artifact proofs/three checkpoints unfinished. Explicit controller producer methods granted; Einstein coordinates context API. |
 | S5 phase2 authored retained operations | Einstein474 | Dependency: S2 retained classes. Pin/supersede/drop/export and real compaction/fresh-thread journeys remain. |
 | Shared FieldCodec family schema | Parent478 |21 production lines added/3 deleted; no builtin handler or alternate codec.38 source checks and receiving full tool catalog pass. Installed19 used stock SDK tools and does NOT prove the Core family catalog. The same next S2/S5 native tool/retention journey must close that receiving boundary; full feature scopes remain with473/475. |
 | Quiet release | Arendt prepares; parent sole executor | Existing StoppedOwnerInstallation batch only. Exact next operator reviewed and invocation frozen with actual UI/archive hashes. Readback stays under the original wire custody. Fresh guard finds13idle original owners and openToad519107; SAVE/CLOSE question pending before execution. |
 | Original closure and storage | Parent432 | Original T2/C0/round-two/T4/checklist remains active. Current C0 census has no separate unclaimed family site. Toad50 current real Chromium serving/ACP/settings/security/download acceptance passes without provider calls. Preserve protected prefixes, sessions, uncertain inputs and private owners. |
+
+The next S2/S5 private pair is independent of the frozen receiver release.
+Mendel owns its single normal69-package stage in parent270; Schrodinger and
+Einstein own the shared installed journey. Source pins are Core3f0af494
+(includes context d7c2cf3d), Toad2727f32d8ec and verified nativef1178500.
+The receiving checkpoint38614c38 is pushed; installed source/assets/entrypoint
+and full native trust checks are still in progress. No second native builder,
+public package change or readiness claim. This journey must exercise the Core
+declared tool catalog/nested-family tool and actual Toad original/followup
+ingress/context, unlike earlier19's four stock SDK tools.
 
 ## Quiet history carry
 
