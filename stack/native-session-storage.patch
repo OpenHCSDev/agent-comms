@@ -1342,7 +1342,7 @@
      }
      /**
       * Fork a session from another project directory into the current project.
-@@ -1362,46 +1267,32 @@
+@@ -1362,45 +1267,31 @@
       * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
       */
      static forkFrom(sourcePath, targetCwd, sessionDir, options) {
@@ -1947,7 +1947,7 @@
      if (!firstKeptEntryId) {
          throw new Error("First kept entry has no UUID - session may need migration");
      }
-@@ -647,23 +628,11 @@
+@@ -647,22 +628,10 @@
  /**
   * Generate a summary for a turn prefix (when splitting a turn).
   */
@@ -1983,7 +1983,7 @@
  import { constants, copyFileSync, existsSync, mkdirSync } from "node:fs";
  import { basename, join, parse, resolve } from "node:path";
  import { resolvePath } from "../utils/paths.js";
-@@ -166,8 +167,8 @@
+@@ -166,7 +167,7 @@
          }));
          if (options?.setup) {
              await options.setup(this.session.sessionManager);
@@ -2150,7 +2150,7 @@
              if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
                  addUsageToTotals(usageTotals, entry.usage);
              }
-@@ -3121,31 +3123,21 @@
+@@ -3121,30 +3123,20 @@
          // After compaction, the last assistant usage reflects pre-compaction context size.
          // We can only trust usage from an assistant that responded after the latest compaction.
          // If no such assistant exists, context token count is unknown until the next LLM response.
@@ -2197,7 +2197,7 @@
              tokens: estimate.tokens,
 --- a/dist/core/cache-stats.d.ts
 +++ b/dist/core/cache-stats.d.ts
-@@ -34,17 +34,17 @@
+@@ -34,16 +34,16 @@
   * Cumulative cache waste across a session: prompt tokens that should have been
   * cache reads (they were in the previous turn's prompt) but were re-billed.
   */
@@ -2247,7 +2247,7 @@
  }
  /**
   * Cumulative cache waste across a session: prompt tokens that should have been
-@@ -84,13 +83,14 @@
+@@ -84,12 +83,13 @@
      return scan(entries, models).totals;
  }
  /**
@@ -2280,7 +2280,7 @@
      /** Common ancestor between old and new position, if any */
      commonAncestorId: string | null;
  }
-@@ -87,13 +88,13 @@
+@@ -87,12 +88,12 @@
   * @param entries - Entries in chronological order
   * @param tokenBudget - Maximum tokens to include (0 = no limit)
   */
@@ -2341,7 +2341,7 @@
  }
  // ============================================================================
  // Entry to Message Conversion
-@@ -118,9 +94,8 @@
+@@ -118,8 +94,7 @@
          }
      }
      // Second pass: walk from newest to oldest, adding messages until token budget
@@ -2429,7 +2429,7 @@
      /** Whether this is a split turn (cut point in middle of turn) */
      isSplitTurn: boolean;
      tokensBefore: number;
-@@ -130,8 +102,10 @@
+@@ -130,7 +102,9 @@
      /** Compaction settions from settings.jsonl	*/
      settings: CompactionSettings;
 +    contextWindow: number;
@@ -2440,6 +2440,14 @@
  /**
   * Generate summaries for compaction using prepared data.
   * Returns CompactionResult - SessionManager adds uuid/parentUuid when saving.
+@@ -139,5 +113,5 @@
+  * @param customInstructions - Optional custom focus for the summary
+  * @param sessionId - Optional routing session ID forwarded without enabling prompt caching
+  */
+-export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<CompactionResult>;
++export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string, retainedText?: string): Promise<CompactionResult>;
+ //# sourceMappingURL=compaction.d.ts.map
+\ No newline at end of file
 --- a/dist/core/export-html/index.js
 +++ b/dist/core/export-html/index.js
 @@ -1,4 +1,4 @@
@@ -2557,7 +2565,7 @@
          leafId: sm.getLeafId(),
          systemPrompt: undefined,
          tools: undefined,
-@@ -220,8 +261,9 @@
+@@ -220,7 +261,8 @@
          const inputBasename = basename(resolvedInputPath, ".jsonl");
          outputPath = `${APP_NAME}-session-${inputBasename}.html`;
      }
@@ -2584,7 +2592,7 @@
       */
      setFooter(factory: ((tui: TUI, theme: Theme, footerData: ReadonlyFooterDataProvider) => Component & {
          dispose?(): void;
-@@ -486,8 +487,8 @@
+@@ -486,7 +487,7 @@
      targetId: string;
      oldLeafId: string | null;
      commonAncestorId: string | null;
@@ -2595,7 +2603,7 @@
      customInstructions?: string;
 --- a/dist/core/output-guard.js
 +++ b/dist/core/output-guard.js
-@@ -68,8 +68,13 @@
+@@ -68,7 +68,12 @@
      if (text.length === 0) {
          return;
      }
@@ -2624,7 +2632,7 @@
      let model = options.model;
      let modelFallbackMessage;
      // If session has data, try to restore model from it
-@@ -238,8 +238,7 @@
+@@ -238,7 +238,6 @@
      });
      // Restore messages if session has existing data
      if (hasExistingSession) {
@@ -2640,7 +2648,7 @@
  import { dirname } from "node:path";
  import { resolvePath } from "../utils/paths.js";
  import { CURRENT_SESSION_VERSION } from "./session-manager.js";
-@@ -17,17 +17,19 @@
+@@ -17,16 +17,18 @@
          timestamp,
          cwd: sessionManager.getCwd(),
      };
@@ -2799,7 +2807,7 @@
      /**
       * Get session header.
       */
-@@ -283,8 +262,7 @@
+@@ -283,7 +262,6 @@
       * The session is append-only: use appendXXX() to add entries, branch() to
       * change the leaf pointer. Entries cannot be modified or deleted.
       */
@@ -2827,7 +2835,7 @@
  export { type CompactionSettings, type DefaultProjectTrust, type FullscreenExitOutput, type ImageSettings, type PackageSource, type RetrySettings, SettingsManager, type SettingsManagerCreateOptions, type TuiMode, } from "./core/settings-manager.ts";
  export { formatSkillsForPrompt, type LoadSkillsFromDirOptions, type LoadSkillsResult, loadSkills, loadSkillsFromDir, type Skill, type SkillFrontmatter, } from "./core/skills.ts";
  export { createSyntheticSourceInfo } from "./core/source-info.ts";
-@@ -33,5 +33,6 @@
+@@ -33,4 +33,5 @@
  export { formatDimensionNote, type ResizedImage, resizeImage } from "./utils/image-resize.ts";
  export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.ts";
  export { getPowerShellConfig, getShellConfig } from "./utils/shell.ts";
@@ -2855,7 +2863,7 @@
  export { SettingsManager, } from "./core/settings-manager.js";
  // Skills
  export { formatSkillsForPrompt, loadSkills, loadSkillsFromDir, } from "./core/skills.js";
-@@ -45,5 +45,6 @@
+@@ -45,4 +45,5 @@
  export { detectSupportedImageMimeTypeFromFile } from "./utils/mime.js";
  // Shell utilities
  export { getPowerShellConfig, getShellConfig } from "./utils/shell.js";
@@ -2865,7 +2873,7 @@
 +export { EntryStore, DiskEntryStore, MemoryEntryStore, EntryBranchRange } from "./core/session-entry-store.js";
 --- a/dist/main.js
 +++ b/dist/main.js
-@@ -637,8 +637,8 @@
+@@ -637,7 +637,7 @@
          const scopedModels = modelPatterns && modelPatterns.length > 0
              ? await resolveModelScope(modelPatterns, modelRuntime, { signal: AbortSignal.timeout(15_000) })
              : [];
@@ -2876,7 +2884,7 @@
              if (!sessionOptions.model) {
 --- a/dist/modes/interactive/components/footer.js
 +++ b/dist/modes/interactive/components/footer.js
-@@ -77,8 +77,8 @@
+@@ -77,7 +77,7 @@
          // Calculate cumulative usage from ALL session entries (not just post-compaction messages)
          const usageTotals = createUsageTotals();
          let latestCacheHitRate;
@@ -2973,7 +2981,7 @@
          if (compactionCount > 0) {
              const times = compactionCount === 1 ? "1 time" : `${compactionCount} times`;
              this.showStatus(`Session compacted ${times}`);
-@@ -5194,13 +5193,13 @@
+@@ -5194,12 +5193,12 @@
      handleSessionCommand() {
          const stats = this.session.getSessionStats();
          const sessionName = this.sessionManager.getSessionName();
