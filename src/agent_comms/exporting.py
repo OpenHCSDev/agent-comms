@@ -24,7 +24,6 @@ from .field_codec import FieldCodec
 from .messages import Message
 from .message_reference import MessageReference
 from .registration import Registration
-from .retained_context import RetainedSegment
 
 
 class WireExportFormat(DeclaredFamily, affix="Format"):
@@ -94,26 +93,6 @@ class TextFormat(SelectableWireExportFormat):
             f"[{timestamp}] [{' '.join(attributes)}] "
             f"<{message.sender} -> {message.target}>\n{body}\n"
         ).encode()
-
-
-@dataclass(frozen=True)
-class RetainedFormat(WireExportFormat):
-    """An instruction artifact renders wording from its certified original row."""
-
-    segment: RetainedSegment
-
-    def header(self, metadata: Mapping[str, object]) -> bytes:
-        return ("# Authored retained context\n"
-                f"# metadata: {self.json_record(metadata)}\n\n").encode()
-
-    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
-        original = self.segment.original_text_source(message)
-        provenance = dict(declaration=FieldCodec.encode(message.reference),
-                          wording=FieldCodec.encode(original.reference),
-                          author=original.sender, author_role=original.sender_role.value,
-                          task=FieldCodec.encode(message.task))
-        return (f"# source: {self.json_record(provenance)}\n"
-                + original.body + "\n\n").encode()
 
 
 @dataclass(frozen=True)

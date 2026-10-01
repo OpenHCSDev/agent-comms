@@ -241,39 +241,6 @@ class HistoryViews:
             max_bytes=max_bytes,
         )
 
-    def _retained_context_unlocked(self, owner, snapshot):
-        """Caller holds wire/registry publication and original bus read locks."""
-        from .retained_context import RetainedSegment
-        from .retained_task_facts import RetainedTaskFacts
-        from .turn_context import OwnerProvenance
-
-        digest, facts = self.bus.log.compaction_messages_unlocked(owner.incarnation)
-        retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
-        return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest))
-
-    def retained_context(self, name: str):
-        """Read authored context at the original certified wire/registry cut."""
-        with _store_lock(self._wire_lock_path), self.bus.log.locked():
-            snapshot = self.registry.snapshot()
-            return self._retained_context_unlocked(snapshot.require(name), snapshot)
-
-    def export_retained(self, name: str, destination: Path | str, *, overwrite: bool = False):
-        """Publish current authored wording; original lineage owns selection."""
-        from .exporting import AuthoredSourceScope, FullLimit, RetainedFormat
-        started_at = time.time()
-        with _store_lock(self._wire_lock_path), self.bus.log.locked():
-            snapshot = self.registry.snapshot()
-            owner = snapshot.require(name)
-            segment = self._retained_context_unlocked(owner, snapshot)
-            sources = tuple(sorted(segment.retained.current_authored_sources(owner, snapshot),
-                                   key=lambda message: message.seq))
-            through = self.bus.log._private_marker_unlocked().last_seq
-        return WireTranscriptExporter(
-            format=RetainedFormat(segment),
-            scope=AuthoredSourceScope(tuple(message.reference for message in sources)),
-            limit=FullLimit(), boundary=WireExportBoundary(through, started_at),
-        ).export(sources, Path(destination).expanduser(), overwrite=overwrite)
-
     def export_wire(
         self,
         destination: Path | str,

@@ -47,7 +47,7 @@ References enter as `sequence:message_id` and decode once into MessageReference.
 Human pin admission, correction/drop lineage and current scope remain on Sch's
 original task family and Messaging publication, without agent leases.
 
-HistoryViews captures one certified wire/registry cut through the existing
+WireLog captures one certified wire/registry cut through its existing
 compaction-source reader. RetainedSegment holds that immutable source projection,
 renders its existing exact-source envelope and derives provenance from original
 references and the recipient/digest receipt. It owns no mutable state or text
@@ -59,7 +59,9 @@ AuthoredSourceScope describes only the immutable artifact selection. Original
 WireTranscriptExporter owns limits, checksums, temporary files, fsync and atomic
 publication. Existing JSONL/text formats compose SelectableWireExportFormat so
 the ordinary export CLI does not advertise a format needing retained-source
-custody as a constructor-free option. No second writer or command registry.
+custody as a constructor-free option. No second writer or command registry. The original export-wire query is unchanged.
+The segment freezes only original reference selection and export-boundary metadata
+for this read; they have no update lifecycle or claim/enrollment authority.
 
 One continuous private workflow covers human pin, exact Unicode/multiline text,
 original source identity, no agent lease, wrong-recipient refusal before write,

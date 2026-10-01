@@ -28,7 +28,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
                            "--worktree", owner.worktree)
     assert code == 0
     pin = reference(pinned["pin"])
-    snapshot = comms.views.retained_context(owner.name)
+    snapshot = comms.bus.log.retained_context(owner.name, comms.registry)
     assert FieldCodec.decode(RetainedSegment, FieldCodec.encode(snapshot)) == snapshot
     assert snapshot.text().count(wording.replace("\n", "\\n")) == 1
     assert comms.registry.require(owner.name).turn_lease is None
@@ -59,7 +59,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     assert code == 0 and exported["exported_messages"] == 1
     assert replacement in destination.read_text() and wording not in destination.read_text()
     assert snapshot.text().count(wording.replace("\n", "\\n")) == 1
-    current = comms.views.retained_context(owner.name)
+    current = comms.bus.log.retained_context(owner.name, comms.registry)
     assert wording.replace("\n", "\\n") in current.text() and replacement in current.text()
     code, dropped = command("drop-constraint", owner.name, "--source", pin,
                             "--worktree", owner.worktree)
@@ -74,5 +74,5 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     from agent_comms.comms import Comms
 
     reopened = Comms(comms.root)
-    restored = reopened.views.retained_context(owner.name)
-    assert restored.text() == comms.views.retained_context(owner.name).text()
+    restored = reopened.bus.log.retained_context(owner.name, reopened.registry)
+    assert restored.text() == comms.bus.log.retained_context(owner.name, comms.registry).text()

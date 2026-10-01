@@ -314,8 +314,8 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     overwrite: bool = option("--overwrite", default=False)
 
     def apply(self, ctx: Comms) -> Any:
-        return ctx.views.export_retained(self.thread, self.output,
-                                         overwrite=self.overwrite).to_wire()
+        return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
+            self.output, overwrite=self.overwrite).to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -326,7 +326,7 @@ class RetainedContextCliCommand(CliCommand, declared_name="retained-context"):
     def apply(self, ctx: Comms) -> Any:
         from .field_codec import FieldCodec
 
-        segment = ctx.views.retained_context(self.thread)
+        segment = ctx.bus.log.retained_context(self.thread, ctx.registry)
         return {"kind": segment.declared_name, "text": segment.text(),
                 "provenance": FieldCodec.encode(segment.provenance), "input_supplied": False}
 
