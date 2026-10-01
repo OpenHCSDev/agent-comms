@@ -110,29 +110,30 @@ class NativeIntent:
         selected: SelectedCommitReference | None = None,
     ) -> str:
         """Retain the original source view alongside the declared native intent."""
+        from .retained_task_facts import RetainedTaskFacts
+
         record = dict(
             FieldCodec.encode(self), owner=FieldCodec.encode(owner),
             source=FieldCodec.project(source, "journal"),
         )
         if selected is not None:
             record.update(FieldCodec.encode(selected))
-        return self.frame_record(record)
-
-    @classmethod
-    def frame_record(cls, record: dict[str, Any]) -> str:
-        from .retained_task_facts import RetainedTaskFacts
-
         return RetainedTaskFacts.frame_journal(
             record, retained_payload=RetainedTaskFacts.canonical_journal_bytes(
-                record["source"]["retained"]
+                FieldCodec.project(source.retained, "journal")
             ),
         )
 
     @classmethod
     def read(cls, operation: CompactionOperation) -> NativeIntent:
+        from .retained_task_facts import RetainedTaskFacts
+
         raw = FieldCodec.decode(dict[str, Any], json.loads(operation.intent_json))
-        cls.frame_record(raw)
-        return FieldCodec.decode(cls, {wire: raw[wire] for _, wire in FieldCodec._fields(cls)})
+        intent = FieldCodec.decode(cls, {wire: raw[wire] for _, wire in FieldCodec._fields(cls)})
+        # Recovery consumes this declaration's request controls, never promotes
+        # the containing journal's redacted source view into task authority.
+        RetainedTaskFacts.frame_journal(FieldCodec.encode(intent))
+        return intent
 
     def identity(self, commit_id: str) -> NativeCommitIdentity:
         return NativeCommitIdentity(commit_id, self.payload_digest, self.metadata_digest)
