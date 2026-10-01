@@ -12,6 +12,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation, projected
 from .native_input_record import NativeInputIdText
 from .thread_identity import GenerationCounter, ThreadIncarnation
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -124,6 +125,8 @@ class StoredInput(InputAttempt):
     admission: int = field(metadata={"public_exclude": True})
     target: str
     source_text: str = field(metadata={"public_name": "text"})
+    origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
+                               metadata={"public_exclude": True, "wire_omit_default": True})
     notice_dismissed: bool = field(
         default=False, metadata={"public_exclude": True, "wire_omit_default": True}, kw_only=True
     )

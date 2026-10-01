@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .errors import RelationViolationError
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .input_attempt import (
     GoalInputDecision,
     InputAttempt,
@@ -101,10 +102,8 @@ class InputDocument:
         Unadmitted future inputs remain in their original durable queue; they
         cannot become the source of an earlier native checkpoint.
         """
-        from .retained_task_facts import InputTaskFact
-
         rows = self.compaction_rows(owner, pending_input_key, queue)
-        return rows, tuple(InputTaskFact(row) for row in rows.values())
+        return rows, tuple(row.origin.retained_fact(row) for row in rows.values())
 
     def started_for_native(
         self, lease: TurnLeaseFence, native_id: str, sent_text: str,
@@ -187,10 +186,12 @@ class InputDispositions(LockedStore[InputDocument]):
         return message.response_policy.disposition_key(message, owner)
 
     def record(
-        self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str
+        self, key: str, *, seq: int | None, owner: str, admission: int, target: str, text: str,
+        origin: InputOrigin = UnattributedInputOrigin(),
     ) -> bool:
         """Return acceptance only after the reservation and directory are fsynced."""
-        row = ReservedInput(key, seq, owner, admission, target, text)
+        row = ReservedInput(key, seq, owner, admission, target, text,
+                            origin=origin)
         recorded = False
 
         def change(document: InputDocument) -> InputDocument:

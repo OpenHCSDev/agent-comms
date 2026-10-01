@@ -352,14 +352,10 @@ class Publisher:
                     raise RelationViolationError(
                         "Initial sender must be a visible registered executable."
                     )
-            elif (
-                sender_thread.role.executable
-                or message.sender != sender_thread.name
-                or _human_origin.sender != sender_thread.name
-                or _human_origin.created_at != sender_thread.created_at
-                or _human_origin.worktree != sender_thread.worktree
-            ):
-                raise RelationViolationError("Local USER origin differs from registered identity.")
+            else:
+                _human_origin.require_registered(snapshot)
+                if message.sender != _human_origin.sender:
+                    raise RelationViolationError("Local USER origin differs from registered identity.")
             catalog = self._channels.read()
             if BuiltinChannel.aggregate_target(message.target) or catalog.is_view_target(
                 message.target

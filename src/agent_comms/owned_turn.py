@@ -17,6 +17,7 @@ from .acp_failure import PromptFailureReceipt
 from .channel_input_batch import InputBatch
 from .goal_attempts import LaunchPermit
 from .messages import Message
+from .input_origin import WireInputOrigin
 from .owned_send_admission import OwnedSendAdmission
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
@@ -157,6 +158,10 @@ class OwnedTurn:
                             text=ScheduledTurn.incoming(
                                 origin, aliases=self.snapshot.aliases
                             ).prompt,
+                            origin=WireInputOrigin(
+                                self.runner.comms.bus.log.read_metadata_unlocked().wire_root_id,
+                                origin.reference,
+                            ),
                         )
                     self.original_keys = (*self.original_keys, self.key)
         self.batch = InputBatch.capture(
