@@ -293,7 +293,7 @@ def verify_sent_full_input(
         )
         if row is None or row.identity != expected:
             raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
-        if row.sent_owner_admission_generation != admission.owner_admission_generation:
+        if not row.sent_owner_admission_generation.matches(admission.owner_admission_generation):
             raise SelectedToolDenied("Selected tool names another sending admission")
         if row.session_id is not None or row.verdict is not None:
             raise SelectedToolDenied("Selected input was already settled")

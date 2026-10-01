@@ -119,15 +119,7 @@ class OwnerReleaseReceipt:
         released = AdmissionIdentity(self.thread.incarnation, self.after)
         if not actual.includes(released):
             raise RelationViolationError("Native release admission regressed")
-        if source.sent_owner_admission_generation is None:
-            snapshot.statuses[current.name].require_stopped()
-            if actual != released:
-                raise RelationViolationError("Unrecorded native send has no exact stopped release")
-        else:
-            sent = AdmissionIdentity(self.thread.incarnation, source.sent_owner_admission_generation)
-            fence = AdmissionIdentity(self.thread.incarnation, self.before)
-            if not fence.includes(sent):
-                raise RelationViolationError("Native release predates the sending admission")
+        source.sent_owner_admission_generation.require_release(self, snapshot, current)
 
 
 class OwnerReleaseStore(LockedStore[dict[str, OwnerReleaseReceipt]]):

@@ -8,6 +8,7 @@ import pytest
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import NativeInputReference, UnrecordedNativeInputReference
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from agent_comms.native_admission_epoch import RecordedNativeAdmission
 
 
 def cursor():
@@ -60,7 +61,7 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
     assert reservation().reference == UnrecordedNativeInputReference()
     with pytest.raises(IdentityConflict, match="partial"):
         _ = replace(reservation(), request_generation=1).reference
-    recorded = replace(reservation(), sent_owner_admission_generation=2,
+    recorded = replace(reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2),
                        session_id="original-session", session_file="/original/session.jsonl",
                        session_entry_id="original-entry", request_generation=1,
                        llm_context_digest="f" * 64)

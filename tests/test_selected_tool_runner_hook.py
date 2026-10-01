@@ -19,6 +19,7 @@ from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_admission_epoch import UnrecordedNativeAdmission
 from agent_comms.selected_actions import SelectedExistingFileWrite
 from agent_comms.selected_tool_broker import (
     SelectedToolIntent,
@@ -60,7 +61,7 @@ def nominal_broker_stub(monkeypatch):
         assert row.owner_thread == owner
         assert row.owner_lookup == admission.recipient_lookup
         assert row.attempt_ordinal == admission.attempt_ordinal == 1
-        assert row.stage == "full" and row.sent_owner_admission_generation is None
+        assert row.stage == "full" and row.sent_owner_admission_generation == UnrecordedNativeAdmission()
         assert (
             comms.registry.snapshot().admission_generations[owner]
             == admission.owner_admission_generation
@@ -193,7 +194,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         result = await fake(*args, **kwargs)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             row = NativeRuntimeInput.one(store.session._connection, input_id=kwargs["input_id"])
-        assert row.sent_owner_admission_generation == bound[0][0].owner_admission_generation
+        assert row.sent_owner_admission_generation.matches(bound[0][0].owner_admission_generation)
         return result
 
     monkeypatch.setattr(TrackedTurnSession, "execute", observed)
@@ -284,7 +285,9 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
     async def failed(*args, **kwargs):
         result = await fake(*args, **kwargs)
         if failure == "wrong_input":
-            return replace(result, context=replace(result.context, input_id="not-this-input"))
+            original = result.context.input_id
+            different = ("1" if original[0] == "0" else "0") + original[1:]
+            return replace(result, context=replace(result.context, input_id=different))
         if failure == "stale_epoch":
             # Disposable-only simulated admission revocation, not a live
             # stop/restart or destructive registry state transition.

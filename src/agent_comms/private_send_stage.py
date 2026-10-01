@@ -155,7 +155,7 @@ class NativeSendStage(ABC):
 
     def require_reservation(
         self, db: sqlite3.Connection, input_id: str, owner: ParticipantOwner, token_digest: str
-    ) -> None:
+    ) -> NativeRuntimeInput:
         reserved = NativeRuntimeInput.one(db, input_id=input_id)
         if reserved is None:
             raise StaleFence("native reservation missing before send")
@@ -168,6 +168,7 @@ class NativeSendStage(ABC):
             ).require_valid()
         except ReservationViolationError as error:
             raise StaleFence(f"native reservation changed before send: {error}") from error
+        return reserved
 
     def require_binding(
         self,

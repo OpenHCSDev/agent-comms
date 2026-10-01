@@ -164,7 +164,7 @@ class NativeAlreadyAdmittedRule(ReservationRule):
     explanation = "The native input was already bound to a sending admission."
 
     def violated(self, check: NativeReservationCheck) -> bool:
-        return check.row.sent_owner_admission_generation is not None
+        return check.row.sent_owner_admission_generation.reservation_violation()
 
 
 class NativeAlreadyProvenRule(ReservationRule):

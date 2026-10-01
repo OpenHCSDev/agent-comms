@@ -84,7 +84,10 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
             owner_name="alpha"
         )
         assert current is not None
-        assert current.covered_seq == current.injected_seq == selected.seq
+        assert current.injected_seq == selected.seq
+        # Publication adds an original passive reply. Covered no-wake source
+        # can advance through it; the injected native source stays selected.
+        assert current.covered_seq == comms.views.full_history()[-1].seq
         assert current.input_id == second.input_id
         assert (
             current.owner_admission_generation
@@ -209,7 +212,7 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
                 lookup,
                 "alpha-new",
                 2,
-                proof.sent_owner_admission_generation,
+                proof.sent_owner_admission_generation.to_wire(),
                 second_message.seq,
                 second_message.seq,
                 second.input_id,
