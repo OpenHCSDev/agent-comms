@@ -29,3 +29,34 @@ boundaries without retrying an uncertain original. Source controls alone do not
 prove user readiness. CI deferred; parent owns eventual public activation.
 
 This seed opens a draft before long work. No source fix or gate is claimed yet.
+
+## Original read-only diagnosis
+
+Original seq262/message7b8ade935c6f and seq266/message1a76688ce443 have the same
+six frozen recipients and collective bounded-triage wake decisions. All six
+delivery relations exist. Helper2 has separate committed triage inputs for both
+originals with native references and verdict `ignore`. The first original failed
+for archmemory, pr159 and helper while acquiring `.wire.lock`: nonblocking flock
+errno11 becomes PromptAdmissionBusy, then the five-second raw-writer deadline
+becomes PromptSendUnknown before any prompt bytes. The second stays pending for
+those stopped drains. STOPPED participants are waiting for an agent; they did
+not lose the original route.
+
+The original UNKNOWN reservations remain protected. No replay, drain clearing,
+owner restart, provider call or public mutation occurred. Original diagnostic
+identity/hash, both frozen audiences and per-recipient original coordinator
+receipts are in `evidence/openhcs-channel-delivery/readonly-originals.json`.
+The historical lock holder was not retained and is not inferred from the error.
+
+The separate CLI older-history failure is a current Thread codec applied to
+immutable attached registry snapshots containing the retired member. The live
+registry contains none. Mendel now owns that archival projection crossing in a
+separate followup; neither original archive is rewritten here.
+
+The existing retained-batch/native fixture is extended to collective human
+channel triage and a representative registry size. It uses the installed wheel,
+actual workers, ACP subscriptions, selected native admission and a controlled
+localhost provider. The initial setup attempt refused before publication due to
+a fixture constructor error, retired all workers and made zero provider calls;
+its original receipt/root remain retained. The corrected fresh-root run is in
+progress. No production fix or installed acceptance is claimed yet.

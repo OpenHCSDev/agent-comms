@@ -21,6 +21,12 @@ from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.threads import Thread
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.bus_publication import HumanOrigin
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.native_runtime_input import NativeRuntimeInput
+from contextlib import closing
+import sqlite3
 
 
 async def attach(service, name):
@@ -46,8 +52,8 @@ async def attach(service, name):
 
 
 class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
-    def __init__(self, service, names):
-        self.service, self.names = service, names
+    def __init__(self, service, names, *, collective=False):
+        self.service, self.names, self.collective = service, names, collective
         self.originals = []
 
     def require_selection(self, snapshot, owners):
@@ -57,6 +63,12 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
         assert all(not lifecycle.registry.require(name).process_alive for name in self.names)
         # Batch already owns the wire lock. The canonical publication owner
         # acquires bus/registry custody; Messaging's outer wire scope would nest.
+        if self.collective:
+            sender = self.service.registry.require('human')
+            self.originals = [self.service.bus.publisher.publish_ordinary(
+                Message(sender.name, '#team', 'New collective channel original: test',MessageType.INFO),
+                _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
+            return
         self.originals = [self.service.bus.publisher.publish_initial_cohort(Message(
             'fixture-sender', name, f'Unique new inbox input for {name}: reply ONCE.', MessageType.INFO))
             for name in self.names]
@@ -69,7 +81,8 @@ async def run(arguments):
     assert len(str(stage/'wire'/'native-sessions'/('0'*32)/'s')) < 108
     project, config = stage/'project', stage/'config'
     project.mkdir(); config.mkdir(mode=0o700)
-    provider = LoopbackProvider(status=200, text='Unique controlled native reply.')
+    provider = LoopbackProvider(status=200, text=(
+        '{"decision":"IGNORE"}' if arguments.collective else 'Unique controlled native reply.'))
     provider.response_gate = asyncio.Event()
     connections = set()
 
@@ -105,8 +118,12 @@ async def run(arguments):
     names = [f'restart-worker-{index}' for index in range(arguments.owners)]
     service.registry.declare(Thread('fixture-sender',frozenset(),str(project)))
     service.registry.declare(Thread('history-recipient',frozenset(),str(project)))
+    if arguments.collective:
+        service.registry.declare(Thread('human',frozenset(),str(project),role=ThreadRole.USER))
+    for index in range(arguments.registry_size):
+        service.registry.declare(Thread(f'unrelated-{index}',frozenset(),str(project)))
     for name in names:
-        service.registry.declare(Thread(name,frozenset(),str(project),
+        service.registry.declare(Thread(name,frozenset({'team'} if arguments.collective else ()),str(project),
             model='restart-local/fixture',thinking_level='off',
             task='Provider-free isolated restart acceptance; reply to each original once'))
     for index in range(arguments.history):
@@ -129,7 +146,7 @@ async def run(arguments):
             await attach(service,name)
         assert provider.posts == 0
         originals = [service.registry.require(name) for name in names]
-        cutover = PublishOriginalsAtStoppedBatch(service,names)
+        cutover = PublishOriginalsAtStoppedBatch(service,names,collective=arguments.collective)
         result = await asyncio.to_thread(service.owners.restart_owners,names,cutover=cutover)
         assert len(result)==len(names)
         assert all(not owner.process_alive for owner in originals)
@@ -153,8 +170,16 @@ async def run(arguments):
                         concurrent_native = True
                         provider.response_gate.set()
                     replies = service.bus.inbox('fixture-sender')
-                    if len(replies)==len(names) and all(
-                        service.registry.require(name).active_turn is None for name in names):
+                    completed = len(replies)==len(names)
+                    if arguments.collective:
+                        with closing(sqlite3.connect(
+                            (service.root/'coordination.sqlite3').as_uri()+'?mode=ro',uri=True)) as db:
+                            rows = WakeAssignment.select(db,where='wire_seq=?',
+                                parameters=(cutover.originals[0].seq,))
+                            completed = len(rows)==len(names) and all(
+                                row.lifecycle.declared_name=='ignored' for row in rows)
+                    if completed and all(service.registry.require(name).active_turn is None
+                                         for name in names):
                         break
                 if not diagnosed and time.perf_counter()-started > 25:
                     diagnosed = True
@@ -167,7 +192,15 @@ async def run(arguments):
                 await asyncio.sleep(.05)
         assert concurrent_native
         assert provider.posts==len(names),(provider.posts,len(names))
-        assert {reply.sender for reply in replies}==set(names)
+        if arguments.collective:
+            assert replies == []
+            with closing(sqlite3.connect((service.root/'coordination.sqlite3').as_uri()+
+                                        '?mode=ro',uri=True)) as db:
+                inputs = NativeRuntimeInput.select(db)
+                assert len(inputs)==len(names)
+                assert all(row.stage=='triage' and row.verdict=='ignore' for row in inputs)
+        else:
+            assert {reply.sender for reply in replies}==set(names)
         assert {packet['session_id'] for packet in packets} == set(names)
         facts = [fact for packet in packets
                  for fact in decode_updates(packet['update'].get('_meta'))]
@@ -211,4 +244,6 @@ if __name__=='__main__':
     parser.add_argument('--package',type=Path,required=True)
     parser.add_argument('--owners',type=int,default=3)
     parser.add_argument('--history',type=int,default=259)
+    parser.add_argument('--collective',action='store_true')
+    parser.add_argument('--registry-size',type=int,default=0)
     asyncio.run(run(parser.parse_args()))
