@@ -41,6 +41,9 @@ class PendingDecision:
 
 @dataclass(frozen=True)
 class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
+    def rejected_triage_history(self, execution, **source):
+        raise ValueError("Recorded triage lacks a decision or a terminal failed claim")
+
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         raise IdentityConflict("full wake frame requires the current response obligation")
 
@@ -430,6 +433,12 @@ class DeferredAssignment(InterruptedAssignment):
 
 
 class FailedAssignment(InterruptedAssignment):
+    def rejected_triage_history(self, execution, **source):
+        """A proved rejected result is delivered source, never an IGNORE decision."""
+        from .historical_native_inputs import FailedTriageHistoricalNativeInput
+
+        return FailedTriageHistoricalNativeInput(execution=execution, **source)
+
     notification_state = "Failed"
     notification_detail = "Notification processing failed; inspect the agent error before retrying."
 
