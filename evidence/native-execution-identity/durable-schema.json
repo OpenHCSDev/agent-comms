@@ -1,0 +1,10 @@
+{
+  "original_installed_source": "f076cf1be8f05b2899dc6301ef598f8775c2fe85",
+  "schema_objects_identical": true,
+  "sha256": "9bff6b52340df1208c37db5358b3004d619cf3d8716e7324743e05a4ec1ea9b1",
+  "objects": {
+    "prompt_binding": "CREATE TABLE \"prompt_binding\" (\"input_id\" TEXT NOT NULL CHECK (length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'), \"stage\" TEXT NOT NULL, \"assignment_id\" TEXT NOT NULL, \"execution_id\" TEXT, \"attempt_ordinal\" INTEGER, \"owner_lookup\" TEXT NOT NULL, \"owner_thread\" TEXT NOT NULL, \"owner_generation\" INTEGER NOT NULL CHECK (owner_generation>0), \"wire_root_id\" TEXT NOT NULL, \"source_seq\" INTEGER NOT NULL, \"message_id\" TEXT NOT NULL, \"expected_prompt_digest\" TEXT NOT NULL, \"bound_at_ms\" INTEGER NOT NULL CHECK (bound_at_ms>0), PRIMARY KEY (\"input_id\"), CHECK ((stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR (stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)), CHECK (length(owner_lookup)=32 AND owner_thread<>'' AND length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*' AND source_seq>0 AND message_id<>'' AND length(expected_prompt_digest)=64 AND expected_prompt_digest NOT GLOB '*[^0-9a-f]*')) STRICT, WITHOUT ROWID",
+    "prompt_binding_delete_guard": "CREATE TRIGGER prompt_binding_delete_guard BEFORE DELETE ON prompt_binding BEGIN SELECT RAISE(ABORT,'prelaunch binding is immutable'); END",
+    "prompt_binding_update_guard": "CREATE TRIGGER prompt_binding_update_guard BEFORE UPDATE ON prompt_binding BEGIN SELECT RAISE(ABORT,'prelaunch binding is immutable'); END"
+  }
+}

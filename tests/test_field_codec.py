@@ -46,7 +46,7 @@ def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter():
 def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
     from datetime import UTC, datetime
     from pathlib import Path
-    from agent_comms.typed_table import Column, SqlStorage, TypedTable
+    from agent_comms.typed_table import Column, TextStorage, TypedTable
     import sqlite3
 
     class HexInteger(TextRepresentation):
@@ -81,20 +81,9 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
     with pytest.raises(TypeError):
         FieldCodec.encode(value.timestamp)
 
-    class HexStorage(SqlStorage):
-        sql_type = "TEXT"
-
-        @classmethod
-        def accepts(cls, annotation):
-            return False
-
-        @classmethod
-        def to_sql(cls, value):
-            return FieldCodec.encode(value, Annotated[int, HexInteger])
-
     @dataclass(frozen=True)
     class ScalarRow(TypedTable, declared_name="field_representation_rows"):
-        count: Annotated[int, HexInteger] = field(metadata={"sql": Column(storage=HexStorage)})
+        count: Annotated[int, HexInteger] = field(metadata={"sql": Column(storage=TextStorage)})
 
     with sqlite3.connect(":memory:") as db:
         ScalarRow.create(db)

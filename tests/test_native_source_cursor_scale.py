@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -217,7 +219,7 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
                 second_message.seq,
                 second.input_id,
                 proof.assignment_id,
-                proof.stage,
+                type(proof.execution).declared_name,
                 proof.session_id,
                 proof.request_generation,
             ),

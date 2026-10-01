@@ -10,6 +10,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage, FullSelectedTriage
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordination_errors import StaleFence
 from agent_comms.coordinator import Coordination
@@ -54,10 +56,10 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
                 evidence("beta", first),
                 evidence("alpha", second),
             )
-            assert [row.stage for row in a] == ["triage"]
-            assert [row.stage for row in b] == ["triage", "full"]
-            assert [row.stage for row in later] == ["triage"]
-            assert a[0].triage_result == later[0].triage_result == "ignore"
+            assert [type(row.execution) for row in a] == [TriageNativeExecution]
+            assert [type(row.execution) for row in b] == [TriageNativeExecution, FullNativeExecution]
+            assert [type(row.execution) for row in later] == [TriageNativeExecution]
+            assert a[0].decision is later[0].decision is IgnoreSelectedTriage
             assert len({row.input_id for row in (*a, *b, *later)}) == 4
             assert all(row.expected_prompt_equality_established for row in (*a, *b, *later))
         assert owner.inputs.dispositions.read().rows == {}
