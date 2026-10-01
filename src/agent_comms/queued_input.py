@@ -9,14 +9,13 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, fields, replace
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 from .goal_waits import GoalWait
 from .goals import Goal
 from .image_inputs import ImageInput
-from .input_attempt import InputAttempt
+from .input_attempt import ACPInputIdText, InputAttempt
 from .store_files import _store_lock
 from .turn_goal_permission import AcceptedGoalPermission
 from .turn_input_source import AcceptedFollowingInput
@@ -97,6 +96,7 @@ class QueuedInput:
         echo: bool,
         images: tuple[ImageInput, ...],
         controller: Any,
+        input_id: str | None = None,
     ) -> tuple[QueuedInput, Thread]:
         """Called inside the wire boundary; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
@@ -111,7 +111,7 @@ class QueuedInput:
             text or prompt or "[image prompt]",
             echo,
             context,
-            uuid4().hex,
+            ACPInputIdText.new() if input_id is None else ACPInputIdText.decode(input_id),
             prompt,
             images,
             controller,
@@ -203,10 +203,23 @@ class QueuedInput:
     def future_receipt(self, owner: Thread) -> InputAttempt | None:
         return None
 
+    def after_clear(self) -> QueuedInput | None:
+        return None
+
+    def restore_after_turn(self) -> QueuedInput | None:
+        return self.immediate() if self.echo else None
+
 
 class InitialInput(QueuedInput):
     def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
-        pass  # This freshly captured original has not been offered to a backend inbox.
+        if inputs.queued_inputs.get(session_id, {}).get(self.input_id) is not self:
+            raise RelationViolationError("Original input acceptance changed")
+
+    def after_clear(self) -> InitialInput:
+        return self  # Clearing follow-ups cannot withdraw the original dispatch.
+
+    def restore_after_turn(self) -> None:
+        return None  # Its original terminal disposition owns cancellation/UNKNOWN.
 
     @property
     def accepted_id(self) -> None:

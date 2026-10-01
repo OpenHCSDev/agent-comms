@@ -17,7 +17,7 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .coordination_errors import StaleFence
-from .native_input_record import NativeInputRecord
+from .native_input_record import NativeInputRecord, NativeInputContext
 from .typed_table import Column, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -60,7 +60,7 @@ class PublishedReplyRevision(TypedRow):
 
 
 @dataclass(frozen=True)
-class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
+class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
     @classmethod
     @contextmanager
     def _publication_read(cls, root):
@@ -186,11 +186,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
     sent_owner_admission_generation: int | None = field(
         default=None, metadata={"sql": Column(check="sent_owner_admission_generation>0")}
     )
-    session_id: str | None = None
-    session_file: str | None = None
-    session_entry_id: str | None = None
-    request_generation: int | None = None
-    llm_context_digest: str | None = None
+    session_id: str | None = field(default=None, metadata={"native_context": str})
+    session_file: str | None = field(default=None, metadata={"native_context": str})
+    session_entry_id: str | None = field(default=None, metadata={"native_context": str})
+    request_generation: int | None = field(default=None, metadata={"native_context": int})
+    llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
     verdict: Literal["ignore", "full"] | None = None
 
     without_rowid = True
@@ -264,7 +264,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeRuntimeTable, TypedTable):
 
 
 @dataclass(frozen=True)
-class CurrentNativeCursor(NativeRuntimeTable, TypedTable):
+class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     wire_root_id: str = field(
         metadata={
             "sql": Column(
@@ -283,17 +283,23 @@ class CurrentNativeCursor(NativeRuntimeTable, TypedTable):
     owner_admission_generation: int = field(
         metadata={"sql": Column(primary_key=True, check="owner_admission_generation>0")}
     )
+    @property
+    def owner_identity(self):
+        from .coordination_tables.participants import OwnerGenerations
+
+        return OwnerGenerations(owner_lookup=self.recipient_lookup, owner_thread=self.owner_thread, generation=self.owner_generation)
+
     covered_seq: int = field(metadata={"sql": Column(check="covered_seq>=0")})
     injected_seq: int = field(
         metadata={"sql": Column(check="injected_seq>=0 AND injected_seq<=covered_seq")}
     )
     input_id: str | None = field(
-        metadata={"sql": Column(references=(NativeRuntimeInput, "input_id"))}
+        metadata={"sql": Column(references=(NativeRuntimeInput, "input_id")), "native_context": str}
     )
-    assignment_id: str | None
-    stage: Literal["triage", "full"] | None
-    session_id: str | None
-    request_generation: int | None
+    assignment_id: str | None = field(metadata={"native_context": str})
+    stage: Literal["triage", "full"] | None = field(metadata={"native_context": Literal["triage", "full"]})
+    session_id: str | None = field(metadata={"native_context": str})
+    request_generation: int | None = field(metadata={"native_context": int})
 
     without_rowid = True
     checks = (

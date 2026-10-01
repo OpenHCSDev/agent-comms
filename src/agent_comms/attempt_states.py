@@ -18,6 +18,9 @@ from .coordination_errors import ResponseAdmissionBlocked
 
 @dataclass(frozen=True)
 class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
+    def retry_finality(self) -> bool:
+        return False
+
     terminal: ClassVar[bool] = False
     allows_tool_admission: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
@@ -90,6 +93,9 @@ class LiveAttempt(AttemptState):
 
 
 class TerminalAttempt(AttemptState):
+    def retry_finality(self) -> bool:
+        return self.failed
+
     @abstractmethod
     def disposition(self, snapshot, attempt): ...
 

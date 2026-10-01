@@ -30,16 +30,18 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from .field_codec import FieldCodec
 from .native_runtime_input import NativeRuntimeInput
+from .native_input_record import NativeInputIdText, NativeInputIdentity
+from .coordination_tables.participants import OwnerGenerations
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
+from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .pi_rpc import unique_fields
 from .selected_actions import SelectedAction
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
 _MAX_REQUEST = _MAX_CONTENT + 8192
-_INPUT_ID = re.compile(r"[0-9a-f]{32}\Z")
 _CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
 _TOOL_SOURCE_SHA = "361bce4704c6830b4212894b005d9a191262e37c49e15b396afb2936ffd1a845"
@@ -198,28 +200,21 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
     The caller must provide a private, physical owner-owned session directory.
     An existing slot is never reopened or reclaimed, even after a process crash.
     """
-    if type(input_id) is not str or not _INPUT_ID.fullmatch(input_id):
-        raise SelectedToolDenied("Selected input identity is invalid")
+    try:
+        NativeInputIdText.decode(input_id)
+    except (ValueError, TypeError) as error:
+        raise SelectedToolDenied("Selected input identity is invalid") from error
     if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
         raise SelectedToolDenied("Selected tool call identity is invalid")
     directory = Path(directory).absolute()
     info = directory.lstat()
-    if (
-        not stat.S_ISDIR(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o700
-        or directory.resolve() != directory
-    ):
+    if PrivateDirectoryRole.violation(info) is not None or directory.resolve() != directory:
         raise SelectedToolDenied("Selected tool session directory is not private")
     ledger = directory / "selected-tool-ledger"
     try:
         ledger.mkdir(mode=0o700, exist_ok=True)
         info = ledger.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-        ):
+        if PrivateDirectoryRole.violation(info) is not None:
             raise SelectedToolDenied("Selected tool ledger is not private")
         _sync_dir(directory)
         fd = os.open(ledger / input_id, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -268,15 +263,11 @@ def selected_tool_mode_for_owner(
     Construct after the owner has engaged the selected attempt and reserved its
     tracked input. Never derive this mode from user/model/wake-injected text.
     """
-    if (
-        type(comms) is not Comms
-        or type(store) is not Coordination
-        or type(admission) is not WakeAdmission
-        or type(owner_name) is not str
-        or type(input_id) is not str
-        or not _INPUT_ID.fullmatch(input_id)
-    ):
-        raise SelectedToolDenied("Selected mode has no typed owner attempt")
+    try:
+        NativeInputIdText.decode(input_id)
+        FieldCodec.decode(str, owner_name)
+    except (ValueError, TypeError) as error:
+        raise SelectedToolDenied("Selected mode has no typed owner attempt") from error
 
     def owner_action(request: SelectedToolRequest) -> None:
         # The prompt-send boundary commits this epoch to the exact reserved
@@ -295,44 +286,31 @@ def verify_sent_full_input(
     with Coordination(str(store.session.path), lock_timeout=0) as scoped, scoped.session.read():
         assert_native_runtime_schema(scoped.session._connection)
         row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
-        if row is None or (
-            row.stage,
-            row.assignment_id,
-            row.execution_id,
-            row.attempt_ordinal,
-            row.owner_lookup,
-            row.owner_thread,
-            row.owner_generation,
-            row.sent_owner_admission_generation,
-            row.session_id,
-            row.verdict,
-        ) != (
-            "full",
-            admission.wake_assignment_id,
-            admission.execution_id,
-            admission.attempt_ordinal,
-            admission.recipient_lookup,
-            owner_name,
-            admission.participant_generation,
-            admission.owner_admission_generation,
-            None,
-            None,
-        ):
+        expected = NativeInputIdentity(
+            input_id, admission.wake_assignment_id, "full",
+            OwnerGenerations(owner_lookup=admission.recipient_lookup, owner_thread=owner_name, generation=admission.participant_generation),
+            admission.execution_id, admission.attempt_ordinal,
+        )
+        if row is None or row.identity != expected:
             raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
+        if row.sent_owner_admission_generation != admission.owner_admission_generation:
+            raise SelectedToolDenied("Selected tool names another sending admission")
+        if row.session_id is not None or row.verdict is not None:
+            raise SelectedToolDenied("Selected input was already settled")
+
 
 
 def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
     """Corroborate a live owner result; a persisted receipt alone grants nothing."""
-    if type(input_id) is not str or not _INPUT_ID.fullmatch(input_id):
-        raise SelectedToolDenied("Selected input identity is invalid")
+    try:
+        NativeInputIdText.decode(input_id)
+    except (ValueError, TypeError) as error:
+        raise SelectedToolDenied("Selected input identity is invalid") from error
     receipt = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
     info = receipt.lstat()
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o600
-        or receipt.read_bytes() != (call_id + "\n").encode("ascii")
-    ):
+    if PrivateFileRole.violation(info) is not None:
+        raise SelectedToolDenied("Selected tool receipt is not private")
+    if receipt.read_bytes() != (call_id + "\n").encode("ascii"):
         raise SelectedToolDenied("Selected tool has no matching terminal receipt")
 
 
@@ -449,12 +427,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
         if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
             raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
         info = self.path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o700
-            or self.path.parent.resolve() != self.path.parent
-        ):
+        if PrivateDirectoryRole.violation(info) is not None or self.path.parent.resolve() != self.path.parent:
             raise SelectedToolDenied("Selected tool socket parent is not private")
         if self.path.exists() or self.path.is_symlink():
             raise SelectedToolDenied("Selected tool socket already exists")

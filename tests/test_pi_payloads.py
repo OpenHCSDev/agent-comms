@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+from types import SimpleNamespace
 from collections.abc import Mapping
 
 import pytest
@@ -13,11 +14,17 @@ from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_events import MessageEnd, Response, UnknownPiEvent
 from agent_comms.pi_payloads import (
     AssistantMessage,
+    MissingData,
+    MissingToolResult,
+    ProvidedToolResult,
+    ReportedModel,
     StateData,
     TextContent,
     ToolCallContent,
     UnknownData,
+    UnreportedModel,
 )
+from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import PiRpcChannel
 
 
@@ -75,11 +82,96 @@ def test_command_owns_response_schema_and_unknown_data_stays_opaque():
     assert isinstance(response.data, UnknownData) and response.data.payload == [7, "opaque"]
 
 
+def test_optional_native_observations_have_named_absence_and_one_serialization():
+    ack = decode({"type": "response", "command": "prompt", "success": True})
+    assert isinstance(ack.data, MissingData)
+    assert not ack.data.session_busy
+    with pytest.raises(ValueError, match="no data"):
+        ack.data.require_payload()
+    for state_wire in ({}, {"model": None}):
+        state = StateData.from_wire(state_wire)
+        assert isinstance(state.model, UnreportedModel)
+        assert not state.matches_model(("p", "m"))
+        with pytest.raises(ValueError, match="owner selection"):
+            state.model.require_selection(None)
+        with pytest.raises(ValueError, match="owner selection"):
+            state.model.for_compaction("p/m")
+        assert FieldCodec.decode(StateData, FieldCodec.encode(state)) == state
+    reported = StateData.from_wire({"model": {"provider": "p", "id": "m", "contextWindow": 1024}})
+    assert isinstance(reported.model, ReportedModel)
+    assert reported.matches_model(("p", "m"))
+    assert reported.model.require_selection("p/m") is reported.model
+    assert reported.model.for_compaction("p/m").context_window == 1024
+    with pytest.raises(ValueError, match="owner selection"):
+        reported.model.for_compaction("p/other")
+    for result_wire in ({}, {"result": None}, {"result": {"content": []}}):
+        event = decode({"type": "tool_execution_end", **result_wire})
+        assert isinstance(event.result, ProvidedToolResult if "result" in result_wire and result_wire["result"] == {"content": []} else MissingToolResult)
+        assert event.result.text() == ""
+        assert event.result.edit_diff(True) is None
+        assert FieldCodec.decode(type(event), FieldCodec.encode(event)) == event
+
+
+def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
+    event = decode({
+        "type": "message_end",
+        "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
+    })
+    failures = []
+    session = SimpleNamespace(fail_terminal=failures.append)
+    event.message.tracked_end(session)
+    assert failures == ["original provider rejection"]
+
+
+def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
+    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.tracked_turn import ObservedNativeCommit, PendingNativeCommit
+
+    event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry"})
+    pending = PendingNativeCommit()
+    assert not pending.observed
+    with pytest.raises(NativePiUnavailable, match="tracked model context"):
+        pending.require()
+    observed = pending.capture(event)
+    assert isinstance(observed, ObservedNativeCommit) and observed.observed
+    assert observed.require() is event
+    with pytest.raises(NativePiUnavailable, match="repeated the input commitment"):
+        observed.capture(event)
+
+
+def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
+    from pathlib import Path
+    from agent_comms.native_pi import NativeContextProof, NativePiTerminalFailure, NativePiUnavailable
+    from agent_comms.tracked_turn import AmbiguousTrackedTerminal, PendingTrackedTerminal
+
+    pending = PendingTrackedTerminal()
+    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
+        pending.require_response([])
+    completed = pending.append("actual response")
+    assert completed.require_response(["actual ", "response"]) == "actual response"
+    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
+        completed.require_response(["different stream"])
+    ambiguous = completed.append("second terminal")
+    assert isinstance(ambiguous, AmbiguousTrackedTerminal)
+    with pytest.raises(NativePiUnavailable, match="unique authoritative"):
+        ambiguous.require_response(["actual response"])
+    assert isinstance(completed.tool_round(), PendingTrackedTerminal)
+    failed = completed.fail("original provider rejection")
+    assert failed.tool_round() is failed and failed.append("later text") is failed
+    proof = NativeContextProof("a" * 32, "session", "entry", 1, "b" * 64, Path("original-session.jsonl"))
+    with pytest.raises(NativePiTerminalFailure, match="original provider rejection") as failure:
+        failed.raise_failure(proof, "configured", "model")
+    assert failure.value.context is proof
+
+
 @pytest.mark.parametrize(
     "record",
     [
         {"type": "message_update", "assistantMessageEvent": {"type": "text_delta"}},
         {"type": "message_end", "message": {"role": "assistant", "content": [{"type": "text"}]}},
+        {"type": "message_end", "message": {"role": "assistant", "content": None}},
+        {"type": "message_end", "message": {"role": "assistant", "content": "invalid"}},
+        {"type": "message_end", "message": {"role": "assistant"}},
         {"type": "response", "command": "get_state", "data": "invalid"},
         {"type": "message_start", "message": {"role": "user", "inputId": 42}},
         {"type": "context_committed", "requestGeneration": True},
@@ -221,3 +313,27 @@ def test_native_startup_metadata_uses_existing_entry_family():
         duplicate = json.dumps(row)[:-1] + ', "id": "1234abcd"}'
         with pytest.raises(ValueError):
             StartupMetadataEntry.read_startup(duplicate.encode())
+
+
+@pytest.mark.parametrize(
+    "content, expected",
+    [
+        ([{"type": "thinking", "thinking": "private reasoning"},
+          {"type": "text", "text": "first"}, {"type": "text", "text": " second"}],
+         "first second"),
+        ([{"type": "toolCall", "id": "c", "name": "read", "arguments": {"path": "a"}}],
+         None),
+        ([{"type": "extension_final", "text": "unattested"}], None),
+    ],
+)
+def test_final_content_owns_native_text_admission(content, expected):
+    from agent_comms.native_pi import NativePiUnavailable
+
+    event = decode({"type": "message_end", "message": {
+        "role": "assistant", "stopReason": "stop", "content": content,
+    }})
+    if expected is None:
+        with pytest.raises(NativePiUnavailable, match="non-text content"):
+            _ = event.message.authoritative_text
+    else:
+        assert event.message.authoritative_text == expected

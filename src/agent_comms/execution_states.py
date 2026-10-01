@@ -54,6 +54,13 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
         if ordinal is not None and not 1 <= ordinal <= maximum:
             raise ValueError("current ordinal exceeds budget")
 
+    def has_retry_budget(self, maximum: int) -> bool:
+        ordinal = self.current_attempt_ordinal
+        return ordinal is not None and ordinal < maximum
+
+    def can_retry(self, *, authorized: bool, attempt, is_current: bool) -> bool:
+        return False
+
     def accepts_attempt(self, phase) -> bool:
         return False
 
@@ -194,6 +201,12 @@ class DeferredExecution(InterruptedExecution):
     def validate_snapshot(self, snapshot, authorized):
         if snapshot.attempt is not None and not authorized:
             raise IntegrityViolationError("post-attempt deferral requires authorized retry")
+
+    def can_retry(self, *, authorized: bool, attempt, is_current: bool) -> bool:
+        if self.ordinal is None or attempt is None:
+            return False
+        # Failed terminal attempts own done/death/no-lease proof in their shape.
+        return authorized and attempt.retry_finality() and not is_current
 
 
 class FailedExecution(InterruptedExecution):

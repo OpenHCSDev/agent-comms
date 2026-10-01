@@ -23,8 +23,10 @@ from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_admission_rules import NativeIdentityCheck
 from .native_input_owner import ParticipantOwner
-from .native_input_record import NativeInputRecord
-from .native_pi import _INPUT_ID, NativePiUnavailable, read_tracked_input_digest
+from .native_input_record import NativeInputRecord, NativeInputIdText
+from .message_reference import MessageReference
+from .field_codec import FieldCodec
+from .native_pi import NativePiUnavailable, read_tracked_input_digest
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
@@ -69,6 +71,10 @@ class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     message_id: str
     expected_prompt_digest: str
     bound_at_ms: int = field(metadata={"sql": Column(check="bound_at_ms>0")})
+
+    @property
+    def source(self) -> MessageReference:
+        return MessageReference(self.source_seq, self.message_id)
 
     without_rowid = True
     checks = (
@@ -128,18 +134,9 @@ def bind_expected_prompt(
     the bare prompt bytes.
     """
     assignment = stage.assignment
-    if (
-        type(store) is not Coordination
-        or type(input_id) is not str
-        or _INPUT_ID.fullmatch(input_id) is None
-        or type(assignment) is not WakeAssignment
-        or type(owner) is not Thread
-        or type(generation) is not int
-        or generation <= 0
-        or type(prompt) is not str
-        or not prompt
-    ):
-        raise ValueError("prompt binding requires bounded exact prelaunch identities")
+    NativeInputIdText.decode(input_id)
+    if not FieldCodec.decode(str, prompt):
+        raise ValueError("prompt binding requires nonempty original text")
     digest = native_request_digest(prompt)
 
     # Installation grants no owner authority. Recheck ownership after it, then

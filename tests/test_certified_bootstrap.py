@@ -10,6 +10,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import PublicationActivationBlocked
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.errors import RelationViolationError
 from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus_checkpoint_unlocked
 from agent_comms.proven_source_coverage import SourceCoverage
@@ -48,6 +49,25 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
         assert source_witness(Comms(comms.root).bus).through_seq == sent.seq
+
+
+def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
+    comms, store, root_id, lookups = _root(tmp_path)
+    with store:
+        install_native_runtime_schema(store)
+        first = comms.messaging.send_user_message("bob", "first original", worktree=str(tmp_path))
+        second = comms.messaging.send_user_message("bob", "second original", worktree=str(tmp_path))
+        reader = SourceCoverage(
+            comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
+        )
+        with pytest.raises(IdentityConflict, match="bounded private initial scan"):
+            reader.read(limit=1)
+        page = reader.read(limit=1, partial=True)
+        assert page.more_sources and page.blocked_seq == first.seq
+        assert page.covered_seq == 0 and page.injected_source_seqs == ()
+        assert [message.seq for message in comms.bus.log.full_history()] == [first.seq, second.seq]
+        with pytest.raises(ValueError, match="received bool"):
+            reader.read(limit=True)
 
 
 def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monkeypatch):

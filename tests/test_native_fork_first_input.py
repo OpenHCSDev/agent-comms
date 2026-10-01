@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from acp.schema import TextContentBlock
 
+from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
@@ -162,9 +163,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
         native.persistent,
         session_file=str(native.session),
         expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
-        provider=state.model.provider,
-        model_id=state.model.id,
-        context_window=state.model.context_window,
+        selected=SelectedModel(state.model.provider, state.model.id, state.model.context_window),
     )
     print("ACTUAL_SELECTED_COMPACTION_DECISION", repr(decision), flush=True)
     assert decision.enabled

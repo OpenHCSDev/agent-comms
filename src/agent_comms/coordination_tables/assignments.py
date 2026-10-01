@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from dataclasses import field as dataclass_field
 from enum import StrEnum
 
@@ -37,14 +37,74 @@ class MessageAudience(StrEnum):
 @dataclass(frozen=True, slots=True)
 class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     @property
+    def recipient_identity(self):
+        from agent_comms.audience_manifest import FrozenRecipient
+
+        return FrozenRecipient(self.recipient_lookup, self.recipient)
+
+    def require_selected_source(self, initial, owner) -> None:
+        from agent_comms.audience_manifest import FrozenRecipient
+        from agent_comms.bus_publication import stable_thread_lookup
+        from agent_comms.coordination_errors import IdentityConflict
+        from agent_comms.wake import WakeDecision
+
+        if self.source != MessageReference(initial.message.seq, initial.message.message_id):
+            raise IdentityConflict("wake frame does not match a committed source")
+        if self.recipient_identity != FrozenRecipient(
+            stable_thread_lookup(owner.created_at), owner.name
+        ):
+            raise IdentityConflict("wake frame does not match a committed recipient")
+        expected = WakeDecision(self.recipient_lookup, self.audience, self.lifecycle.mode)
+        selected = sum(
+            recipient == self.recipient_identity and decision == expected
+            for recipient, decision in zip(
+                initial.audience.recipients, initial.decisions, strict=True
+            )
+        )
+        if selected != 1:
+            raise IdentityConflict("wake frame requires one selected N/K recipient")
+
+    def require_initial_decision(self) -> None:
+        initial = replace(
+            self,
+            lifecycle=self.lifecycle.mode.initial_state()(),
+            updated_at_ms=self.accepted_at_ms,
+            revision=1,
+        )
+        if (
+            self != initial
+            or self.resolver_version != RESOLVER_VERSION
+            or self.policy_version != POLICY_VERSION
+        ):
+            from agent_comms.coordination_errors import IdentityConflict
+
+            raise IdentityConflict("claim acceptance requires initial frozen decision")
+
+    def require_same_acceptance(self, candidate: WakeAssignment) -> None:
+        # Only lifecycle progress may differ from the original accepted row.
+        progress = replace(
+            candidate,
+            lifecycle=self.lifecycle,
+            updated_at_ms=self.updated_at_ms,
+            revision=self.revision,
+        )
+        if self != progress or self.lifecycle.mode != candidate.lifecycle.mode:
+            from agent_comms.coordination_errors import IdentityConflict
+
+            raise IdentityConflict("accepted claim identity conflicts")
+
+    @property
     def source(self) -> MessageReference:
         return MessageReference(self.wire_seq, self.message_id)
 
     def require_engaged_binding(self) -> AssignmentBinding:
         engagement = self.lifecycle.require_engagement()
         return AssignmentBinding(
-            self.assignment_id, self.revision, self.recipient_lookup,
-            self.source, engagement.execution_id,
+            self.assignment_id,
+            self.revision,
+            self.recipient_lookup,
+            self.source,
+            engagement.execution_id,
         )
 
     assignment_id: str = dataclass_field(

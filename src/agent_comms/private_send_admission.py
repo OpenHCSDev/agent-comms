@@ -29,6 +29,7 @@ from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptAdmissionBusy
 from .native_runtime_input import NativeRuntimeInput
 from .pi_vocabulary import ThinkingLevel
+from .private_path import FileRevision
 from .text_digest import TextDigest
 from .tracked_turn import TrackedTurnSession
 
@@ -185,7 +186,7 @@ class PrivateSendAdmission:
             yield store, registry, db
 
     def _saved_session(
-        self, actual: Path, runtime_revision: tuple[int, int, int, int, int] | None
+        self, actual: Path, runtime_revision: FileRevision | None
     ) -> Path:
         # get_state resolved this exact source before the writer was started.
         if (
@@ -224,7 +225,7 @@ class PrivateSendAdmission:
     def __call__(
         self,
         actual_session_file: Path,
-        selected_runtime_revision: tuple[int, int, int, int, int] | None = None,
+        selected_runtime_revision: FileRevision | None = None,
     ) -> Iterator[None]:
         try:
             asyncio.get_running_loop()

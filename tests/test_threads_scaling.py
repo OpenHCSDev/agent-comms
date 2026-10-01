@@ -110,6 +110,31 @@ def test_mounted_coordination_snapshot_reopens_without_scanning_bus(wired, monke
     assert updated == wire(wired.root).views.coordination_snapshot()
 
 
+def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired, monkeypatch):
+    first = wired.messaging.send_message("PR111", "#base", "channel clock")
+    wired.messaging.send_message("fixer", "PR111", "direct clock")
+    expected = wired.bus.channel_activity()
+    sent = wired.bus.last_sent_timestamps()
+    assert expected["#base"].last_message == first.timestamp
+    fresh = wire(wired.root)
+    parsed = []
+    original = Message.from_wire
+
+    def measured(record):
+        parsed.append(record["seq"])
+        return original(record)
+
+    monkeypatch.setattr(Message, "from_wire", measured)
+    assert fresh.bus.channel_activity() == expected
+    assert fresh.bus.last_sent_timestamps() == sent
+    assert parsed == []
+    appended = wired.messaging.send_message("PR111", "#base", "appended clock")
+    parsed.clear()  # Publisher validation belongs to a different lifetime.
+    assert fresh.bus.channel_activity()["#base"].last_message == appended.timestamp
+    assert fresh.bus.last_sent_timestamps()["PR111"] == appended.timestamp
+    assert parsed == [appended.seq]
+
+
 def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(wired):
     wired.messaging.send("PR111", "#base", "first")
     wired.messaging.send("fixer", "#base", "second")

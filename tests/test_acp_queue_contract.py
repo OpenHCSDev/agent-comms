@@ -18,12 +18,14 @@ from agent_comms.acp_extension import (
     CursorScope,
     QueueScope,
     QueuePromptRequest,
+    SteerPromptRequest,
     UnavailableQueueProjection,
     decode_updates,
     encode_request,
     encode_updates,
 )
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.errors import RelationViolationError
 from agent_comms.comms import Comms
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
@@ -122,6 +124,30 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     assert state.scope.admission.incarnation.name == "beta"
     assert isinstance(state.projection, UnavailableQueueProjection)
     assert exact in agent.inputs.queued_inputs["beta"]
+
+
+async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_replay(tmp_path):
+    comms, agent, _, _ = _owner(tmp_path)
+    comms.agents.begin_turn("beta", "active", "Held native fixture")
+    inbox = agent.inputs.backend_inboxes["beta"] = asyncio.Queue()
+    requests = [QueuePromptRequest("same"), SteerPromptRequest("same")]
+    for request in requests:
+        response = await agent.prompt(
+            "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(request)
+        )
+        receipt = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
+        assert receipt.input_id == request.input_id
+    assert requests[0].input_id != requests[1].input_id
+    state = agent.inputs.queue_state("beta")
+    assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]
+    assert all(row.public_status == "unknown" for row in agent.inputs.dispositions.read().rows.values())
+    before = inbox.qsize()
+    with pytest.raises(RelationViolationError, match="reservation already exists"):
+        await agent.prompt(
+            "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(requests[0])
+        )
+    assert inbox.qsize() == before
+    assert len(agent.inputs.dispositions.read().rows) == 2
 
 
 @pytest.mark.parametrize("user_text", [["list"], [], {"text": "dict"}, 7, False])

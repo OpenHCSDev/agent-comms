@@ -143,36 +143,12 @@ class NativeBindingCheck(NativeIdentityCheck):
     prompt_digest: TextDigest
 
 
-class NativeAssignmentRule(ReservationRule):
+class NativeInputIdentityRule(ReservationRule):
     check_type = NativeIdentityCheck
-    explanation = "The native input belongs to another sealed assignment."
+    explanation = "The original native input assignment, stage, attempt or owner changed."
 
     def violated(self, check: NativeIdentityCheck) -> bool:
-        return check.row.assignment_id != check.stage.assignment.assignment_id
-
-
-class NativeStageRule(ReservationRule):
-    check_type = NativeIdentityCheck
-    explanation = "The native input belongs to another execution stage."
-
-    def violated(self, check: NativeIdentityCheck) -> bool:
-        return check.row.stage != check.stage.stage
-
-
-class NativeAttemptRule(ReservationRule):
-    check_type = NativeIdentityCheck
-    explanation = "The native input belongs to another execution attempt."
-
-    def violated(self, check: NativeIdentityCheck) -> bool:
-        return not check.stage.matches_attempt(check.row)
-
-
-class NativeOwnerRule(ReservationRule):
-    check_type = NativeIdentityCheck
-    explanation = "The native input coordinator owner or generation changed."
-
-    def violated(self, check: NativeIdentityCheck) -> bool:
-        return check.row.owner_identity != check.owner
+        return check.row.identity != check.stage.identity(check.row.input_id, check.owner)
 
 
 class NativeTokenRule(ReservationRule):
@@ -215,20 +191,12 @@ class NativeBindingRootRule(ReservationRule):
         return check.row.wire_root_id != check.wire_root_id
 
 
-class NativeBindingSequenceRule(ReservationRule):
+class NativeBindingSourceRule(ReservationRule):
     check_type = NativeBindingCheck
-    explanation = "The prelaunch binding names a different committed source sequence."
+    explanation = "The prelaunch binding names a different committed source message."
 
     def violated(self, check: NativeBindingCheck) -> bool:
-        return check.row.source_seq != check.stage.assignment.wire_seq
-
-
-class NativeBindingMessageRule(ReservationRule):
-    check_type = NativeBindingCheck
-    explanation = "The prelaunch binding names a different committed message."
-
-    def violated(self, check: NativeBindingCheck) -> bool:
-        return check.row.message_id != check.stage.assignment.message_id
+        return check.row.source != check.stage.assignment.source
 
 
 class NativeBindingContentRule(ReservationRule):

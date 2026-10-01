@@ -1,150 +1,106 @@
-"""Disposable, scope-bound append checkpoint for a viewer's sidebar metrics.
-
-The bus JSONL owns the messages. A changed display predicate or a damaged
-checkpoint rebuilds from the bus; an ordinary append reads only its new rows.
-"""
-
+"""Disposable viewer metrics retain one declared scope and original bus boundary."""
 from __future__ import annotations
 
 import hashlib
 import json
-import os
-import tempfile
 from collections.abc import Callable, Mapping
 from contextlib import suppress
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Literal
+
+from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision
+from .read_basis import ChannelDisplayScope
+from .read_ledger import ReadLedger
+from .messages import Message
 
 DisplayMetrics = tuple[dict[str, tuple[float, float]], dict[str, int]]
 
 
-class BusDisplayIndex:
+@dataclass(frozen=True)
+class DisplayMetricScope:
+    scopes: tuple[ChannelDisplayScope, ...]
+    activity_scopes: tuple[ChannelDisplayScope, ...]
+    viewer_names: frozenset[str]
+
+    @property
+    def empty_metrics(self) -> DisplayMetrics:
+        return ({scope.channel: (0.0, 0.0) for scope in self.activity_scopes},
+                dict.fromkeys((scope.channel for scope in self.scopes), 0))
+
+    def observe(self, message: Message, metrics: DisplayMetrics) -> None:
+        clocks, unread = metrics
+        for scope in self.activity_scopes:
+            if scope.includes(message):
+                last_message, last_user = clocks[scope.channel]
+                clocks[scope.channel] = (
+                    max(last_message, message.timestamp),
+                    max(last_user, message.timestamp)
+                    if ReadLedger.human(message.sender_role) else last_user,
+                )
+        if message.sender not in self.viewer_names:
+            for scope in self.scopes:
+                if scope.unread(message):
+                    unread[scope.channel] += 1
+
+
+@dataclass(frozen=True)
+class DisplayCheckpoint(AppendCheckpoint):
+    semantics: DisplayMetricScope
+    activity: dict[str, tuple[float, float]]
+    counts: dict[str, int]
+    schema: Literal[2] = field(default=2, kw_only=True)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if any(value < 0 for value in self.counts.values()):
+            raise ValueError("Unread projection count must be nonnegative")
+        expected = ({scope.channel for scope in self.semantics.activity_scopes},
+                    {scope.channel for scope in self.semantics.scopes})
+        if (self.activity.keys(), self.counts.keys()) != expected:
+            raise ValueError("Projection metrics differ from the captured channel scope")
+
+    @property
+    def metrics(self) -> DisplayMetrics:
+        return self.activity, self.counts
+
+    def current_for(self, revision: BusFileRevision, semantics: DisplayMetricScope) -> bool:
+        return (self.source, self.semantics) == (revision, semantics)
+
+
+class BusDisplayIndex(BusAppendIndex):
+    record_type = DisplayCheckpoint
+
     def __init__(self, bus_path: Path, viewer: str):
-        self.bus_path = bus_path
-        digest = hashlib.sha256(viewer.encode("utf-8")).hexdigest()
-        self.path = bus_path.with_name(f"bus_display_{digest}.json")
+        digest = hashlib.sha256(viewer.encode()).hexdigest()
+        super().__init__(bus_path, bus_path.with_name(f"bus_display_{digest}.json"))
 
-    @staticmethod
-    def _digest(record: Mapping[str, Any]) -> str:
-        payload = {key: value for key, value in record.items() if key != "integrity"}
-        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-    @staticmethod
-    def _tail(stream: Any, offset: int) -> str:
-        start = max(0, offset - 4096)
-        stream.seek(start)
-        return hashlib.sha256(stream.read(offset - start)).hexdigest()
-
-    def _load(
-        self,
-        stream: Any,
-        revision: tuple[int, int, int, int],
-        semantics: list[Any],
-        initial: DisplayMetrics,
-    ) -> tuple[DisplayMetrics, int] | None:
-        try:
-            saved = json.loads(self.path.read_text())
-            source = saved["source"]
-            offset = saved["offset"]
-            if (
-                saved.get("schema") != 1
-                or saved.get("integrity") != self._digest(saved)
-                or saved.get("semantics") != semantics
-                or not isinstance(source, list)
-                or len(source) != 4
-                or type(offset) is not int
-                or offset < 0
-                or source[0] != revision[0]
-                or offset > revision[1]
-                or (offset == revision[1] and source[2:] != list(revision[2:]))
-                or saved["tail"] != self._tail(stream, offset)
-            ):
-                return None
-            activity = saved["activity"]
-            counts = saved["counts"]
-            if (
-                not isinstance(activity, dict)
-                or not isinstance(counts, dict)
-                or activity.keys() != initial[0].keys()
-                or counts.keys() != initial[1].keys()
-            ):
-                return None
-            parsed_activity = {
-                name: (float(values[0]), float(values[1]))
-                for name, values in activity.items()
-                if isinstance(values, list)
-                and len(values) == 2
-                and all(type(value) in (int, float) for value in values)
-            }
-            parsed_counts = {
-                name: value for name, value in counts.items() if type(value) is int and value >= 0
-            }
-            if len(parsed_activity) != len(activity) or len(parsed_counts) != len(counts):
-                return None
-            return (parsed_activity, parsed_counts), offset
-        except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError):
-            return None
-
-    def _write(
-        self,
-        revision: tuple[int, int, int, int],
-        stream: Any,
-        semantics: list[Any],
-        metrics: DisplayMetrics,
-    ) -> None:
-        record = {
-            "schema": 1,
-            "source": list(revision),
-            "offset": revision[1],
-            "tail": self._tail(stream, revision[1]),
-            "semantics": semantics,
-            "activity": metrics[0],
-            "counts": metrics[1],
-        }
-        record["integrity"] = self._digest(record)
-        fd, temporary = tempfile.mkstemp(prefix=".bus-display-", dir=self.path.parent)
-        try:
-            with os.fdopen(fd, "w") as output:
-                json.dump(record, output)
-                output.flush()
-            os.replace(temporary, self.path)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
-
-    def snapshot(
-        self,
-        revision: tuple[int, int, int, int] | None,
-        semantics: list[Any],
-        initial: DisplayMetrics,
-        apply: Callable[[Mapping[str, Any], DisplayMetrics], None],
-    ) -> DisplayMetrics | None:
+    def snapshot(self, revision: tuple[int, int, int, int] | None,
+                 semantics: DisplayMetricScope, initial: DisplayMetrics,
+                 apply: Callable[[Mapping, DisplayMetrics], None]) -> DisplayCheckpoint | None:
         if revision is None:
-            # The caller may have opened a newer bus boundary after its first
-            # revision check. Its captured records then own this snapshot.
             return None
+        source = BusFileRevision(*revision)
         try:
             stream = self.bus_path.open("rb")
         except FileNotFoundError:
             return None
         with stream:
-            stat = os.fstat(stream.fileno())
-            if stat.st_ino != revision[0] or stat.st_size < revision[1]:
+            if not source.opened_by(stream):
                 return None
-            if revision[1]:
-                stream.seek(revision[1] - 1)
+            if source.size:
+                stream.seek(source.size - 1)
                 if stream.read(1) != b"\n":
                     return None
-            checkpoint = self._load(stream, revision, semantics, initial)
-            if checkpoint is None:
-                metrics = dict(initial[0]), dict(initial[1])
-                offset = 0
+            checkpoint = self.checkpoint(stream, source)
+            if checkpoint is None or checkpoint.semantics != semantics:
+                metrics, offset = (dict(initial[0]), dict(initial[1])), 0
             else:
-                metrics, offset = checkpoint
+                metrics, offset = checkpoint.metrics, checkpoint.offset
             stream.seek(offset)
-            while stream.tell() < revision[1]:
-                raw = stream.readline()
-                if stream.tell() > revision[1] or not raw.endswith(b"\n"):
+            while stream.tell() < source.size:
+                raw = stream.readline(source.size - stream.tell())
+                if not raw.endswith(b"\n"):
                     return None
                 if not raw.strip():
                     continue
@@ -152,7 +108,10 @@ class BusDisplayIndex:
                 if not isinstance(record, Mapping):
                     raise ValueError("JSONL bus row must be an object")
                 apply(record, metrics)
-            if offset != revision[1]:
+            projected = DisplayCheckpoint(source, source.size,
+                         AppendCheckpoint.fingerprint(stream, source.size),
+                         semantics, *metrics)
+            if offset != source.size:
                 with suppress(OSError):
-                    self._write(revision, stream, semantics, metrics)
-            return metrics
+                    self.write(projected)
+            return projected

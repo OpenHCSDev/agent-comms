@@ -8,7 +8,6 @@ single-send backend path and its strict saved-session reopen.
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -16,18 +15,15 @@ from .agent_events import AgentEvent
 from .backend import PersistentPiSession, _session_revision
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue
+from .native_input_owner import RegistryOwner
 from .native_pi import NativePiRpcLaunch
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import OwnerSummaryOutcome
 from .owner_compaction_runtime import compact_owner_once
-from .owner_compaction_settings import (
-    PiCompactionDecision,
-    PiSettingsEvidenceError,
-    read_compaction_decision,
-)
+from .owner_compaction_settings import PiCompactionDecision, PiSettingsEvidenceError
+from .pi_payloads import StateData
 from .registration import Registration
-from .runtime_info import AgentRuntimeInfo
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
 from .selected_source import SelectedAdmissionSource
@@ -41,7 +37,7 @@ async def maybe_compact_owner_turn(
     launcher: str,
     thread_name: str,
     turn_id: str,
-    runtime_info: AgentRuntimeInfo | None,
+    prepared: StateData,
     original_input_key: str,
     persistent: PersistentPiSession,
     *,
@@ -57,95 +53,52 @@ async def maybe_compact_owner_turn(
     original input is durable but provably unbound; the bridge permits only
     that one row and rechecks every ingress revision at native commit.
     """
-    owner, owner_generation = registry.live_owner_with_generation(thread_name)
-    selected_native = summary_strategy is None
-    if (
-        owner.active_turn is None
-        or owner.active_turn.id != turn_id
-        or owner.session_file is None
-        or not owner.model
-        or runtime_info is None
-        or runtime_info.model != owner.model
-        or type(runtime_info.context_size) is not int
-        or not 0 < runtime_info.context_size <= 2**53 - 1
-        or "/" not in owner.model
-    ):
-        if selected_native:
-            raise PiSettingsEvidenceError("Selected native context must be prepared before input")
-        return False
-    assert runtime_info is not None
-    assert runtime_info.context_size is not None
-    context_used = runtime_info.context_used
-    if not selected_native and (
-        type(context_used) is not int or not 0 <= context_used <= 2**53 - 1
-    ):
-        return False
-    context_window = runtime_info.context_size
-    provider, model_id = owner.model.split("/", 1)
-    if not provider or not model_id:
-        return False
+    snapshot = registry.snapshot()
+    try:
+        captured = RegistryOwner.capture(snapshot, thread_name, "Selected compaction owner changed")
+        turn = captured.require_active_turn()
+        if TurnId(turn.id) != TurnId(turn_id):
+            raise ValueError("Selected compaction turn changed")
+        owner = captured.thread
+        session_file = owner.require_saved_session()
+        selected = prepared.model.for_compaction(owner.model)
+    except ValueError as error:
+        raise PiSettingsEvidenceError("Selected native context must be prepared before input") from error
+    owner_generation = snapshot.owner_generations[owner.name]
+    context_window = selected.context_window
+    provider, model_id = selected.provider, selected.model_id
     package = NativePiRpcLaunch.package_for_command(launcher)
-    # A selected child owns effective settings including project trust and model
-    # overrides. Detached injected strategies still need conservative file proof.
-    project_settings = Path(owner.worktree) / ".pi" / "settings.json"
-    global_dir = Path(
-        os.environ.get("PI_CODING_AGENT_DIR") or Path.home() / ".pi" / "agent"
-    ).expanduser()
-    if not global_dir.is_absolute():
-        raise PiSettingsEvidenceError("Canonical global settings directory required")
-    native_config = Path(os.environ.get("AGENT_COMMS_NATIVE_CONFIG_DIR") or global_dir).expanduser()
-    if not native_config.is_absolute():
-        raise PiSettingsEvidenceError("Canonical native model configuration directory required")
-    model_files = tuple(
-        dict.fromkeys(
-            (
-                global_dir / "models.json",
-                native_config / "models.json",
-                project_settings.with_name("models.json"),
-            )
-        )
-    )
-    settings_paths = (
-        str(global_dir / "settings.json"),
-        str(project_settings),
-        *(str(file) for file in model_files),
-    )
+    if not persistent.available:
+        raise PiSettingsEvidenceError("Selected native session must be prepared before input")
+    if summary_strategy is None and (input_text is None or on_admission is None):
+        raise PiSettingsEvidenceError("Selected live Pi summary needs its original-input owner")
 
-    def configuration_unbound() -> bool:
-        for file in (project_settings, *model_files):
-            try:
-                file.lstat()
-            except FileNotFoundError:
-                continue
-            return True
-        return False
-
-    if selected_native:
-        if input_text is None or on_admission is None:
-            raise PiSettingsEvidenceError("Selected live Pi summary needs its original-input owner")
-        if not persistent.available:
-            raise PiSettingsEvidenceError("Selected native session must be prepared before input")
-    elif configuration_unbound():
-        return False
+    # Preserve source-file invalidation across the later native reopen. These
+    # paths come from the original prepared child's launch, not display metadata
+    # or a detached settings decision. Effective values are still read from Pi.
+    launch = persistent.custody.idle().child.key[0]
+    environment = launch.env
+    global_dir = Path(environment.get("PI_CODING_AGENT_DIR") or Path(environment["HOME"]) / ".pi" / "agent")
+    if global_dir.parts and global_dir.parts[0] == "~":
+        global_dir = Path(environment["HOME"]).joinpath(*global_dir.parts[1:])
+    native_config = Path(environment["AGENT_COMMS_NATIVE_CONFIG_DIR"])
+    if not global_dir.is_absolute() or not native_config.is_absolute():
+        raise PiSettingsEvidenceError("Prepared native configuration directories must be absolute")
+    project_settings = launch.cwd / ".pi" / "settings.json"
+    settings_paths = tuple(dict.fromkeys(map(str, (
+        global_dir / "settings.json", project_settings,
+        global_dir / "models.json", native_config / "models.json",
+        project_settings.with_name("models.json"),
+    ))))
 
     async def decision() -> PiCompactionDecision:
-        if selected_native:
-            return await read_selected_compaction_decision(
-                persistent,
-                session_file=owner.session_file,
-                expected_package=package,
-                provider=provider,
-                model_id=model_id,
-                context_window=context_window,
-            )
-        if configuration_unbound():
-            raise PiSettingsEvidenceError("Adaptive project trust or custom model is not bound")
-        return await asyncio.to_thread(
-            read_compaction_decision,
-            package,
-            owner.worktree,
-            context_tokens=context_used,
-            context_window=context_window,
+        # Native preparation owns model identity; the same retained child owns
+        # effective settings and context use, including injected summary workers.
+        return await read_selected_compaction_decision(
+            persistent,
+            session_file=session_file,
+            expected_package=package,
+            selected=selected,
         )
 
     settings = await decision()
@@ -156,7 +109,7 @@ async def maybe_compact_owner_turn(
     )
     if summary_strategy is None:
         assert input_text is not None and on_admission is not None
-        revision = _session_revision(owner.session_file)
+        revision = _session_revision(session_file)
         original = bridge.inputs.read().rows.get(original_input_key)
         if revision is None or original is None:
             raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
@@ -167,8 +120,8 @@ async def maybe_compact_owner_turn(
                 owner=owner.process_identity,
                 turn=TurnId(turn_id),
                 ingress_key=original_input_key,
-                admission_generation=owner.active_turn.admission_generation,
-                correction_witness=f"{owner.active_turn.admission_generation}:{digest.value}",
+                admission_generation=turn.admission_generation,
+                correction_witness=f"{turn.admission_generation}:{digest.value}",
                 input_digest=digest,
                 original_digest=original.digest,
                 reserved_revision=revision,

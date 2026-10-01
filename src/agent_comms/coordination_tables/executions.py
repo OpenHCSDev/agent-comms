@@ -18,7 +18,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.coordination_tables.attempts import AttemptRecord
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
 from agent_comms.execution_states import ExecutionState
 from agent_comms.field_codec import projected
 from agent_comms.typed_table import (
@@ -120,6 +120,18 @@ END"""
 
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
+    def retry_authorized(self, replay: ReplayAssessments | None, obligation) -> bool:
+        if replay is None:
+            return False
+        return (
+            self.lifecycle.has_retry_budget(self.max_attempts)
+            and replay.allows_retry
+            and (
+                self.origin is not ExecutionOrigin.WIRE
+                or (obligation is not None and obligation.lifecycle.retryable)
+            )
+        )
+
     execution_id: str = dataclass_field(
         metadata={
             "sql": Column(

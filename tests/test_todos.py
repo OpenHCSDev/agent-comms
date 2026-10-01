@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.threads import Thread
-from agent_comms.todos import Assignment, GoalRef, TodoConflict, TodoError, TodoStore
+from agent_comms.todos import Assignment, GoalRef, OpenTodoState, TodoConflict, TodoError, TodoStore
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
@@ -201,7 +201,7 @@ def test_blocked_todo_retains_assignment_goal_does_not_follow_status(
     )
     assert opened.assignment == assigned.assignment
     assert done.assignment is None and done.revision == 5
-    assert store.get("todo-2").state == "open" and store.get("todo-2").goal == goal
+    assert store.get("todo-2").state is OpenTodoState and store.get("todo-2").goal == goal
     with pytest.raises(TodoConflict):
         store.assign("todo-1", expected_revision=5, owner=worker, parent=lead, generation="gen-c")
 

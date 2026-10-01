@@ -46,7 +46,6 @@ class StatsRequest:
         return any(
             future.done()
             and not future.cancelled()
-            and future.result().data is not None
             and future.result().data.session_busy
             for future in self._pending
         )

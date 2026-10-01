@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from agent_comms.bus_source_page import AddressedPage
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_foreground import _accept_visible_deliveries
@@ -92,7 +93,6 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
     from agent_comms.bus_publication import CommittedDelivery
     from agent_comms.errors import RelationViolationError
     from agent_comms.private_bus_checkpoint import (
-        certified_delivery_page_unlocked,
         install_private_bus_checkpoint,
     )
 
@@ -116,9 +116,9 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
             saved_index = checkpoint.read_bytes()
             sender = case.comms.registry.require("sender")
             with pytest.raises(RelationViolationError):
-                certified_delivery_page_unlocked(
-                    case.bus.log, marker, stable_thread_lookup(sender.created_at)
-                )
+                with case.bus.log.certified_read() as source:
+                    source.addressed_page(case.bus.log, AddressedPage.capture(
+                        lookup=stable_thread_lookup(sender.created_at)))
             assert checkpoint.read_bytes() == saved_index
             return
         # Explicit cold certification must reject a corrupt candidate rather
@@ -201,7 +201,6 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
     from agent_comms.delivery_policy import DeliveryPolicy, InitialDeliveryPolicy
     from agent_comms.field_codec import FieldCodec
     from agent_comms.private_bus_checkpoint import (
-        certified_delivery_page_unlocked,
         install_private_bus_checkpoint,
     )
 
@@ -226,15 +225,14 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
         public = case.bus.log.full_history()
         assert len(public) == 1
         install_private_bus_checkpoint(case.bus.log)
-        with case.bus.log.locked():
+        with case.bus.log.certified_read() as source:
             marker = case.bus.log._private_marker_unlocked()
             full = tuple(case.bus.log.verified_records_unlocked(marker))
             assert full[0].message == public[0]
             delivery, = full[0].deliveries()
             recipient = delivery.audience.recipients[0].recipient_lookup
-            _, certified, more = certified_delivery_page_unlocked(
-                case.bus.log, marker, recipient
-            )
+            _, certified, more = source.addressed_page(
+                case.bus.log, AddressedPage.capture(lookup=recipient))
             assert certified == (delivery,)
             assert not more
     finally:

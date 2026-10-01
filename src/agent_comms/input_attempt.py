@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar
+from uuid import UUID, uuid4
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, projected
-from .thread_identity import ThreadIncarnation
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, TextRepresentation, projected
+from .native_input_record import NativeInputIdText
+from .thread_identity import GenerationCounter, ThreadIncarnation
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -18,8 +20,23 @@ if TYPE_CHECKING:
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
 
-_NATIVE_ID = re.compile(r"[0-9a-f]{32}\Z")
 
+class ACPInputIdText(TextRepresentation):
+    """One original submission ID, independent of its later native input ID."""
+
+    @classmethod
+    def new(cls) -> str:
+        return uuid4().hex
+
+    @classmethod
+    def encode(cls, value):
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if UUID(hex=value).hex != value:
+            raise ValueError("ACP submission requires a canonical UUID hex identity")
+        return value
 
 @dataclass(frozen=True, slots=True)
 class GoalInputDecision:
@@ -34,7 +51,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     has_started: ClassVar[bool] = False
     has_native_binding: ClassVar[bool] = False
     unresolved: ClassVar[bool] = False
-    cancellation_feedback: ClassVar[str] = "Delivery unconfirmed — input not retried. Inspect delivery before deciding whether to send a new message."
+    cancellation_feedback: ClassVar[str] = (
+        "Delivery unconfirmed — input not retried. Inspect delivery before deciding whether to send a new message."
+    )
 
     @property
     @abstractmethod
@@ -48,6 +67,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def queued_for(self, owner: ThreadIncarnation, admission: int, text: str) -> bool:
         return False
+
+    def require_started(self, admission: int) -> StartedInput:
+        raise RelationViolationError("Input start lacks its original native disposition")
 
     def proves_started(
         self,
@@ -75,8 +97,12 @@ class InputAttempt(DeclaredFamily, affix="Input"):
         return False
 
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
-        *, snapshot: RegistrySnapshot,
+        self,
+        lease: TurnLeaseFence,
+        native_id: str,
+        sent_text: str,
+        *,
+        snapshot: RegistrySnapshot,
     ) -> StartedInput | None:
         return None
 
@@ -108,17 +134,15 @@ class StoredInput(InputAttempt):
     )
 
     def __post_init__(self) -> None:
-        if (
-            not self.key
-            or not self.owner
-            or not self.target
-            or type(self.source_text) is not str
-            or not self.source_text
-            or self.admission <= 0
-        ):
-            raise ValueError("Invalid ACP input identity")
+        try:
+            for value in (self.key, self.owner, self.target, self.source_text):
+                if not FieldCodec.decode(str, value):
+                    raise ValueError("Input identity text cannot be empty")
+            GenerationCounter.require_positive(self.admission)
+        except ValueError as error:
+            raise ValueError("Invalid ACP input identity") from error
         if self.sequence is not None and (
-            self.sequence <= 0
+            FieldCodec.decode(int, self.sequence) <= 0
             or (
                 self.key != f"bus:{self.sequence}"
                 and not self.key.startswith(f"bus:{self.sequence}:owner:")
@@ -224,8 +248,15 @@ class SentInput(StoredInput):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if not self.turn_id or _NATIVE_ID.fullmatch(self.native_id) is None or not self.sent_text:
-            raise ValueError("Invalid native input attempt")
+        try:
+            from .thread_identity import TurnId
+
+            TurnId.for_registration(self.turn_id)
+            NativeInputIdText.decode(self.native_id)
+            if not FieldCodec.decode(str, self.sent_text):
+                raise ValueError("Native input text cannot be empty")
+        except ValueError as error:
+            raise ValueError("Invalid native input attempt") from error
 
     @property
     def sent_digest(self) -> TextDigest:
@@ -257,9 +288,18 @@ class StartedInput(SentInput):
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled — input not retried."
 
+    def require_started(self, admission: int) -> StartedInput:
+        if not self.matches_admission(admission):
+            raise RelationViolationError("Input start admission changed")
+        return self
+
     def started_for_native(
-        self, lease: TurnLeaseFence, native_id: str, sent_text: str,
-        *, snapshot: RegistrySnapshot,
+        self,
+        lease: TurnLeaseFence,
+        native_id: str,
+        sent_text: str,
+        *,
+        snapshot: RegistrySnapshot,
     ) -> StartedInput | None:
         """Return this original row's recorded lease/input evidence only.
 
@@ -271,9 +311,11 @@ class StartedInput(SentInput):
             return None
         if not self.matches_admission(lease.admission_generation):
             return None
-        return self if self.matches_native(
-            turn_id=lease.turn_id, native_id=native_id, text=sent_text
-        ) else None
+        return (
+            self
+            if self.matches_native(turn_id=lease.turn_id, native_id=native_id, text=sent_text)
+            else None
+        )
 
     def proves_started(
         self,
@@ -296,7 +338,9 @@ class StartedInput(SentInput):
 class NotSentInput(StoredInput):
     unresolved = True
     public_status = "not_sent"
-    cancellation_feedback = "Not sent — cancellation completed before native delivery. Input not retried."
+    cancellation_feedback = (
+        "Not sent — cancellation completed before native delivery. Input not retried."
+    )
 
     def unsettled_for(self, owner: Thread, pending_key: str | None) -> bool:
         return False

@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from hashlib import sha256
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
 from .agent_events import CompactionEvent
 from .compaction_states import CompactionPublishedMetadata
 from .declared_family import DeclaredFamily
-from .input_attempt import InputAttempt
+from .input_attempt import ACPInputIdText, InputAttempt
 from .field_codec import FieldCodec
 from .goal_presentation import GoalExecution
 from .goals import Goal
@@ -25,6 +25,7 @@ from .pi_payloads import McpLiveReceipt
 from .routing import MessageRoute
 from .thread_identity import AdmissionIdentity, ThreadIncarnation
 from .turn_lease import TurnState
+from .wire_metadata import WireRootIdText
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 
 if TYPE_CHECKING:
@@ -166,10 +167,9 @@ class CursorScope(AttachmentScope):
     owner_pid: int
 
     def __post_init__(self):
+        WireRootIdText.decode(self.wire_root_id)
         if (
             not self.session_id
-            or len(self.wire_root_id) != 32
-            or any(c not in "0123456789abcdef" for c in self.wire_root_id)
             or self.owner_pid <= 0
             or self.admission.admission_generation <= 0
             or self.admission.incarnation.created_at <= 0
@@ -469,6 +469,10 @@ class CommsRequest(DeclaredFamily, affix="Request"):
 class PromptRequest(CommsRequest):
     user_text: str | None = None
     defer_display: bool = False
+    input_id: Annotated[str, ACPInputIdText] = field(default_factory=ACPInputIdText.new)
+
+    def __post_init__(self):
+        ACPInputIdText.decode(self.input_id)
 
     @property
     def draft_text(self) -> str | None:
@@ -481,16 +485,12 @@ class PromptRequest(CommsRequest):
         pass
 
     async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
-        pass
+        await inputs.emit_queue_state(session_id)
 
 
 class QueuePromptRequest(PromptRequest):
     def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:
         return item.deferred(row, owner)
-
-    async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
-        await inputs.emit_queue_state(session_id)
-
 
 class SteerPromptRequest(PromptRequest):
     def accepted(self, item: QueuedInput, row: InputAttempt, owner: Thread) -> QueuedInput:

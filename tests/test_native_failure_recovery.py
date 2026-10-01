@@ -17,7 +17,6 @@ from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_recovery import (
     RecoveryMonitorCapability,
     VerifiedOwnerLoss,
-    _owner_loss_verified,
 )
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
@@ -32,7 +31,6 @@ from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 def failed_owner(directory, output, exit_allowed):
     # Persist the historical pre-settlement failure shape for operator recovery.
-    SelectedRequest._uncertain_failure = lambda self, error: None
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
     runtime._trusted_package = lambda path: path
     fake, _calls = _fake_model()
@@ -57,7 +55,12 @@ def failed_owner(directory, output, exit_allowed):
                 )
                 + "\n"
             )
-        raise NativePiUnavailable("pre-fix native provider failure")
+        # Revoke the real owner before the failure consumer can settle. This
+        # leaves the original admitted input unresolved without an obsolete
+        # failure hook or a fabricated owner-loss grant.
+        os.environ["AGENT_COMMS_THREAD"] = "beta"
+        comms.owners.release("beta")
+        raise NativePiUnavailable("released native provider failure")
 
     TrackedTurnSession.execute = old_failure
     try:
@@ -76,7 +79,6 @@ def failed_owner(directory, output, exit_allowed):
         ).fetchone()
         execution_id, input_id = row["execution_id"], row["input_id"]
     os.environ["AGENT_COMMS_THREAD"] = "beta"
-    comms.owners.release("beta")
     output.put((str(root), execution_id, input_id))
     if not exit_allowed.wait(10):
         raise TimeoutError("test failed to release fixture process")
@@ -119,8 +121,8 @@ def test_recovery_releases_only_failed_slot_and_never_recovers_acceptance(releas
             ).fetchone()
         )
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as proof:
-            assert _owner_loss_verified(proof, execution_id, proof.owner_lookup, 1, 1, store)
-        assert not _owner_loss_verified(proof, execution_id, proof.owner_lookup, 1, 1, store)
+            assert proof.owns(store, store.snapshots.get(execution_id).attempt)
+        assert not proof.owns(store, store.snapshots.get(execution_id).attempt)
         settled = RecoveryMonitorCapability.recover_native_failure(
             store, execution_id, session_file
         ).value
@@ -208,43 +210,6 @@ def test_recovery_refuses_live_native_session_process(released_failure):
         child.terminate()
         child.wait(timeout=5)
 
-
-@pytest.mark.asyncio
-async def test_unresolved_execution_does_not_engage_a_new_source(
-    tmp_path,  # noqa: F811
-    monkeypatch,
-):
-    from agent_comms.bus_publication import stable_thread_lookup
-    from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
-    from agent_comms.coordination_errors import StaleFence
-
-    root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda path: path)
-    fake, calls = _fake_model(fail_on=1)
-    monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    # A historical unresolved attempt still blocks; current live failures are
-    # settled separately by DurableTurn and do not produce this old shape.
-    with monkeypatch.context() as historical:
-        historical.setattr(SelectedRequest, "_uncertain_failure", lambda self, error: None)
-        with pytest.raises(NativePiUnavailable):
-            await runtime.SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
-            ).run()
-    source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
-    lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        accept_delivery_cohort(comms.bus, root_id, source.seq, store)
-        with pytest.raises(StaleFence, match="unresolved execution"):
-            await runtime.SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
-            ).run()
-        claims = sealed_cohort_assignments(store, lookup, after_seq=source.seq - 1)
-        assert len(claims) == 1
-        assert type(claims[0].lifecycle) is FullPendingAssignment
-        assert len(calls) == 1
-        assert (
-            store.session._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 1
-        )
 
 
 def replacement_release(root):

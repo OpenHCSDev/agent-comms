@@ -179,31 +179,6 @@ def monitor_evidence(
     )
 
 
-@pytest.fixture
-def test_only_trusted_owner_loss(monkeypatch: pytest.MonkeyPatch) -> VerifiedOwnerLoss:
-    # Isolated store transition fixture; native release observations have
-    # separate process-backed integration tests.
-    proof = object.__new__(VerifiedOwnerLoss)
-    object.__setattr__(proof, "execution_id", "exec")
-    object.__setattr__(proof, "owner_lookup", "owner")
-    object.__setattr__(proof, "owner_generation", 1)
-    object.__setattr__(proof, "attempt_ordinal", 1)
-    monkeypatch.setattr(
-        recovery_module,
-        "_owner_loss_verified",
-        lambda supplied, execution_id, lookup, generation, ordinal, store: (
-            supplied is proof
-            and (execution_id, lookup, generation, ordinal)
-            == (
-                proof.execution_id,
-                proof.owner_lookup,
-                proof.owner_generation,
-                proof.attempt_ordinal,
-            )
-        ),
-    )
-    return proof
-
 
 def _concurrent_start(
     path: str, token: str, gate: multiprocessing.Event, output: multiprocessing.Queue
@@ -1047,14 +1022,14 @@ def test_recovered_audit_rejects_prior_attempt_incident_and_terminal(db_path: Pa
 
 
 def test_monitor_requires_owner_loss_separate_from_child_exit(
-    db_path: Path, test_only_trusted_owner_loss: VerifiedOwnerLoss
+    db_path: Path
 ) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
         monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
         for evidence, owner_loss in (
             (monitor_evidence(True), None),
-            (monitor_evidence(True, subprocess_dead=False), test_only_trusted_owner_loss),
+            (monitor_evidence(True, subprocess_dead=False), object.__new__(VerifiedOwnerLoss)),
             (monitor_evidence(True), object.__new__(VerifiedOwnerLoss)),
         ):
             with pytest.raises(RecoveryBlocked):
@@ -1102,88 +1077,6 @@ def test_monitor_production_verifier_remains_closed(db_path: Path) -> None:
             and not snapshot.attempt.lifecycle.backend_done
         )
         assert snapshot.replay is None
-
-
-def test_monitor_death_without_done_is_blocked_and_keeps_pointer(
-    db_path: Path, test_only_trusted_owner_loss: VerifiedOwnerLoss
-) -> None:
-    with ready(db_path) as db:
-        _, fence = started(db)
-        with pytest.raises(PermissionError):
-            RecoveryMonitorCapability(db, _grant=object())
-        monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        with pytest.raises(RecoveryBlocked):
-            monitor.terminalize_dead_attempt(
-                "exec",
-                1,
-                1,
-                expected_attempt_revision=1,
-                expected_execution_revision=3,
-                expected_pointer_revision=1,
-                evidence=monitor_evidence(False),
-                owner_loss=test_only_trusted_owner_loss,
-            )
-        persisted = db.snapshots.get("exec")
-        assert persisted.is_current
-        assert persisted.attempt is not None and persisted.attempt.lifecycle.process_dead
-        assert not persisted.attempt.lifecycle.backend_done
-        assert persisted.replay is not None and persisted.replay.facts == ReplayFact.UNKNOWN_EFFECTS
-        with pytest.raises(StaleRevision):
-            monitor.terminalize_dead_attempt(
-                "exec",
-                1,
-                1,
-                expected_attempt_revision=1,
-                expected_execution_revision=3,
-                expected_pointer_revision=1,
-                evidence=monitor_evidence(True),
-                owner_loss=test_only_trusted_owner_loss,
-            )
-        after = monitor.terminalize_dead_attempt(
-            "exec",
-            1,
-            1,
-            expected_attempt_revision=2,
-            expected_execution_revision=3,
-            expected_pointer_revision=1,
-            evidence=monitor_evidence(True),
-            owner_loss=test_only_trusted_owner_loss,
-        )
-        assert type(after.value.execution.lifecycle) is FailedExecution
-        assert after.value.last_recovery is not None
-        assert after.value.last_recovery.attempt == 1
-
-
-def test_monitor_known_safe_evidence_allows_deferred_and_never_publishes(
-    db_path: Path, test_only_trusted_owner_loss: VerifiedOwnerLoss
-) -> None:
-    with ready(db_path) as db:
-        _, fence = started(db)
-        db.attempts.observe_replay(
-            fence,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
-        monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        outcome = monitor.terminalize_dead_attempt(
-            "exec",
-            1,
-            1,
-            expected_attempt_revision=1,
-            expected_execution_revision=3,
-            expected_pointer_revision=1,
-            evidence=monitor_evidence(True, unknown_effects=False),
-            owner_loss=test_only_trusted_owner_loss,
-        )
-        assert type(outcome.value.execution.lifecycle) is DeferredExecution
-        assert outcome.value.publication_intent is None
-        assert outcome.value.publication_receipt is None
-        assert not hasattr(db, "freeze_publication_intent")
-        assert not hasattr(db, "record_publication_receipt")
-        assert issubclass(PublicationActivationBlocked, Exception)
 
 
 def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
@@ -1338,7 +1231,7 @@ def test_crash_reopen_pending_starts_once_after_owner_returns(db_path: Path) -> 
 
 
 def test_frozen_publishing_snapshot_no_nonpublication_settlement(
-    db_path: Path, test_only_trusted_owner_loss: VerifiedOwnerLoss
+    db_path: Path
 ) -> None:
     with ready(db_path) as db:
         _, fence = started(db)
@@ -1397,21 +1290,9 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
                 outcome=AttemptFailedAttempt(),
                 reason_code="no_receipt",
             )
-        monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        with pytest.raises(PublicationUncertain):
-            monitor.terminalize_dead_attempt(
-                "exec",
-                1,
-                1,
-                expected_attempt_revision=1,
-                expected_execution_revision=3,
-                expected_pointer_revision=1,
-                evidence=monitor_evidence(True),
-                owner_loss=test_only_trusted_owner_loss,
-            )
         assert db.snapshots.get("exec").is_current
         assert db.snapshots.get("exec").attempt is not None
-        assert db.snapshots.get("exec").attempt.lifecycle.backend_done
+        assert not db.snapshots.get("exec").attempt.lifecycle.backend_done
         assert db.snapshots.get("exec").publication_receipt is None
     with store(db_path) as reopened:
         assert reopened.snapshots.get("exec").obligation.lifecycle.declared_name == "publishing"

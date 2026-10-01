@@ -92,7 +92,11 @@ class InputDrain(FutureInputQueue):
             inbox = self.backend_inboxes.get(session_id)
             if inbox is not None:
                 inbox.put_nowait({"type": "clear_queue"})
-            self.queued_inputs.pop(session_id, None)
+            self.queued_inputs[session_id] = {
+                key: retained
+                for key, item in self.queued_inputs.get(session_id, {}).items()
+                if (retained := item.after_clear()) is not None
+            }
             self.restored_inputs.pop(session_id, None)
         await self.emit_queue_state(session_id)
 
@@ -121,7 +125,7 @@ class InputDrain(FutureInputQueue):
             return tuple(
                 QueueItem(input_id, item.text)
                 for input_id, item in values.items()
-                if item.echo and item.context.owns(scope.admission)
+                if item.context.owns(scope.admission)
             )
 
         items = current(self.queued_inputs.get(session_id, {}))
@@ -340,6 +344,7 @@ class InputDrain(FutureInputQueue):
                 echo=request.defer_display,
                 images=images,
                 controller=controller,
+                input_id=request.input_id,
             )
             item = request.accepted(item, self.dispositions.read().lookup(item.key), owner)
             self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
@@ -435,20 +440,22 @@ class InputDrain(FutureInputQueue):
             row = self.dispositions.read().rows.get(key)
             if row is not None and not row.unresolved:
                 await self.emit_input_disposition(session_id, row)
-        item = self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
-        text = item.text if item and item.echo else None
         row = self.dispositions.read().lookup(started_keys[0] if len(started_keys) == 1 else None)
         if input_id is None and original.notice_keys:
             row = self.dispositions.read().lookup(original.notice_keys[0])
-            if row.has_started and row.matches_admission(source_scope.admission_generation):
-                input_id, text = row.public_id, original.notice_text
+        row = row.require_started(source_scope.admission_generation)
+        if input_id is None and original.notice_keys:
+            input_id = row.public_id
+        item = self.queued_inputs.get(session_id, {}).get(input_id or "")
+        text = item.text if item else original.notice_text if input_id == row.public_id else None
         await self.emit_input_started(
             session_id,
             text,
             input_id,
             source_scope=source_scope,
-            native_id=row.native_id if row.has_started else None,
+            native_id=row.native_id,
         )
+        self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
         await self.emit_queue_state(session_id)
 
     async def input_refused(self, session_id: str, input_id: str | None) -> None:
@@ -492,7 +499,11 @@ class InputDrain(FutureInputQueue):
         remaining = self.queued_inputs.pop(session_id, {})
         if remaining:
             self.restored_inputs.setdefault(session_id, {}).update(
-                {key: item.immediate() for key, item in remaining.items() if item.echo}
+                {
+                    key: restored
+                    for key, item in remaining.items()
+                    if (restored := item.restore_after_turn()) is not None
+                }
             )
             await self.emit_queue_state(session_id)
 
@@ -504,6 +515,7 @@ class InputDrain(FutureInputQueue):
         *,
         images: tuple[Any, ...] = (),
         display_text: str | None = None,
+        input_id: str | None = None,
     ) -> None:
         with _store_lock(self.comms._wire_lock_path):
             item, _owner = InitialInput.capture(
@@ -514,6 +526,15 @@ class InputDrain(FutureInputQueue):
                 echo=display_text is not None,
                 images=images,
                 controller=self.runtime.controller.get(),
+                input_id=input_id,
             )
-        await self.emit_input_disposition(session_id, self.dispositions.read().lookup(item.key))
-        await item.dispatch(self.effects.turns, session_id, thread_name)
+            self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
+        try:
+            await self.emit_input_disposition(session_id, self.dispositions.read().lookup(item.key))
+            await self.emit_queue_state(session_id)
+            await item.dispatch(self.effects.turns, session_id, thread_name)
+        finally:
+            queued = self.queued_inputs.get(session_id, {})
+            if queued.get(item.input_id) is item:
+                queued.pop(item.input_id)
+                await self.emit_queue_state(session_id)

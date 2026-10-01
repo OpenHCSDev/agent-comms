@@ -23,7 +23,7 @@ from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .store_files import _store_lock
 from .threads import Thread
-from .thread_identity import OwnerIdentity
+from .thread_identity import OwnerIdentity, AdmissionIdentity
 from .restart_refusals import (
     OwnerSelectionChangedRefusal,
     OwnerGenerationChangedRefusal,
@@ -97,6 +97,37 @@ class OwnerReleaseReceipt:
         if self.thread != snapshot.threads.get(self.thread.name):
             return False
         return snapshot.statuses[self.thread.name].stopped
+
+
+    def require_native_loss(self, snapshot, source) -> None:
+        """The original release attests only its exact dead process and admission.
+
+        A recorded send can be fenced by a later release in the same incarnation.
+        An unrecorded epoch instead needs the exact current stopped receipt. Both
+        paths preserve UNKNOWN; neither says bytes were unwritten or permits retry.
+        """
+        current = snapshot.threads.get(self.thread.name)
+        if current is None or current.incarnation != self.thread.incarnation:
+            raise RelationViolationError("Released native owner incarnation changed")
+        source.require_recorded_owner(current)
+        process = self.thread.require_process()
+        current.require_local_process(process)
+        current.require_idle()
+        if process.alive():
+            raise RelationViolationError("Released native owner process is still alive")
+        actual = snapshot.admission_identity(current.name)
+        released = AdmissionIdentity(self.thread.incarnation, self.after)
+        if not actual.includes(released):
+            raise RelationViolationError("Native release admission regressed")
+        if source.sent_owner_admission_generation is None:
+            snapshot.statuses[current.name].require_stopped()
+            if actual != released:
+                raise RelationViolationError("Unrecorded native send has no exact stopped release")
+        else:
+            sent = AdmissionIdentity(self.thread.incarnation, source.sent_owner_admission_generation)
+            fence = AdmissionIdentity(self.thread.incarnation, self.before)
+            if not fence.includes(sent):
+                raise RelationViolationError("Native release predates the sending admission")
 
 
 class OwnerReleaseStore(LockedStore[dict[str, OwnerReleaseReceipt]]):

@@ -15,32 +15,12 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
 from agent_comms.coordination_tables.publications import PublicationIntents, PublicationReceipt
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import projected
-
-
-def retry_disposition_authorized(
-    execution: ExecutionRecord,
-    replay: ReplayAssessments | None,
-    obligation: ResponseObligation | None,
-) -> bool:
-    """One derived terminal-failure partition; SQL view owns the same relation."""
-    return (
-        execution.lifecycle.current_attempt_ordinal is not None
-        and execution.lifecycle.current_attempt_ordinal < execution.max_attempts
-        and replay is not None
-        and replay.replay_safe
-        and replay.facts == ReplayFact.NONE
-        and not replay.side_effects_possible
-        and (
-            execution.origin is not ExecutionOrigin.WIRE
-            or (obligation is not None and obligation.lifecycle.retryable)
-        )
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,9 +115,7 @@ class RecoverySnapshot:
         self.validate_current_pointer()
         self.validate_response_route()
         self.validate_publication_receipt()
-        self.execution.lifecycle.validate_snapshot(
-            self, retry_disposition_authorized(self.execution, self.replay, self.obligation)
-        )
+        self.execution.lifecycle.validate_snapshot(self, self.retry_authorized)
 
     def validate_membership(self) -> None:
         execution = self.execution
@@ -265,17 +243,10 @@ class RecoverySnapshot:
 
     @projected(view="snapshot")
     def can_retry(self) -> bool:
-        execution = self.execution
-        attempt = self.attempt
-        return (
-            retry_disposition_authorized(execution, self.replay, self.obligation)
-            and execution.lifecycle.retry
-            and attempt is not None
-            and attempt.lifecycle.failed
-            and attempt.lifecycle.backend_done
-            and attempt.lifecycle.process_dead
-            and attempt.lifecycle.lease_expires_at_ms is None
-            and not self.is_current
+        return self.execution.lifecycle.can_retry(
+            authorized=self.retry_authorized,
+            attempt=self.attempt.lifecycle if self.attempt is not None else None,
+            is_current=self.is_current,
         )
 
     def settle(self, session, outcome, reason_code: str | None) -> None:
@@ -353,4 +324,4 @@ class RecoverySnapshot:
 
     @property
     def retry_authorized(self) -> bool:
-        return retry_disposition_authorized(self.execution, self.replay, self.obligation)
+        return self.execution.retry_authorized(self.replay, self.obligation)

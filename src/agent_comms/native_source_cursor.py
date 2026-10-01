@@ -17,11 +17,13 @@ from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .historical_native_inputs import HistoricalNativeInput
+from .native_input_record import UnrecordedNativeInputReference
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import CurrentNativeCursor
 from .proven_source_coverage import ProvenSourceCoverage, SourceCoverage
 from .threads import Thread
+from .field_codec import FieldCodec
 
 
 class NativeSourceCursor:
@@ -45,15 +47,7 @@ class NativeSourceCursor:
         owner_generation: int,
         committed_input_id: str | None,
     ) -> CurrentNativeCursor | None:
-        if (
-            type(owner) is not Thread
-            or type(owner_admission_generation) is not int
-            or owner_admission_generation <= 0
-            or type(owner_generation) is not int
-            or owner_generation <= 0
-            or (committed_input_id is not None and type(committed_input_id) is not str)
-        ):
-            raise ValueError("current cursor requires exact coordinator and owner identities")
+        committed_input_id = FieldCodec.decode(str | None, committed_input_id)
         identity = CursorOwner(
             wire_root_id=self.wire_root_id,
             thread=owner,
@@ -100,8 +94,7 @@ class NativeSourceCursor:
             if prior is None and coverage.covered_seq == 0:
                 return None  # A blocked first source is not a zero-valued cursor.
             if prior is not None and (
-                prior.owner_thread != identity.thread.name
-                or prior.owner_generation != identity.generation
+                prior.owner_identity != identity.participant_identity
                 or coverage.covered_seq < prior.covered_seq
                 or injected < prior.injected_seq
             ):
@@ -206,7 +199,7 @@ class NativeSourceCursor:
     def _require_source(
         self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage
     ) -> None:
-        if cursor.owner_thread != owner.thread.name or cursor.owner_generation != owner.generation:
+        if cursor.owner_identity != owner.participant_identity:
             raise IdentityConflict("current native cursor owner identity differs")
         coverage = sources.prefix(through_seq=cursor.covered_seq)
         if cursor.covered_seq > coverage.covered_seq or (
@@ -219,16 +212,8 @@ class NativeSourceCursor:
             if not owner.matches_prefix(self.store.session._connection, evidence):
                 raise IdentityConflict("current cursor borrows historical owner source proof")
         proof = sources.last_proof(cursor.injected_seq)
-        if (cursor.injected_seq == 0 and cursor.input_id is not None) or (
-            proof is not None
-            and (
-                cursor.input_id != proof.input_id
-                or cursor.assignment_id != proof.assignment_id
-                or cursor.stage != proof.stage
-                or cursor.session_id != proof.context.session_id
-                or cursor.request_generation != proof.context.request_generation
-                or proof.owner_generation != owner.generation
-                or proof.owner_thread != owner.thread.name
-            )
-        ):
+        expected = proof.reference if proof is not None else UnrecordedNativeInputReference()
+        if cursor.reference != expected:
             raise IdentityConflict("current native cursor proof differs from journal")
+        if proof is not None and proof.owner_identity != owner.participant_identity:
+            raise IdentityConflict("current native cursor proof belongs to another owner")

@@ -703,6 +703,7 @@ async def test_selected_first_source_is_default_off_before_any_real_cli_spawn(
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("unreviewed selected CLI must never spawn")
 
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="builtins are unreviewed"):
         await TrackedTurnSession.execute(
@@ -793,7 +794,8 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
             "import json,sys; from pathlib import Path; "
             "request=json.loads(sys.stdin.readline()); "
             f"Path({str(received)!r}).write_text(json.dumps(request)); "
-            f"print({json.dumps(state)!r},flush=True); sys.stdin.read()"
+            f"state=json.loads({json.dumps(state)!r}); state['id']=request['id']; "
+            "print(json.dumps(state),flush=True); sys.stdin.read()"
         )
         return await start((sys.executable, "-u", "-c", program), **kwargs)
 
@@ -815,7 +817,7 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(
-        "agent_comms.tracked_turn._require_reviewed_selected_source_cli", lambda: None
+        "agent_comms.native_pi._require_reviewed_selected_source_cli", lambda: None
     )
     monkeypatch.setattr(AttachedChild, "start", launch)
     monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
@@ -825,7 +827,10 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     reason = (
         "fake prewrite boundary"
         if damage == "valid_preflight"
-        else "saved inode changed" if damage == "changed_inode" else "runtime or inode differs"
+        else "saved inode changed" if damage == "changed_inode"
+        else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
+              "wrong_model": "model_changed: Selected first source model differs",
+              "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
     )
     expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
     with pytest.raises(expected, match=reason):
@@ -860,7 +865,10 @@ async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
     }
     assert launch_envs[0]["AGENT_COMMS_SELECTED_SOURCE_COPY"] == "1"
     assert launch_envs[0]["PI_OFFLINE"] == "1"
-    assert json.loads(received.read_text()) == {"type": "get_state", "id": "native-capability"}
+    from agent_comms.pi_commands import GetState, PiCommand
+
+    preflight = PiCommand.from_wire(json.loads(received.read_text()))
+    assert isinstance(preflight, GetState) and preflight.id
     assert boundary_seen is (damage == "valid_preflight")
 
 
@@ -892,7 +900,10 @@ sys.stdin.read()
             worktree=tmp_path,
             session_dir=tmp_path / "sessions",
         )
-    assert json.loads(received.read_text()) == {"type": "get_state", "id": "native-capability"}
+    from agent_comms.pi_commands import GetState, PiCommand
+
+    preflight = PiCommand.from_wire(json.loads(received.read_text()))
+    assert isinstance(preflight, GetState) and preflight.id
 
 
 def test_prepared_rpc_launch_requires_exact_package_and_private_policy(

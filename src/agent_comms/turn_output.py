@@ -72,18 +72,11 @@ class TurnOutput:
         transport_ok = not self.failure_text and (
             session.native_session.custody.retained or session.native.proc.returncode == 0
         )
-        success = (
-            transport_ok
-            and self.error_message is None
-            and session.admission.started
-            and self.final_assistant_stop
-            and not session.inputs.uncertain
-            and not session.inputs.unresolved
-        )
         self.settle(session, transport_ok)
+        success = transport_ok and self.clean and session.inputs.settled
         return events.Done(
             text=self.terminal_text(success, stderr, session.native.proc.returncode),
-            ok=success and self.failure is None and not session.native.attestation.uncertain,
+            ok=success and session.native.attestation.trustworthy,
             reason_code=self.failure.code if self.failure else None,
             diagnostic={
                 **self.diagnostic,

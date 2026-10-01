@@ -23,11 +23,15 @@ class NativeTool(DeclaredFamily, affix="Tool"):
     action: ClassVar[str] = ""
 
     @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, Any]) -> ToolStart:
+    def for_name(cls, name: str) -> type[NativeTool]:
         try:
-            declaration = cls.decode(name.lower())
+            return cls.decode(name.lower())
         except ValueError:
-            declaration = cls
+            return cls
+
+    @classmethod
+    def start(cls, call_id: str, name: str, arguments: dict[str, Any]) -> ToolStart:
+        declaration = cls.for_name(name)
         detail = declaration.detail(arguments)
         action = declaration.action or name.replace("_", " ").title()
         if detail:
@@ -41,6 +45,11 @@ class NativeTool(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def detail(cls, arguments: dict[str, Any]) -> object:
+        return None
+
+    @classmethod
+    def result_diff(cls, result, ok):
+        """Unknown tool metadata remains opaque; it cannot invent edit evidence."""
         return None
 
 
@@ -92,6 +101,10 @@ class BashTool(CodingTool):
 
 class EditTool(PathTool, CodingTool):
     acp_kind = "edit"
+
+    @classmethod
+    def result_diff(cls, result, ok):
+        return result.edit_diff(ok)
 
     def _parse_resource(self) -> FileClaimPath:
         return ExistingFileClaim(Path(self.arguments["path"]))

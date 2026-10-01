@@ -11,7 +11,9 @@ from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
 from .historical_native_inputs import HistoricalNativeInput
 from .message_bus import MessageBus
-from .native_input_owner import RegistryOwner
+from .native_input_owner import RegistryOwner, ParticipantOwner
+from .native_input_record import NativeInputReference
+from .thread_identity import GenerationCounter
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .registry_document import RegistrySnapshot
 
@@ -22,6 +24,14 @@ class CursorOwner(RegistryOwner):
 
     wire_root_id: str
     generation: int
+
+    def __post_init__(self):
+        GenerationCounter.require_positive(self.generation)
+        GenerationCounter.require_positive(self.admission_generation)
+
+    @property
+    def participant_identity(self):
+        return ParticipantOwner(self.thread, self.generation).coordinator_identity(self.lookup)
 
     @property
     def lookup(self) -> str:
@@ -35,11 +45,7 @@ class CursorOwner(RegistryOwner):
     def require_participant(self, store: Coordination, reason: str) -> None:
         assert_native_runtime_schema(store.session._connection)
         person = store.participants.get(self.lookup)
-        if (
-            not person.committed
-            or person.owner_thread != self.thread.name
-            or person.participant_generation != self.generation
-        ):
+        if not person.committed or person.owner_identity != self.participant_identity:
             raise StaleFence(reason)
 
     def cursor(self, db: sqlite3.Connection) -> CurrentNativeCursor | None:
@@ -51,34 +57,10 @@ class CursorOwner(RegistryOwner):
             owner_admission_generation=self.admission_generation,
         )
 
-    def _matches_input(
-        self,
-        row: NativeRuntimeInput | None,
-        *,
-        assignment_id: str,
-        stage: str,
-        session_id: str,
-        request_generation: int,
-    ) -> bool:
-        return row is not None and (
-            row.owner_lookup,
-            row.owner_thread,
-            row.owner_generation,
-            row.sent_owner_admission_generation,
-            row.assignment_id,
-            row.stage,
-            row.session_id,
-            row.request_generation,
-        ) == (
-            self.lookup,
-            self.thread.name,
-            self.generation,
-            self.admission_generation,
-            assignment_id,
-            stage,
-            session_id,
-            request_generation,
-        )
+    def _matches_input(self, row: NativeRuntimeInput | None, reference: NativeInputReference) -> bool:
+        if row is None or row.owner_identity != self.participant_identity:
+            return False
+        return row.sent_owner_admission_generation == self.admission_generation and row.reference == reference
 
     def matches_prefix(
         self, db: sqlite3.Connection, evidence: tuple[HistoricalNativeInput, ...]
@@ -86,26 +68,21 @@ class CursorOwner(RegistryOwner):
         return all(
             self._matches_input(
                 NativeRuntimeInput.one(db, input_id=item.input_id),
-                assignment_id=item.assignment_id,
-                stage=item.stage,
-                session_id=item.context.session_id,
-                request_generation=item.context.request_generation,
+                item.reference,
             )
             for item in evidence
         )
 
     def require_recorded_input(self, db: sqlite3.Connection, cursor: CurrentNativeCursor) -> None:
-        if cursor.input_id is None:
-            return
-        row = NativeRuntimeInput.one(db, input_id=cursor.input_id)
+        cursor.reference.require_recorded_input(self, db)
+
+    def require_recorded_reference(self, db: sqlite3.Connection, reference: NativeInputReference) -> None:
+        row = NativeRuntimeInput.one(db, input_id=reference.input_id)
         if row is None or row.sent_owner_admission_generation != self.admission_generation:
             raise IdentityConflict("current cursor input admission differs")
         if not self._matches_input(
             row,
-            assignment_id=cursor.assignment_id,
-            stage=cursor.stage,
-            session_id=cursor.session_id,
-            request_generation=cursor.request_generation,
+            reference,
         ):
             raise IdentityConflict("current cursor proof differs from journal")
 
@@ -120,12 +97,7 @@ class CursorOwner(RegistryOwner):
         """Historical evidence cannot seed another live admission generation."""
         if proof is None:
             return True  # Covered no-wake prefix may precede an UNKNOWN gap.
-        if (proof.owner_lookup, proof.owner_thread, proof.owner_generation, proof.source_seq) != (
-            self.lookup,
-            self.thread.name,
-            self.generation,
-            injected_seq,
-        ):
+        if proof.owner_identity != self.participant_identity or proof.source_seq != injected_seq:
             raise IdentityConflict("current cursor native proof belongs to another owner")
         if prior is None or injected_seq > prior.injected_seq:
             if proof.input_id != committed_input_id:
@@ -144,10 +116,7 @@ class CursorOwner(RegistryOwner):
             raise IdentityConflict("current cursor input admission differs")
         if not self._matches_input(
             reserved,
-            assignment_id=proof.assignment_id,
-            stage=proof.stage,
-            session_id=proof.context.session_id,
-            request_generation=proof.context.request_generation,
+            proof.reference,
         ):
             raise IdentityConflict("current cursor differs from committed native receipt")
         return True

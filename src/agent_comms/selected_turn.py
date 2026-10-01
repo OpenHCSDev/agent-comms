@@ -59,7 +59,6 @@ class SelectedPrompt:
                 participant.initial,
                 participant.assignment,
                 participant.owner.thread,
-                phase="triage",
             )
             + (
                 f"You are participant {participant.owner.thread.name}. "
@@ -79,7 +78,6 @@ class SelectedPrompt:
             participant.initial,
             assignment,
             participant.owner.thread,
-            phase="full",
             obligation=obligation,
         )
         suffix = (

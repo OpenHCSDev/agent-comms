@@ -39,6 +39,16 @@ def test_pi_spellings_are_not_compared_by_consumers():
     assert not violations, violations
 
 
+def test_tracked_receipt_and_terminal_data_do_not_restore_nullable_slots():
+    source = ast.parse((SOURCE / "tracked_turn.py").read_text())
+    replaced = {"input_event", "context_event", "terminal_error", "final_messages"}
+    assert not [
+        f"{node.attr}:{node.lineno}"
+        for node in ast.walk(source)
+        if isinstance(node, ast.Attribute) and node.attr in replaced
+    ]
+
+
 def test_summary_members_own_the_response_contract():
     assert SelectedSummaryData.__abstractmethods__ == frozenset({"response"})
     members = SelectedSummaryData.members_with(SelectedSummaryData)
@@ -68,3 +78,33 @@ def test_vocabularies_derive_names_from_their_declarations():
     }
     assert CompactionReason.names() == ("manual", "overflow", "threshold", "unknown")
     assert ThinkingLevel.selected_names() == ("low", "high")
+
+
+def test_c1_observation_consumers_do_not_reconstruct_absence():
+    """Native optional JSON is decoded before response/model/tool consumers."""
+    consumers = {
+        "pi_events.py": {"Response", "ToolExecutionEnd", "ToolExecutionUpdate"},
+        "pi_payloads.py": {"AssistantMessage", "StateData"},
+        "native_tools.py": {"EditTool"},
+        "pi_commands.py": {"SessionSnapshot", "GetState", "CatalogQuery"},
+        "native_attestation.py": {"PendingAttestation"},
+        "turn_stats.py": {"StatsRequest"},
+    }
+    violations = []
+    for filename, owners in consumers.items():
+        for declaration in ast.parse((SOURCE / filename).read_text()).body:
+            if not isinstance(declaration, ast.ClassDef) or declaration.name not in owners:
+                continue
+            for method in declaration.body:
+                if not isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)) or method.name.startswith("normalize_"):
+                    continue
+                for comparison in ast.walk(method):
+                    if not isinstance(comparison, ast.Compare):
+                        continue
+                    terms = [comparison.left, *comparison.comparators]
+                    if any(isinstance(term, ast.Constant) and term.value is None for term in terms) and any(
+                        isinstance(term, ast.Attribute) and term.attr in {"data", "model", "result", "partial_result", "content"}
+                        for term in terms
+                    ):
+                        violations.append(f"{filename}:{comparison.lineno}")
+    assert not violations, violations

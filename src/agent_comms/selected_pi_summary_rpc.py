@@ -52,16 +52,7 @@ def _summary_response(
         if not raw or not raw.endswith(b"\n"):
             raise ValueError("Incomplete selected summary")
         response = PiRpcChannel.decode_record(raw, strict=True)
-        if (
-            not isinstance(response, Response)
-            or response.id != request.id
-            or response.command is not AgentCommsSummarizeCompaction
-            or response.success is not True
-        ):
-            raise ValueError("Unmatched selected summary response")
-        data = response.data
-        if data is None or data.operation_id != request.operation_id:
-            raise ValueError("Unmatched selected summary operation")
+        data = response.require_request(request).require_request(request)
         return data.response(request, tokens_before)
     except (ValueError, TypeError, KeyError) as error:
         raise SelectedChildUnknown(f"Selected summary response is uncertain: {error}") from error

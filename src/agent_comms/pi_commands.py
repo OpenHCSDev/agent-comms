@@ -47,8 +47,7 @@ class SessionSnapshot:
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return bool(
             response.success
-            and response.data is not None
-            and session.native.attestation.conflicts(response.data)
+            and response.data.conflicts_attestation(session.native.attestation)
         ) or super().invalidates_identity(response, session)
 
 
@@ -203,14 +202,14 @@ class GetState(SessionSnapshot, PiCommand):
         cls, response: Response, session: TurnSession
     ) -> AsyncIterator[events.AgentEvent]:
         if response.success:
-            state = response.data or StateData()
+            state = response.data.require_payload()
             session.native.attestation = session.native.attestation.observe(state)
-            session.model_name = state.model.display_name if state.model else None
+            session.model_name = state.model.display_name
             session.session_name = state.session_name
             session.active_session_file = state.session_file or session.active_session_file
-            session.usage.size = state.model.context_window if state.model else None
+            session.usage.size = state.model.context_window
             yield events.AgentInfo(
-                model=state.model.display_name if state.model else None,
+                model=state.model.display_name,
                 thinking_level=ThinkingLevel.optional_name(state.thinking_level),
                 session_name=state.session_name,
                 session_file=session.active_session_file,
@@ -228,7 +227,7 @@ class GetSessionStats(SessionSnapshot, PiCommand):
         cls, response: Response, session: TurnSession
     ) -> AsyncIterator[events.AgentEvent]:
         if response.success:
-            context = response.data.context_usage if response.data is not None else None
+            context = response.data.require_payload().context_usage
             if context is not None:
                 if context.tokens is not None and context.tokens > 0:
                     session.usage.confirm(context.tokens)
@@ -289,8 +288,8 @@ class CatalogQuery(PiCommand):
                 stderr = asyncio.create_task(child.discard_stderr())
                 try:
                     response = await self.exchange(PiRpcChannel(child.stdout), child.stdin)
-                    if response.success is True and response.data is not None:
-                        return response.data
+                    if response.success is True:
+                        return response.data.require_payload()
                 finally:
                     stderr.cancel()
                     await asyncio.gather(stderr, return_exceptions=True)

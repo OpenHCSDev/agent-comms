@@ -16,6 +16,7 @@ from agent_comms.private_sidecar import native_request_digest
 from agent_comms.reservation_rules import ReservationRule, ReservationViolationError
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadRole
+from agent_comms.pi_vocabulary import ThinkingLevel
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -77,19 +78,15 @@ async def test_durable_private_admission_names_each_changed_authority(
             rules.RegistryWorktreeRule: replace(
                 registry, actual=replace(current, worktree=str(tmp_path / "other"))
             ),
+            rules.RegistryModelRule: replace(registry, actual=replace(current, model="fixture/changed")),
+            rules.RegistryThinkingRule: replace(registry, actual=replace(current, thinking_level=next(level for level in ThinkingLevel.members_with(ThinkingLevel) if level is not current.thinking_level))),
+            rules.RegistrySessionRule: replace(registry, actual=replace(current, session_file=str(tmp_path / "changed.jsonl"))),
             rules.RegistryTurnRule: replace(registry, actual=replace(current, active_turn=None)),
             rules.RegistryGoalRule: replace(
                 registry, actual=replace(current, goal=Goal("changed", "changed"))
             ),
-            rules.NativeAssignmentRule: replace(
-                reservation, row=replace(row, assignment_id="another")
-            ),
-            rules.NativeStageRule: replace(
-                reservation, row=replace(row, stage="triage" if direct else "full")
-            ),
-            rules.NativeAttemptRule: replace(reservation, row=replace(row, attempt_ordinal=99)),
-            rules.NativeOwnerRule: replace(
-                reservation, owner=replace(expected, generation=expected.generation + 1)
+            rules.NativeInputIdentityRule: replace(
+                reservation, row=replace(row, owner_generation=expected.generation + 1)
             ),
             rules.NativeTokenRule: replace(reservation, token_digest="0" * 64),
             rules.NativeAlreadyAdmittedRule: replace(
@@ -102,11 +99,8 @@ async def test_durable_private_admission_names_each_changed_authority(
                 reservation, row=replace(row, verdict="ignore")
             ),
             rules.NativeBindingRootRule: replace(bound, wire_root_id="0" * 32),
-            rules.NativeBindingSequenceRule: replace(
+            rules.NativeBindingSourceRule: replace(
                 bound, row=replace(binding, source_seq=binding.source_seq + 1)
-            ),
-            rules.NativeBindingMessageRule: replace(
-                bound, row=replace(binding, message_id="another")
             ),
             rules.NativeBindingContentRule: replace(bound, prompt_digest=TextDigest.of("changed")),
             rules.NativeClaimRecipientRule: replace(
@@ -148,8 +142,8 @@ async def test_durable_private_admission_names_each_changed_authority(
             assert declaration.declared_name in str(caught.value)
         # The shared owner/attempt rules also apply to the independent prelaunch row.
         for changes, refusal in (
-            ({"owner_generation": expected.generation + 1}, rules.NativeOwnerRule),
-            ({"attempt_ordinal": 99}, rules.NativeAttemptRule),
+            ({"owner_generation": expected.generation + 1}, rules.NativeInputIdentityRule),
+            ({"attempt_ordinal": 99}, rules.NativeInputIdentityRule),
         ):
             with pytest.raises(ReservationViolationError) as caught:
                 replace(bound, row=replace(binding, **changes)).require_valid()

@@ -21,8 +21,8 @@ def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> No
     enrollment = create_fresh_private_session(session_dir, worktree=tmp_path)
     info = enrollment.path.lstat()
     assert (info.st_dev, info.st_ino, info.st_nlink, info.st_mode & 0o777) == (
-        enrollment.device,
-        enrollment.inode,
+        enrollment.file_identity.device,
+        enrollment.file_identity.inode,
         1,
         0o600,
     )
@@ -81,6 +81,7 @@ def test_explicit_selected_bootstrap_is_prewrite_durable_and_attested(tmp_path: 
         "partial",
         "duplicate_key",
         "fsync_failed",
+        "revision_changed",
     ],
 )
 def test_selected_startup_requires_exact_two_durable_metadata_appends(
@@ -136,10 +137,21 @@ def test_selected_startup_requires_exact_two_durable_metadata_appends(
         from agent_comms import fresh_private_session as module
 
         monkeypatch.setattr(module.os, "fsync", lambda _: (_ for _ in ()).throw(OSError("EIO")))
+    elif damage == "revision_changed":
+        from agent_comms import fresh_private_session as module
+
+        actual_fsync = module.os.fsync
+
+        def append_during_fsync(descriptor: int) -> None:
+            actual_fsync(descriptor)
+            with fresh.path.open("ab") as stream:
+                stream.write(b"{}\n")
+
+        monkeypatch.setattr(module.os, "fsync", append_during_fsync)
     if damage == "none":
         revision = fresh.verify_selected_startup()
-        assert revision[:2] == (fresh.device, fresh.inode)
-        assert revision[2] > fresh.bootstrap_size
+        assert revision.identity == fresh.file_identity
+        assert revision.size > fresh.bootstrap_size
         with pytest.raises(NativePiUnavailable, match="earlier input"):
             fresh.verify_prewrite()
     else:
@@ -430,3 +442,34 @@ def test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_select
             fresh_session=fresh,
             admission_generation=3,
         )
+
+
+@pytest.mark.parametrize(
+    "mutation, reason",
+    [
+        ({"model": None}, "model_changed"),
+        ({"model": {"provider": "other", "id": "z-ai/glm-5.3-flash"}}, "model_changed"),
+        ({"messageCount": 1}, "messages_present"),
+        ({"pendingMessageCount": 1}, "pending_messages"),
+        ({"isStreaming": True}, "streaming"),
+        ({"isStreaming": None}, "streaming"),
+        ({"isCompacting": True}, "compacting"),
+        ({"isCompacting": None}, "compacting"),
+    ],
+)
+def test_enrollment_refuses_nonempty_or_unattested_runtime(tmp_path, mutation, reason):
+    from agent_comms.pi_payloads import StateData
+
+    fresh = create_fresh_private_session(
+        tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
+    )
+    observed = {
+        "sessionId": fresh.session_id,
+        "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
+        "thinkingLevel": "high", "messageCount": 0, "pendingMessageCount": 0,
+        "isStreaming": False, "isCompacting": False,
+    }
+    fresh.require_runtime(StateData.from_wire(observed))
+    with pytest.raises(NativePiUnavailable, match=reason):
+        fresh.require_runtime(StateData.from_wire(observed | mutation))
+    fresh.verify_prewrite()
