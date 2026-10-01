@@ -88,3 +88,24 @@ nested Core tool/native manifest journey, plus saved configured-provider proof
 and whole boundary/guidance/inspection closure. Source or SDK contracts do not
 claim whole installed readiness. Public defaults and original UNKNOWN are
 unchanged.
+
+## Actual installed full controlled journey39
+
+New immutable native0064 / installed Core43df and Toad89655 completed the continuous
+actual Toad → ACP → native → nested Core decision tool → same-turn followup → second
+authored input → CLI inspection journey in 48.995 seconds, with three localhost
+provider requests and zero paid/public calls. All three original native input IDs
+are unique and saved once. The decision is one original wire message; three silent
+context manifests do not perturb the message high-water. Historical turn/diff
+queries preserve the journal. Actual compositor reply frames are retained as SVG.
+Fixture closure returned and native children were asserted dead; the final exact
+fixture process census is empty.
+
+Original32–35 negatives remain intact, with no replay. The original joint-turn reply
+oracle and screenshot API were corrected in the existing UI driver, not production.
+Actual SDK38 additionally proves that replacing a valid PNG preserves the native
+input while dropping original-image attribution. Details and artifact hashes:
+`installed-context-toad-core-tool39-receipt.json`, `logical-image-sdk38-receipt.json`.
+
+This is installed controlled-provider acceptance, not configured-provider saved-state
+acceptance, full phase1 Ready, public activation or performance readiness.
