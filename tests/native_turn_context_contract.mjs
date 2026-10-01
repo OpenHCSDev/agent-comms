@@ -31,6 +31,8 @@ const kept=manager.appendMessage({role:'user',content:[
     {type:'image',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',mimeType:'image/png'},
 ],timestamp:3});
 manager.appendCompaction('Original source summary.',kept,100);
+if (process.argv.includes('--retained-history'))
+    manager.appendMessage({role:'user',content:'Representative retained native history. '.repeat(3000),timestamp:4});
 manager.appendCustomMessageEntry('source-contract','Original injected delivery',true);
 const {session}=await pi.createAgentSession({cwd,agentDir,modelRuntime:runtime,
     settingsManager:settings,sessionManager:manager,resourceLoader:loader});
