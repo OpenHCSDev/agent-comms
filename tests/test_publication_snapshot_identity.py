@@ -63,7 +63,10 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
         response = case.bus.log.read_keyed_response(intent)
         assert intent.matches_publication(response)
         with case.bus.log.locked():
-            conversation = ResponseConversation.capture(case.bus, case.store.snapshots.get("exec"))
+            snapshot = case.store.snapshots.get("exec")
+            conversation = ResponseConversation.capture(
+                case.bus, snapshot, snapshot.require_wire_response()
+            )
             changed = (
                 replace(response, notice=True)
                 if notice

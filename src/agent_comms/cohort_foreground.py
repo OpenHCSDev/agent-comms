@@ -316,7 +316,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else (
                 {
                     "disposition": result.disposition.declared_name,
-                    "claim_id": result.assignment_id,
+                    "claim_ids": result.assignment_ids,
                     "response_message_id": result.response_message_id,
                 }
                 if result is not None

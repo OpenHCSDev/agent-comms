@@ -1,4 +1,4 @@
-"""A selected participant holds one exact live lease and its frozen source."""
+"""A selected participant holds one exact live lease and its captured source batch."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_cohort import accept_delivery_cohort, next_sealed_assignment
+from .coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_tables.assignments import WakeAssignment
@@ -23,6 +23,8 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .turn_phase import PreparingPhase, TurnPhase
 from .diagnostics import record_request_progress
+from .selected_source_batch import SelectedSource, SelectedSourceBatch
+from .wake import derive_exact_reply_target
 
 
 @dataclass(frozen=True)
@@ -34,8 +36,7 @@ class SelectedParticipant(MroDispatch):
     owner: RegistryOwner
     identity: ParticipantOwner
     lookup: str
-    assignment: WakeAssignment
-    initial: CommittedDelivery
+    batch: SelectedSourceBatch
     provider: str
     model: str
 
@@ -51,8 +52,9 @@ class SelectedParticipant(MroDispatch):
         self.comms.agents.transition_turn(lease, phase)
 
     def consume_reply_wait(self) -> None:
-        """Completed selected handling consumes only this original dependency reply."""
-        self.comms.goals.consume_reply_wait(self.owner, self.initial.message.reference)
+        """Consume each original dependency reply included in this completed input."""
+        for source in self.batch.sources:
+            self.comms.goals.consume_reply_wait(self.owner, source.delivery.message.reference)
 
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:
@@ -89,8 +91,8 @@ class SelectedParticipant(MroDispatch):
         identity = ParticipantOwner(thread, participant.participant_generation)
         with store.session.read():
             identity.require(store, lookup)
-        assignment = next_sealed_assignment(store, lookup, thread.name, after_seq=after_seq)
-        if assignment is None:
+        pending = pending_sealed_assignments(store, lookup, thread.name, after_seq=after_seq)
+        if not pending:
             yield None
             return
         participant.pointer.require_idle()
@@ -101,7 +103,15 @@ class SelectedParticipant(MroDispatch):
         if not provider or not model:
             raise IdentityConflict("Selected owner's configured provider/model is incomplete")
         with cls.lease(comms, owner) as leased:
-            initial = cls.source(bus, store, root_id, assignment, identity)
+            sources = tuple(
+                SelectedSource(row, cls.source(bus, store, root_id, row, identity))
+                for row in pending
+            )
+            target = derive_exact_reply_target(sources[0].delivery.message)
+            batch = SelectedSourceBatch(tuple(
+                source for source in sources
+                if derive_exact_reply_target(source.delivery.message) == target
+            ))
             selected = cls(
                 comms,
                 bus,
@@ -110,12 +120,11 @@ class SelectedParticipant(MroDispatch):
                 leased,
                 ParticipantOwner(leased.thread, identity.generation),
                 lookup,
-                assignment,
-                initial,
+                batch,
                 provider,
                 model,
             )
-            selected.transition(PreparingPhase(f"Preparing {initial.message.target} message"))
+            selected.transition(PreparingPhase(f"Preparing {len(batch.sources)} messages in {', '.join(batch.targets)}"))
             yield selected
 
     @staticmethod

@@ -103,9 +103,6 @@ async def test_durable_private_admission_names_each_changed_authority(
                 reservation, row=replace(row, verdict=IgnoreSelectedTriage)
             ),
             rules.NativeBindingRootRule: replace(bound, wire_root_id="0" * 32),
-            rules.NativeBindingSourceRule: replace(
-                bound, row=replace(binding, source_seq=binding.source_seq + 1)
-            ),
             rules.NativeBindingContentRule: replace(bound, prompt_digest=TextDigest.of("changed")),
             rules.NativeClaimRecipientRule: replace(
                 claim, current=replace(claim.current, recipient="another")

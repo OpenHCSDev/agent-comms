@@ -301,11 +301,7 @@ def _require_cohort_assignments(
             if terminal
             else assignment.lifecycle.require_engagement()
         )
-        target = snapshot.execution.exact_target
-        if (
-            engagement.exact_target != target
-            or derive_exact_reply_target(initial.message) != target
-        ):
+        if engagement.exact_target != derive_exact_reply_target(initial.message):
             raise IdentityConflict("response claim conflicts with original selected bus route")
 
 
@@ -356,7 +352,8 @@ def prepare_fenced_response(
         with store.session.transaction() as db:
             snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness)
             execution = snapshot.execution
-            target = execution.require_response_target()
+            obligation = snapshot.require_wire_response()
+            target = obligation.exact_target
             existing = snapshot.publication_intent
             if existing is not None:
                 snapshot.require_existing_preparation(
@@ -374,7 +371,7 @@ def prepare_fenced_response(
             when = time.time() if timestamp is None else timestamp
             candidate = Message(
                 execution.owner_thread,
-                execution.exact_target,
+                target,
                 payload,
                 message_type,
                 timestamp=when,
@@ -383,14 +380,14 @@ def prepare_fenced_response(
             intent = PublicationIntents(
                 execution_id=execution.execution_id,
                 sender=execution.owner_thread,
-                exact_target=execution.exact_target,
+                exact_target=target,
                 message_type=message_type,
                 notice=notice,
                 timestamp=when,
                 payload=payload,
                 payload_digest=hashlib.sha256(payload.encode()).hexdigest(),
                 publication_key=canonical_publication_key(
-                    execution.execution_id, execution.exact_target
+                    execution.execution_id, target
                 ),
                 expected_message_id=candidate.message_id,
             )
@@ -490,7 +487,7 @@ def _settle_fenced_response(
                 # only authorized first append while its final fence is locked.
                 from .response_conversation import ResponseConversation
 
-                conversation = ResponseConversation.capture(bus, snapshot)
+                conversation = ResponseConversation.capture(bus, snapshot, obligation)
                 matched = bus.publisher._publish_keyed_response_unlocked(
                     intent, conversation=conversation, registry_snapshot=registry_snapshot
                 )
