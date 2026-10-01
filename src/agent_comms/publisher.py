@@ -119,22 +119,9 @@ class Publisher:
         original_source: CertifiedSourceRead | None = None,
     ) -> Message:
         snapshot = snapshot or self._registry.snapshot()
-        if message.decision is not None:
-            author = snapshot.require(sender)
-            author.require_turn(
-                message.decision.source_turn_id, snapshot.admission_generations[sender]
-            )
-            message.decision.require_emission(author)
-            if message.decision.supersedes is not None:
-                from .private_bus_checkpoint import source_references_unlocked
-
-                if original_source is None:
-                    raise RelationViolationError("Decision correction requires the original publication read")
-                original_source.require_marker(self.log._private_marker_unlocked())
-                original, = source_references_unlocked(
-                    original_source, (message.decision.supersedes,)
-                )
-                message.decision.require_correction(original, snapshot)
+        if original_source is not None:
+            original_source.require_marker(self.log._private_marker_unlocked())
+        message.require_task_publication(sender, snapshot, original_source)
 
         def resolve_mention(name: str) -> str | None:
             canonical = snapshot.aliases.get(name, name)
