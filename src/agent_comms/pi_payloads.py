@@ -1004,8 +1004,8 @@ class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
 class NativeEditDetails(PiPayload):
     """Native edit metadata, decoded only when projecting actual edit evidence."""
 
-    patch: str | None = None
-    diff: str | None = None
+    patch: str | None = wire_field("patch")
+    diff: str | None = wire_field("diff")
     first_changed_line: int | None = wire_field("firstChangedLine")
 
     @classmethod
@@ -1033,18 +1033,19 @@ class NativeEditDetails(PiPayload):
 class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
     """Decode the original owned result once; other extension details stay opaque."""
     opaque: ClassVar[bool] = False
+    wire_tag = "agentCommsKind"
 
     @classmethod
     def normalize_wire(cls, value):
         if value is None:
             return {"kind": NoToolDetails.declared_name}
-        if not isinstance(value, dict):
+        if not isinstance(value, dict) or cls.wire_tag not in value:
             return {"kind": OpaqueToolDetails.declared_name, "payload": value}
         return super().normalize_wire(value)
 
     @classmethod
     def wire_member(cls, value):
-        return FileMutationToolDetails if "agentCommsArtifact" in value else OpaqueToolDetails
+        return cls.decode(value[cls.wire_tag])
 
     def edit_diff(self):
         return None

@@ -15,6 +15,8 @@ def main(package):
     tools = Path(package) / "dist/core/tools"
     (tools / "agent-comms-file-artifact.js").write_bytes(
         Path(__file__).with_name("native-file-artifact.mjs").read_bytes())
+    (tools / "native-file-artifact-schema.mjs").write_bytes(
+        Path(__file__).with_name("native-file-artifact-schema.mjs").read_bytes())
     for name in ("write", "edit"):
         path = tools / f"{name}.js"
         imports = "mkdir as fsMkdir" if name == "write" else "access as fsAccess, readFile as fsReadFile"

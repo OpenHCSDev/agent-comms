@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import stat
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields
@@ -20,6 +19,8 @@ from .declared_family import DeclaredFamily
 from .native_package import verify_native_package
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_helper import PiHelper, SessionHelperRequest
+from .native_revision_text import NativeRevisionText
+from .private_path import FileRevision
 
 
 class NativePreparationError(ValueError):
@@ -39,21 +40,17 @@ class NativeWitness:
     def __post_init__(self):
         if any(not getattr(self, item.name) for item in fields(self)):
             raise NativePreparationError("Exact native witness required")
-        if (
-            not self.session_file.startswith("/")
-            or re.fullmatch(r"[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+", self.revision) is None
-        ):
+        if not self.session_file.startswith("/"):
             raise NativePreparationError("Canonical native path and revision required")
+        NativeRevisionText.decode(self.revision)
 
     def require_session(self, canonical: str) -> None:
         if self.session_file != canonical:
             raise ValueError("Native witness does not identify owner's canonical session")
 
     def require_current_file(self, file: Path) -> None:
-        from .checkpoint_seals import file_revision
-
         self.require_session(str(file))
-        if self.revision != ":".join(map(str, file_revision(file.stat()))):
+        if NativeRevisionText.decode(self.revision) != FileRevision.from_stat(file.stat()):
             raise ValueError("Native retained source changed since preparation")
 
     def retained_task_facts(self):
@@ -149,12 +146,10 @@ def prepare_native_source(
         )
         after = file.stat()
 
-        def revision(info: os.stat_result) -> tuple[int, ...]:
-            return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
-
-        if revision(before) != revision(after):
+        revision = FileRevision.from_stat(before)
+        if revision != FileRevision.from_stat(after):
             raise NativePreparationError("Native preparation failed or changed")
-        return result.checked(file, ":".join(map(str, revision(before))))
+        return result.checked(file, NativeRevisionText.encode(revision))
     except (OSError, ValueError, TypeError) as error:
         if isinstance(error, NativePreparationError):
             raise
