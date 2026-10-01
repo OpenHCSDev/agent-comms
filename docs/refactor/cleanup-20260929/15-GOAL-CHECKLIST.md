@@ -1,24 +1,51 @@
-## 2026-10-01 actual default switch completed; normal entrypoint check in progress
+## 2026-10-01 default checkpoint live and verified; remaining scope active
 
-Parent executed the reviewed quiet469 operator after Tristan confirmed drafts
-saved and Toad closed. Original complete batch passes in29.54s: thirteen original
-owners restarted with exact retained configurations; all fresh interpreters and
-five default links point to runtime-native-applied-cohort-20261001 (Coree191 /
-Toad1edd / Textual6b / SDK0.12.1 / native593). InputDocument170 rows,14 unresolved,
-and original SHA55fbc466 remain unchanged. Only declared runtime projections and
-compaction journal were reset; durable native proofs/wire/goals/decisions retained.
-Original private receipt/preimages remain under .release-private; sanitized review
-is evidence/native-applied-cohort-20261001/parent-cutover-review.json.
+Parent executed the reviewed quiet469 operator once after Tristan saved drafts
+and closed Toad. Thirteen original owners restarted in29.54s with their exact
+retained configurations. Default runtime-native-applied-cohort-20261001 contains
+Coree191 / Toad1edd / Textual6b / SDK0.12.1 / native593. InputDocument170 rows,
+14 unresolved and original SHA55fbc466 are unchanged. Only declared runtime
+projections and compaction journal were reset; native proofs and durable history
+remain protected. The one-use executable is retired; its audit and private
+preimages remain. Core469 final closure is merged with zero product changes.
 
-Both actual installed candidate journeys were accepted before publication.
-Schrodinger is the sole fresh ordinary-default public-root Toad/ACP/history/tab
-verifier; default entrypoint acceptance is not yet claimed. Toad262 merged main
-8ea96a37; reviewed7026 is an ancestor,258 reconciled as incorporated with its
-original counterexamples retained. Full254 performance continues independently.
-Optional472 whole review found a new nullable historical-decision guard and that
-native input SQL is original reservation/proof authority, not a disposable
-projection. Mendel owns typed recorded-proof closure and original schema4 retention,
-without a converter, reset or alternate codec. It did not delay this live checkpoint.
+Both installed controlled-provider continuous journeys passed: native fork,
+first-message queue, cancellation and stationary Ready; bus DM/IRC handling,
+physical returns and cold reopen. The ordinary published toad-comms path also
+passed real saved startup, channel/participant opening and A/B/A clicks, with
+three fresh ACP loads, zero requests/errors, unchanged original sources and
+complete owned cleanup. Corrected original receipt SHA7d3bad48 only fixes
+provider provenance: native gate used localhost controlled responses, no paid
+calls. Parent verified that scope and notified Tristan with a pinned question.
+Tristan reports the live build is “way better”; this does not close performance.
+
+Toad262 is merged,258 incorporated and259 closed with original negatives
+preserved. Current main production/metadata equals the installed frozen pair.
+Toad254 incorporates263 into its feature branch, not production main. Kepler's
+sole changed-source41MB physical A/B/A/scroll/video/profile journey completed
+87.826s,16 native checks and preserved source; moving CPU remains75–78%, and
+full installed performance/50ms targets are not accepted. Heisenberg integrates
+and reviews that source checkpoint; Kepler completes correlated footage review.
+
+Core472 remains active under Mendel: original schema4 reservation/proof authority
+must be preserved, historical triage owns its required decision, and shared
+TypedTable encoding must use the existing FieldCodec scalar representation.
+The old97fa readiness is rejected by whole-source review; interrupted edits
+remain in the same worktree and its owner has resumed.
+
+New owner-requested retained-memory S5 is copied verbatim and indexed after S2.
+Einstein owns phase1 draft473: one ContextSegment/TurnContext assembler, original
+provenance/token accounting, text-free manifests and inspection, with byte-identical
+input and actual saved/configured-provider acceptance. Phase2 draft474 depends
+on S2 retained classes and owns authored pin/supersede/drop/export journeys.
+Schrodinger owns S2 implementation in parallel;428 was merged planning only.
+First working real-thread context inspection is pending, not fabricated from
+the plan. Both owners coordinate shared preparation/packing directly.
+
+Parent432 imports original469 closure and cleanup2795712f. Attributable owned
+cleanup totals943.01MiB, preserving source, saved sessions, UNKNOWN and shared
+Git. Full original goal/T4/deletion closure remains active. Earlier sections
+below are historical evidence, not current runtime or owner dispositions.
 
 ## 2026-10-01 corrected paired candidate: both actual journeys pass
 

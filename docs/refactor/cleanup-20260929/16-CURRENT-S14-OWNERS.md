@@ -1,132 +1,66 @@
-## 2026-10-01 actual default switch completed; normal entrypoint check in progress
-
-Parent executed the reviewed quiet469 operator after Tristan confirmed drafts
-saved and Toad closed. Original complete batch passes in29.54s: thirteen original
-owners restarted with exact retained configurations; all fresh interpreters and
-five default links point to runtime-native-applied-cohort-20261001 (Coree191 /
-Toad1edd / Textual6b / SDK0.12.1 / native593). InputDocument170 rows,14 unresolved,
-and original SHA55fbc466 remain unchanged. Only declared runtime projections and
-compaction journal were reset; durable native proofs/wire/goals/decisions retained.
-Original private receipt/preimages remain under .release-private; sanitized review
-is evidence/native-applied-cohort-20261001/parent-cutover-review.json.
-
-Both actual installed candidate journeys were accepted before publication.
-Schrodinger is the sole fresh ordinary-default public-root Toad/ACP/history/tab
-verifier; default entrypoint acceptance is not yet claimed. Toad262 merged main
-8ea96a37; reviewed7026 is an ancestor,258 reconciled as incorporated with its
-original counterexamples retained. Full254 performance continues independently.
-Optional472 whole review found a new nullable historical-decision guard and that
-native input SQL is original reservation/proof authority, not a disposable
-projection. Mendel owns typed recorded-proof closure and original schema4 retention,
-without a converter, reset or alternate codec. It did not delay this live checkpoint.
-
 # Current integration owners and release disposition
 
-The full goal remains active. Historical decisions and acceptance remain in
-15-GOAL-CHECKLIST.md, Git history and original PR evidence.
+Updated2026-10-01 after ordinary default acceptance. The full original goal
+remains active. Historical decisions and evidence are retained in
+15-GOAL-CHECKLIST.md, Git history and original PR receipts.
 
-## Public installation
+## Live installation
 
-Default runtime-body-readiness-20260930 is unchanged: Core6feb634b /
-Toadade14962 / Textual2e49cb83 / SDK0.12.1 / native593b978a. Scoped253
-acceptance is complete; the larger corrected cohort is not publicly active.
-No original uncertain input is replayed.
+Default: /home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001.
+Coree191bcf4 / Toad1edd96c0 / Textual6b5895fa / SDK0.12.1 / native593b978a.
+Toad main8ea96a37 has identical production/metadata to installed1edd. Later
+Core469 closure adds documents only. There are no merged product fixes waiting
+for installation at this checkpoint.
 
-## Next paired build — 2026-10-01, both actual journeys passed
+Parent executed the existing quiet operator once after saved-draft/normal-client
+closure. Thirteen original owners preserve configurations; all five default
+links/interpreters are current. InputDocument170 rows/14 unresolved and SHA55fbc
+remain unchanged. Runtime projections/compaction journal reset; durable native
+proofs, wire/goals/decisions and UNKNOWN preserved. One-use executable retired,
+exact audit and private preimages retained. No original input replay.
 
-Toad262 exact frozen1edd96c0 / Coree191bcf4 / Textual6b5895fa / SDK0.12.1 /
-native593 uses reviewed258 source7026ea09. Package source/metadata match;
-activationf03e2370 is unchanged. Shared read/application ownership closes
-both queued-body and after-read counterexamples; old259/u08 positive evidence
-remains scoped and does not waive its reproduced race.
+## Actual acceptance and limits
 
-Actual bus-u09 passes137.640s:7583 original ANSI frames, all five expected
-answers and zero duplicates; hot DM/IRC handling,31 same-open observations,
-physical B/A/B sends, cold reopen and shutdown. Actual g458j/u03 passes113.939s:
-original41MB history/fork, painted focused Fork Escape with0 POST/no child,
-cold child/first answer, five physical pending-before-Started paints and once
-chat transfer, busy queue/cancel; backend finished identity and emitted Session
-details converge to Ready.2731 original frames. Parent read actual terminal,
-paint, source-custody and stationary-ready proof. Einstein finishes published
-receipt/cleanup; Sch updates262 readiness. Parent reviews and merges262 to
-main, then executes the same469 quiet operator after draft-safe public client
-retirement. Toad258 is based on254, so262 carries its accepted source to main
-without waiting for the remaining full254 performance work.
-
-Core471 merged59a03f31 and470 merged e191bcf4. Actual native recovery passed
-10.43s: live owner release refused, exact dead-owner recovery retains UNKNOWN,
-input/cursor/wire/native/proof bytes; successor does not replay and independent
-new input replies. Native closure28 deleted/98 added; shared SQL capability
-1 deleted/2 added. Core468 merged77fc0838 and is included, with runtime journal
-reset only at quiet cutover. Optional Core472 is ready for whole parent review,
-but its separate runtime-schema change is not included in this frozen pair.
-
-## Previous immutable candidate — rejected for activation
-
-Runtime-atomic-page-handoff-20261001 contains Core970bc527 / Toad15601a4f /
-Textual6b5895fa / SDK0.12.1 / native593b978a. All original303/304/266 package
-files match. Parent verified package/activation/staging hashes and cleanup.
-Actual native/ACP/LinuxDriver continuous gate passes in85.538s: five physical
-pending-before-Started paints; fork/immediate child open/first reply; busy
-queue/cancel; strict2390 queue/chat frames without missing or duplicate input.
-The stationary postcancel Ready caption is not covered.
-
-Toad251a276 and2529b are merged. Parent normally integrated their current main
-into2503fe890f8; source/pyproject/lock are identical to frozen156. Core456/457/
-458/459/460/462/467 are merged; main9370 production/native-stack/pyproject
-are identical to tested970. Failed earlier immutable prefixes and original
-frame983 negatives remain preserved, with no activation waiver.
+- Native installed34:113.939s,2731 original ANSI frames; real SDK fork and
+  painted Escape, immediate child open, five visibly queued-before-Started
+  submissions, once-only chat, busy queue/cancel and stationary canonical/emitted
+  Ready. Controlled localhost provider; zero paid calls.
+- Busu09:137.640s,7583 frames without duplicates; hot sender/recipient DM+IRC
+  handling,31 observations, physical B/A/B distinct sends, cold reopen/shutdown.
+- Ordinary default: actual toad-comms saved startup and channel/participant/A/B/A
+  clicks; three fresh ACP loads, zero prompts/RPC errors, original source/input/
+  owner bindings unchanged, cleanup complete. Parent reviewed actual screenshots
+  and corrected receipt7d3bad48. No full CPU/50ms/smooth-scroll claim.
+- Tristan has been notified by a pinned question and reports the live build is
+  way better. First context measurement still requires original native reporting.
 
 ## Active ownership
 
-| Workflow | Integration owner | Current work and acceptance |
+| Workflow | Integration owner | Current disposition and next action |
 | --- | --- | --- |
-| Transcript source/page/live publication | Heisenberg258; parent integration262 | Shared original native read/application cohort7026 reviewed; corrected installed bus and retained native gates pass. No text deduplication, extra store or body-ID mirror. |
-| Continuous physical queue/fork/cancel | Einstein, Core458 | g458j/u03 passes113.939s/2731 ANSI frames; five before-Started input paints, fork Escape/cold open and stationary original+visible Ready. Publishing receipt/cleanup. |
-| Canonical bus and DM/IRC/tab-return | Schrodinger, Toad262 | u09 passes137.640s/7583 ANSI frames with zero duplicates; hot handling,31 observations,B/A/B distinct sends,cold reopen/shutdown. Original156/u07 negative and259/u08 scoped positive preserved. |
-| Paired integration and public cutover | Parent, Core432 | Exact1edd/e191/6b/593 accepted pair; final merge/quiet switch pending. Public Toad4091704 remains open; preserve drafts before retirement. |
-| Full warm-history/scroll/CPU/resources | Heisenberg254; Kepler260 | Original geometry restoration scope now covers all registered windows; actual source trim/resize/PageDown counter passes.65.28s prior physical source readable/End bounded; full current installed performance and CPU target remain open. |
-| SessionRevision and all14 consumers | Mendel468; parent integration | Merged77fc0838; scoped44.7MB manual/native commit and strict reopen/UNKNOWN proofs.75 deleted/155 added; included in next frozen pair, not yet public. |
-| Quiet operator and cancellation followthrough | Arendt469 | Retarget same operator to1edd and both original actual gate hashes; fresh public-owner/client read-only census. No public execution. Stationary caption acceptance is now proven by g458j/u03. |
-| Remaining full/triage execution identity | Mendel472; parent whole review | Actual native/ACP two journeys pass;101 deleted/200 added. Durable prompt bindings unchanged; runtime schema4→5 requires its own reviewed projection-reset disposition. Not a blocker for262. |
+| Publication, DM/IRC and native queue checkpoint | Parent262; Heisenberg258, Einstein458, Schrodinger262 | Merged and installed/live verified;258 incorporated,259 closed, all original failures preserved. No repeated unchanged gate. |
+| Full warm-history/scroll/CPU/resources and T4 | Heisenberg254; Kepler263 contribution |263 merged into254 feature branch; latest5a650212 has4 production files30 deleted/67 added. Existing geometry/demand owners cover reflow and async reversal. Kepler's sole41MB real source A/B/A+draftUndo+held/reverse/End15idle run exits0 in87.826s,16 checks,744 GIL samples; CPU75–78% moving/6.3% idle. Review correlated footage/profile and ship a useful verified checkpoint; no installed/50ms acceptance yet. |
+| S14 native triage/full execution identity | Mendel472 | Same interrupted worktree resumed. Preserve original schema4/live proof; remove nullable historical decision state and complete existing TypedTable scalar encoding. Old97fa acceptance does not cover correction. Publish coherent source and affected native proof before merge. |
+| S5 phase1 turn-context ownership | Einstein473 | Original plan copied and indexed after S2; one assembler/segments, provenance/token counts, text-free original wire manifests, context CLI; byte-identical input and actual saved/configured-provider acceptance. Publish first real inspection output. |
+| S2 exact retained facts and Decision | Schrodinger, implementation PR being opened |428 was planning only. Trace current claims, then implement original source projections/retained classes/Decision/native packing; coordinate directly with Einstein. No authoritative memory replica. |
+| S5 phase2 retained context operations | Einstein474 | Draft stacked on473; named dependency S2 retained classes. Add RetainedSegment and authored pin/supersede/drop/export with original source lineage and real compaction/export journeys. |
+| Quiet release closure and one-use retirement | Arendt469; parent executor | Final783a1471 reviewed and merged, zero product changes. Exact audit/private preimages protected. Completed, no new public restart or cutover. |
+| Integration/checklist and storage | Parent432 | Normal whole-source imports, final live proof/current owners; reviewed cleanup2795712f imports943.01MiB cumulative. Keep original scope/deletion closure, then merge tested remaining source normally. |
 
-Existing six Codex threads are reused. Each journey has a separate private
-root and original process. Einstein preserves failed recorder attempts u01/u02;
-u03 uses fresh independent inputs and does not replay them. Cleanup receipts
-report803.56MiB attributable reclaimed storage; source, proofs, UNKNOWN and
-active shared Git storage are protected. Final parent import is pending.
+Existing six Codex agents are reused; no competing implementations or new
+coordinator. Current resource warning is swap12.5GiB, with home22.4GiB and
+RAM19.2GiB available. Completed captures are not repeated; new source work reuses
+installed dependencies, and native gates follow the current physical capture.
 
-## Completed independent contributions
+## Completed structural contributions
 
-- Arendt456/467: native context/input closure and manual/adaptive controls
-  complete. Original44.7MB read checkpoint38–43ms incremental versus~2s full
-  decode. Full performance goal remains distinct.
-- Mendel457/462: coordination/certified-reply source and explicit None-state
-  disposition complete. Owned disposable cleanup freed70,062,080 allocated
-  bytes; protected source, proofs and runtime dependencies were retained.
-- Parent459: shared fresh-file/source proof policies and native controls
-  complete. No permission reconstructed from stat.
-- Core463/464/465/466, Textual15 and test-only Toad255 are merged. Typed ACP
-  errors, prompt replacement, attachment close/join and shared audit ratchet
-  are included in970. Public Textual remains2e49 pending cutover.
+Core463/464/465/466 typed errors, standing live-path prompt, attachment lifecycle
+and builtin-handler ratchet are merged and included. Core468 SessionRevision
+closes14 consumers (75 deleted/155 added), exact external colon ABI and original
+FieldCodec; actual44.7MB manual native commit/reopen/UNKNOWN evidence retained.
+Core471 shared nullable SQL capability and470 admission epoch family are merged
+and included; no optional472 schema reset is part of the live release.
 
-## Remaining explicit closure
-
-1. Merge accepted262 checkpoint and reconcile258 by actual source ancestry.
-   Both installed journeys pass; accept final receipt/cleanup, retain originals.
-2. Execute reviewed canonical quiet cutover on freshly observed owners and
-   clients. Protect drafts; reset only declared runtime stores/compaction
-   journal and preserve native sessions/proofs/durable wire/goals/decisions/
-   UNKNOWN and original input dispositions.
-3. Verify ordinary affected live entrypoints, then send Tristan's persistent
-   question notification. Finish254/full performance and original T4 scope.
-4. Include merged468 in the next coherent paired candidate; reset its runtime
-   compaction journal at cutover. External native colon ABI and original
-   FieldCodec stay exact; native sessions/proofs/UNKNOWN are preserved.
-5. Unrecorded sent-admission release is closed in merged470. Close remaining
-   S14 full/triage execution identity in472 through original owners, preserving
-   durable prompt-binding proof semantics.
-
-Original Dalton/T2 and Toad116/142 resource requirements remain in the full
-checklist and original plan receipts. Current candidate evidence:
-evidence/atomic-page-handoff-20261001/parent-package-review.json.
+Original Dalton/T2, round-two surfaces, Toad116/142 resources, actual Toad50
+remaining scope and full T4 requirements still require their complete original
+checklist audit. This scoped checkpoint is not goal completion.
