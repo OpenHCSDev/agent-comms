@@ -16,9 +16,14 @@ preparation; no old executable or second restart implementation is published.
 - Native/root unchanged: native593b978a717ae8f6, wireRoot
   e206f3766e60451a989ca34df0e2a94b,
   `/var/tmp/agent-comms-live-20260927-wzjtqhza`.
-- Activation, staging and package-ready receipt hashes: **unfilled until new corrected package artifacts exist**. Earlier d3ba cohort hashes are retired from this operator.
+- Activation SHA `48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83`.
+- Staging SHA `b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf`.
+- Package-ready SHA `9798c46404cb0be8bd7d8bc91c3770ae8e5db5e83b0fad8a7bf07528d7d54388` from
+  `/home/ts/.cache/agent-scratch/source-publication-custody-stage-20260930/paired-ready-receipt.json`.
+- Earlier d3ba cohort hashes remain retired from this operator.
 
-Corrected source freeze is reviewed; packaging remains in progress. Einstein
+Corrected source freeze and original package artifact hashes were read and verified.
+Package state is PACKAGE-READY-AWAITING-ACTUAL-JOINT-AND-BUS-GATES. Einstein
 joint-native/UI and Sch bus/hot-view acceptance artifacts are **pending and
 unfilled**. The operator requires BOTH reviewed artifact paths and hashes at
 execution and refuses package-ready/activation/staging files as substitutes.

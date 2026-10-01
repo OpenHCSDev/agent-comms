@@ -49,10 +49,10 @@ PINS = {
     'batrachian-toad': '85d45b512cac88bdf5dd8870f41e53768ab3c009',
     'textual': '6b5895fa0a72aeec2aeaef7206d5debfa0c1803c',
 }
-ACTIVATION_SHA = ''  # Unfilled until the corrected cohort package artifact exists.
-STAGING_SHA = ''  # Unfilled until the corrected cohort package artifact exists.
+ACTIVATION_SHA = '48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83'
+STAGING_SHA = 'b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf'
 PAIR_READY = Path('/home/ts/.cache/agent-scratch/source-publication-custody-stage-20260930/paired-ready-receipt.json')
-PAIR_READY_SHA = ''  # Unfilled until the corrected cohort package artifact exists.
+PAIR_READY_SHA = '9798c46404cb0be8bd7d8bc91c3770ae8e5db5e83b0fad8a7bf07528d7d54388'
 
 
 def digest(path):
