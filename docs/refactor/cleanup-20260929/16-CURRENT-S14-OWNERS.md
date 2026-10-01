@@ -9,8 +9,9 @@ remains active. Historical decisions and evidence are retained in
 Default: /home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001.
 Coree191bcf4 / Toad1edd96c0 / Textual6b5895fa / SDK0.12.1 / native593b978a.
 Toad main8ea96a37 has identical production/metadata to installed1edd. Later
-Core469 closure adds documents only. There are no merged product fixes waiting
-for installation at this checkpoint.
+Core469 closure adds documents only. The accepted checkpoint covers all product merges through e191. Newly merged
+Core472 is now awaiting the next paired installation; it has scoped actual
+installed native/ACP proof, not public/default acceptance.
 
 Parent executed the existing quiet operator once after saved-draft/normal-client
 closure. Thirteen original owners preserve configurations; all five default
@@ -40,7 +41,7 @@ exact audit and private preimages retained. No original input replay.
 | --- | --- | --- |
 | Publication, DM/IRC and native queue checkpoint | Parent262; Heisenberg258, Einstein458, Schrodinger262 | Merged and installed/live verified;258 incorporated,259 closed, all original failures preserved. No repeated unchanged gate. |
 | Full warm-history/scroll/CPU/resources and T4 | Heisenberg254; Kepler263 contribution |263 merged into254 feature branch; latest5a650212 has4 production files30 deleted/66 added. Existing geometry/demand owners cover reflow and async reversal. Kepler's sole41MB real source A/B/A+draftUndo+held/reverse/End15idle run exits0 in87.826s,16 checks,744 GIL samples; CPU75–78% moving/6.3% idle. Review correlated footage/profile and ship a useful verified checkpoint; no installed/50ms acceptance yet. |
-| S14 native triage/full execution identity | Mendel472 | Same interrupted worktree resumed. Preserve original schema4/live proof; remove nullable historical decision state and complete existing TypedTable scalar encoding. Old97fa acceptance does not cover correction. Publish coherent source and affected native proof before merge. |
+| S14 native triage/full execution identity | Mendel472; parent integration | Corrected e0/d4f merged after whole-source review:112 deleted/284 added across12 files, original SQL4/proofs unchanged. Actual installed saved-restart channel/native/ACP passes34.80s;69 controls/6 guards. Public installation pending next backend cohort. Mendel owns unchanged baseline mock-fixture later-source gap, coordinated with476. |
 | S5 phase1 turn-context ownership | Einstein473 | Original plan copied and indexed after S2; one assembler/segments, provenance/token counts, text-free original wire manifests, context CLI; byte-identical input and actual saved/configured-provider acceptance. Publish first real inspection output. |
 | S2 exact retained facts and Decision | Schrodinger475 |475 draft opened frome191 with S2 receiving ownership;428 was planning only. Implement original source projections/retained classes/Decision/native packing; coordinate directly with Einstein. No authoritative memory replica. |
 | S5 phase2 retained context operations | Einstein474 | Draft stacked on473; named dependency S2 retained classes. Add RetainedSegment and authored pin/supersede/drop/export with original source lineage and real compaction/export journeys. |
@@ -61,10 +62,10 @@ ended Outcome uncertain on262 and their266 remain Pending. helper2 checked both
 and chose no response; Linnaeus/headless-bootstrap are stopped. Sidebar reports
 NativePiUnavailable for the three failed recipients. Diagnose the original native
 triage failure and derive truthful pending/error handling from its authority;
-no replay of262 or duplicate send of266. A separate CLI history read erroneously
-reaches the shared registry with unsupported last_goal_report_turn; direct
-Comms(publicroot) reads the original public registry correctly. Cause remains
-unconfirmed; no stripping of registry fields or compatibility reader authorized.
+no replay of262 or duplicate send of266. A separate CLI history read reaches an attached historical source registry via
+HistoricalSources.page/HistorySource.registry and rejects archived
+last_goal_report_turn. The original public registry is valid. Arendt traces the
+original archive contract; no stripping of fields or compatibility reader.
 
 ## Completed structural contributions
 
