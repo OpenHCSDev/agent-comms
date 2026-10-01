@@ -225,6 +225,7 @@ class Column:
     index: bool = False
     generated: str | None = None
     storage: type[SqlStorage] | None = None
+    nullable: bool = False  # SQLite NULL may decode to a mandatory nominal value.
 
 
 @dataclass(frozen=True)
@@ -295,7 +296,7 @@ class TypedRow:
                 item.name,
                 item.init,
                 hints[item.name],
-                _base_type(hints[item.name])[1],
+                _base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
                 item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
                 item.metadata.get("sql", Column()),
             )
