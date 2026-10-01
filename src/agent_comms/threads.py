@@ -7,10 +7,10 @@ import time
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING
 
-from .channel_targets import Tag
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
+from .thread_provenance import ThreadProvenance
 from .pi_vocabulary import ThinkingLevel
 from .goals import Goal, GoalRevision
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
@@ -38,24 +38,25 @@ def _thread_creation_time() -> float:
 
 
 @dataclass(frozen=True, slots=True)
-class Thread:
+class Thread(ThreadProvenance):
     """Declares one agent thread's identity and provenance."""
 
-    name: str
-    tags: frozenset[str] = field(metadata={"registration_inheritance": InheritEmpty})
-    worktree: str
+    name: str = field(kw_only=False)
+    tags: frozenset[str] = field(kw_only=False, metadata={"registration_inheritance": InheritEmpty})
+    worktree: str = field(kw_only=False)
     parent: str | None = None
     task: str | None = None
     process_identity: ProcessIdentity | None = None
     session_file: str | None = field(
-        default=None, metadata={"registration_inheritance": InheritMissing}
+        default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
     )
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     thinking_level: type[ThinkingLevel] | None = field(
         default=None, metadata={"registration_inheritance": InheritMissing}
     )
     goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
-    created_at: float = field(default_factory=_thread_creation_time)
+    created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
+                              metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
     previous_worktrees: tuple[str, ...] = field(
         default=(), metadata={"registration_inheritance": InheritEmpty}
@@ -63,7 +64,8 @@ class Thread:
     auto_title_pending: bool = field(
         default=False, metadata={"registration_inheritance": InheritPrevious}
     )
-    title: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
+    title: str | None = field(default=None, kw_only=True,
+                             metadata={"registration_inheritance": InheritMissing})
     role: ThreadRole = ThreadRole.AGENT
     active_turn: ActiveTurn | None = None
     channel_scope_generation: int = 0
@@ -79,6 +81,7 @@ class Thread:
         object.__setattr__(self, "_generated_created_at", generated)
         if generated:
             object.__setattr__(self, "created_at", float(self.created_at))
+        super(Thread, self).__post_init__()
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None:
             if self.active_turn.owner_pid != self.pid:
@@ -102,17 +105,8 @@ class Thread:
             or self.turn_generation == 0
         ):
             raise ValueError("Finished turn requires a prior turn generation and ID.")
-        for tag in self.tags:
-            Tag(tag)
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        if not self.name or not set(self.name) <= allowed:
-            raise ValueError(
-                f"Thread name {self.name!r} must be alphanumeric with hyphens/underscores."
-            )
         if self.parent == self.name:
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
-        if not self.worktree:
-            raise ValueError("Thread worktree cannot be empty.")
         if self.model is not None and not self.model.strip():
             raise ValueError("Thread model cannot be empty.")
         if self.thinking_level is not None:
@@ -283,10 +277,6 @@ class Thread:
             }
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
-
-    @property
-    def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.name, self.created_at)
 
     @property
     def turn_identity(self) -> TurnIdentity | None:

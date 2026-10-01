@@ -1,0 +1,176 @@
+{
+  "assessment": "unreviewed",
+  "capture_receipt": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/receipt.json",
+  "review_intervals": [
+    {
+      "label": "archive-feed",
+      "start": 13.31738653301727,
+      "seconds": 2
+    },
+    {
+      "label": "archive-modal",
+      "start": 16.709277121000923,
+      "seconds": 2
+    },
+    {
+      "label": "archive-selector",
+      "start": 20.086682166031096,
+      "seconds": 2
+    },
+    {
+      "label": "archive-native",
+      "start": 25.054994414036628,
+      "seconds": 2
+    },
+    {
+      "label": "archive-focused",
+      "start": 27.690859830006957,
+      "seconds": 2
+    },
+    {
+      "label": "archive-end",
+      "start": 30.353881430986803,
+      "seconds": 2
+    },
+    {
+      "label": "archive-return",
+      "start": 32.94171462202212,
+      "seconds": 2
+    }
+  ],
+  "artifacts": {
+    "archive-feed-slow.mp4": {
+      "bytes": 249844,
+      "sha256": "49c416152d1080ef4ddd1b1c31aca73fa438f7150e6bd057afb74a9c641a4785"
+    },
+    "archive-feed-frames.png": {
+      "bytes": 521003,
+      "sha256": "e06d51581e6f191bd30baf3c6ff9c0f6f365188601ab1e1410f231432c3d6924"
+    },
+    "archive-modal-slow.mp4": {
+      "bytes": 139534,
+      "sha256": "a8dc37ac6499f97f3291dc086aa7ecaa361a9610209a1578a73768bfce4677f0"
+    },
+    "archive-modal-frames.png": {
+      "bytes": 176827,
+      "sha256": "307997829f7b288647c174903c53d0a1b91deb7b246efbe0cfd1e2009ba20168"
+    },
+    "archive-selector-slow.mp4": {
+      "bytes": 194800,
+      "sha256": "2a79904b39780fc0539b283088900a04cb1df7fdf03f95c7da1287e8670d8e8c"
+    },
+    "archive-selector-frames.png": {
+      "bytes": 434100,
+      "sha256": "484fe2835d8d27b2ff31df4f631010913c67cfcd1fab5f63c62ec52fb496a1c3"
+    },
+    "archive-native-slow.mp4": {
+      "bytes": 262416,
+      "sha256": "aaaa7228c8535864f26ba1169ae1ba8418700b16f079b0b6504894685a24b0db"
+    },
+    "archive-native-frames.png": {
+      "bytes": 493473,
+      "sha256": "b620559061c2f43e6d47b1bd39df4c6a22f5df6d8ab7dab437d91b4cdc83dc35"
+    },
+    "archive-focused-slow.mp4": {
+      "bytes": 234901,
+      "sha256": "706c067bdf2667070ff162a139b73973b65d3ecfe0e9f1d819b0bea6301839ad"
+    },
+    "archive-focused-frames.png": {
+      "bytes": 472412,
+      "sha256": "97bb84c177698cf4810edda2a3c2fae8052a66965e594f9feb44ea63a5874325"
+    },
+    "archive-end-slow.mp4": {
+      "bytes": 261938,
+      "sha256": "40412e80e1ba9a321ee8fe9e743cfc81cc05a15f8c8d0d675da1c4d398f6b7c2"
+    },
+    "archive-end-frames.png": {
+      "bytes": 659902,
+      "sha256": "6dfa5316a3237470099b3b07736c659cd030b3f1a509ad08e9db5b66865698c4"
+    },
+    "archive-return-slow.mp4": {
+      "bytes": 298810,
+      "sha256": "535ead98d4b411a77f34e4ecd3d1e72d9662515b6c4ac44dcaed3b2dce2a8831"
+    },
+    "archive-return-frames.png": {
+      "bytes": 750529,
+      "sha256": "2dc0f730fd8853e16a60338b03a59f634f427a27f9d12dc7e06847bacccbd369"
+    }
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 827809,
+        "start_ticks": 31381018,
+        "returncode": 0
+      },
+      {
+        "pid": 827973,
+        "start_ticks": 31381571,
+        "returncode": 0
+      },
+      {
+        "pid": 828058,
+        "start_ticks": 31381623,
+        "returncode": 0
+      },
+      {
+        "pid": 828168,
+        "start_ticks": 31382171,
+        "returncode": 0
+      },
+      {
+        "pid": 828174,
+        "start_ticks": 31382212,
+        "returncode": 0
+      },
+      {
+        "pid": 828342,
+        "start_ticks": 31382770,
+        "returncode": 0
+      },
+      {
+        "pid": 828348,
+        "start_ticks": 31382828,
+        "returncode": 0
+      },
+      {
+        "pid": 828429,
+        "start_ticks": 31383389,
+        "returncode": 0
+      },
+      {
+        "pid": 828446,
+        "start_ticks": 31383429,
+        "returncode": 0
+      },
+      {
+        "pid": 828697,
+        "start_ticks": 31384015,
+        "returncode": 0
+      },
+      {
+        "pid": 828741,
+        "start_ticks": 31384065,
+        "returncode": 0
+      },
+      {
+        "pid": 829051,
+        "start_ticks": 31384667,
+        "returncode": 0
+      },
+      {
+        "pid": 829074,
+        "start_ticks": 31384715,
+        "returncode": 0
+      },
+      {
+        "pid": 829309,
+        "start_ticks": 31385303,
+        "returncode": 0
+      }
+    ]
+  }
+}

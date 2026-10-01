@@ -1,0 +1,56 @@
+{
+  "protected_originals": {
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history_sources.json": {
+      "bytes": 823,
+      "sha256": "04e8e078c27e92659b732efdcaa9f476b17435c7c84e7f171533cf1bf3cc6548"
+    },
+    "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl": {
+      "bytes": 41270257,
+      "sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c"
+    },
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198/bus.jsonl": {
+      "bytes": 7513177,
+      "sha256": "940e2444dfa703a2b1a9910097c01756303e19877a16945dbe26f38367e01ef1"
+    },
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198/registry.json": {
+      "bytes": 265444,
+      "sha256": "cd2a20900794c7e8e8e9b0de20193456d42ea7085eb7acfc4a9255965fc68e30"
+    },
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198/bus_meta.json": {
+      "bytes": 834,
+      "sha256": "dce0d1acd4a1812f037f4beddffd5b87709a3ab82f49768aeeb5c7aa9282d9c3"
+    },
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198/private_bus_checkpoint.sqlite3": {
+      "bytes": 28672,
+      "sha256": "795e41896b4fb0100c48324f31e140b827810400384cf2748728437cca27e290"
+    },
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w/bus.jsonl": {
+      "bytes": 27674,
+      "sha256": "2a841e0858aaad523e36ae1b9983c63eb542b3c3f6b0e8746f4f638fc01c6d76"
+    },
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w/registry.json": {
+      "bytes": 15257,
+      "sha256": "bd2b2c850288ec25d3322615d9626d2c28d22a77c2c7137ca31c262ad72d4264"
+    },
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w/bus_meta.json": {
+      "bytes": 823,
+      "sha256": "ca47ef3889961e912314b34f4a6836b12b97a0f8a68d2dda18cfe026209e34e6"
+    },
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w/private_bus_checkpoint.sqlite3": {
+      "bytes": 28672,
+      "sha256": "4888ee3d442865ffd27976f9bbb258ab7511afd2d6481f1f9a14b11f314b933c"
+    }
+  },
+  "unchanged": true,
+  "private_native_inputs_before": 0,
+  "private_native_inputs_after": 0,
+  "prompt_binding_before": 0,
+  "prompt_binding_after": 0,
+  "fixture_owner_identity": {
+    "pid": 764232,
+    "start_time": 31172734
+  },
+  "fixture_turn_generation": 0,
+  "raw_before": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04-before.json",
+  "raw_after": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04-after.json"
+}
