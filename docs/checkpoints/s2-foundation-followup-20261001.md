@@ -78,6 +78,53 @@ is not package-ready or installed-ready. A reviewed resource grant, normal new
 native artifact, then the actual SDK/native selected-compaction journey are
 required. Full S2, three native checkpoints and S4 are still open.
 
+### Reviewed artifact boundary correction
+
+Source checkpoint `d1e6c4bb` replaces artifact-key shape dispatch with the
+`NativeToolDetails` family's owned discriminator. The native publisher imports
+a generated contract derived from that declaration and the original artifact
+field. `FieldCodec` decodes the selected member. Untagged external extension
+details remain opaque, including arrays and scalars; a similarly named artifact
+key grants no evidence. Unknown owned tags and extra owned fields are refused.
+There is no reader for the replaced untagged owned format. The existing edit
+details declaration omits absent optional fields so a write's original result
+does not acquire synthetic null diff or patch fields.
+
+`NativeRevisionText`, using the existing `TextRepresentation` capability, owns
+the SDK's unchanged five-field colon scalar. Preparation and current-file
+validation use the original `FileRevision`. `SessionRevision.native_stamp`
+also delegates to that encoding rather than maintaining a third spelling.
+Witness JSON, selected source equality and sidecar fencing retain their original
+contracts. No codec subclass, mirrored revision field or new source store was
+introduced. These corrections address BOUND-2, MEMB-4 and IDEN-3.
+
+The direct SDK semantic control executed the actual stock write and edit tool
+definitions on an owned regular source copy with the reviewed producer patch.
+It checked BOM/UTF-8/CRLF write and edit bytes, original operation digest and
+byte count, preserved patch evidence, failed edit, optional custom operations
+without an owned receipt, and cancellation after a completed filesystem write.
+The cancelled write's original side effect is retained without a successful
+tool result. The SDK's completed PASS output and empty error log are preserved;
+the original wrapper exit status was not separately retained. A subsequent
+read-only decoder control admits both actual emitted receipts and proves exact
+wire round trips without executing another operation. Fifteen affected source
+cases passed after preserving the original null-field round-trip failure.
+
+Evidence is in `evidence/retained-task-facts-s2-followup-20261001/`:
+`sdk-semantic07.json`, `sdk-semantic07.log`, `sdk-decoder10.json`,
+`structural08.log` (original failed round trip), and `structural09.log`.
+The successful disposable SDK copy was retired after recording its complete
+file hash manifest and proving no process or installed references. Its local
+write/edit/cancel effects and the original frozen 0064 package are protected.
+These controls do not establish a normal trusted native artifact, installed
+Core/native/ACP/UI acceptance, selected compaction, or full S2 readiness.
+The normal new native build remains withheld for the critical disk budget.
+The correction deletes 24 production/recipe/generator lines and adds 77;
+SDK driver and affected test changes are counted separately. The required
+committed-source ratchet against merged foundation `91db3971` exits zero with
+no positive numeric debt delta. `structural-handoff12.json` records the exact
+source checkpoint and executed SDK helper/schema byte identity.
+
 | Remaining operation | Determining owner and required closure |
 | --- | --- |
 | General original constraints | Extend the original authored source and applicability/correction declarations beyond explicit decisions. Preserve exact wording, source identity, authority, scope and supersession; no prose-based instruction inference or second constraint ledger. All packing/query consumers derive the same applicable projection. |

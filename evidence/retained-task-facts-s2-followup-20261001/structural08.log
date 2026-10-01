@@ -1,0 +1,48 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-retained-task-facts-s2-followup-20261001
+configfile: pyproject.toml
+plugins: anyio-4.14.2, typeguard-4.5.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 15 items
+
+tests/test_native_file_artifact.py F                                     [  6%]
+tests/test_tool_diffs.py .......                                         [ 53%]
+tests/test_compaction_boundaries.py .......                              [100%]
+
+=================================== FAILURES ===================================
+____ test_original_file_operation_survives_later_file_change_and_branch_cut ____
+
+comms = <agent_comms.comms.Comms object at 0x7f86cd0d8830>
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/evidence/retained-task-facts-s2-followup-20261001/pytest-structural08/test_original_file_operation_s0')
+
+    def test_original_file_operation_survives_later_file_change_and_branch_cut(comms, tmp_path):
+        comms.messaging.initialize_private_initial_protocol()
+        module = Path(__file__).resolve().parents[1] / 'stack/native-file-artifact.mjs'
+        target = tmp_path / 'artifact.py'
+        text = 'original = "\u03bb"\n'
+        producer = subprocess.run(['node', '--input-type=module', '-e', '''
+            const {CompletedFileMutation} = await import(process.argv[1]);
+            const original = await CompletedFileMutation.write(process.argv[2], process.argv[3]);
+            console.log(JSON.stringify(original.details(undefined)));
+        ''', module.as_uri(), str(target), text], check=True, capture_output=True, text=True)
+        details = json.loads(producer.stdout)
+        assert target.read_bytes() == text.encode()
+        target.write_text('later = "different contents"\n')
+        # A later filesystem value cannot rewrite what the original successful tool did.
+        assert details['agentCommsArtifact']['digest'] == FieldCodec.encode(TextDigest.of(text))
+        assert details['agentCommsArtifact']['byte_count'] == len(text.encode())
+        decoded = NativeToolDetails.from_wire(details)
+        assert isinstance(decoded, FileMutationToolDetails)
+>       assert decoded.to_wire() == details
+E       AssertionError: assert {'patch': Non...ile_mutation'} == {'agentCommsK...e_count': 16}}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Left contains 2 more items:
+E         {'diff': None, 'patch': None}
+E         Use -v to get more diff
+
+tests/test_native_file_artifact.py:42: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_file_artifact.py::test_original_file_operation_survives_later_file_change_and_branch_cut
+========================= 1 failed, 14 passed in 0.87s =========================
