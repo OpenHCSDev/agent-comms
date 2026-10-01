@@ -34,9 +34,9 @@ from Sch's exact source wheel/runtime, application/protocol never mocked.
 
 Semantic source/caller reasoning FIRST, reuse existing owner/capabilities and
 implement coherent nominal behavior with replaced-copy deletion, validation
-LAST. A new class alone is not a structural fix. Runtime lifecycle and retained
-payload-budget reservation/intent/recovery/custody/cursor map belong to Arendt;
-compaction to Sch. No parallel PayloadBudget/RetainedContext/SessionIdentity/
+LAST. A new class alone is not a structural fix. Runtime lifecycle and custody/cursor map belongs to Arendt; compaction payload fact-map and its
+retained-context payload type belong to Sch494. Reservation/intent/recovery
+share that payload owner across the coordinated Arendt/Sch boundary. No parallel PayloadBudget/RetainedContext/SessionIdentity/
 Cursor/Custody family. APPEND/AGENTS were not edited while Tristan revises them.
 
 Committed `integrated-semantic-owner-search16.json` records actual searches,

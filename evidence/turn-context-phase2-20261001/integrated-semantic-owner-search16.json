@@ -130,7 +130,7 @@
     "read_cut": "WireLog._store_lock + original bus lock + RegistrySnapshot + certified wire cut; original WireExportBoundary",
     "publication": "WireTranscriptExporter atomic output, RetainedFormat renders original row from captured original source",
     "artifact": "Original successful SDK write/edit CompletedFileMutation -> NativeToolDetails decode once -> FileMutationToolDetails -> NativeFileArtifact -> exact native request/result journal pair; no present-filesystem reconstruction",
-    "reservation_intent_recovery_payload_budget": "No new policy/calculator/authority introduced here. Retained context payload budget and lifecycle closure belongs to Arendt; native compaction to Sch. Protected current main owners retained."
+    "reservation_intent_recovery_payload_budget": "No new policy/calculator/authority introduced here. Sch494 owns compaction payload fact-map and retained-context payload TYPE; reservation/intent/recovery reuse it through Arendt runtime lifecycle boundary. Protected accepted main mechanisms retained."
   },
   "runtime_fact_map_owner": "Arendt",
   "compaction_owner": "Schrodinger",
@@ -159,5 +159,6 @@
       "HumanConstraintPin": "Member of original ScopedTaskDeclaration HUMAN behavior without a model lease; original MessageReference wording; owner and correction lineage stay on original task family."
     },
     "new_production_types_this_main_492_integration": 0
-  }
+  },
+  "compaction_payload_fact_map_owner": "Schrodinger494"
 }

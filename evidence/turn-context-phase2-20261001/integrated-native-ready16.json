@@ -273,7 +273,7 @@
   "scope_limits": [
     "Actual installed Toad compositor + ACP/native/SDK/CLI, no physical-pixel/global Ready claim.",
     "Wire USER feature only; later direct-StoredInput/fullS2/S3/S4 remains Sch481 follow-up.",
-    "Runtime lifecycle/payloadbudget reservation-intent-recovery/custody-cursor map belongs Arendt; no independent production implementation here.",
+    "Arendt owns runtime lifecycle/custody/cursor; Sch494 owns compaction payload fact-map and retained-context payload TYPE. Reservation/intent/recovery share that same payload owner across their coordinated boundary. No independent implementation here.",
     "Compaction policy/native workflow belongs Sch; original approved producer and fresh full native artifact normally integrated.",
     "Original fixture/source/journals/inputs/proofs retained; public carry/default activation belongs parent."
   ],
@@ -307,8 +307,8 @@
       "sha256": "72dfd3e227981f91e83fed97f3744753b6d407cda11b6f6f4f7687a541b5d0e3"
     },
     "evidence/turn-context-phase2-20261001/integrated-semantic-owner-search16.json": {
-      "bytes": 6205,
-      "sha256": "a5495be69bc3e5f9823fd73c848badd5f0e220b47c54f79572830d6dc03d426a"
+      "bytes": 6323,
+      "sha256": "233582206ad6e7a0b3065eec437aa4c08ec2c86ad3696788ca2ad74730d0b037"
     },
     "/home/ts/wt/s5integrated01/authored-context-journey/fresh-ui/toad-ingress/original-reply-1.svg": {
       "bytes": 66579,

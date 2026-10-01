@@ -2,9 +2,10 @@
 
 ## Current authored wire checkpoint
 
-Owner: Einstein474 consumer/integration. Runtime lifecycle, retained-context
-payload-budget reservation/intent/recovery and custody/cursor fact-map belong to
-Arendt. Compaction policy/native preparation belongs to Schrodinger. No parallel
+Owner: Einstein474 consumer/integration. Runtime lifecycle and custody/cursor fact-map belong to Arendt. Compaction
+payload fact-map and retained-context payload type belong to Schrodinger494.
+Reservation/intent/recovery consume that same payload owner through the shared
+boundary coordinated with Arendt; no second runtime budget authority. No parallel
 family or independent symptom patch is authorized here.
 
 Normally integrated main485/487/488, merged491 and whole approved79 producer
