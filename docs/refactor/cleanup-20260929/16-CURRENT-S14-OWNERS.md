@@ -1,6 +1,6 @@
 # Current integration owners and release disposition
 
-Updated2026-10-01 after ordinary default acceptance and the264 merge. The full original goal
+Updated2026-10-01 after ordinary default acceptance and the264/266/476 merges. The full original goal
 remains active. Historical decisions and evidence are retained in
 15-GOAL-CHECKLIST.md, Git history and original PR receipts.
 
@@ -47,7 +47,7 @@ exact audit and private preimages retained. No original input replay.
 | Workflow | Integration owner | Current disposition and next action |
 | --- | --- | --- |
 | Publication, DM/IRC and native queue checkpoint | Parent262; Heisenberg258, Einstein458, Schrodinger262 | Merged and installed/live verified;258 incorporated,259 closed, all original failures preserved. No repeated unchanged gate. |
-| Full warm-history/scroll/CPU/resources and T4 | Heisenberg266; Kepler causal contribution |254 installed/live verified.264 exact129ab7 merged normally as d6856f6b after parent reviewed the three production files and actual A-return/down frames; tested b524 has zero product/metadata delta. Shared MeasuredViewportBody owns height-independent arrangements; native code-height contract eliminates24 repeated arrangements to1. Actual installed full saved41MB journey90.657s passed16 checks, preserved originals/draft/undo and cleaned workers. No overall CPU improvement: Up93.1%,Down88.9%,reverse84.9%,End82.5%,idle22.6% includes observers. Default still254;264 included in upcoming476 candidate. Full TC1/T9/T4/Strip/focus/growingEnd/cache resource lifetime and CPU scope continues in main-based draft266. Existing footage/profile identifies seven exact source-interval readmissions and costly native registration/retirement; no new cache or recorder. |
+| Full warm-history/scroll/CPU/resources and T4 | Heisenberg269; Kepler causal contribution |254 installed/live verified.264 exact129ab7 merged normally as d6856f6b after parent reviewed the three production files and actual A-return/down frames; tested b524 has zero product/metadata delta. Shared MeasuredViewportBody owns height-independent arrangements; native code-height contract eliminates24 repeated arrangements to1. Actual installed full saved41MB journey90.657s passed16 checks, preserved originals/draft/undo and cleaned workers. No overall CPU improvement: Up93.1%,Down88.9%,reverse84.9%,End82.5%,idle22.6% includes observers. Default still254;264 included in upcoming476 candidate. Full TC1/T9/T4/Strip/focus/growingEnd/cache resource lifetime and CPU scope continues in main-based draft269;266 is merged d0349869 as described below. Existing footage/profile identifies seven exact source-interval readmissions and costly native registration/retirement; no new cache or recorder. |
 | S14 native triage/full execution identity | Mendel472; parent integration | Corrected e0/d4f merged after whole-source review:112 deleted/284 added across12 files, original SQL4/proofs unchanged. Actual installed saved-restart channel/native/ACP passes34.80s;69 controls/6 guards. Public installation pending next backend cohort. Mendel owns unchanged baseline mock-fixture later-source gap, coordinated with476. |
 | S5 phase1 turn-context ownership | Einstein473 | Working typed wire checkpoint275a7847 plus current native/query continuation; silent observations preserve original message sequences/proofs. Full-provider text-free segment manifest comes from existing SDK onContextReady; runtime query borrows existing pending-response owner and original root/process/incarnation fences. Recorded renderers use identical determining state. First real NRA coordination preview6078 bytes/~1520 estimated tokens remains partial; not full provider usage. Native/installed acceptance pending. |
 | S2 exact retained facts and Decision | Schrodinger475 | Working3577118c after shared codec correction; NoDecision/Decision, Original/Correction and Current/Explicit replace nullable internal states.149 dormant implementation lines plus132 old tests deleted. UserDecisionSupersession uses original HumanMessage/source role and certified original reference; no impersonation or mirrored ledger. Current/historical facts consumed at the original compaction capture/current fence.22 receiving source checks and actual generated full tool catalog pass. Native exact packing/commit, general user constraints, supported artifact provenance and installed three-checkpoint acceptance remain incomplete. Existing historical tool prose lacks artifact producer proofs and is not promoted into authority. |
@@ -56,13 +56,13 @@ exact audit and private preimages retained. No original input replay.
 | Integration/checklist and storage | Parent432 | Normal whole-source imports, final live proof/current owners; reviewed cleanup2795712f imports943.01MiB cumulative. Keep original scope/deletion closure, then merge tested remaining source normally. |
 
 Existing six Codex agents are reused; no competing implementations or new
-coordinator. Current resource warning is swap13.4GiB, with home18.6GiB and
-RAM20.5GiB available. Completed captures are not repeated; new source work reuses
+coordinator. Latest resource warning is swap14.2GiB, with home16.3GiB and
+RAM21.6GiB available. Completed captures are not repeated; new source work reuses
 installed dependencies, and native gates follow the current physical capture.
 
 ## New live channel regression
 
-Arendt owns draft476 for the actual first two #openhcs sends on the installed build:
+Arendt owns476 for the actual first two #openhcs sends on the installed build:
 262/7b8ade935c6f “test” and266/1a76688ce443 “testing again”. Direct original
 MessageNotification projection proves architecture-memory/pr159/helper checks
 ended Outcome uncertain on262 and their266 remain Pending. helper2 checked both
@@ -83,8 +83,10 @@ Paired normal69-package Core632/Toad2673e3 (264 product)/Text6b stage tested u06
 ordinary reply painted and genuine provider503 stopped the drain, but the new saved
 message had no claim and thus painted no notification result. Original failed UI
 receipt retained; Arendt is closing this same workflow through frozen audience and
-original readiness, without synthesizing claims or status stores.476 is not live;
-return to draft until the affected installed journey passes.267 only pairs pins.
+original readiness, without synthesizing claims or status stores.476 is merged0d111357 after native cancellation and installed channel/Pilot
+acceptance. Actual public physical capture exposes a remaining DM readiness
+consumer gap described below.476 is not live.267 now owns that concrete
+consumer closure as well as the matched pins; no other feature enters its scope.
 
 Mendel owns separate draft477 for archived history. HistoryArchive.page reaches
 HistorySource.registry and strict-current Thread decoding rejects the historical
@@ -210,3 +212,14 @@ S5 CLI selected-private-root correction, not a new native build. Einstein owns
 continuous installed native/ACP/CLI two-input inspection; Schrodinger retains
 unfinished general constraints/artifact provenance. No S2/S5 public activation
 or complete context inspection claim yet.
+
+The independently accepted476 native/backend checkpoint is now merged normally
+as0d111357 (2026-10-01T06:57:29Z). No installed/public readiness claim follows
+from that merge.267 actual receiver details closure remains active.
+
+270 receiving pinf9bfa77e and normal69 package prefix are published. Core3f4456c5
+(301 Python files) and Toadf9bfa77e (273) are byte-identical to installed modules;
+SDK0.12.1, full native451 trust and pip dependency closure pass. Einstein has the
+exact prefix for the existing continuous two-input native/ACP/CLI driver.
+Source/native trust is not that pending user-journey acceptance. The64MB private
+prefix stays protected until the owner finishes its gate; public593 unchanged.
