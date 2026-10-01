@@ -40,9 +40,24 @@ def manual_summary_source(
     These empty retained facts are explicit for neutral reservation/fresh-file
     controls, not a production default or proof of actual task retention.
     """
-    return summary_source(
+    return FieldCodec.encode(
+        manual_summary_record(
+            session, owner, incarnation=incarnation, selected=selected,
+            settings=settings, retained=retained,
+        )
+    )
+
+
+def manual_summary_record(
+    session, owner="owner", *, incarnation=None,
+    selected=SelectedModel("fixture", "model", 1000),
+    settings=PiCompactionSettings(100, 100),
+    retained=RetainedTaskFacts(()),
+) -> SelectedSummarySource:
+    """Declared source record; the wire fixture above encodes this same value."""
+    return SelectedSummarySource(
         manual_source_value(session, owner, incarnation=incarnation),
-        selected=selected, settings=settings, retained=retained,
+        selected, settings, retained,
     )
 
 
@@ -82,3 +97,35 @@ def refresh_source(envelope, session):
         reserved_revision=SessionRevision.observe(str(session)).require_available()))
     envelope.clear()
     envelope.update(FieldCodec.encode(updated))
+
+
+def native_intent(session, *, owner="owner", selected=None, retained=RetainedTaskFacts(())):
+    """Neutral journal controls through the actual intent/source declarations.
+
+    Uses this fixture's physical file revision. These supplied journal controls
+    are not a native writer grant, backend observation or live acceptance proof.
+    A selected link is the caller's original SelectedCommitReference unchanged.
+    """
+    from pathlib import Path
+    from agent_comms.compaction_source import CompactionSource
+    from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+    from agent_comms.native_revision_text import NativeRevisionText
+    from agent_comms.owner_compaction_gate import OwnerCompactionAttestation
+    from agent_comms.owner_compaction_prepare import NativeWitness
+    from agent_comms.private_path import FileRevision
+
+    session = Path(session).resolve(strict=True)
+    witness = NativeWitness(
+        "fixture-session", str(session), "fixture-leaf", "fixture-kept",
+        NativeRevisionText.encode(FileRevision.from_stat(session.stat())),
+    )
+    payload = NativeSummaryPayload(summary="private journal fixture summary", tokens_before=0)
+    intent = NativeIntent(witness, payload.payload_digest(witness), payload.metadata_digest())
+    attestation = OwnerCompactionAttestation(
+        owner, 1, "turn", None, None, str(session), witness.leaf_id, witness.revision, None,
+    )
+    source = CompactionSource(
+        witness, str(session.parent), owner, 1, "turn", None, None,
+        "fixture-bus-revision", "fixture-input-revision", retained,
+    )
+    return intent, attestation, source, selected
