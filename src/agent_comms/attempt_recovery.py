@@ -38,6 +38,7 @@ class VerifiedOwnerLoss:
     """A native owner's attested release, valid only inside its registry lock."""
 
     attempt: AttemptRecord
+    native_input: NativeRuntimeInput
     _issuer: object = field(repr=False)
     _active: bool = field(repr=False)
     _store: Coordination = field(repr=False)
@@ -92,6 +93,7 @@ class VerifiedOwnerLoss:
             proof = object.__new__(cls)
             for name, value in (
                 ("attempt", attempt),
+                ("native_input", source),
                 ("_issuer", _OWNER_LOSS_ISSUER),
                 ("_active", True),
                 ("_store", store),
@@ -174,7 +176,8 @@ class RecoveryMonitorCapability:
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("UNKNOWN abandonment cannot resolve frozen publication")
             cls._require_native_session_exited(
-                store.session.path.parent / "native-sessions" / loss.attempt.owner_lookup
+                loss.native_input.require_session_identity(),
+                store.session.path.parent / "native-sessions" / loss.native_input.owner_lookup,
             )
             return cls(store, _grant=_MONITOR_GRANT).terminalize_dead_attempt(
                 execution_id,
@@ -218,16 +221,11 @@ class RecoveryMonitorCapability:
             assert attempt is not None  # The release observer requires an attempt.
             if snapshot.publication_intent is not None:
                 raise PublicationUncertain("native failure cannot resolve frozen publication")
-            reserved = NativeRuntimeInput.one(
-                store.session._connection,
-                execution_id=execution_id,
-                attempt_ordinal=attempt.attempt_ordinal,
-            )
-            assert reserved is not None  # Already joined by the release observer.
+            reserved = loss.native_input
+            original_session = reserved.require_session_identity()
             session_dir = store.session.path.parent / "native-sessions" / loss.attempt.owner_lookup
             session_file = Path(session_file).absolute()
-            if session_file.parent != session_dir:
-                raise RecoveryBlocked("native failure session belongs to another owner")
+            original_session.require_session(str(session_file))
             binding = read_expected_prompt_binding(store, reserved.input_id)
             if binding is None or binding.identity != reserved.identity:
                 raise RecoveryBlocked("native failure lacks its bound original input")
@@ -237,6 +235,7 @@ class RecoveryMonitorCapability:
                 proof = NativeContextProof.read_evidence(
                     session_file, reserved.input_id, evidence=evidence
                 )
+                original_session.require_context(proof)
                 _header, entries = evidence.observe()
                 user_index = next(
                     index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id
@@ -251,7 +250,7 @@ class RecoveryMonitorCapability:
                     terminal.require_failed_terminal(proof.session_entry_id)
                 except ValueError as error:
                     raise RecoveryBlocked(str(error)) from error
-                cls._require_native_session_exited(session_dir)
+                cls._require_native_session_exited(original_session, session_dir)
                 monitor = cls(store, _grant=_MONITOR_GRANT)
                 return monitor.terminalize_dead_attempt(
                     execution_id,
@@ -271,8 +270,12 @@ class RecoveryMonitorCapability:
                 )
 
     @staticmethod
-    def _require_native_session_exited(session_dir: Path) -> None:
-        """Observe the pinned RPC session's processes under owner exclusion."""
+    def _require_native_session_exited(identity, session_dir: Path) -> None:
+        """Observe BOTH launch forms of this originally selected RPC source.
+
+        The directory is a launch resource; the original recorded identity owns
+        the saved source. Neither can be inferred from the other's parent.
+        """
         proc = Path("/proc")
         if not proc.is_dir():
             raise RecoveryBlocked("native recovery requires Linux process observation")
@@ -288,7 +291,13 @@ class RecoveryMonitorCapability:
             except PermissionError as error:
                 raise RecoveryBlocked("native process observation was denied") from error
             for index, argument in enumerate(args[:-1]):
-                if argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir):
+                selected = (
+                    argument == b"--session" and args[index + 1] == os.fsencode(identity.path)
+                )
+                allocated = (
+                    argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir)
+                )
+                if selected or allocated:
                     raise RecoveryBlocked("native session subprocess is still running")
 
     def terminalize_dead_attempt(

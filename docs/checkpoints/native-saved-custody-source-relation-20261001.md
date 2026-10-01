@@ -15,10 +15,11 @@ parses all 311 authored production Python modules serially, without parse caches
 or detectors. The existing NRA 3.11 environment cannot parse this source; the
 analysis uses a 3.14 interpreter with the original NRA source API.
 
-There are 28 requested Python root declarations, 60 declarations including
-inherited implementations, 322 methods, 2,038 lexical same-name call candidates
-and 1,917 projected flow candidates. NRA resolves 492 exact function edges;
-the remaining 1,425 are retained with their possible symbols/open resolution.
+The refreshed working-source census has 35 requested Python root declarations,
+71 declarations including inherited implementations, 421 methods, 2,488 lexical
+same-name call candidates and 2,353 projected flow candidates. NRA resolves 546
+exact function edges; the remaining 1,807 are retained with their possible
+symbols/open resolution.
 Generic `.read`, `.prepare`, `.require` receivers are not falsely assigned to a
 custody owner merely because their names match. Constructor targets and callable
 references also require their original declarations; an unresolved edge is an
@@ -39,6 +40,14 @@ The OOPSLA source-fidelity obligation applies to every row below. Agreement
 between a selected path, launch argument and decoded journal does not recover
 the selection judgment. The captured original selector must reach the writer;
 the emitted native identity must reach its proof and publication consumers.
+
+The authoritative paper is Zenodo record 22782549, published 2026-09-29:
+main sections 6.2/6.5 and Corollary 6.3, supplementary sections 4.6/4.8.
+The original downloaded main/supplementary PDFs and checksums are held in
+`/home/ts/.cache/agent-scratch/oopsla-zenodo-latest-20261001/`.
+Batching reduces operations, not independently supplied semantic answers.
+Native inheritance and overlapping capability MRO recover the determining
+declaration; generated external routing does not establish source recovery.
 
 | Question / cases | Existing determining owner | Source and consumers |
 |---|---|---|
@@ -72,25 +81,81 @@ same original `SelectedSession` object through their boundaries:
   context corroboration are distinct questions and receive their original owners.
 - `ReopenNative.expected`: delete flattening the original decoded identity into a
   string and rebuilding another identity object at the receiver.
+- `PrivateSendAdmission`: delete stored bus/store/root/owner/participant copies;
+  the same acquired `SelectedParticipant` supplies those facts at the boundary.
+- `NativeRuntimeInput`: bind the original emitted `NativeSessionIdentity` with
+  the send epoch before bytes. Commit only the later context receipt against
+  that selected source. Delete post-result source selection as the source of
+  recovery identity. No new column, proof store or reconstructed old UNKNOWN.
+- `NativeContextReference`: recorded/unrecorded completion belongs to this
+  existing family. Admission and tool eligibility consume `.recorded`; historical
+  and continued receipt acquisition calls `NativeRuntimeInput.require_context_proof`.
+  Delete those readers' independent context-construction algorithms. SQL NULL
+  classification stays at `NativeInputContext.reference`, not its consumers.
+- `Registration.attach_native_session`: source publication checks the original
+  `RegistryOwner` against the locked determining document and uses existing
+  registration transitions. It retains the current phase rather than comparing
+  an obsolete full Thread. Selected attestation and ordinary `TurnProgress`
+  consume this same transaction and its returned original owner snapshot.
+  Explicit operator `attach-session` is a different authority: its exact captured
+  Thread CAS can also replace a process. It does not grant native admission.
 
 These are unfinished working-tree deletions, not a completed global closure.
 The remaining independent decisions are explicit blockers to Ready:
 
 | Unchanged consumer | Independent answer still present | Required deletion |
 |---|---|---|
-| `historical_native_inputs.read_historical_native_inputs` | `root/native-sessions/recipient_lookup` selects admissible location | Recover exact original live-recorded context/source membership; corroborate its native identity without assigning selection authority to the path. |
 | `continued_private_session.verify_continued_private_session` | parent-parent decides source class; parent name decides owner lookup | Derive original stable owner lookup from captured incarnation and whole original input/context coverage; preserve raw UNKNOWN. |
 | `compaction_summaries.SelectedSummaries.reserve` | lexical private path decides fresh/continued coverage and raw refusal | Original enrolled fresh capability versus verified continued coverage owns the algorithm/case hook; storage path is not permission. |
-| `attempt_recovery` | reconstructed private directory and only `--session-dir` prove native process absence | Observe original selected/admitted source with exact native/process/release proof; historical missing source remains unresolved rather than becoming NotSent. |
-| `SelectedParticipant` / `run_selected` | native source publication not consumed from original AgentInfo | Reuse canonical `ThreadManagement.attach_session` publication with the captured owner/lease source transition; do not add a last-source cache. |
 | tracked private launch | fixed private launch flags ignore ordinary configured settings/extensions | Complete the existing launch/configuration contract before claiming ordinary configured ACP continuation. No fixture-only override or disabled extensions acceptance. |
 | paused next-model dispatch | active writer and summary commit still interpreted by idle assumptions | Extend existing custody behavior and delete idle reacquisition/retirement assumptions; preserve the same input and writer, never re-admit it. |
 
-No partial factory patch is claimed to close these rows. Native input context
-storage has a required all-or-none group; it cannot be partly populated as a
-second source selector. Historical reservation rows without context remain
-uncertain. Any required durable source relation changes must use the existing
-input owner and Singer #495 preservation seam, not another codec/store/reset.
+Historical reads now recover the exact original row's identity and context;
+recovery observes both original `--session` and launch-resource `--session-dir`
+process forms. A directory cannot select the saved source. Historical rows which
+never recorded a selected source still refuse recovery inference.
+
+No partial factory patch is claimed to close the remaining rows. The original
+source pair and later context receipt are different acquisition phases of the
+same SQL row. NativeInputContext's all-or-none group describes the context receipt;
+the context anchor no longer mistakes prewrite selected identity for completion.
+Native schema 5 to 6 is an unfinished declaration transition, not a deployed
+format or permission to reset original rows. Singer #495 owns the eventual
+frozen one-shot preservation seam. Existing complete contexts and NULL historical
+UNKNOWN must remain byte/field identical; no carry has been executed.
+
+## Shared batching ownership and consumer census
+
+Kepler #490 is the sole writer of the COMPLETE plural builder: ExecutionStore.create,
+WakeAssignment/ExecutionAssignmentLink, RecoverySnapshot obligations/intent/receipts,
+response preparation/publication/terminal/recovery, SelectedAttempt.engage/run,
+SelectedParticipant.select and CoordinatedTurn.capture. This receiving scope
+supersedes the previous partial handoff. Arendt does not edit those scalar
+algorithms in parallel. Our protected shared selected_turn change only passes
+the original returned context to `session.continued`; private_send_stage recovers
+the original recorded identity instead of rebuilding a private parent.
+
+The determining relation is `create(sources=batch.sources)` to original ordered
+membership and route obligations, then `require_wire_responses()`. ALL original
+route bodies are prepared before ANY append; each publication consumes its exact
+original obligation and owner witness. `require_published_evidence(route)` returns
+the original intent/receipt and terminal carries the receipt tuple. There is no
+first-route subset, scalar compatibility alias, copied message ID/target set or
+parallel response authority.
+
+| Consumer boundary | Required original relation and deletion |
+|---|---|
+| producer / normal CLI / foreground | Existing execution owner captures every original source and target; delete scalar execution construction and imports. |
+| native / tool | Shared selected algorithm prepares and publishes every route; tool capabilities retain per-original membership/audience, not the first assignment as batch authority. |
+| historical | Membership joins original ExecutionAssignmentLink or preexecution TriageNativeSources; receipt/context storage is not a second membership decision. |
+| recovery | RecoverySnapshot receives complete obligations; existing ResponseState and PublicationIntents own receipt presence/identity and envelope validation, respectively. Delete copied checks. |
+| terminal receipts | Original publication receipt tuple, never reconstructed IDs/targets or scalar result fallbacks. |
+| cursor / coverage | SourceCoverage proves the entire original frozen prefix; CursorOwner admits monotonic publication. Batch size or route order cannot replace per-original handling evidence. |
+
+The NRA lexical/exact/open census is source evidence, not a declaration that
+Kepler's scalar closure has already landed here. His exact implementation/deleted
+site census must reach both PR bodies before parent review. Native6 and broader
+saved custody work do not hold that independently coherent batching checkpoint.
 
 ## Boundary ownership and final validation
 

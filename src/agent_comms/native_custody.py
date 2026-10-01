@@ -139,7 +139,7 @@ class ReopenNative(NativeCustody):
             raise SavedSessionReopenError(
                 "Saved native session failed strict reopen validation."
             ) from error
-        return NativeSessionIdentity(identity, session_file)
+        return identity
 
     def reopen(self, session_file: str) -> ReopenNative:
         if session_file != self.session_file:

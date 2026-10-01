@@ -136,7 +136,7 @@ def read_historical_native_inputs(
                     "AND d.wire_seq=r.wire_seq AND d.claim_id=c.assignment_id "
                     "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
                     "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
-                    "AND n.owner_lookup=c.recipient_lookup AND n.session_id IS NOT NULL "
+                    "AND n.owner_lookup=c.recipient_lookup AND n.session_entry_id IS NOT NULL "
                     "LIMIT 3",
                     (wire_root_id, recipient_lookup, source_seq),
                 )
@@ -149,20 +149,11 @@ def read_historical_native_inputs(
         if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
             raise IdentityConflict("historical source has ambiguous native input evidence")
         rows.sort(key=lambda item: item[1].execution.proof_order)
-        expected_dir = (store.session.path.parent / "native-sessions" / recipient_lookup).absolute()
         evidence: list[HistoricalNativeInput] = []
         for source, row in rows:
-            session_file = Path(row.session_file)
-            if not session_file.is_absolute() or session_file.parent != expected_dir:
-                raise IdentityConflict("historical native session belongs to another recipient")
-            recorded = NativeContextProof(
-                row.input_id,
-                row.session_id,
-                row.session_entry_id,
-                row.request_generation,
-                row.llm_context_digest,
-                session_file,
-            )
+            original_session = row.require_session_identity()
+            session_file = original_session.path
+            recorded = row.require_context_proof()
             try:
                 # Journal alone cannot promote an unrecorded or uncertain input.
                 # The immutable SQL row is already present from the live event;
@@ -175,6 +166,7 @@ def read_historical_native_inputs(
                 raise IdentityConflict("historical native context evidence is unavailable") from error
             if observed != recorded:
                 raise IdentityConflict("historical native context differs from live-recorded proof")
+            original_session.require_context(observed)
             binding = read_expected_prompt_binding(store, row.input_id)
             if binding is not None:
                 # A binding must name exactly this reserved input; anything else is

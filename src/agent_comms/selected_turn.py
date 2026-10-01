@@ -284,7 +284,7 @@ class SelectedConsideration:
             participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
             outcome.settle(participant, stage, request.admission, result.context)
-            continued = session.continued(result.context.session_file)
+            continued = session.continued(result.context)
             return continued, outcome.continue_turn(
                 participant, continued, request.admission.input_id
             )

@@ -24,6 +24,8 @@ OWNERS = frozenset({
     "RecoveryMonitorCapability", "SelectedSummarySource", "SelectedSummarySlot",
     "SessionRevision", "NativeEvidenceRead", "NativeEvidenceScope", "ContextBudget",
     "CompactionPolicy", "ReplayAssessments", "TurnPhase", "CoordinationSegment",
+    "NativeContextReference", "NativeAdmissionEpoch", "Registration", "ThreadManagement",
+    "PrivateSendAdmission", "SelectedParticipant", "SelectedRequest",
 })
 
 modules = tuple(parse_python_modules(SOURCE, parse_workers=1, use_parse_cache=False))
@@ -98,7 +100,7 @@ data = {
     ],
 }
 OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-OUTPUT.write_text(json.dumps(data, indent=2) + "\n")
+OUTPUT.write_text(json.dumps(data, separators=(",", ":")) + "\n")
 print(json.dumps({"output": local(OUTPUT), "roots": len(roots), "classes": len(classes),
     "methods": len(methods), "call_candidates": len(candidates), "flow_edges": len(edges),
     "resolved_edges": sum(e["resolved_function"] is not None for e in edges)}), flush=True)

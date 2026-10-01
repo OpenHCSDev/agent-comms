@@ -21,7 +21,6 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict
 from .coordination_response import _response_boundary
 from .coordinator import Coordination
-from .fresh_private_session import FreshPrivateSession
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
@@ -30,13 +29,17 @@ from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptAdmissionBusy
 from .pi_vocabulary import ThinkingLevel
 from .private_path import FileRevision
+from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .tracked_turn import TrackedTurnSession
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
+    from .native_attestation import ObservedAttestation
     from .pi_events import PiEvent
     from .selected_tool_broker import NativeToolMode
+    from .selected_session import SelectedSession
+    from .selected_participant import SelectedParticipant
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
 from .registry_document import RegistrySnapshot
@@ -44,19 +47,34 @@ from .registry_document import RegistrySnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class PrivateSendAdmission:
-    bus: MessageBus
-    store_path: Path
-    wire_root_id: str
-    owner: RegistryOwner
-    participant: ParticipantOwner
+    selected: SelectedParticipant
     stage: NativeSendStage
     input_id: str
     token_digest: str
     prompt: str
-    expected_session: Path | None
-    fresh_selected: FreshPrivateSession | None
+    session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _journal: CompactionJournal = field(init=False, repr=False)
+
+    @property
+    def bus(self) -> MessageBus:
+        return self.selected.bus
+
+    @property
+    def store_path(self) -> Path:
+        return self.selected.store.session.path
+
+    @property
+    def wire_root_id(self) -> str:
+        return self.selected.root_id
+
+    @property
+    def owner(self) -> RegistryOwner:
+        return self.selected.owner
+
+    @property
+    def participant(self) -> ParticipantOwner:
+        return self.selected.identity
 
     def __post_init__(self) -> None:
         # Prepare schema before the deadline-constrained raw writer, as before.
@@ -70,16 +88,11 @@ class PrivateSendAdmission:
     def reserve(
         cls,
         *,
-        bus: MessageBus,
-        store: Coordination,
-        wire_root_id: str,
-        owner: RegistryOwner,
-        participant: ParticipantOwner,
+        selected: SelectedParticipant,
         stage: NativeSendStage,
         token: str,
         prompt: str,
-        expected_session: Path | None,
-        fresh_selected: FreshPrivateSession | None,
+        session: SelectedSession,
     ) -> PrivateSendAdmission:
         """Reserve once and bind the exact prompt before any native process starts.
 
@@ -87,32 +100,23 @@ class PrivateSendAdmission:
         never roll it back or make another input eligible for automatic replay.
         """
         digest = TextDigest.of(token).value
-        input_id = stage.reserve(store, participant, digest)
+        input_id = stage.reserve(selected.store, selected.identity, digest)
         bind_expected_prompt(
-            store,
+            selected.store,
             input_id=input_id,
             stage=stage,
-            owner=owner.thread,
-            generation=participant.generation,
+            owner=selected.owner.thread,
+            generation=selected.identity.generation,
             prompt=prompt,
         )
         return cls(
-            bus=bus,
-            store_path=store.session.path,
-            wire_root_id=wire_root_id,
-            owner=owner,
-            participant=participant,
+            selected=selected,
             stage=stage,
             input_id=input_id,
             token_digest=digest,
             prompt=prompt,
-            expected_session=expected_session,
-            fresh_selected=fresh_selected,
+            session=session,
         )
-
-    @property
-    def session_dir(self) -> Path:
-        return self.bus.log.path.parent / "native-sessions" / self.stage.recipient_lookup
 
     def verify(self, store: Coordination, context: NativeContextProof) -> None:
         self.stage.verify(
@@ -121,7 +125,6 @@ class PrivateSendAdmission:
             self.input_id,
             self.token_digest,
             context,
-            session_dir=self.session_dir,
             wire_root_id=self.wire_root_id,
             prompt=self.prompt,
         )
@@ -134,7 +137,7 @@ class PrivateSendAdmission:
         provider: str,
         model: str,
         selected_tool_mode: NativeToolMode | None = None,
-        observe_event: Callable[[PiEvent | AgentEvent], Awaitable[None]] | None = None,
+        observe_event: Callable[[PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
 
@@ -149,13 +152,12 @@ class PrivateSendAdmission:
                     input_id=self.input_id,
                     prompt=self.prompt,
                     worktree=Path(self.owner.thread.worktree).absolute(),
-                    session_dir=self.session_dir,
-                    session_file=self.expected_session,
+                    session=self.session,
                     provider=provider,
                     model=model,
                     thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
                     maintenance_root=self.bus.log.path.parent,
-                    fresh_selected=self.fresh_selected,
+                    fresh_selected=self.session.startup(),
                     selected_tool_mode=selected_tool_mode,
                     observe_event=observe_event,
                     prompt_send_boundary=self,
@@ -172,7 +174,7 @@ class PrivateSendAdmission:
 
     @contextmanager
     def _exclusion(
-        self, actual_session_file: Path, selected_runtime_revision: FileRevision | None
+        self, identity: NativeSessionIdentity, selected_runtime_revision: FileRevision | None
     ) -> Iterator[tuple[Coordination, RegistrySnapshot, sqlite3.Connection, PrivateInputSend]]:
         with ExitStack() as authority:
             try:
@@ -183,7 +185,7 @@ class PrivateSendAdmission:
                     store, self.input_id, self.participant, self.wire_root_id,
                     self.prompt, blocking=False,
                 ))
-                saved = self._saved_session(actual_session_file, selected_runtime_revision)
+                saved = self.session.admit(identity, selected_runtime_revision)
                 raw = authority.enter_context(
                     self._journal.private_inputs.admission(saved, blocking=False)
                 )
@@ -195,46 +197,10 @@ class PrivateSendAdmission:
                 raise
             yield store, registry, db, raw
 
-    def _saved_session(
-        self, actual: Path, runtime_revision: FileRevision | None
-    ) -> Path:
-        # get_state resolved this exact source before the writer was started.
-        if (
-            not isinstance(actual, Path)
-            or actual.is_symlink()
-            or (
-                self.expected_session is not None
-                and (actual != self.expected_session or not actual.is_file())
-            )
-        ):
-            raise IdentityConflict("native send requires an exact saved session file")
-        try:
-            saved = actual.resolve(strict=False)
-            directory = (
-                self.bus.log.path.parent
-                / "native-sessions"
-                / self.stage.recipient_lookup
-            ).resolve(strict=True)
-        except OSError as error:
-            raise IdentityConflict("native saved session unavailable before send") from error
-        if (
-            saved.parent != directory
-            or saved.suffix != ".jsonl"
-            or (actual.exists() and not actual.is_file())
-        ):
-            raise IdentityConflict("native saved session changed before send")
-        if self.fresh_selected is not None and (
-            runtime_revision is None
-            or saved != self.fresh_selected.path
-            or self.fresh_selected.verify_selected_startup() != runtime_revision
-        ):
-            raise IdentityConflict("selected fresh source changed before native send")
-        return saved
-
     @contextmanager
     def __call__(
         self,
-        actual_session_file: Path,
+        identity: NativeSessionIdentity,
         selected_runtime_revision: FileRevision | None = None,
     ) -> Iterator[None]:
         try:
@@ -243,7 +209,7 @@ class PrivateSendAdmission:
             pass
         else:
             raise IdentityConflict("native send admission requires the isolated raw writer")
-        with self._exclusion(actual_session_file, selected_runtime_revision) as (store, registry, db, raw):
+        with self._exclusion(identity, selected_runtime_revision) as (store, registry, db, raw):
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send admission cannot be reused")
             _require_no_private_owner_rename(self.bus.log.path.parent)
@@ -261,6 +227,6 @@ class PrivateSendAdmission:
             # exclusion through the raw writer; neither ACK nor fake result clears it.
             raw.mark_unknown(self.input_id)
             reserved.sent_owner_admission_generation.record(
-                reserved, db, self.owner.admission_generation
+                reserved, db, self.owner.admission_generation, identity
             )
             yield

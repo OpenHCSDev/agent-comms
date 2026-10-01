@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
     from .native_pi import NativePiRpcLaunch
     from .pi_payloads import StateData
+    from .native_session_reopen import NativeSessionIdentity
 
 
 @dataclass(frozen=True)
@@ -114,9 +115,9 @@ class NativeStartupAdmission:
         """Ordinary startup has no fresh selected-source enrollment to attest."""
 
     def prompt_boundary(
-        self, delegate: Callable[..., AbstractContextManager[None]], session_file: str,
+        self, delegate: Callable[..., AbstractContextManager[None]], identity: NativeSessionIdentity,
     ) -> AbstractContextManager[None]:
-        return delegate(session_file)
+        return delegate(identity)
 
 
 class SelectedNativeStartupAdmission(NativeStartupAdmission):
@@ -157,6 +158,6 @@ class SelectedNativeStartupAdmission(NativeStartupAdmission):
         self.revision = revision
 
     def prompt_boundary(
-        self, delegate: Callable[..., AbstractContextManager[None]], session_file: str,
+        self, delegate: Callable[..., AbstractContextManager[None]], identity: NativeSessionIdentity,
     ) -> AbstractContextManager[None]:
-        return delegate(session_file, self.revision)
+        return delegate(identity, self.revision)

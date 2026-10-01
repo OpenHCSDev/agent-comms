@@ -122,17 +122,11 @@ def _recorded_private_contexts(
         rows = NativeRuntimeInput.select(
             db, where="owner_lookup=?", parameters=(session.parent.name,)
         )
-    if any(row.session_id is None for row in rows):
-        raise ValueError("Continued private owner has unresolved native input")
+    # Context completion belongs to the original row's reference family. A
+    # prewrite selected session never promotes an uncertain original input.
+    proofs = tuple(row.require_context_proof() for row in rows)
     return {
-        row.input_id: NativeContextProof(
-            row.input_id,
-            row.session_id,
-            row.session_entry_id,
-            row.request_generation,
-            row.llm_context_digest,
-            session,
-        )
-        for row in rows
+        row.input_id: proof
+        for row, proof in zip(rows, proofs, strict=True)
         if row.session_file == str(session) and row.owner_thread == owner
     }

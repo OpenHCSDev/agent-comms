@@ -32,6 +32,7 @@ from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
+    from .selected_session import SelectedSession
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -327,14 +328,14 @@ class NativeContextProof(NativeContextRecord):
     session_file: Path
 
     def corroborates_input(
-        self, input_id: str, session_dir: Path, *, evidence: NativeEvidenceRead | None = None
+        self, input_id: str, *, evidence: NativeEvidenceRead | None = None
     ) -> bool:
         """Check an already-observed live event against its isolated saved proof.
 
         This grants neither replay nor recovery authority. History IO occurs
         before the coordinator read transaction, as on the native return path.
         """
-        if self.input_id != input_id or self.session_file.parent != session_dir:
+        if self.input_id != input_id:
             return False
         return self.read_evidence(self.session_file, input_id, evidence=evidence) == self
 
@@ -523,8 +524,7 @@ class NativePiRpcLaunch:
         package: Path,
         *,
         worktree: Path,
-        session_dir: Path,
-        session_file: Path | None = None,
+        session: SelectedSession,
         provider: str = "openrouter",
         model: str = "z-ai/glm-5.3-flash",
         thinking_level: str | None = None,
@@ -538,6 +538,7 @@ class NativePiRpcLaunch:
         only establishes the executable and its settings; native input, context,
         and model-delivery proofs remain separate per-attempt observations.
         """
+        session_dir, session_file = session.directory, session.path
         try:
             for value in (provider, model):
                 FieldCodec.decode(str, value)
@@ -564,7 +565,6 @@ class NativePiRpcLaunch:
         if not worktree.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         if session_file is not None:
-            session_file = _session_location(session_dir, str(session_file))
             from .fresh_private_session import FreshPrivateSession
 
             FreshPrivateSession.require_launch_header(session_file, selected_thinking_level)
