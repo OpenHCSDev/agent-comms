@@ -1,3 +1,25 @@
+## 2026-10-01 actual default switch completed; normal entrypoint check in progress
+
+Parent executed the reviewed quiet469 operator after Tristan confirmed drafts
+saved and Toad closed. Original complete batch passes in29.54s: thirteen original
+owners restarted with exact retained configurations; all fresh interpreters and
+five default links point to runtime-native-applied-cohort-20261001 (Coree191 /
+Toad1edd / Textual6b / SDK0.12.1 / native593). InputDocument170 rows,14 unresolved,
+and original SHA55fbc466 remain unchanged. Only declared runtime projections and
+compaction journal were reset; durable native proofs/wire/goals/decisions retained.
+Original private receipt/preimages remain under .release-private; sanitized review
+is evidence/native-applied-cohort-20261001/parent-cutover-review.json.
+
+Both actual installed candidate journeys were accepted before publication.
+Schrodinger is the sole fresh ordinary-default public-root Toad/ACP/history/tab
+verifier; default entrypoint acceptance is not yet claimed. Toad262 merged main
+8ea96a37; reviewed7026 is an ancestor,258 reconciled as incorporated with its
+original counterexamples retained. Full254 performance continues independently.
+Optional472 whole review found a new nullable historical-decision guard and that
+native input SQL is original reservation/proof authority, not a disposable
+projection. Mendel owns typed recorded-proof closure and original schema4 retention,
+without a converter, reset or alternate codec. It did not delay this live checkpoint.
+
 ## 2026-10-01 corrected paired candidate: both actual journeys pass
 
 Replacement Toad262 freezes Coree191bcf4 / Toad1edd96c0 (source7026ea09) /
