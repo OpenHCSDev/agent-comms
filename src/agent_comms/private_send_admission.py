@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_errors import IdentityConflict, StaleFence
+from .coordination_errors import IdentityConflict
 from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .fresh_private_session import FreshPrivateSession
@@ -27,7 +27,6 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptAdmissionBusy
-from .native_runtime_input import NativeRuntimeInput
 from .pi_vocabulary import ThinkingLevel
 from .private_path import FileRevision
 from .text_digest import TextDigest
@@ -243,7 +242,9 @@ class PrivateSendAdmission:
             )
             assert_native_runtime_schema(db)
             self.participant.require(store, self.stage.assignment.recipient_lookup)
-            self.stage.require_reservation(db, self.input_id, self.participant, self.token_digest)
+            reserved = self.stage.require_reservation(
+                db, self.input_id, self.participant, self.token_digest
+            )
             self.stage.require_claim(store)
             self.stage.require_binding(
                 store, self.input_id, self.participant, self.wire_root_id, self.prompt
@@ -253,12 +254,7 @@ class PrivateSendAdmission:
             # exclusion through the raw writer; neither ACK nor fake result clears it.
             self._journal.private_inputs.reserve(saved, self.input_id)
             with self._journal.private_inputs.send_fence(saved, private_input_id=self.input_id):
-                updated = NativeRuntimeInput.update(
-                    db,
-                    where="input_id=? AND sent_owner_admission_generation IS NULL",
-                    parameters=(self.input_id,),
-                    sent_owner_admission_generation=self.owner.admission_generation,
+                reserved.sent_owner_admission_generation.record(
+                    reserved, db, self.owner.admission_generation
                 )
-                if updated.rowcount != 1:
-                    raise StaleFence("native input admission was already bound")
                 yield
