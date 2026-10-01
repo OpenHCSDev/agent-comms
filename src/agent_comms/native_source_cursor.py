@@ -55,58 +55,65 @@ class NativeSourceCursor:
             generation=owner_generation,
             admission_generation=owner_admission_generation,
         )
-        if committed_input_id is None:
-            return self._advance_proven(identity, committed_input_id)
-        # The native result is already settled. A competing wire reader must
-        # not permanently erase its auxiliary cursor proof. Retry only a lock
-        # refusal; no input, claim, or provider operation is repeated here.
-        deadline = time.monotonic() + 2.0
-        while True:
+        with NativeEvidenceScope() as source_reads:
             try:
-                return self._advance_proven(identity, committed_input_id)
+                return self._advance_proven(identity, committed_input_id, source_reads)
             except BlockingIOError:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
+                if committed_input_id is None:
                     raise
-                time.sleep(min(remaining, 0.025))
+                # The existing two-second budget bounds lock contention, not
+                # decoding an admitted source. Start it at the first refusal.
+                # Retain the same original file resource across these probes;
+                # each borrow still rechecks its byte prefix and SQL proof.
+                deadline = time.monotonic() + 2.0
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise
+                    time.sleep(min(remaining, 0.025))
+                    try:
+                        return self._advance_proven(identity, committed_input_id, source_reads)
+                    except BlockingIOError:
+                        if time.monotonic() >= deadline:
+                            raise
 
     def _advance_proven(
-        self, identity: CursorOwner, committed_input_id: str | None
+        self, identity: CursorOwner, committed_input_id: str | None,
+        source_reads: NativeEvidenceScope,
     ) -> CurrentNativeCursor | None:
-        with NativeEvidenceScope() as source_reads:
-            sources = self._coverage(identity.lookup)
-            witness = sources.witness()
-            coverage = sources.prefix(source_reads=source_reads)
-            proof = sources.last_proof(
-                coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
-                source_reads=source_reads,
+        sources = self._coverage(identity.lookup)
+        witness = sources.witness()
+        coverage = sources.prefix(source_reads=source_reads)
+        proof = sources.last_proof(
+            coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
+            source_reads=source_reads,
+        )
+        evidence = sources.evidence(coverage, source_reads=source_reads)
+        with (
+            _response_boundary(self.bus, blocking=False) as registry,
+            self.store.session.transaction() as db,
+        ):
+            if sources.witness_unlocked() != witness:
+                raise IdentityConflict("current cursor canonical source changed before commit")
+            identity.require_live(
+                self.bus, registry, "current cursor owner or private root changed"
             )
-            evidence = sources.evidence(coverage, source_reads=source_reads)
-            with (
-                _response_boundary(self.bus, blocking=False) as registry,
-                self.store.session.transaction() as db,
+            identity.require_participant(self.store, "current cursor recipient generation changed")
+            prior = identity.cursor(db)
+            injected = coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0
+            if prior is None and coverage.covered_seq == 0:
+                return None  # A blocked first source is not a zero-valued cursor.
+            if prior is not None and (
+                prior.owner_identity != identity.participant_identity
+                or coverage.covered_seq < prior.covered_seq
+                or injected < prior.injected_seq
             ):
-                if sources.witness_unlocked() != witness:
-                    raise IdentityConflict("current cursor canonical source changed before commit")
-                identity.require_live(
-                    self.bus, registry, "current cursor owner or private root changed"
-                )
-                identity.require_participant(self.store, "current cursor recipient generation changed")
-                prior = identity.cursor(db)
-                injected = coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0
-                if prior is None and coverage.covered_seq == 0:
-                    return None  # A blocked first source is not a zero-valued cursor.
-                if prior is not None and (
-                    prior.owner_identity != identity.participant_identity
-                    or coverage.covered_seq < prior.covered_seq
-                    or injected < prior.injected_seq
-                ):
-                    raise IdentityConflict("current cursor would change owner or regress")
-                if not identity.matches_prefix(db, evidence):
-                    return prior
-                if not identity.admits(db, proof, injected, prior, committed_input_id):
-                    return prior
-                return self._publish(db, identity, prior, coverage, proof)
+                raise IdentityConflict("current cursor would change owner or regress")
+            if not identity.matches_prefix(db, evidence):
+                return prior
+            if not identity.admits(db, proof, injected, prior, committed_input_id):
+                return prior
+            return self._publish(db, identity, prior, coverage, proof)
 
     @staticmethod
     def _publish(

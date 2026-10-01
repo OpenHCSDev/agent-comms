@@ -49,3 +49,21 @@ its original auxiliary cursor transaction, bounded by its existing two-second
 policy. This change restores that declared behavior; no new retry/timeout,
 provider input replay, acquisition bypass, cursor mirror or fleet reduction.
 Storage/wire/native formats and current private-file/prefix proof checks unchanged.
+
+## Representative-history contention relation
+
+The first three-owner installed gate02 passed: three simultaneous real native
+triages and three input-backed cursors,21 ACP updates,0diagnostics,22.73seconds,
+all worker cleanup complete. This small-history result is scoped, not sufficient
+for large-history contention.
+
+Owner review identified that the original cursor clock began before potentially
+seconds-long initial decoding. Advance now acquires one existing NativeEvidenceScope,
+observes the original source, and starts its unchanged two-second contention budget
+only on the first original BlockingIOError. Retries borrow the same acquired reader;
+every observation still verifies original byte-prefix and original SQL proof/current
+owner/generation. No new timeout/cursor/proof permission, provider operation or
+input is retried. The first nonblocking probe without an original committed input
+still refuses. File/decode/mutation failures remain distinct and are never retried.
+Representative saved history plus real publication contention is the remaining
+installed acceptance; no live originals are used as inputs.
