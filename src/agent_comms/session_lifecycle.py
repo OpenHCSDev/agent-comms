@@ -150,6 +150,7 @@ class SessionLifecycle:
 
     def validated_thread(self, cwd: str, session_id: str) -> Thread:
         thread = self.comms.registry.require(session_id)
+        thread.execution.require_native()
         known_paths = {
             str(Path(path).expanduser().resolve())
             for path in (thread.worktree, *thread.previous_worktrees)
