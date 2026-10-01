@@ -146,3 +146,64 @@ The independent artifact native manifest `776cd99e55d6917b` is unchanged.
 Full S2 retention, three genuine compactions and separate S4 remain open.
 Evidence is `human-source32/33/34`, `human-ratchet35`, `human-final36` and
 `human-source-handoff37.json` in the existing followup evidence directory.
+
+## Installed USER source and original task carry checkpoint
+
+The immutable local wheel contains the committed USER production55d2; all source
+Python modules are byte-verified against their installed counterparts in
+`installed-user-carry49.json`. The two continuous USER publisher/source journeys
+pass without source overlay, conftest scheduler replacement, native launch or
+provider calls. Exact wording, original identity, rename, correction, drop,
+repeated pin, audience/author refusal and goal applicability remain covered.
+This is installed Core source acceptance, not the frontend CLI/ACP/native user
+journey owned by Einstein474.
+
+The one-use `RetainedTaskSourceCarry` extends `StoppedOwnerInstallation` outside
+`src/`. The enclosing owner alone controls stops, package/route publication,
+runtime reset and launches. Selection asks the original installed decoder to
+verify the whole original certificate before any fence. After all owners stop,
+the original writer captures the original typed records under its existing bus
+descriptor. The target validates every promoted post-image under that same
+opened lock before writes. Private0600 raw bus/marker/index preimages are synced
+before publication. The target's existing Message, DeliveryPolicy, FrozenAudience,
+CommittedDelivery and WireScan own current decoding and attestation; copied
+old content signatures are refused (BOUND-2/IDEN-1). There is no runtime converter,
+old reader, second task store or replay authority (TIME-1/TIME-2).
+
+Only populated old declaration envelopes change. Message identity, body, scope,
+frozen recipients, delivery decisions and original sequence/admission frontier
+are retained. The operator retires the old derived certificate, candidate WAL
+database and activity/display indexes, then certifies the complete new prefix.
+Registry, native journals and input records are outside its write set. An ended
+model turn remains historical; a carry never promotes it into a current lease.
+Any uncertain write leaves the existing stopped batch and private preimages for
+operator review. Existing receipt/preimages refuse an automatic second attempt.
+
+Actual installed original-publisher -> central zero-live-owner batch -> target
+certificate -> new USER subject/pin -> retained source -> reopen passes in
+`installed-carry48-receipt.json`. A mutated original certificate refuses before
+fences/preimages/publication in `installed-carry47-receipt.json`. The prior45
+failed control is preserved: its oracle incorrectly demanded a current model
+decision after the original turn ended, and it exposed the candidate inode reset
+requirement now owned by this operation.46 established the correction;48 covers
+the final original-selection admission. Opaque protected fixture bytes in these
+controls are explicitly NOT proof of actual UNKNOWN/native input continuity.
+Original read-only seven-row admission and three-envelope re-attestation controls
+39/41 remain unchanged and retained. No public root or original source was edited.
+
+Arendt's enclosing operator may call `require_selection(snapshot, owners)` and
+`after_stopped(lifecycle)` with the declared original interpreter/root/root ID
+and fresh private receipt. It must not call `complete` independently to create
+a second restart. Runtime retained-compaction rows are reset by that enclosing
+operation after its private preimages, not carried by this member. Sealed native
+summaries and their journals are never rewritten. All transition helpers must be
+deleted after the actual durable cutover closes; they are not a runtime fallback.
+
+This checkpoint still does not prove real retained live-owner cutover, USER native
+HumanInput pinning beyond wire references, frontend consumers, or full S2/S3
+genuine compactions. Native776 trust remains closed and was not repeated.
+The installed scratch resource is registered in `installed-scratch-owner50.json`.
+The recovered `multi_agent_v1` capability is absent from this session's tool
+catalog, so direct peer handoff is unconfirmed; the source and receipt are
+published through481 for the integration owner. Foundation473/270 delivery is
+independent and must not wait for these remaining full-S2 requirements.
