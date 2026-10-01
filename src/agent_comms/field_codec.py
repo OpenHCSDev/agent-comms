@@ -313,25 +313,23 @@ class FieldCodec(Sealed):
         return cast(T, cls._decode(target, data))
 
     @classmethod
-    def record_schema(cls, target: type) -> dict[str, Any]:
-        """Describe the same declared record or family accepted by decode."""
-        if issubclass(target, DeclaredFamily):
-            alternatives = []
-            for member in target.members_with(target):
-                schema = cls._record_schema(member)
-                tag = member.family_discriminator
-                schema["properties"] = {
-                    tag: {"type": "string", "const": member.declared_name},
-                    **schema["properties"],
-                }
-                schema["required"] = [tag, *schema["required"]]
-                alternatives.append(schema)
-            return {"oneOf": alternatives} if alternatives else {"not": {}}
-        return cls._record_schema(target)
+    def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
+        """Instance values carry their selector inside the encoded object."""
+        alternatives = []
+        for member in target.members_with(target):
+            schema = cls.record_schema(member)
+            tag = member.family_discriminator
+            schema["properties"] = {
+                tag: {"type": "string", "const": member.declared_name},
+                **schema["properties"],
+            }
+            schema["required"] = [tag, *schema["required"]]
+            alternatives.append(schema)
+        return {"oneOf": alternatives} if alternatives else {"not": {}}
 
     @classmethod
-    def _record_schema(cls, target: type) -> dict[str, Any]:
-        """Share field metadata between ordinary records and tagged members."""
+    def record_schema(cls, target: type) -> dict[str, Any]:
+        """Named request fields; external tool/CLI selection remains separate."""
         properties = {}
         required = []
         hints = cls._types(target)
@@ -392,7 +390,7 @@ class FieldCodec(Sealed):
         if annotation in primitive:
             return {"type": primitive[annotation]}
         if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-            return cls.record_schema(annotation)
+            return cls._family_schema(annotation)
         if isinstance(annotation, type) and is_dataclass(annotation):
             return cls.record_schema(annotation)
         raise TypeError(f"No declared JSON schema for {annotation}")

@@ -252,6 +252,10 @@ def test_family_instance_schema_tracks_decode_members_and_custom_discriminator()
         assert FieldCodec.decode(Request, {"scope": encoded}) == Request(value)
 
     assert FieldCodec.value_schema(type[Scope])["enum"] == list(Scope.names())
+    # Named APIs select a declaration outside their payload; nested values
+    # select it inside the object. Both use the same declared field metadata.
+    assert FieldCodec.record_schema(ExplicitScope)["required"] == ["externalProject"]
+    assert "selection" not in FieldCodec.record_schema(ExplicitScope)["properties"]
 
     @dataclass(frozen=True)
     class NewScope(ExplicitScope):
