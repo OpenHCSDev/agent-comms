@@ -317,21 +317,22 @@ class FieldCodec(Sealed):
         """Instance values carry their selector inside the encoded object."""
         alternatives = []
         for member in target.members_with(target):
-            schema = cls.record_schema(member)
             tag = member.family_discriminator
-            schema["properties"] = {
-                tag: {"type": "string", "const": member.declared_name},
-                **schema["properties"],
-            }
-            schema["required"] = [tag, *schema["required"]]
-            alternatives.append(schema)
+            alternatives.append(cls._record_schema(
+                member, {tag: {"type": "string", "const": member.declared_name}}, [tag]
+            ))
         return {"oneOf": alternatives} if alternatives else {"not": {}}
 
     @classmethod
     def record_schema(cls, target: type) -> dict[str, Any]:
         """Named request fields; external tool/CLI selection remains separate."""
-        properties = {}
-        required = []
+        return cls._record_schema(target, {}, [])
+
+    @classmethod
+    def _record_schema(
+        cls, target: type, properties: dict[str, Any], required: list[str]
+    ) -> dict[str, Any]:
+        """Build fields once, including an internally supplied family selector."""
         hints = cls._types(target)
         for declared, key in cls._fields(target):
             annotation = hints[declared.name]
