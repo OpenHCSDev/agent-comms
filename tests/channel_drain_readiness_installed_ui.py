@@ -1,7 +1,8 @@
 """Actual installed TUI/native receiver failure and independent saved input.
 
 Reuse the existing application/native journey. Only the localhost provider HTTP
-status is controlled; UI, registry, source, ACP and native processes remain real.
+status is controlled; UI, registry, source, ACP and native processes remain real. The application runs
+under Textual Pilot; external st/Linux entrypoint acceptance is a separate gate.
 """
 import argparse
 import asyncio
@@ -127,6 +128,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     assert original.message == pending_source
     assert any(recipient.canonical_thread == 'beta' for recipient in original.audience.recipients)
     result = {'elapsed_seconds':perf_counter()-started, 'localhost_provider_posts':len(requests),
+        'ui_driver':'Textual App.run_test/Pilot', 'external_terminal_entrypoint_verified':False,
         'ordinary_first_reply_visible':True, 'actual_native_provider_failure':True,
         'same_open_ui_channel_waiting_recovery_visible':True,
         'same_owner_dm_waiting_recovery_title':str(details.title),

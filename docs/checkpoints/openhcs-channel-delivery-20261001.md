@@ -202,7 +202,7 @@ assignment declaration, not parallel consumer state logic.
 Focused affected controls: 31 pass in 5.57 seconds. This source checkpoint is
 still Draft; one fresh installed continuous UI journey must prove first reply,
 actual native failure, a newly committed unhandled channel source visibly waiting
-for recovery, physical DM/return clicks and unchanged uncertain input, with exactly
+for recovery, Pilot DM/return clicks and unchanged uncertain input, with exactly
 two controlled localhost POSTs. The completed e05 cancellation/native acceptance
 is retained without repetition. Public installation remains parent-owned.
 
@@ -218,7 +218,7 @@ identical to accepted264b524; its pin is updated through normal metadata/lock.
 The continuously open actual application paints an ordinary native reply, then
 real native SDK/ACP 503 failure stops the original drain. A fresh independent
 source223 is saved with original frozen audience and no handling claim. Its
-expanded channel notification visibly says Waiting for recovery. Physical clicks
+expanded channel notification visibly says Waiting for recovery. Pilot clicks
 open the original DM tab, expose Needs attention/Inbox unavailable plus current
 Waiting for recovery, and return to the channel retaining that feedback. The
 failed original native input is exactly unchanged, no provider retry/new handling
@@ -254,3 +254,21 @@ adjustment follows the completed u07 installed gate and changes acquisition reus
 not member semantics or the protocol/native/store format. Keep u07's exact tested
 heads in its receipt; no repeated paid/native UI workflow is claimed for this
 post-gate adjustment. Parent's matched publication remains the next boundary.
+
+
+### Verification scope correction
+
+u07 uses the installed real application and ACP/native processes inside
+InstalledApp.run_test(headless=False), driven by Textual Pilot.click. Its screenshot
+exports and compositor assertions establish that installed application's render
+path. They do not establish the external st/Linux user entrypoint. Earlier use of
+"physical" for those clicks is corrected to "Pilot" above and in PR descriptions.
+The original u07 receipt and private root remain unchanged; the published sanitized
+receipt explicitly classifies its driver and this remaining verification boundary.
+
+Parent owns ONE remaining read-only affected st/private-Xvfb capture on the final
+0a76958a/50f965e6 paired prefix: original #openhcs, failed-recipient DM and return
+must paint from the existing262UNKNOWN/266frozen delivery/diagnostic sources.
+No original prompt, new provider request, restart or uncertain input replay is
+required or authorized by that capture. Exact module/root/native and original
+proof preservation are mandatory. Source review readiness is not live readiness.

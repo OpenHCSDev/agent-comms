@@ -35,5 +35,8 @@
     "native_full_trust": true,
     "sdk": "0.12.1",
     "prefix": "/home/ts/.local/share/agent-comms/runtime-openhcs-channel-delivery-476-20261001-03"
-  }
+  },
+  "ui_driver": "InstalledApp.run_test(headless=False), Textual Pilot.click",
+  "external_terminal_entrypoint_verified": false,
+  "remaining_entrypoint_gate": "Parent-owned read-only st/private-Xvfb on final0a76958a/50f965e6 original #openhcs\u2192failed-recipientDM\u2192return; no original prompt/replay/restart"
 }
