@@ -46,11 +46,19 @@ def test_native_timing_rejects_an_observation_before_its_job():
         CompactionSourceProgress(0, 1000, "history", 1250, 1000)
 
 
-def test_stream_measurements_do_not_republish_unchanged_source_state():
+@pytest.mark.parametrize("leaf", ["map", "history", "current-turn", "synthesis"])
+def test_stream_measurements_do_not_republish_unchanged_source_state(leaf):
     first = CompactionSourceProgress(0, 1000, "map", 1000, 1250)
-    heartbeat = CompactionSourceProgress(0, 1000, "map", 1000, 2000)
+    heartbeat = CompactionSourceProgress(0, 1000, leaf, 1000, 2000)
     completed = CompactionSourceProgress(500, 1000, "map", 1000, 2000)
     phase = ModelWaitPhase().compacting().measured("native-job", first)
     assert heartbeat.elapsed_ms == 1000
     assert phase.measured("native-job", heartbeat) == phase
     assert phase.measured("native-job", completed) != phase
+    # Leaf semantics still cross the actual external boundary unmodified.
+    progress = events.CompactionSummaryProgress(
+        operation_id="native-job", text="leaf summary", source=heartbeat
+    )
+    (decoded,) = decode_updates(encode_updates(CompactionChangedUpdate(progress)))
+    assert decoded.event.source.summary_phase == leaf
+    assert decoded.event.text == progress.text
