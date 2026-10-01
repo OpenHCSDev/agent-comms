@@ -23,23 +23,25 @@ from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_pi import NativePiInputNotSent, NativePiUnavailable
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from agent_comms.selected_request import SelectedRequest
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 
 def unknown_owner(directory, admitted, output, exit_allowed):
-    # Reproduce the pre-fix durable UNKNOWN left by the historical worker.
-    SelectedRequest._uncertain_failure = lambda self, error: None
+    # Revoke the real owner before the current failure consumer can settle.
+    # Both recorded and unrecorded original inputs remain UNKNOWN; no obsolete
+    # failure hook or fabricated owner-loss grant is used.
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
     runtime._trusted_package = lambda path: path
-    fake, _calls = _fake_model(fail_on=1)
+    fake, _calls = _fake_model()
 
     async def fail(*args, **kwargs):
         if admitted:
             await fake(*args, **kwargs)
+        os.environ["AGENT_COMMS_THREAD"] = "beta"
+        comms.owners.release("beta")
         raise NativePiUnavailable("UNKNOWN before admission receipt")
 
     TrackedTurnSession.execute = fail
@@ -58,8 +60,6 @@ def unknown_owner(directory, admitted, output, exit_allowed):
             f"SELECT * FROM {NativeRuntimeInput.declared_name}"
         ).fetchone()
         execution_id, input_id = row["execution_id"], row["input_id"]
-    os.environ["AGENT_COMMS_THREAD"] = "beta"
-    comms.owners.release("beta")
     output.put((str(root), root_id, execution_id, input_id))
     if not exit_allowed.wait(15):
         raise TimeoutError("test must release fixture process")
@@ -273,10 +273,11 @@ print(json.dumps({"type":"response", "id":request["id"],
     monkeypatch.setattr(native_pi, "_trusted_package", lambda path: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", local_rpc)
     monkeypatch.setattr(DurableTurn, "fail_unknown", after_reap)
-    with pytest.raises(NativePiUnavailable, match="capability is unavailable"):
+    with pytest.raises(NativePiInputNotSent, match="capability preflight failed") as failure:
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
+    assert failure.value.diagnostic_evidence["input_disposition"] == "not_sent"
     with Coordination(str(root / "coordination.sqlite3")) as store:
         old = store.session._connection.execute(
             f"SELECT * FROM {NativeRuntimeInput.declared_name}"

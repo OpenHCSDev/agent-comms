@@ -133,7 +133,8 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
     from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
     from agent_comms.coordinator import Coordination
-    from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_admission_epoch import RecordedNativeAdmission
 
     journal, session, inputs, source = continued
     inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
@@ -189,7 +190,7 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
                 owner_thread="foreign" if damage == "foreign" else "owner",
                 owner_generation=1,
                 owner_token_digest="c" * 64,
-                sent_owner_admission_generation=1,
+                sent_owner_admission_generation=RecordedNativeAdmission(1),
                 session_id=None if damage == "unsettled" else "session",
                 session_file=None if damage == "unsettled" else str(session),
                 session_entry_id=None if damage == "unsettled" else "user",
