@@ -41,7 +41,7 @@ contains no detector omission/scan_status field, so complete detector coverage
 is not inferred from its zero reported findings. The initial 3.11 syntax refusal
 is retained privately and was replaced by the successful 3.14 source scan.
 
-## Still required before Ready
+## Original checkpoint requirements (subsequent evidence below)
 
 1. Native system instructions, skills, compaction summary and retained/live
    transcript must enter the same context observation at their original native
@@ -64,3 +64,27 @@ StoreLock resource change is requested from S2, not copied independently. Mendel
 472 owns selected/native execution identity, so selected prompt composition must
 be coordinated directly. Arendt 476 owns the urgent live channel delivery defect.
 Phase 2 remains in dependent draft 474, awaiting S2 retained declarations.
+
+## Current receiving checkpoint, 2026-10-01
+
+Published `c190370d` integrates Sch's native pin `3f0af494` normally. The original
+claim owns digest/lifetime and now holds read-only contributor coordinates.
+Core renders once, including image coordinates and the original StoredInput
+authorship source; NativeInputClaim observes those coordinates with SDK token
+measurement. Six current source controls and the new f117 actual SDK contract
+pass. Detailed receipt: `logical-contributors-checkpoint31.json`.
+
+Old installed19 remains accepted for native/ACP/CLI and stock tools only. The new
+normal installed pair has Core3f0 / Toad38614 / nativef117 with 69 dependencies.
+Fresh continuous32 passed the original read-only next-context query, then
+deadlocked before input in the combined UI/owner fixture. The original stack
+shows a lock-held UI launch awaiting the same loop as the lock-blocked goal
+observer. Sch owns fixture loop separation to match normal deployment. All
+attested owned processes are gone; no original input was reserved or replayed.
+Negative proof: `installed-context-toad-core-tool32-receipt.json`.
+
+Remaining full-phase1 acceptance is the same actual Toad original/followup and
+nested Core tool/native manifest journey, plus saved configured-provider proof
+and whole boundary/guidance/inspection closure. Source or SDK contracts do not
+claim whole installed readiness. Public defaults and original UNKNOWN are
+unchanged.
