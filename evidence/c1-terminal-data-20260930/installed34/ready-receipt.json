@@ -1,0 +1,78 @@
+{
+  "pins": {
+    "agent-comms": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+    "batrachian-toad": "1edd96c0cfa011a69782cdeb67138ceea98e227b",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "phase": "affected-installed-retained-native-ACP-terminal-workflow-pass",
+  "elapsed_seconds": 113.9394751819782,
+  "raw_root": "/home/ts/wt/g458j/u03",
+  "five_original_physical_pre_delivery_proofs": 5,
+  "strict_ANSI_frames": 2731,
+  "native_turn_after_cancel": "original consumed finished ID equals canonical registry last_finished_turn_id; idle and actual ANSI Session details Ready",
+  "fork_escape": "original mounted/focused/hittable Fork controls actually painted; Escape before POST creates no child",
+  "context_observations_from_original_ACP": [
+    {
+      "session": "beta",
+      "stamp": "[1790825348.905]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.104]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.113]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.179]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.470]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    },
+    {
+      "session": "beta",
+      "stamp": "[1790825349.834]",
+      "native_ACP_used": 110,
+      "native_ACP_size": 272000
+    }
+  ],
+  "protocol_update_counts": {},
+  "original_RequestFailed_updates": [],
+  "cleanup": [],
+  "public_mutations": 0,
+  "paid_calls": 0,
+  "manual_replay": false,
+  "runtime_activation_unchanged": true,
+  "original_source": {
+    "path": "/home/ts/wt/toad-workspace-growing-end-continuity-20260930/.artifacts/private-warm-scroll-236-01/native-forks/sessions/--home-ts-wt-toad-workspace-growing-end-continuity-20260930-.artifacts-private-warm-scroll-236-01-project--/2026-09-30T12-41-27-530Z_01a0f255-8aeb-754e-9e82-dc119cf460b0.jsonl",
+    "bytes": 41270331,
+    "sha256": "fc5a6209efae51c1cb82833b1e296ebeeefe9e28b180f5a02d70a2d0928084e0",
+    "original_source_and_owner_unchanged": true
+  },
+  "image_provenance": "software monochrome rendering of exact recorded original ANSI text snapshots; no new GUI run or X screenshot",
+  "pixels": [
+    "/home/ts/wt/g458j/u03/proof/retained-saved-startup.png",
+    "/home/ts/wt/g458j/u03/proof/fork-controls-painted.png",
+    "/home/ts/wt/g458j/u03/proof/stationary-ready.png"
+  ],
+  "limitations": [
+    "background history Indexing caption is a resource operation, not a claim of full performance closure",
+    "controlled localhost responses and usage; selected context/output caps came from original SDK model, active request sizes are not token counts",
+    "u01 configuration observation defect and u02 new observer defect retained with original inputs; no old input replay",
+    "not default-activation proof; parent owns cutover and separate affected normal default entrypoint"
+  ],
+  "protocol_update_counts_note": "coordination extension batch is empty for this fixture; native usage/update observations use original SDK UsageUpdate, not an invented DTO"
+}
