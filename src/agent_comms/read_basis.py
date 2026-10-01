@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .messages import Message
     from .registration import Registration
     from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +33,7 @@ class Conversation:
     target: str = ""
     participants: tuple[ThreadIncarnation, ...] = ()
 
-    def current(self, snapshot: RegistrySnapshot) -> bool:
+    def current(self, snapshot: RegistryProvenance) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)
 
     def to_wire(self) -> dict:
@@ -326,14 +327,14 @@ class DMDisplayScope(MessageDisplayScope):
     second_names: frozenset[str]
 
     @staticmethod
-    def names_for(name: str, snapshot: RegistrySnapshot) -> frozenset[str]:
+    def names_for(name: str, snapshot: RegistryProvenance) -> frozenset[str]:
         canonical = snapshot.aliases.get(name, name)
         return frozenset(
             {canonical, *(alias for alias, owner in snapshot.aliases.items() if owner == canonical)}
         )
 
     @classmethod
-    def capture(cls, a: str, b: str, snapshot: RegistrySnapshot) -> DMDisplayScope:
+    def capture(cls, a: str, b: str, snapshot: RegistryProvenance) -> DMDisplayScope:
         return cls(cls.names_for(a, snapshot), cls.names_for(b, snapshot))
 
     @classmethod
@@ -376,7 +377,7 @@ class ChannelDisplayScope(MessageDisplayScope):
 
     @classmethod
     def capture(
-        cls, channel: Channel, snapshot: RegistrySnapshot, *, seen: frozenset[int] = frozenset()
+        cls, channel: Channel, snapshot: RegistryProvenance, *, seen: frozenset[int] = frozenset()
     ) -> ChannelDisplayScope:
         members = frozenset(
             name

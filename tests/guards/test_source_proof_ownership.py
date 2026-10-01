@@ -86,3 +86,19 @@ def test_original_wire_reply_has_no_native_streaming_membership():
     assert not issubclass(IncomingTranscript, UserTranscript)
     assert not issubclass(IncomingTranscript, StreamingMerge)
     assert issubclass(WireTextTranscript, MarkdownTranscript)
+
+
+def test_archived_identity_cannot_reacquire_a_live_registry_or_thread():
+    from dataclasses import MISSING, fields
+    from typing import get_type_hints
+    from agent_comms.historical_views import HistorySource, HistoricalThread
+    from agent_comms.thread_provenance import ThreadProvenance
+
+    provenance = next(item for item in fields(HistorySource) if item.name == "provenance")
+    assert provenance.default is MISSING and provenance.default_factory is MISSING
+    assert get_type_hints(HistoricalThread)["thread"] is ThreadProvenance
+    assert not hasattr(HistorySource, "registry")
+    for module in ("historical_views", "history_views", "transcripts"):
+        for node in ast.walk(ast.parse((SOURCE / f"{module}.py").read_text())):
+            assert not (isinstance(node, ast.Attribute) and node.attr == "registry"
+                        and isinstance(node.value, ast.Name) and node.value.id == "source"), module

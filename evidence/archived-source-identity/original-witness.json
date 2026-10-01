@@ -1,0 +1,78 @@
+{
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "baseline_core": "bd86f28c source; installed prefix provenance below",
+  "sources": [
+    {
+      "source": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-0njqz198",
+        "original_root": "/home/ts/.agent-comms",
+        "wire_root_id": "b8ff29c8e11f47f1a59b568650e580a3",
+        "bus_identity": [
+          2084,
+          2399114
+        ],
+        "size": 7531950,
+        "snapshot_bus_revision": [
+          4390474,
+          7513177,
+          1790659560882218866,
+          1790659584523685903
+        ],
+        "snapshot_registry_revision": [
+          4390495,
+          265444,
+          1790626566463410747,
+          1790659584614292422
+        ]
+      },
+      "registry_threads": 104,
+      "retired_field_rows": 104,
+      "original_hashes": {
+        "bus.jsonl": "940e2444dfa703a2b1a9910097c01756303e19877a16945dbe26f38367e01ef1",
+        "registry.json": "cd2a20900794c7e8e8e9b0de20193456d42ea7085eb7acfc4a9255965fc68e30",
+        "bus_meta.json": "dce0d1acd4a1812f037f4beddffd5b87709a3ab82f49768aeeb5c7aa9282d9c3"
+      }
+    },
+    {
+      "source": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza/history/source-a7v0vr4w",
+        "original_root": "/var/tmp/agent-comms-live-20260927-6_d_vdul",
+        "wire_root_id": "aaed93d6297f4c15bccc68c211066c7e",
+        "bus_identity": [
+          2083,
+          4200147
+        ],
+        "size": 31633,
+        "snapshot_bus_revision": [
+          4390508,
+          27674,
+          1790659562811256973,
+          1790659586556293035
+        ],
+        "snapshot_registry_revision": [
+          4390524,
+          15257,
+          1790626575585426896,
+          1790659586557397519
+        ]
+      },
+      "registry_threads": 7,
+      "retired_field_rows": 7,
+      "original_hashes": {
+        "bus.jsonl": "2a841e0858aaad523e36ae1b9983c63eb542b3c3f6b0e8746f4f638fc01c6d76",
+        "registry.json": "bd2b2c850288ec25d3322615d9626d2c28d22a77c2c7137ca31c262ad72d4264",
+        "bus_meta.json": "ca47ef3889961e912314b34f4a6836b12b97a0f8a68d2dda18cfe026209e34e6"
+      }
+    }
+  ],
+  "originals_mutated": false,
+  "installed_prefix": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001",
+  "activation_keys": [
+    "stage",
+    "pins",
+    "sdk",
+    "native_package",
+    "state",
+    "staging_receipt_sha256"
+  ]
+}

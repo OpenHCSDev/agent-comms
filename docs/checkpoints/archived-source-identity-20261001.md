@@ -29,3 +29,32 @@ Reuse real installed CLI and saved-history source path, controlled fixture only
 where required; tests do not replace actual original readonly source acceptance.
 Latest NRA refactor-audit catalog applies. Full targeted declaration/consumer
 census and migration receipt follows source inspection. Draft precedes long work.
+
+## Working source checkpoint
+
+ThreadProvenance declares original recorded identity/tags/worktree/session/title;
+RegistryProvenance declares its original namespace/aliases. Live Thread and
+RegistrySnapshot inherit these original facts. HistorySource requires that
+provenance; all archive paging, display evidence, catalog, identity resolution,
+read ledger, transcript and compaction identity consumers use it directly.
+The archived snapshot is never decoded as live Thread. Patterns IDEN-1, IDEN-5,
+BOUND-2 and TIME-3 apply; the existing codec stays unchanged.
+
+The one-shot tools/cutover/carry_history_provenance.py is outside src and writes
+ONLY a fresh explicit candidate manifest/receipt. Parent authorized deriving
+104+7 separately scoped declarations and 9+0 aliases from frozen registries.
+Original bus/registry/metadata hashes, manifest bytes, source revisions, original
+native paths and all determining facts are unchanged. Zero historical births
+remain zero; positive-birth admission is a live capability, never fabricated.
+Public manifest publication requires parent quiet installation of this reader;
+the one-use executable is retired after that publication.
+
+The existing attach producer now installs its destination's existing certified
+checkpoint, so transcript reads have the same original source custody as public
+paging. Only destination metadata/index files change.
+
+Focused controls: 26 passed in 6.66s; 20 passed in 7.21s. Earlier failed controls
+remain in owned scratch. A preexisting obsolete QueuedInputContext three-argument
+fixture is separate. Actual installed baseline history CLI reproduced the retired
+last_goal_report_turn rejection with original bytes unchanged. Installed candidate
+acceptance is pending; these controls do not establish readiness.
