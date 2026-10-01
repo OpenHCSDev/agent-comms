@@ -140,11 +140,11 @@ class RetainedTaskFacts:
         effective: dict[MessageReference, tuple[Message, Message]] = {}
         for fact in self.facts:
             for message in fact.choices():
-                root = message.decision.root_source(message, originals)
-                originals[message.reference] = root
-                _, previous = effective.get(root.reference, (root, root))
-                if message.decision.revises_after(previous):
-                    effective[root.reference] = (root, message)
+                for root in message.decision.current_roots(message, originals, owner, registry):
+                    originals[message.reference] = root
+                    _, previous = effective.get(root.reference, (root, root))
+                    if message.decision.revises_after(previous):
+                        effective[root.reference] = (root, message)
         return tuple(message for root, message in effective.values()
                      if root.require_decision().applies(owner, registry))
 
