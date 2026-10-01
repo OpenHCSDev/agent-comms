@@ -1,3 +1,14 @@
+## Authored-context paired release checkpoint — 2026-10-01
+
+Core #474 merged as ee000781; receiving Toad #282 merged as b27b8309.
+Normal receiving69 prefix at /home/ts/wt/toad-receiving-authored474-20261001/.artifacts/runtime-authored474-20261001 pins complete authored-source feature and combined53b8 native, SDK0.12.1, Textual4e9016/diff8fa7. Four source/assets inventories byte-identical,314 original protected files unchanged. Existing task_decisions deleted301 lines; retained human source/pin/selected native compaction/export/empty fresh thread journey42.533s with2 localhostPOST,0paid/public/replay.
+
+Installed automatic globals and original copied42,924,939B native session startup passed (27 messages, live-only proof capability, kernel network denied,0 provider prompts). Whole original receiving wire certified359 records/through318,0 writes. Authentic old decoder found no populated retired decision fields. Recheck the whole source under stopped custody; incompatible late records refuse before publication, not a guessed migration.
+
+Idle client2086043 normal quit was verified after zero draft lengths/zero outstanding submissions; process exited. Existing complete17-owner restart is underway, with unchanged compaction policy and all original inputs/native sessions/proofs/durable goals protected. Do not call live until publication receipt and default installed TUI gate pass. Private operator receipt: .release-private/authored474-20261001/publication.json. Initial directory permission refusal occurred before receipt/fencing, corrected on owned directory; no input operation.
+
+Heisenberg275 new scoped Ready source6a034fed passes actual85.193s input-focused paging7/7 and post-reversal stationary zero viewport work. HighCPU and broader warm/cold/raster/sidebar scope remain unfinished. Arendt489 full lifecycle, Sch494 retained framing, Kepler490 batching and Singer495 one-use preserved schema carry remain independent active scopes. User-supplied turn-state patch stays inside489; no competing exposure authority applied.
+
 ## Standing correction: semantic ownership before validation
 
 Owner-supplied patch `plans/0001-turn-state-crosses-its-boundary-as-itself.patch`
