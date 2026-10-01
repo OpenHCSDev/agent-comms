@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,7 +41,7 @@ class BusActivityIndex(BusAppendIndex):
         self._retained: ActivityCheckpoint | None = None
 
     def snapshot(self, revision: tuple[int, int, int, int] | None,
-                 parse: Callable[[Mapping[str, Any]], tuple[ActivityFields, ...]]) -> ActivitySnapshot:
+                 parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivitySnapshot:
         if revision is None:
             return {}, {}
         source = BusFileRevision(*revision)

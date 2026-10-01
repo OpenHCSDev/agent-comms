@@ -134,7 +134,7 @@ class MessageBus:
             thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
         )
 
-    def _delivery_decoder(self) -> Callable[[Mapping], DeliveryMessage]:
+    def _delivery_decoder(self) -> Callable[[Mapping], Iterator[DeliveryMessage]]:
         from functools import partial
 
         return partial(

@@ -7,12 +7,13 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goals import Goal
+from .native_session_reopen import NativeSessionIdentity
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 
 if TYPE_CHECKING:
@@ -46,6 +47,20 @@ class WireProvenance(Provenance):
 class JournalProvenance(Provenance):
     path: str
     entries: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class NativeProvenance(Provenance):
+    identity: NativeSessionIdentity
+    request_generation: int
+    context_digest: str
+
+
+@dataclass(frozen=True)
+class ResourceProvenance(Provenance):
+    path: str
+    sha256: str
+    representation: str
 
 
 @dataclass(frozen=True)
@@ -91,6 +106,9 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
     @abstractmethod
     def text(self) -> str: ...
 
+    def render_into(self, prompt_parts, provider):
+        prompt_parts.append(self.text())
+
     def manifest(self, tokens: int) -> SegmentManifest:
         raw = self.text().encode()
         return SegmentManifest(
@@ -109,13 +127,29 @@ class SuppliedSegment:
 
 
 @dataclass(frozen=True, kw_only=True)
-class TranscriptSegment(SuppliedSegment, ContextSegment):
+class UserInputSegment(SuppliedSegment, ContextSegment):
     pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionSummarySegment(SuppliedSegment, ContextSegment):
-    pass
+class MeasuredNativeSegment(ContextSegment):
+    """An SDK-owned input observation, not a second native message vocabulary."""
+
+    tokens: int
+
+    @abstractmethod
+    def provider_value(self): ...
+
+    @abstractmethod
+    def render_into(self, prompt_parts, provider): ...
+
+    def text(self):
+        return json.dumps(self.provider_value(), ensure_ascii=False, separators=(",", ":"))
+
+    def measured_manifest(self):
+        # The SDK measures/hashes its exact original JSON representation.
+        return SegmentManifest(self.declared_name, self.provenance,
+                               self.sha256, self.utf8_bytes, self.tokens)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -124,8 +158,62 @@ class InjectionSegment(SuppliedSegment, ContextSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SystemLayerSegment(SuppliedSegment, ContextSegment):
+class SystemLayerSegment(MeasuredNativeSegment):
+    content: str
+    tokens: int
+    sha256: str
+    utf8_bytes: int
+
+    def provider_value(self):
+        return self.content
+
+    def render_into(self, prompt_parts, provider):
+        provider["systemPrompt"] = self.content
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeMessages:
+    # These are the SDK's exact *provider* messages, including opaque extension
+    # and provider fields. Core does not decode them as its event/message subset.
+    messages: tuple[dict[str, Any], ...]
+    tokens: int
+    sha256: str
+    utf8_bytes: int
+
+    def provider_value(self):
+        return list(self.messages)
+
+    def render_into(self, prompt_parts, provider):
+        provider.setdefault("messages", []).extend(self.messages)
+
+
+@dataclass(frozen=True, kw_only=True)
+class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompactionSummarySegment(NativeMessages, MeasuredNativeSegment):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class InjectionMessageSegment(NativeMessages, MeasuredNativeSegment):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolCatalogSegment(MeasuredNativeSegment):
+    tools: tuple[dict[str, Any], ...]
+    tokens: int
+    sha256: str
+    utf8_bytes: int
+
+    def provider_value(self):
+        return list(self.tools)
+
+    def render_into(self, prompt_parts, provider):
+        provider["tools"] = list(self.tools)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -197,8 +285,7 @@ class GoalSegment(InstructionSegment):
     goal: Goal
 
     @classmethod
-    def capture(cls, owner: Thread) -> GoalSegment:
-        goal = owner.goal
+    def capture(cls, owner: Thread, goal: Goal) -> GoalSegment:
         instruction = InstructionFile.read("goal.md")
         return cls(
             provenance=(OwnerProvenance(owner.incarnation, str(goal.revision)), instruction.source),
@@ -227,6 +314,7 @@ class ReplyRouteSegment(InstructionSegment):
 @dataclass(frozen=True)
 class RenderedInput:
     text: str
+    provider: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -305,7 +393,7 @@ class TurnContext:
             turn,
             (
                 CoordinationSegment.capture(owner, views),
-                TranscriptSegment(provenance=source, content=task),
+                UserInputSegment(provenance=source, content=task),
             ),
         )
 
@@ -316,7 +404,10 @@ class TurnContext:
         return replace(self, segments=(*self.segments, segment))
 
     def render(self) -> RenderedInput:
-        return RenderedInput("".join(segment.text() for segment in self.segments))
+        prompt_parts, provider = [], {}
+        for segment in self.segments:
+            segment.render_into(prompt_parts, provider)
+        return RenderedInput("".join(prompt_parts), provider)
 
     def manifest(self, tokens: tuple[int, ...], *, counter: str) -> ContextManifest:
         return ContextManifest(
