@@ -20,6 +20,33 @@ if TYPE_CHECKING:
     from .private_bus_checkpoint import CertifiedSourceRead
 
 
+@dataclass(slots=True)
+class StoreLockContention:
+    """One operation's borrowed wait resource, spent only at physical locks.
+
+    Source reading, decoding and consumer work cannot spend this resource.
+    It grants no owner, input, proof or replay permission.
+    """
+
+    remaining: float
+
+    def acquire_posix(self, descriptor: int, mode: int) -> None:
+        import fcntl
+        while True:
+            begun = time.monotonic()
+            try:
+                fcntl.flock(descriptor, mode | fcntl.LOCK_NB)
+            except BlockingIOError:
+                self.remaining -= time.monotonic() - begun
+                if self.remaining <= 0:
+                    raise
+                begun = time.monotonic()
+                time.sleep(min(self.remaining, 0.025))
+                self.remaining -= time.monotonic() - begun
+            else:
+                return
+
+
 @dataclass(frozen=True)
 class StoreLock:
     """One physical lock's descriptor and opened durability resource."""
@@ -40,6 +67,7 @@ def _store_lock(
     blocking: bool = True,
     max_bus_bytes: int | None = None,
     shared: bool = False,
+    contention: StoreLockContention | None = None,
 ) -> Iterator[StoreLock]:
     """Hold a canonical store lock with its inheritable descriptor/resource.
 
@@ -72,7 +100,10 @@ def _store_lock(
             import fcntl
 
             mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-            fcntl.flock(lock_file.fileno(), mode | (0 if blocking else fcntl.LOCK_NB))
+            if contention is None:
+                fcntl.flock(lock_file.fileno(), mode | (0 if blocking else fcntl.LOCK_NB))
+            else:
+                contention.acquire_posix(lock_file.fileno(), mode)
         try:
             # The shared claim bus durability guard may parse the entire log.
             # A bounded projection must refuse over-budget bytes *before* that

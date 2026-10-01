@@ -5,7 +5,7 @@ import json
 
 
 class LoopbackProvider:
-    def __init__(self, *, status: int = 503, text: str = "local summary"):
+    def __init__(self, *, status: int = 503, text: str = "local summary", response_timeout: float = 15):
         self.status = status
         self.text = text
         self.port = 0
@@ -14,6 +14,7 @@ class LoopbackProvider:
         self.requests = []
         self.tool_call = None
         self.response_gate = None
+        self.response_timeout = response_timeout
 
     def response_chunks(self):
         if self.tool_call is None:
@@ -54,7 +55,7 @@ class LoopbackProvider:
                 body = await asyncio.wait_for(reader.readexactly(length), 3)
                 self.requests.append(json.loads(body))
             if self.response_gate is not None:
-                await asyncio.wait_for(self.response_gate.wait(), 15)
+                await asyncio.wait_for(self.response_gate.wait(), self.response_timeout)
             if self.status == 0:
                 # This attempt stays in flight until Pi is cancelled.
                 await asyncio.wait_for(reader.read(), 20)
