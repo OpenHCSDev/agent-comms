@@ -1,3 +1,30 @@
+## 2026-10-01 queue foundation installed; fresh default verification underway
+
+The parent executed the frozen483 operator once after all thirteen owners were
+idle and public Toad had exited normally. All five default entrypoints now point
+to runtime-s5-receiving61-20261001: Core4345 / Toad0dd9 / Textual4e / Diff8fa /
+SDK0.12.1 / frozen native0064. The original stopped-owner batch restarted all
+thirteen owners and verified retained configurations under its acquired custody.
+Changed compaction runtime journals were reset only after protected preimages
+were saved; 609,667,530 bytes of originals remain private and protected. Native
+sessions/proofs, InputDoc, durable wire/goals and uncertain inputs were preserved;
+no input was replayed. Queue receiving native/ACP/Toad verification is now being
+repeated through the discovered default installation, separate from prior61
+candidate acceptance. The default physical saved-history/channel check is also
+underway on a private display. Overall readiness is not claimed.
+
+Kepler owns the newly demonstrated shared inner prompt-binding lock contention
+(diagnostic d0c838af6ca8f8f592fcc976cfdd5dd6, original nra-domain-mapping input
+not_sent): the inner lock is entered after the one-use token is consumed, outside
+the earlier acquisition exclusion. The complete admission acquisition must own
+all pregrant resources before consuming that token; replay is not a repair.
+Arendt owns the separate general model/tool latency follow-up using actual recent
+native/provider/tool/journal/observer timestamps. Earlier454 backpressure work
+closed one measured observer delay and did not establish general latency solved.
+Mendel owns the48-hour disk-growth tally and safe owned disposable cleanup; new
+heavy stage/capture allocations are paused at8.23GiB home while source work
+continues. Full275 performance and481/474 retained ownership remain active.
+
 ## 2026-10-01 recovery checkpoint installed and scoped live verification passed
 
 The parent executed the frozen479 recovery operator once after normal draft-saving
