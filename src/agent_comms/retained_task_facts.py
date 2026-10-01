@@ -33,6 +33,9 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
     def for_decisions(self, current: frozenset[MessageReference]) -> ExactTaskFact:
         return self
 
+    def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> ExactTaskFact:
+        return self
+
 
 @dataclass(frozen=True)
 class UserSourceTaskFact(ExactTaskFact):
@@ -104,6 +107,24 @@ class InputTaskFact(ExactTaskFact):
 
 
 @dataclass(frozen=True)
+class HumanInputTaskFact(InputTaskFact, declared_name="historical_human_input"):
+    """Exact human input with recorded scope; no inferred prose constraint kind."""
+
+    def __post_init__(self):
+        self.source.origin.require_human()
+
+    def for_owner(self, owner, registry):
+        if self.source.origin.require_human().applies(owner, registry):
+            return CurrentHumanInputTaskFact(self.source)
+        return HumanInputTaskFact(self.source)
+
+
+@dataclass(frozen=True)
+class CurrentHumanInputTaskFact(HumanInputTaskFact, declared_name="current_human_input"):
+    pass
+
+
+@dataclass(frozen=True)
 class RetainedTaskFacts:
     """One frozen source projection; no inferred prose facts or replay authority."""
 
@@ -130,7 +151,8 @@ class RetainedTaskFacts:
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""
         current = frozenset(message.reference for message in self.current_decisions(owner, registry))
-        return RetainedTaskFacts(tuple(fact.for_decisions(current) for fact in self.facts))
+        return RetainedTaskFacts(tuple(fact.for_decisions(current).for_owner(owner, registry)
+                                       for fact in self.facts))
 
     @property
     def text(self) -> str:

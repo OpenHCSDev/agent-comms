@@ -30,6 +30,7 @@ from .acp_extension import (
 from .activity import StoppedDrainDiagnostic, UnavailableDrainDiagnostic
 from .agent_events import Done
 from .comms import Comms
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .coordination_errors import CoordinationError
 from .input_attempt import InputAttempt
 from .input_disposition import FutureInputQueue, InputDispositions
@@ -345,6 +346,7 @@ class InputDrain(FutureInputQueue):
                 images=images,
                 controller=controller,
                 input_id=request.input_id,
+                origin=request.origin,
             )
             item = request.accepted(item, self.dispositions.read().lookup(item.key), owner)
             self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
@@ -515,6 +517,7 @@ class InputDrain(FutureInputQueue):
         images: tuple[Any, ...] = (),
         display_text: str | None = None,
         input_id: str | None = None,
+        origin: InputOrigin = UnattributedInputOrigin(),
     ) -> None:
         with _store_lock(self.comms._wire_lock_path):
             item, _owner = InitialInput.capture(
@@ -526,6 +529,7 @@ class InputDrain(FutureInputQueue):
                 images=images,
                 controller=self.runtime.controller.get(),
                 input_id=input_id,
+                origin=origin,
             )
             self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
         try:
