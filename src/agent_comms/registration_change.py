@@ -122,7 +122,6 @@ class UpdatedRegistration(RegistrationChange):
     def changes_identity(self) -> bool:
         return (
             self.previous.publication_identity != self.thread.publication_identity
-            or self.previous.execution is not self.thread.execution
             or self.previous_status.changes_owner(self.status)
         )
 
