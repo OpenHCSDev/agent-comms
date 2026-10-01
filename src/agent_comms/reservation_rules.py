@@ -9,7 +9,7 @@ from typing import ClassVar
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
-from .selected_source import SelectedAdmissionSource, SelectedSource, SessionRevision
+from .selected_source import SelectedAdmissionSource, SelectedSource, SessionObservation
 from .thread_identity import ThreadIncarnation, TurnId
 
 
@@ -33,7 +33,7 @@ class RuleCheck:
 @dataclass(frozen=True, kw_only=True)
 class ReservationCheck(RuleCheck):
     source: SelectedSource
-    revision: SessionRevision | None
+    revision: SessionObservation
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -113,7 +113,7 @@ class SessionChangedRule(ReservationRule):
     explanation = "The saved session or input proof changed after reservation."
 
     def violated(self, check: ReservationCheck) -> bool:
-        return check.source.reserved_revision != check.revision
+        return not check.revision.matches(check.source.reserved_revision)
 
 
 class IngressChangedRule(ReservationRule):

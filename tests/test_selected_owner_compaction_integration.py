@@ -361,7 +361,12 @@ async def acp_selected_summary_journey(
     ):
         root = tmp_path if private_session else tmp_path / "acp-wire"
         comms = wire(root)
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        if private_session:
+            # owner_fixture already created this root's certified protocol.
+            with comms.bus.log.certified_read() as source:
+                root_id = source.witness.root_id
+        else:
+            root_id = comms.messaging.initialize_private_initial_protocol()
         project = tmp_path / "proj"
         project.mkdir()
 
@@ -945,7 +950,8 @@ async def test_private_retained_session_accepts_after_runtime_journal_reset(
         info,
     ):
         comms = wire(tmp_path)
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        with comms.bus.log.certified_read() as source:
+            root_id = source.witness.root_id
         with Coordination(str(tmp_path / "coordination.sqlite3")) as coordination:
             install_native_runtime_schema(coordination)
         project = tmp_path / "proj"

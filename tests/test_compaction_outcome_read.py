@@ -107,7 +107,7 @@ def test_only_exact_committed_native_link_supersedes_uncertainty(original):
         commit_id = journal.operations.begin(str(session), FieldCodec.encode(reference), inputs=inputs)
     journal.summaries.mark_unknown(operation)
     assert observe(original).outcomes
-    revision = ':'.join(map(str, attempt.source().reserved_revision[0]))
+    revision = attempt.source().reserved_revision.native_stamp
     journal.operations.resolve(commit_id, CommittedOperation(), FieldCodec.encode(
         CommittedNativeOutcome('native-entry', revision, 'native-entry', 'a' * 64)))
     assert not observe(original).outcomes

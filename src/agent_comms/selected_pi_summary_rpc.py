@@ -116,7 +116,7 @@ class SelectedSummarySlot:
                 )
             except NativePiUnavailable as error:
                 raise SelectedChildUnknown(str(error)) from error
-            if witness.revision != ":".join(map(str, retained.revision[0])):
+            if witness.revision != retained.revision.native_stamp:
                 raise SelectedChildUnknown("Selected source witness is stale")
             proc, reader = retained.child.proc, retained.child.reader
             operation = journal.summaries.reserve(

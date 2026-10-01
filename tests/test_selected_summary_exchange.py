@@ -4,6 +4,7 @@ Only provider responses are controlled locally. Native saved state, transport,
 reservation, cancellation and child custody are real; no substitute child host.
 """
 
+
 from __future__ import annotations
 
 import asyncio
@@ -18,6 +19,7 @@ from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.selected_source import SessionRevision
 from agent_comms.selected_pi_summary_rpc import SelectedChildUnknown, SelectedSummarySlot
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -26,7 +28,6 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 @pytest.fixture
 async def retained_summary(native_backend):
     """Prepare a real SDK source without replacing the retained child or its reader."""
-    from agent_comms.backend import _session_revision
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
     from agent_comms.field_codec import FieldCodec
@@ -74,7 +75,7 @@ async def retained_summary(native_backend):
                 owner=owner.require_process(),
                 incarnation=owner.incarnation,
                 turn=TurnId(lease.turn_id),
-                reserved_revision=_session_revision(str(native.session)),
+                reserved_revision=SessionRevision.observe(str(native.session)).require_available(),
             )
         ),
         selected=SelectedModel(model.provider, model.id, model.context_window).to_wire(),
@@ -455,7 +456,6 @@ def test_summary_file_metadata_uses_transport_without_retired_count_or_total_bud
 
 async def test_retained_native_summary_preserves_source_and_blocks_replay(native_backend):
     """The SDK owns saved entries, the native child owns summary metadata."""
-    from agent_comms.backend import _session_revision
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
     from agent_comms.field_codec import FieldCodec
@@ -505,7 +505,7 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
         owner=owner.require_process(),
         incarnation=owner.incarnation,
         turn=TurnId(lease.turn_id),
-        reserved_revision=_session_revision(str(native.session)),
+        reserved_revision=SessionRevision.observe(str(native.session)).require_available(),
     )
     journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
     slot = SelectedSummarySlot(owner.name, preparation.witness.session_id)
