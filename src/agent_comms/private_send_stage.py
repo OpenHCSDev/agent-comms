@@ -7,6 +7,8 @@ import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from contextlib import contextmanager
+from collections.abc import Iterator
 
 from .assignment_states import DeferredAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -26,7 +28,7 @@ from .native_pi import NativeContextProof
 from .native_prompt_binding import (
     PromptBinding,
     expected_prompt_matches_journal,
-    read_expected_prompt_binding,
+    expected_prompt_binding,
 )
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import native_request_digest
@@ -169,7 +171,23 @@ class NativeSendStage(ABC):
         *,
         blocking: bool = False,
     ) -> PromptBinding:
-        binding = read_expected_prompt_binding(store, input_id, blocking=blocking)
+        with self.bound_prompt(store, input_id, owner, wire_root_id, prompt,
+                               blocking=blocking) as binding:
+            return binding
+
+    @contextmanager
+    def bound_prompt(
+        self, store: Coordination, input_id: str, owner: ParticipantOwner,
+        wire_root_id: str, prompt: str, *, blocking: bool = False,
+    ) -> Iterator[PromptBinding]:
+        with expected_prompt_binding(store, input_id, blocking=blocking) as binding:
+            self.require_bound_prompt(binding, owner, wire_root_id, prompt)
+            yield binding
+
+    def require_bound_prompt(
+        self, binding: PromptBinding | None, owner: ParticipantOwner,
+        wire_root_id: str, prompt: str,
+    ) -> None:
         if binding is None:
             raise IdentityConflict("native send has no durable prompt binding")
         try:
@@ -184,7 +202,6 @@ class NativeSendStage(ABC):
             raise IdentityConflict(
                 f"native send differs from its durable prompt binding: {error}"
             ) from error
-        return binding
 
 
 class TriageNativeSend(NativeSendStage):
