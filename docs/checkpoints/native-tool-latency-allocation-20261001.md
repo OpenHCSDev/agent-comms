@@ -36,3 +36,27 @@ Next: close that authority relation and instrument the existing real retained
 native read fixture at preparation/admission/execution boundaries. The 121s
 model request and 129s historical journal gap remain separately scoped; there
 is no provider-capacity attribution or claim that general latency is fixed.
+
+## Working source checkpoint
+
+ProjectRuntimeRequest extends the original RuntimeRequest family. Native launch
+retains the original registry OwnerIdentity and full ProcessIdentity; every
+query validates them through RegistrySnapshot.require_owner_process. Rename
+uses the existing original incarnation relation, not a new alias reader.
+The reply reads current worktree directly from the registry. It grants no input
+or tool execution, and stores no project copy.
+
+The project extension uses the existing owner Unix socket and closes its reader
+and connection on success/refusal/EOF. Replaced the repeated synchronous CLI
+launch; no timer, retry or second native transport server was added. Login
+removes the new launch capabilities with the existing managed native settings.
+The native source manifest declares the changed project extension bytes.
+
+Original socket controls PASS: rename/current project, changed project, stale
+owner generation, stale process birth and foreign request thread. The small
+private fixture observed valid checks in 4–36ms. Nine focused project/auth/IPC
+controls passed; the old fake project-continuation test failed on both the
+candidate and unchanged installed4345 baseline. Its failure is preserved and
+not claimed green. These controls do not establish an installed native tool
+journey or current live readiness. The coupled native package must be rebuilt
+with these declared bytes before that affected journey.
