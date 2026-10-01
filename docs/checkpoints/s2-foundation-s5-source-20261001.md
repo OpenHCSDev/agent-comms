@@ -5,6 +5,49 @@ Einstein for S5 native context observation and inspection. Parent owns global
 review, merge, installed selection and cutover. This is a partial checkpoint,
 not completion of the full S2 plan.
 
+## Current receiving source correction
+
+Source checkpoint `3b6b658b7c2d69f84c2d86c7f988bd2c8c0da09c` normally
+integrates Core #480 and closes two later source findings. The 0064 installed
+journeys below retain their original source identities; they do not certify
+these new Python declarations. Einstein owns the single new installed receiving
+journey, Kepler its original-source oracle, and Mendel the normal paired package.
+Core #480's process contract also requires the paired Toad #274 consumer.
+
+`Thread.goal_checkpoint` derives the captured identity from the sole original
+goal. `HumanInputOrigin` and `OwnerCompactionAttestation` consume the same
+`GoalCheckpoint` family: named absent or present with the existing `GoalRevision`.
+The duplicate input-origin goal getter is deleted. Existing registry Goal and
+GoalRevision wire formats remain unchanged; the new captured field has one
+strict format, with no null decoder or compatibility reader. Source checks cover
+active, paused and completed goals, replacement and clearing before reservation.
+
+`DecisionAttachment.current_roots` owns current-lineage eligibility. A public
+correction reaching a recipient who never received its private ancestor remains
+an exact historical original row, without acquiring that ancestor or its choice
+authority. Applicable owned corrections still require the original source.
+The consumer uses this family operation on its existing certified captured read;
+no additional bus read, retained store, cache or identity roster is introduced.
+The actual A-private-B / public-team-C publisher and held source-cut reproducer
+failed before this correction and passes afterward. Its privacy and authority
+assertions compare original Message objects, rather than JSON body substrings.
+
+The current correction deletes 161 remaining dormant prototype/test lines.
+Against the original census baseline the two obsolete files are wholly deleted:
+244 production-prototype lines and 196 test lines. Neither is an input to the
+native builder or pinned package. Actual native CompactionPolicy and all native
+0064 source/import/tree pins are unchanged. The Python correction is +51/-22
+across six existing production files relative to the integrated-main checkpoint.
+
+The final required debt ratchet passes on this committed source with no positive
+numeric deltas. Source receipts are `goal-checkpoint-source48.json`,
+`cross-audience-source54.json`, `dead-trigger-declaration53.json` and
+`final-source-handoff56.json` in the S2 evidence directory. The latter records
+exact source hashes and the installed gate still required. Failed collection,
+wrong exception expectation and JSON escaping oracles remain preserved.
+This is a source checkpoint, not installed or public readiness. Full S2 remains
+in draft #481.
+
 ## Exact source and delivery dependency
 
 The existing normal installed Core source is
