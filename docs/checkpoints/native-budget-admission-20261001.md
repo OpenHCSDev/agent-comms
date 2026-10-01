@@ -77,6 +77,29 @@ admit_prompt or mint a second input. Cancellation/refusal keeps original input
 and incomplete journal operation protected. Current pre-input-only selected
 admission cannot simply be reused with Started rows or weakened idle checks.
 
+## Scheduled preparation and live queued input correction
+
+Original failed scheduled turn `b35dd335659e4f5ba1bd2687d25659c6` began preparing
+before ACP accepted queued input `81f20aa7dcfe4ef6813d822e38fd5e1f` at queue revision12.
+That reserved input, at admission1194, is the unresolved matching row. The budget
+failure's Started input is not unresolved; the earlier BoundUnknown belongs to
+admission473. Neither is the cause of this particular compaction refusal.
+
+`InputDrain.future_inputs` joined through `OriginalTurnInput.notice_keys`, which
+is deliberately empty for an internal scheduled continuation. It therefore lost
+the original live deferred receipt even though its input context and turn binding
+were exact. The lookup now consumes the original source's existing `compaction_key`
+relation. No-key requests grant no exception. `DeferredQueuedInput.future_receipt`
+still requires the same live turn and full admission identity; the document still
+compares the exact accepted receipt and refuses all other unsettled inputs.
+This corrects IDEN-6: display notices were being used as execution identity.
+
+The autonomous follow-up sanity case now queues before the original writer starts,
+checks the real scheduled reservation and compaction rows, then exercises native
+start and follow-up authority. Installed native acceptance remains pending. No
+public reserved or UNKNOWN input has been settled, restored or replayed by this
+change. Budget growth during an already Started tool round remains separate work.
+
 This causal checkpoint is source/evidence only; no installed budget repair or
 whole485 readiness is claimed. The independently accepted installed485 package
 walk/project-socket latency checkpoint remains intact. Next acceptance is the
