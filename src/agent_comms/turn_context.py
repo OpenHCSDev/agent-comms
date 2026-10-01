@@ -13,7 +13,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goals import Goal
-from .thread_identity import ThreadIncarnation, TurnId
+from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 
 if TYPE_CHECKING:
     from .presentation import ThreadView
@@ -72,6 +72,12 @@ class SegmentManifest:
     sha256: str
     utf8_bytes: int
     tokens: int
+
+    def __post_init__(self):
+        if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
+            raise ValueError("Invalid original context segment observation")
+        if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
+            raise ValueError("Context segment requires its measured byte digest")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -228,13 +234,30 @@ class ContextTurn(DeclaredFamily, affix="ContextTurn"):
     @abstractmethod
     def source_revision(self, owner: Thread) -> str: ...
 
+    def require_recorded(self):
+        raise ValueError("A next-context preview cannot be published as a recorded turn")
+
+    def matches_generation(self, generation: int) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class RecordedContextTurn(ContextTurn):
     identity: TurnId
+    occurrence: TurnIdentity
+
+    def __post_init__(self):
+        if self.occurrence.generation < 1:
+            raise ValueError("Context requires the original admitted turn generation")
 
     def source_revision(self, owner: Thread) -> str:
         return self.identity.value
+
+    def require_recorded(self):
+        return None
+
+    def matches_generation(self, generation: int) -> bool:
+        return self.occurrence.generation == generation
 
 
 class NextContextTurn(ContextTurn):
@@ -248,6 +271,15 @@ class ContextManifest:
     turn: ContextTurn
     segments: tuple[SegmentManifest, ...]
     counter: str
+
+    def changed_since(self, previous: ContextManifest) -> dict:
+        """An inspection projection, never a retained input copy."""
+        return {
+            "previous_turn": FieldCodec.encode(previous.turn),
+            "turn": FieldCodec.encode(self.turn),
+            "removed": [FieldCodec.encode(s) for s in previous.segments if s not in self.segments],
+            "added": [FieldCodec.encode(s) for s in self.segments if s not in previous.segments],
+        }
 
 
 @dataclass(frozen=True)

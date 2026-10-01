@@ -184,7 +184,7 @@ class OwnedTurn:
 
         self.context = TurnContext.for_owner(
             self.thread,
-            RecordedContextTurn(TurnId(self.turn_id)),
+            RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),
             self.task,
             self.runner.comms.views.thread_views(),
             tuple(origin.reference for origin in self.origins),

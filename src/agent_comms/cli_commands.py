@@ -631,6 +631,8 @@ class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
 class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
     thread: str = option("thread")
+    turn: int | None = option("--turn", default=None, help="Original admitted turn generation")
+    diff: bool = option("--diff", default=False, action="store_true")
 
     def apply(self, ctx: Comms) -> Any:
         from .active_route import read_active_route
@@ -639,6 +641,24 @@ class ContextCliCommand(CliCommand):
         from .turn_context import TurnContext, GoalSegment, NextContextTurn
 
         owner = ctx.registry.require(self.thread)
+        if self.turn is not None or self.diff:
+            manifests = ctx.bus.log.context_manifests(owner.incarnation)
+            selected = tuple(
+                manifest for manifest in manifests
+                if self.turn is None or manifest.turn.matches_generation(self.turn)
+            )
+            if not selected:
+                raise ValueError("No original context manifest exists for the requested turn")
+            if self.diff:
+                latest = selected[-1]
+                prior = next(
+                    (manifest for manifest in reversed(manifests)
+                     if manifest.turn != latest.turn), None,
+                )
+                if prior is None:
+                    raise ValueError("No preceding recorded turn exists for comparison")
+                return latest.changed_since(prior)
+            return {"manifests": FieldCodec.encode(selected), "text_recorded": False}
         context = TurnContext.for_owner(owner, NextContextTurn(), "", ctx.views.thread_views())
         if owner.active_goal is not None:
             context = context.prepend(GoalSegment.capture(owner))

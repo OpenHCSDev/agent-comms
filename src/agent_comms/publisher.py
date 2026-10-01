@@ -413,8 +413,7 @@ class Publisher:
                 # availability until explicit operator reconciliation exists.
                 expected_sequence = 1
                 duplicate = False
-                for record in self.log.verified_records_unlocked(metadata):
-                    previous = record.message
+                for previous in self.log._iter_log_unlocked():
                     if previous.seq != expected_sequence:
                         raise HumanAdmissionBlockedError(
                             "Private bus sequence gap has UNKNOWN outcome; "
