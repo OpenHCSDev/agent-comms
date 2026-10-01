@@ -53,5 +53,41 @@
     "next_action": "Original history advance/page publication and live retirement must share frame/resource custody; prove causally before new stage/run."
   },
   "bus_receipt": "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/u06/proof/receipt.json",
-  "bus_visual_qualification": "No rendered-pixel visibility claim from black SVG; preserve originalartifact, no recoloring."
+  "bus_visual_qualification": "Parent personally viewed original physical-v03/after.png: retained answers CONTROLLED_RETURN_0 and CONTROLLED_RETURN_2 readable once with native headers and Ready. Actual st/Xvfb, no prompt/provider/replay; original u06 hashes unchanged, cleanup empty. Proves retained-source physical visibility, not retrospective hot colored-frame correctness.",
+  "backend_merge": {
+    "main": "9370a6010c80fba75feaad9e2076f1844d2b44ea",
+    "PRs": [
+      456,
+      457,
+      458,
+      459,
+      460,
+      462,
+      467
+    ],
+    "production_stack_pyproject_identical_to_tested_970": true,
+    "scope": "Actual native/ACP and bus source functional checkpoint; not frontend physical-ready or whole S14 closure",
+    "unclosed_S14": [
+      "SessionRevision thirteen-consumer value, Core468",
+      "triage/full execution identity",
+      "unrecorded sent-admission release"
+    ]
+  },
+  "bus_physical_assessment": "evidence/s14-bus-projection/installed-bus-gate/u06/physical-v03/assessment.json",
+  "SessionRevision_followup": {
+    "PR": 468,
+    "worktree": "/home/ts/wt/comms-session-revision-value-20261001",
+    "implementation_owner": "Mendel",
+    "parent_owns_integration": true,
+    "not_in_frozen_release": true
+  },
+  "parallel_rendering": {
+    "PR": 256,
+    "source": "37ae869d2d294c8c36a12facf6ec872abefaf971",
+    "integration": 254,
+    "full_map_baseline": 212,
+    "full_map_candidate": 0,
+    "retained_prepared_resources": "12/12",
+    "scope": "Actual source ToolCall/render workers and native layout; not installed physical readiness"
+  }
 }

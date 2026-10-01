@@ -26,6 +26,10 @@ stage runtime-source-publication-custody-20260930 is assigned to Schrodinger's
 original normal builder. Einstein's native/ACP/Linux terminal and Schrodinger's
 bus journeys may run in parallel on separate fresh private roots after preflight.
 Full254 performance continues independently and does not hold this release.
+Core456/457/458/459/460/462/467 are now merged. Final main9370a601 production,
+native stack and pyproject are byte-identical to the tested970 candidate.
+Frontend source publication remains the activation blocker, not a Core merge
+hold. Post-merge original evidence has been normally retained in parent432.
 
 ## Active ownership
 
@@ -35,14 +39,15 @@ Full254 performance continues independently and does not hold this release.
 | Continuous physical queue/fork/cancel journey | Einstein, Core458; original input controls Kepler251 | First physical Enter pending-before-Started and once-chat passed u02/u03. u02 all five continuous functional controls pass; strict emitted-frame review fails duplicate first-fork input+reply. Original terminal1/cleanup[] preserved. Main-guard correction proves earlier unmounted menu symptom was not a product verdict. Source252 correction is next dependency. |
 | Canonical bus and open DM/IRC/tab-return projection | Schrodinger, Core460 | Corrected u06 terminal0 passes source/protocol/compositor text journey: hot replies/handling,31 samples,3 tab-return sends and cold source once. Original NO_COLOR/TERM=dumb captures have unproven physical color visibility; qualify using actual terminal path without recoloring or replay. |
 | Paired source, metadata, merging and public cutover | Parent, Toad250/Core432 | Review whole affected owners/consumers, merge coherent source, freeze exact pins, require actual same-build journeys, then canonical quiet cutover. |
-| Full warm-history/scroll/CPU/resources | Heisenberg, Toad254 | Source4ad3c6aa preserves original body readiness, native geometry reuse and shared retirement/page admission. Source controls pass; physical CPU/tab/fast-reverse-End improvement remains unverified. |
+| Full warm-history/scroll/CPU/resources | Heisenberg, Toad254; disjoint WorkerStatic contribution Kepler256 | Source4ad3c6aa preserves original body readiness, native geometry reuse and shared retirement/page admission. Kepler25637ae869d removes212 full scene arrangements in the actual12-tool source journey using original committed native size/Resize;12 prepared resources retained. Source controls pass; combined installed video/CPU/tab/fast-reverse-End improvement remains unverified. |
+| SessionRevision value and all13 consumers | Mendel implementation, parent integration, Core468 | Required stack merged; parent opened persistent isolated468 and transferred its complete surface. Named file/proof states, original FileRevision, outcomes first, original FieldCodec and external native colon ABI. Work does not change the frozen critical candidate or hold activation. |
 
-Existing Codex threads are reused. Heisenberg resumes254 after publishing252;
-Einstein and Schrodinger own independent same-cohort actual journeys. Arendt
-updates the existing prepared operator for the new target without executing it.
-Kepler251 published shared original dialog readiness/fixture integration; no
-competing binding patch or unchanged failed-prefix test is scheduled. Mendel
-remains available for the deferred value-type inventory; no new provider fleet.
+Existing Codex threads are reused. Heisenberg owns252 and254 integration;
+Kepler owns disjoint256 rendering progress in parallel. Einstein and Schrodinger
+own independent same-cohort actual journeys. Arendt prepares the existing
+operator without executing it. Mendel owns complete468 implementation after the
+required stack merge. No competing publication patch or unchanged failed-prefix
+test is scheduled; no new provider fleet.
 
 ## Prepared and completed independent contributions
 

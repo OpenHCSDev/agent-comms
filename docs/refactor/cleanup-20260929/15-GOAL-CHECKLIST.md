@@ -1,3 +1,33 @@
+## Backend checkpoint merged; publication fix and parallel follow-ups
+
+Core456/457/458/459/460/462/467 are merged. Parent verified final main9370a601
+production/native-stack/pyproject equal tested970bc527. Actual native five-input
+fork/queue/cancel and bus source/handling checks support this scoped backend
+checkpoint. The frontend duplicate paint still blocks public activation; full
+S14 and the original goal are not claimed complete.
+
+Parent opened requested post-stack SessionRevision draft468 on persistent
+main9370a601 and transferred the entire13-consumer implementation to Mendel.
+Outcomes is first; original FileRevision and nested FieldCodec remain owners,
+native colon ABI and protected journals/proofs/UNKNOWN remain exact. The
+follow-up does not change or delay the frozen critical release.
+
+Kepler256 independently closes fixed-width WorkerStatic preparation through
+original committed public native size and Resize. The actual12-tool source
+journey eliminates212 full scene rebuilds and retains12 prepared resources;
+combined installed video/CPU/scroll acceptance remains assigned under254.
+Heisenberg252 publishes atomic page/live handoff with original admitted-frame
+negative/positive and cancellation evidence; next installed acceptance awaits
+parent review and coherent freeze. Source progress is not live readiness.
+
+Parent viewed original st/Xvfb retained-source physical-v03 screenshot: both
+controlled answers and native headers are readable once, Ready is visible,
+no prompts/providers/replay occurred and original u06 hashes/cleanup are
+preserved. This qualifies fresh retained-source color visibility; it does not
+retroactively prove original hot black exports. Owned disposable cleanup
+freed70,062,080 allocated bytes; protected dependencies prevented larger safe
+removal. All post-merge raw evidence is normally retained in parent432.
+
 ## Current actual acceptance: bus functional pass, native paint failure
 
 Corrected immutable85/970/6b/SDK0.12.1/native593 package/source/runtime preflight
