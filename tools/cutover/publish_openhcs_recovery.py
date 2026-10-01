@@ -221,8 +221,12 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
             archive = Path(source.root)
             destination = directory / archive.name
             destination.mkdir(mode=0o700)
-            for name in ('bus.jsonl', 'registry.json', 'bus_meta.json', 'private_bus_checkpoint.sqlite3'):
-                originals.append(retain_file(archive / name, destination / name))
+            for name in ('bus.jsonl', 'registry.json', 'bus_meta.json', 'private_bus_checkpoint.sqlite3',
+                         'private_bus_checkpoint.sqlite3-journal', 'private_bus_checkpoint.sqlite3-wal',
+                         'private_bus_checkpoint.sqlite3-shm'):
+                path = archive / name
+                if path.exists():
+                    originals.append(retain_file(path, destination / name))
             fsync_directory(destination)
         for name in (HistoryArchive.filename, InputDispositions.filename, 'bus_meta.json', 'registry.json',
                      'coordination.sqlite3', 'coordination.sqlite3-wal', 'coordination.sqlite3-shm'):
