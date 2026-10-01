@@ -53,8 +53,9 @@ class SelectedSummarySource:
             raise ValueError("Selected source witness required")
 
     def journal_json(self) -> str:
+        record = FieldCodec.encode(self)
         return RetainedTaskFacts.frame_journal(
-            FieldCodec.encode(self), payload_path=("retained",)
+            record, retained_payload=RetainedTaskFacts.canonical_journal_bytes(record["retained"])
         )
 
     @classmethod

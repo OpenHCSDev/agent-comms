@@ -123,7 +123,9 @@ class NativeIntent:
         from .retained_task_facts import RetainedTaskFacts
 
         return RetainedTaskFacts.frame_journal(
-            record, payload_path=("source", "retained")
+            record, retained_payload=RetainedTaskFacts.canonical_journal_bytes(
+                record["source"]["retained"]
+            ),
         )
 
     @classmethod
