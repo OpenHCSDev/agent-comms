@@ -32,9 +32,9 @@
         },
         {
           "path": "/home/ts/.agent-comms/extensions/pi-project-sync/index.ts",
-          "sha256": "a9519fa9c11dcc44eb34805e927b5c51478398cf64e8e3c8135fc41040ca6e21",
+          "sha256": "1cceb41fe65f2d58d1f9838f9314e800906a0959173beee2a21892caf2e33d69",
           "snapshot": "extensions/pi-project-sync/index.ts",
-          "bytes": 932
+          "bytes": 1878
         }
       ]
     },

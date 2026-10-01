@@ -12,7 +12,7 @@ import json
 import os
 import tempfile
 import threading
-from dataclasses import replace
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pytest
@@ -1294,7 +1294,7 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(
 
 @pytest.mark.parametrize(
     "malformed",
-    ['{"decision":"IGNORE","decision":"FULL"}', '{"decision":[]}', "[]"],
+    ['{"decision":"IGNORE","decision":"FULL"}', '{"decision":[]}', "[]", "IGNORE"],
 )
 async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
     tmp_path: Path, monkeypatch, malformed: str
@@ -1308,22 +1308,36 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
         return replace(result, text=malformed)
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", bad)
-    with pytest.raises(IdentityConflict, match="triage response"):
-        await SelectedExecution(
-            root=root,
-            wire_root_id=root_id,
-            owner_name="alpha",
-            native_package=tmp_path,
-            opt_in=True,
-        ).run()
-    assert len(calls) == 1 and len(comms.views.channel_history("#team")) == 1
+    failed = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="alpha",
+        native_package=tmp_path, opt_in=True,
+    ).run()
+    assert failed.disposition is FailedAssignment
+    assert len(calls) == 1
+    assert "invalid triage decision" in comms.views.channel_history("#team")[-1].body
+    notifications = comms.views.message_notifications((_initial.message,))[
+        (_initial.message.seq, _initial.message.message_id)
+    ]
+    failure = next(item for item in notifications if item.recipient == "alpha")
+    assert failure.state == "Failed" and not failure.busy
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
                 "SELECT count(*) FROM native_runtime_input WHERE session_id IS NOT NULL"
             ).fetchone()[0]
-            == 0
+            == 1
         )
+        claim = store.assignments.get(failed.assignment_id)
+        assert type(claim.lifecycle) is FailedAssignment
+        rejected = read_historical_native_inputs(
+            store, wire_root_id=root_id, recipient_lookup=claim.recipient_lookup,
+            source_seq=claim.wire_seq,
+        )
+        assert rejected[0].proves_triage_source(rejected)
+        assert "decision" not in {item.name for item in fields(rejected[0])}
+    assert await SelectedExecution(root=root, wire_root_id=root_id, owner_name="alpha",
+                                   native_package=tmp_path).run() is None
+    assert len(calls) == 1  # A rejected decision is never tried again.
 
 
 async def test_registered_owner_stopped_during_model_cannot_settle(

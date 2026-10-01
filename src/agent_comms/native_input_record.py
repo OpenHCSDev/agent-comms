@@ -69,7 +69,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         return False
 
     @abstractmethod
-    def historical_proof(self, record, **source):
+    def historical_proof(self, record, *, lifecycle, **source):
         """Acquire the declared recorded-proof member from the original SQL row."""
         raise NotImplementedError
 
@@ -98,14 +98,11 @@ class TriageNativeExecution(NativeInputExecution):
     def binding_fields(self):
         return {"execution_id": None, "attempt_ordinal": None}
 
-    def historical_proof(self, record, **source):
-        from .historical_native_inputs import TriageHistoricalNativeInput
-        from .selected_triage import SelectedTriage
+    def historical_proof(self, record, *, lifecycle, **source):
+        from .selected_triage import TriageDecisionRecord
 
-        # Original nullable SQL emission enters the required recorded-proof
-        # member here. No domain None or callback may fabricate a decision.
-        decision = FieldCodec.decode(type[SelectedTriage], FieldCodec.encode(record.verdict))
-        return TriageHistoricalNativeInput(execution=self, decision=decision, **source)
+        decision = FieldCodec.decode(TriageDecisionRecord, FieldCodec.encode(record.verdict))
+        return decision.historical_proof(record, lifecycle, self, **source)
 
 
 @dataclass(frozen=True)
@@ -141,7 +138,7 @@ class FullNativeExecution(NativeInputExecution):
             and execution.lifecycle.current_attempt_ordinal == self.attempt_ordinal
         )
 
-    def historical_proof(self, record, **source):
+    def historical_proof(self, record, *, lifecycle, **source):
         from .historical_native_inputs import FullHistoricalNativeInput
 
         FieldCodec.decode(type(None), record.verdict)

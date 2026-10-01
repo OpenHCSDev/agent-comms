@@ -1,0 +1,13 @@
+{
+  "original_root": "/var/tmp/ac-sealed-test-a66dpe1i",
+  "wire_root_id": "e5db275b0f1e49d5904e6998f45049e8",
+  "native_package": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent",
+  "saved_restart": false,
+  "contended_cursor": false,
+  "rejected_triage_continuity": true,
+  "localhost_posts": 4,
+  "provider_failures": [],
+  "owners_stopped": true,
+  "server_thread_alive": false,
+  "wire_sha256": "9f81dce727624aa025de8fc7be63388a862ddaf1a5ca6fb59677f45a3be8a5ac"
+}

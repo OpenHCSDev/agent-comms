@@ -1,0 +1,307 @@
+{
+  "source_log": "/home/ts/.local/state/toad/logs/Agent_Comms_2026-10-01T00_14_12_560100.txt",
+  "source_sha256": "3c89b8811273687cdf06aea41785bd15dc39e0ab2047a6763efe4cf19882f07c",
+  "clock_limits": "ACP lines retain order, no receive/paint clock. Turn.started_at and native startedAtMs are wall-clock observations; gap is bracket only, not duration of one named function. Native elapsedMs is its own monotonic request clock.",
+  "turns": [
+    {
+      "log": "Agent_Comms_2026-10-01T00_14_12_560100.txt",
+      "rpc_id": 5,
+      "prompt_line": 9,
+      "session": "comms428",
+      "prompt": "yo",
+      "phases": {
+        "preparing": 12,
+        "prompt_acceptance": 14,
+        "model_wait": 15,
+        "settling_stats": 39,
+        "publishing": 42
+      },
+      "request_stages": {
+        "preparing": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828068147,
+          "elapsedMs": 0.08978,
+          "callbackMs": 0,
+          "callbackMaxMs": 0,
+          "transport": ""
+        },
+        "callback": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828068242,
+          "elapsedMs": 95.066752,
+          "callbackMs": 0,
+          "callbackMaxMs": 0,
+          "transport": ""
+        },
+        "callback_end": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828068242,
+          "elapsedMs": 95.164467,
+          "callbackMs": 0.096523,
+          "callbackMaxMs": 0.096523,
+          "transport": ""
+        },
+        "connecting": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828068251,
+          "elapsedMs": 103.937349,
+          "callbackMs": 0.096523,
+          "callbackMaxMs": 0.096523,
+          "transport": "websocket"
+        },
+        "connected": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828068682,
+          "elapsedMs": 534.996075,
+          "callbackMs": 0.096523,
+          "callbackMaxMs": 0.096523,
+          "transport": "websocket"
+        },
+        "dispatch": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828068682,
+          "elapsedMs": 535.096285,
+          "callbackMs": 0.096523,
+          "callbackMaxMs": 0.096523,
+          "transport": "websocket"
+        },
+        "first_event": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828069011,
+          "elapsedMs": 864.143108,
+          "callbackMs": 0.096523,
+          "callbackMaxMs": 0.096523,
+          "transport": "websocket"
+        },
+        "first_delta_consumed": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828072082,
+          "elapsedMs": 3935.413539,
+          "callbackMs": 0.625184,
+          "callbackMaxMs": 0.310799,
+          "transport": ""
+        },
+        "stream_end": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828072583,
+          "elapsedMs": 4436.054307,
+          "callbackMs": 1.299642,
+          "callbackMaxMs": 0.310799,
+          "transport": "websocket"
+        },
+        "finished": {
+          "requestId": "9fbce466-c671-4eab-8e48-0e9519a024dc",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "d35ca331e7cd8f3f14d3c0c72ee50188",
+          "startedAtMs": 1790828068147,
+          "observedAtMs": 1790828072592,
+          "elapsedMs": 4444.740776,
+          "callbackMs": 9.153514,
+          "callbackMaxMs": 7.853872,
+          "transport": ""
+        }
+      },
+      "tools": 0,
+      "text_chunks": 5,
+      "turn": {
+        "id": "773864c4a31f4771ba229886b04ee5da",
+        "started_at": 1790828059.536463
+      },
+      "input_started": {
+        "input_id": "15f713dfc3b844b08f776740cd02d428",
+        "native_id": "d35ca331e7cd8f3f14d3c0c72ee50188",
+        "scope": {
+          "session_id": "comms428",
+          "admission": {
+            "incarnation": {
+              "name": "comms428",
+              "created_at": 1790725198.0008519
+            },
+            "admission_generation": 1115
+          },
+          "owner_pid": 465933
+        },
+        "revision": 6
+      },
+      "first_text_line": 29,
+      "response_line": 46
+    },
+    {
+      "log": "Agent_Comms_2026-10-01T00_14_12_560100.txt",
+      "rpc_id": 6,
+      "prompt_line": 47,
+      "session": "comms428",
+      "prompt": "tedting again",
+      "phases": {
+        "preparing": 50,
+        "prompt_acceptance": 52,
+        "model_wait": 53,
+        "settling_stats": 77,
+        "publishing": 80
+      },
+      "request_stages": {
+        "preparing": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828088724,
+          "elapsedMs": 0.024196,
+          "callbackMs": 0,
+          "callbackMaxMs": 0,
+          "transport": ""
+        },
+        "callback": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828088827,
+          "elapsedMs": 102.84993,
+          "callbackMs": 0,
+          "callbackMaxMs": 0,
+          "transport": ""
+        },
+        "callback_end": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828088827,
+          "elapsedMs": 102.891438,
+          "callbackMs": 0.043432,
+          "callbackMaxMs": 0.043432,
+          "transport": ""
+        },
+        "connecting": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828088832,
+          "elapsedMs": 107.551513,
+          "callbackMs": 0.043432,
+          "callbackMaxMs": 0.043432,
+          "transport": "websocket"
+        },
+        "connected": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828088840,
+          "elapsedMs": 116.331479,
+          "callbackMs": 0.043432,
+          "callbackMaxMs": 0.043432,
+          "transport": "websocket"
+        },
+        "dispatch": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828088841,
+          "elapsedMs": 116.384439,
+          "callbackMs": 0.043432,
+          "callbackMaxMs": 0.043432,
+          "transport": "websocket"
+        },
+        "first_event": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828089034,
+          "elapsedMs": 309.530466,
+          "callbackMs": 0.043432,
+          "callbackMaxMs": 0.043432,
+          "transport": "websocket"
+        },
+        "first_delta_consumed": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828092238,
+          "elapsedMs": 3513.44161,
+          "callbackMs": 0.295789,
+          "callbackMaxMs": 0.128212,
+          "transport": ""
+        },
+        "stream_end": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828092540,
+          "elapsedMs": 3815.627057,
+          "callbackMs": 0.775155,
+          "callbackMaxMs": 0.128212,
+          "transport": "websocket"
+        },
+        "finished": {
+          "requestId": "414f7a0d-1d54-46fe-a348-bbe4ee1395c5",
+          "sessionId": "01a0ef8a-0c69-75a1-86fe-53cd38ab0d18",
+          "inputId": "55566ba993d0f3a680ed17b4f9532458",
+          "startedAtMs": 1790828088724,
+          "observedAtMs": 1790828092543,
+          "elapsedMs": 3818.378538,
+          "callbackMs": 3.195378,
+          "callbackMaxMs": 2.420223,
+          "transport": ""
+        }
+      },
+      "tools": 0,
+      "text_chunks": 5,
+      "turn": {
+        "id": "18dc8c1ca9574d618ce31ba840f26190",
+        "started_at": 1790828083.551732
+      },
+      "input_started": {
+        "input_id": "c12ca89cfab3443ba7930f146460ab8c",
+        "native_id": "55566ba993d0f3a680ed17b4f9532458",
+        "scope": {
+          "session_id": "comms428",
+          "admission": {
+            "incarnation": {
+              "name": "comms428",
+              "created_at": 1790725198.0008519
+            },
+            "admission_generation": 1115
+          },
+          "owner_pid": 465933
+        },
+        "revision": 9
+      },
+      "first_text_line": 67,
+      "response_line": 84
+    }
+  ]
+}

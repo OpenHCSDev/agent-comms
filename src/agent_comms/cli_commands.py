@@ -38,6 +38,7 @@ from .importing import ImportFormat, ImportLimits
 from .messages import MessageType
 from .message_reference import MessageReference
 from .thread_management import ForkSpec
+from .thread_execution import ThreadExecution, ExternalThreadExecution
 
 
 def _duration_seconds(value: str) -> float:
@@ -512,6 +513,8 @@ class RegisterCliCommand(CliCommand):
     parent: str | None = option("--parent", default=None)
     task: str | None = option("--task", default=None)
     pid: int = option("--pid", default=0)
+    execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution,
+                                            parser_default=ExternalThreadExecution.declared_name)
 
     def apply(self, ctx: Comms) -> Any:
         from .threads import Thread
@@ -523,6 +526,7 @@ class RegisterCliCommand(CliCommand):
             parent=self.parent,
             task=self.task,
             process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
+            execution=self.execution,
         )
         ctx.registry.declare(thread)
         return {"registered": self.name}
