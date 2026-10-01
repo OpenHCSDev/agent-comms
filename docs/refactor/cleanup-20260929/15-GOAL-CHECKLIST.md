@@ -1,3 +1,36 @@
+## 2026-10-01 admission checkpoint installed; default native gate passed
+
+Core484 and paired Toad276 are merged. Parent published the reviewed normal
+runtime-core484-receiving-20261001 cohort through the original stopped-owner
+batch: Core50d77, Toada708 metadata (complete application source equal to0dd),
+Text4e, Diff8fa, SDK0.12.1 and native0064. All five default entrypoints changed;
+all thirteen idle owners restarted and their original settings were verified.
+The unchanged runtime format uses PreserveCompactionPolicy: no journal retired,
+no native/session/input copies or replay; 27 protected original hashes remained
+unchanged under stopped custody. Only the registry preimage was copied (268660
+bytes). Preserve and Reset share one acquired file-custody context manager;
+operator checkpoint3258 deletes31 lines and adds98. Eight actual filesystem/
+SQLite/codec resource controls passed; the operator is published in parent432.
+
+The default installed native gate passed24.371s: three real owners under a held
+prompt-binding exclusion, three distinct original native inputs/localhost
+provider requests, all turns active before response release and all test workers
+retired. No paid/public/replayed input. Kepler published receipt/source proof at
+cac34d98. This establishes affected admission, not general latency or complete
+Toad usability. A bounded physical saved-history attachment follows separately.
+The first preflight refused a transient client before admission/publication; its
+original refusal log is retained. There was one admitted cutover, no input retry.
+
+Mendel now owns only the performance pair (Toad275cf7 + Text18efe), while Heisenberg
+owns correlated physical/profile acceptance and continued viewport work. Arendt485
+pushed the original owner IPC project read replacing a measured539–553ms per-tool
+CLI startup; installed native acceptance and the separate~30s greeting/model path
+remain open. Sch481 pushed79d3 with484 and cleared29 fixture failures (59pass,
+2 package-dependent skips). Einstein474 is unblocked for wire-authored USER
+compaction/export/fresh-native acceptance; direct-native USER/fullS2 remains Sch.
+Singer is the new dedicated worktree cleanup owner, reusing Mendel's inventory;
+implementation agents are not diverted. Kepler's completed context is preserved.
+
 ## 2026-10-01 shared admission fix merged; paired installation preparing
 
 Parent reviewed and merged Core484 as50d77a17. Six production modules delete61
