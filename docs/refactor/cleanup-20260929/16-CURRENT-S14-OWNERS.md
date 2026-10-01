@@ -418,3 +418,57 @@ screenshot receivers alive and idle with the same owner-fenced stopped drain;
 both original files are byte-unchanged. Actual public Toad519107 is still open.
 The frozen receiver fix and quiet publication remain separate from the new
 S2/S5 stage. No public defaults, receiver processes or uncertain inputs changed.
+
+## Current source closures and resource disposition
+
+Core473 source104d6039 and Toad270 source25d8e602 complete the queue input
+ownership correction. QueueProjection members own refusal or original human
+capture; QueueAttachment supplies scope freshness after availability has been
+accepted. QueueChangedUpdate rejects malformed available observations at its
+record boundary. AgentController delegates instead of probing another owner's
+absent fields. This adds no wire fields, mutable cache or native change. Relative
+to the merged foundations, Core deletes2 production lines and adds22; Toad
+deletes5 and adds27 across its attachment and controller. Current source checks
+pass; the changed installed receiving path is still pending. Receiving-command
+preparation61 uses the original runner, one editor/image input and one active
+followup, two controlled local requests, and no repeated compaction or paid run.
+
+Arendt owns the concrete live-PID/unbound-session admission failure in new draft
+Core482, `fix/runtime-session-admission-20261001`. Einstein supplied actual48's
+ACP log and complete caller trace. Normal fork lifecycle establishes the binding
+before runtime start; that path has not been demonstrated broken by this failure.
+The repair belongs to original runtime admission, without a second binding store.
+
+Full481's original SDK filesystem evidence checkpoint28c08fc4 is code-bearing:
+successful default write/edit returns evidence from the original operation;
+the witnessed native branch joins its original call and result into retained
+facts. It does not infer current filesystem, repository or symbol facts. Parent
+source review requires the owned details discriminator to come from its family,
+and the external five-field revision encoding to have one codec. Schrodinger
+is correcting these before a new native build. Full repeated-compaction and S4
+acceptance remain open; foundation475 is not completion of full S2.
+
+The actual Text18 recording remains a partial failure: cold B's visible-history
+predicate timed out, readable B appeared later, and A return was not reached.
+Observer-inclusive scrolling CPU remains roughly74–81%; no overall CPU gain is
+established. The original native PageDown control finds unchanged body epochs
+but an absolute-region cache-key change and a replaced geometry resource.
+Heisenberg owns the resulting whole Compositor/layout correction in275/Text18;
+Kepler joins profile and frame evidence without another source implementation.
+
+Mendel archived and verified five explicitly cleared recovered source copies,
+then removed only those source directories. Net reclaimed748,277,760 bytes
+(about714MiB); packaging outputs, recovery archives, receipts and logs remain.
+Fresh resource guard reports WARNING: home8.5GiB, RAM19.7GiB and swap13.6GiB.
+Parent's default `uv cache prune`, with normal in-use checks and no force or CI
+mode, completed with no unused entries. Existing instruction line18 permits
+proportionate bounded work under warnings. Mendel is calculating the exact
+paired-stage and receiving-fixture peak before parent grants a serial run;
+critical pressure is not permission to delete protected histories or bundles.
+
+Parent again acquired the three screenshot receivers from the original typed
+registry and activity: alive, idle, owner-fenced UnavailableDrainReadiness. Both
+original files remained byte-identical. Original diagnostics all identify262
+and the outer admission-lock failure. ToAd519107 remains live on old254;
+publication.json is absent. Frozen479 execution still requires normal client
+closure and fresh original guards; no uncertain input was replayed.
