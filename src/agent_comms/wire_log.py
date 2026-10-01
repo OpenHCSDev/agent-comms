@@ -32,6 +32,7 @@ from .errors import (
 from .field_codec import FieldCodec
 from .messages import Message
 from .store_files import (
+    StoreLockContention,
     _atomic_write_text,
     _iter_jsonl_records,
     _iter_jsonl_stream,
@@ -51,15 +52,17 @@ class WireLog:
         self.path = Path(path)
 
     @contextmanager
-    def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None):
+    def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
+               contention: StoreLockContention | None = None):
         """The existing canonical bus lock and durability read barrier."""
-        with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as lock:
+        with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
+                         contention=contention) as lock:
             yield lock
 
     @contextmanager
-    def certified_read(self, *, blocking: bool = True):
+    def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
         """Borrow the original source verified by this canonical lock barrier."""
-        with _store_lock(self.path, blocking=blocking) as lock:
+        with _store_lock(self.path, blocking=blocking, contention=contention) as lock:
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
             source.require_marker(marker)

@@ -8,7 +8,6 @@ under wire→bus→registry→SQL locks. Reads recheck both owner and SQL after 
 from __future__ import annotations
 
 import sqlite3
-import time
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -25,6 +24,7 @@ from .native_runtime_input import CurrentNativeCursor
 from .proven_source_coverage import ProvenSourceCoverage, SourceCoverage
 from .threads import Thread
 from .field_codec import FieldCodec
+from .store_files import StoreLockContention
 
 
 class NativeSourceCursor:
@@ -35,9 +35,10 @@ class NativeSourceCursor:
             raise ValueError("current native cursor needs actual private stores")
         self.bus, self.store, self.wire_root_id = bus, store, wire_root_id
 
-    def _coverage(self, lookup: str) -> SourceCoverage:
+    def _coverage(self, lookup: str, contention: StoreLockContention | None = None) -> SourceCoverage:
         return SourceCoverage(
-            self.bus, self.store, wire_root_id=self.wire_root_id, recipient_lookup=lookup
+            self.bus, self.store, wire_root_id=self.wire_root_id, recipient_lookup=lookup,
+            contention=contention
         )
 
     def advance(
@@ -56,32 +57,15 @@ class NativeSourceCursor:
             admission_generation=owner_admission_generation,
         )
         with NativeEvidenceScope() as source_reads:
-            try:
-                return self._advance_proven(identity, committed_input_id, source_reads)
-            except BlockingIOError:
-                if committed_input_id is None:
-                    raise
-                # The existing two-second budget bounds lock contention, not
-                # decoding an admitted source. Start it at the first refusal.
-                # Retain the same original file resource across these probes;
-                # each borrow still rechecks its byte prefix and SQL proof.
-                deadline = time.monotonic() + 2.0
-                while True:
-                    remaining = deadline - time.monotonic()
-                    if remaining <= 0:
-                        raise
-                    time.sleep(min(remaining, 0.025))
-                    try:
-                        return self._advance_proven(identity, committed_input_id, source_reads)
-                    except BlockingIOError:
-                        if time.monotonic() >= deadline:
-                            raise
+            return self._advance_proven(identity, committed_input_id, source_reads,
+                StoreLockContention(2.0) if committed_input_id is not None else None)
 
     def _advance_proven(
         self, identity: CursorOwner, committed_input_id: str | None,
         source_reads: NativeEvidenceScope,
+        contention: StoreLockContention | None,
     ) -> CurrentNativeCursor | None:
-        sources = self._coverage(identity.lookup)
+        sources = self._coverage(identity.lookup, contention)
         witness = sources.witness()
         coverage = sources.prefix(source_reads=source_reads)
         proof = sources.last_proof(
@@ -90,7 +74,7 @@ class NativeSourceCursor:
         )
         evidence = sources.evidence(coverage, source_reads=source_reads)
         with (
-            _response_boundary(self.bus, blocking=False) as registry,
+            _response_boundary(self.bus, blocking=False, contention=contention) as registry,
             self.store.session.transaction() as db,
         ):
             if sources.witness_unlocked() != witness:
