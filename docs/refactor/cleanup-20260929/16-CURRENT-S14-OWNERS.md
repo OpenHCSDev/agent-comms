@@ -51,7 +51,7 @@ Full live channel acceptance follows quiet history carry, not before it.
 | S5 phase1 context ownership | Einstein473 | Installed native/ACP/context --turn/--diff journey19 passes26.408s on frozen private270/451; no paid calls. Current3948 coherent source includes476/477 and nominal S2 changes. Full logical attribution and byte-identical actual user/provider acceptance remain DRAFT. |
 | S2 retained facts and provenance | Schrodinger475; Toad pair272 | Selected installed native retention passes9.59s. Authenticated ingress origin extends original PromptRequest/reservation/StoredInput; unproven historical inputs stay neutral. General constraints/artifact proofs/three checkpoints unfinished. Explicit controller producer methods granted; Einstein coordinates context API. |
 | S5 phase2 authored retained operations | Einstein474 | Dependency: S2 retained classes. Pin/supersede/drop/export and real compaction/fresh-thread journeys remain. |
-| Shared FieldCodec family schema | Parent478 |21 production lines added/3 deleted; no builtin handler or alternate codec.38 source checks and receiving full tool catalog pass. Installed19 used stock SDK tools and does NOT prove the Core family catalog. The same next S2/S5 native tool/retention journey must close that receiving boundary; full feature scopes remain with473/475. |
+| Shared FieldCodec family schema | Parent478 |Merged464b05dc:3 production lines deleted/21 added; no builtin handler or alternate codec.38 source checks and receiving catalog22 pass. Parent reviewed original installed34's actual33-tool SDK catalog/hash,2 recorded manifests, native nested-family tool call/nonerror result and matching canonical decision. Complete codec is byte-identical to installed3f0. This closes the shared schema boundary; failed whole-run reply oracle and full473/475 scopes remain separate. Not yet default-installed. |
 | Quiet release | Arendt prepares; parent sole executor | Existing StoppedOwnerInstallation batch only. Exact next operator reviewed and invocation frozen with actual UI/archive hashes. Readback stays under the original wire custody. Fresh guard finds13idle original owners and openToad519107; SAVE/CLOSE question pending before execution. |
 | Original closure and storage | Parent432 | Original T2/C0/round-two/T4/checklist remains active. Current C0 census has no separate unclaimed family site. Toad50 current real Chromium serving/ACP/settings/security/download acceptance passes without provider calls. Preserve protected prefixes, sessions, uncertain inputs and private owners. |
 
@@ -75,7 +75,28 @@ evidence and originals are preserved in /home/ts/wt/s5i04. Exact owned fixture
 identities were retired; no original/public owner or input changed. Schrodinger
 owns the fixture's process separation; Einstein keeps the same full journey.
 This is not installed feature readiness or authorization to repeat the failed
-attempt. The continuous custom-tool receiving boundary remains unproven.
+attempt. The continuous custom-tool receiving boundary was unproven at32.
+
+Later34 advanced through the actual installed UI/native crossing. Parent read
+the original s5i06 journal, InputDoc, manifests and canonical wire directly:
+the human/image original and controller followup have distinct native IDs and
+the same original turn ID;2 localhost requests produced1 canonical decision
+and a successful native comms_decision tool result with matching reference.
+The actual SDK catalog hashes1ce0c73e/18049bytes and matches both manifests.
+Native stop follows the SDK's intervening followup entry. The helper's first-input
+reply-before-next-user assertion falsely rejected that ordering. Its35.034s
+negative is retained, not promoted to whole-journey readiness; Schrodinger owns
+the reply oracle. Manual turn has no goal permit, so phase1 preserves its
+original absence of goal guidance rather than injecting it to satisfy a test.
+Parent478 accepted only the schema mechanism. No raw HTTP byte claim or full
+473/475 readiness follows; original failed attempts were not replayed.
+
+Mendel retired10 verified owned build/wheel directories. Allocated file tally
+174,694,400 bytes included shared uv hardlinks; actual last-link reclamation
+was51,355,648 bytes, with54,767,616 bytes observed free-space increase. Do not
+report the larger tally as reclaimed space. Existing p01 uses installed03, which
+remains protected with installed04, proofs, frozen default and native bundles.
+Home remains about12.2GiB free. Unknown-owned large folders remain untouched.
 
 Heisenberg's private performance journey need not wait for public477 carry:
 Mendel's already-valid private g477/p01 root supported combined06's physical
