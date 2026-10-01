@@ -37,3 +37,12 @@ Raw result: `.artifacts/typed-journal-fixtures/provider-free-batch01.log`.
 Resource warning was handled with one bounded 60-second batch, no new environment
 or parallel fixtures. Sch retains functional installed manual/adaptive ownership;
 remaining old callers in other fixture files are outside this bounded contribution.
+
+## Main integration
+
+Normal merge of merged #494/main `590c406c` produced `9425ea89`; PR base is main.
+The resulting production diff against main is empty. The inherited intent/source
+reader changes were checked with the same 34 affected provider-free controls:
+**34 passed in 5.22s**, raw `.artifacts/typed-journal-fixtures/main-integration02.log`.
+No native/provider run or frozen #494 branch change. This test-only handoff is
+independent of #490 batching and its pending lifecycle API extension.
