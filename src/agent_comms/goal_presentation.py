@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from .field_codec import FieldCodec
 from .goal_states import (
@@ -17,6 +18,9 @@ from .goal_states import (
     UnrecordedBlockGoal,
 )
 from .thread_presentation import ThreadPresentation
+
+if TYPE_CHECKING:
+    from .bus_publication import CommittedDelivery
 
 
 class ExecutionPresentation(ABC):
@@ -71,6 +75,12 @@ class GoalExecutionState(StrEnum):
 class GoalWaitTarget:
     name: str
     created_at: float
+
+    def sent(self, original: CommittedDelivery) -> bool:
+        """Only this declared incarnation can supply a dependency reply."""
+        from .bus_publication import stable_thread_lookup
+
+        return original.audience.sender_lookup == stable_thread_lookup(self.created_at)
 
 
 @dataclass(frozen=True, slots=True)
