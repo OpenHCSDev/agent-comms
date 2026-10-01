@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .goals import GoalRevision
 from .message_reference import MessageReference
-from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
-from .turn_context import Provenance
+from .thread_identity import ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
+from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
     from .messages import Message
@@ -188,6 +189,19 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 
     def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return message
+
+    def original_wording(self, original) -> str:
+        return original.body
+
+    def original_wording_context_source(self, original) -> Provenance:
+        return WireProvenance(original.reference)
+
+    def original_input_sources(self, inputs):
+        return ()
+
+    def original_wording_provenance(self, original) -> dict[str, object]:
+        return dict(wording=FieldCodec.encode(original.reference),
+                    author=original.sender, author_role=original.sender_role.value)
 
     def selected_sources(self, message: Message) -> tuple[Message, ...]:
         return (message,)
@@ -474,6 +488,20 @@ class NativeInputConstraintPin(HumanConstraintPin):
     def __post_init__(self):
         super().__post_init__()
         self.subject.require_human_input()
+
+    def original_wording(self, original) -> str:
+        return original.source_text
+
+    def original_wording_context_source(self, original) -> Provenance:
+        return original.context_provenance()
+
+    def original_input_sources(self, inputs):
+        return (self.subject.require_human_input().require_original(inputs),)
+
+    def original_wording_provenance(self, original) -> dict[str, object]:
+        origin = original.origin.require_human()
+        return dict(wording=FieldCodec.encode(original.context_provenance()),
+                    author=origin.author.sender, author_role=ThreadRole.USER.value)
 
     def require_wording_publication(self, registry, original_source):
         from .input_disposition import InputDispositions
