@@ -90,9 +90,10 @@ class TriageNativeExecution(NativeInputExecution):
         return {"execution_id": None, "attempt_ordinal": None}
 
     def proves_triage_source(self, proof, evidence) -> bool:
-        if not proof.expected_prompt_equality_established:
-            return False
-        return proof.require_triage_decision().proves_source(evidence)
+        return (
+            proof.expected_prompt_equality_established
+            and proof.require_triage_decision().proves_source(evidence)
+        )
 
 
 @dataclass(frozen=True)
@@ -104,7 +105,7 @@ class FullNativeExecution(NativeInputExecution):
 
     def __post_init__(self):
         validate_execution_id(self.execution_id)
-        if type(self.attempt_ordinal) is not int or self.attempt_ordinal < 1:
+        if FieldCodec.decode(int, self.attempt_ordinal) < 1:
             raise IdentityConflict("Native full input requires an original attempt")
 
     @classmethod
