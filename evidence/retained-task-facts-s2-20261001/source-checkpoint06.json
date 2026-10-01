@@ -1,0 +1,17 @@
+{
+  "status": "SOURCE_CHECKPOINT_NOT_READY",
+  "tested_source": "db4e8c29779e78f31733c9ca28ffbeb8d593ac62",
+  "shared_schema": "04fbfc52 normal merge; public named payload contract retained and nested tagged family uses the same original field walk",
+  "affected_result": "22 passed in 2.01s; source only",
+  "required_debt_gate": {
+    "exit": 1,
+    "positive_delta": {"ForeignAbsenceProbe:src/agent_comms/cli_commands.py": 1},
+    "owner": "Einstein #473; original Thread context contribution replaces foreign goal probe",
+    "schema_string_subscript_delta": 0,
+    "s2_path_increases": 0,
+    "raw_receipt": "ratchet-source05.json"
+  },
+  "next_source_relation": "Einstein owns original sealed WireRecord recipient/sender identity at compaction read; Schrodinger owns retained fact applicability. Display-name/channel matching cannot authorize facts for a new incarnation or later channel member. No timestamp rule, raw N/K export, seen list or second record store is permitted.",
+  "native_cohort": "One combined S2+S5 prepared native package will be assembled after the meaningful shared source checkpoint is published. Parent owns paired Toad metadata and public cutover; Einstein owns native full-context query acceptance. Current public package remains untouched.",
+  "remaining": "General constraints, artifact/tool original provenance and matched installed native checkpoint/recall acceptance remain incomplete. Originals and uncertain outcomes remain protected."
+}

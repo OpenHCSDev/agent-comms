@@ -1867,9 +1867,10 @@
  }
  // ============================================================================
  // Main compaction function
-@@ -608,31 +569,51 @@
+@@ -608,31 +569,55 @@
   */
- export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
+-export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
++export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId, retainedText = "") {
      const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
 -    // Generate summaries and merge into one
 -    let summary;
@@ -1894,6 +1895,10 @@
 -        summaryUsage = result.usage;
 +    if(preparation.contextWindow!==model.contextWindow)throw new Error('Compaction selected context window changed');
 +    const contextPolicy=CompactionPolicy.fromEnvironment(env);
++    const { readFiles, modifiedFiles } = computeFileLists(fileOps);
++    const annotations = formatFileOperations(readFiles, modifiedFiles);
++    contextPolicy.packSummary(retainedText, "", annotations, tokensBefore, preparation.retainedMessages,
++        model, settings.reserveTokens, createCompactionSummaryMessage);
 +    const summaryBytes=contextPolicy.inputBytes(model,settings.reserveTokens)-contextPolicy.retainedBytes(model,settings.reserveTokens);
 +    const pieces=isSplitTurn ? 2 : 1;
 +    customInstructions=[customInstructions,
@@ -1929,8 +1934,10 @@
 +        summaryUsage = summaryUsage ? combineUsage(summaryUsage, prefixResult.usage) : prefixResult.usage;
      }
      // Compute file lists and append to summary
-     const { readFiles, modifiedFiles } = computeFileLists(fileOps);
-     summary += formatFileOperations(readFiles, modifiedFiles);
+-    const { readFiles, modifiedFiles } = computeFileLists(fileOps);
+-    summary += formatFileOperations(readFiles, modifiedFiles);
++    summary = contextPolicy.packSummary(retainedText, summary, annotations,
++        tokensBefore, preparation.retainedMessages, model, settings.reserveTokens, createCompactionSummaryMessage);
 +    // This is the exact representation SessionContext.restore admits, including
 +    // JSON escaping, summary envelope and the complete file annotations.
 +    const synthesized=createCompactionSummaryMessage(summary,tokensBefore,Date.now());
@@ -2433,6 +2440,14 @@
  /**
   * Generate summaries for compaction using prepared data.
   * Returns CompactionResult - SessionManager adds uuid/parentUuid when saving.
+@@ -139,5 +113,5 @@
+  * @param customInstructions - Optional custom focus for the summary
+  * @param sessionId - Optional routing session ID forwarded without enabling prompt caching
+  */
+-export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<CompactionResult>;
++export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string, retainedText?: string): Promise<CompactionResult>;
+ //# sourceMappingURL=compaction.d.ts.map
+\ No newline at end of file
 --- a/dist/core/export-html/index.js
 +++ b/dist/core/export-html/index.js
 @@ -1,4 +1,4 @@

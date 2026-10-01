@@ -4,6 +4,11 @@
 Audit outputs and validation receipts are attached to
 [PR428](https://github.com/OpenHCSDev/agent-comms/pull/428).
 
+**2026-10-01 foundation update:** #475 deletes both dormant prototype modules
+and their obsolete tests. The historical file/line observations below remain
+evidence of the original gap, not current runtime consumers. The live native
+policy and uncompleted S1 requirements remain; full S2 followup is open in #481.
+
 ## Original promises
 
 [PR48](https://github.com/OpenHCSDev/agent-comms/pull/48) supplied dormant contracts.

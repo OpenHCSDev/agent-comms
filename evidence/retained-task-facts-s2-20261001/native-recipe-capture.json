@@ -1,0 +1,15 @@
+{
+  "owner": "Schrodinger #475 + Einstein #473",
+  "purpose": "sole combined native stock recipe review-only assembly; source not native/public acceptance",
+  "source_head": "cc7572cdb4a8aa8800eae2b6760bdb81d705004d",
+  "canonical_builder": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/bin/prepare-pi-native",
+  "canonical_builder_sha256": "36a858c5bc62dc729180439fe2db09df476c2ceee04d8e38a2e313d36ec642cd",
+  "capture_recipe": "/home/ts/.cache/agent-scratch/s2-s5-native-bundle-20261001/capture-stock-recipe.sh",
+  "capture_recipe_sha256": "75a565e30914472e51fa769804e7c7db198380dde8e3d4fa319eae41016befc2",
+  "capture": "/home/ts/.cache/agent-scratch/s2-s5-native-bundle-20261001/fresh-unverified",
+  "npm_cache_borrow": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "stock_size_mib": 159,
+  "headroom": "18.6GiB home/20.5GiB RAM; warning proportional bounded single builder, no fleet expansion",
+  "public_changes": [],
+  "provider_calls": 0
+}

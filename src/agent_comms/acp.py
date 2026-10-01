@@ -278,7 +278,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
             try:
                 return await self.turns.prompt_owned(
-                    session_id, prompt, display_text=display_text, input_id=request.input_id
+                    session_id, prompt, display_text=display_text, input_id=request.input_id,
+                    origin=request.origin,
                 )
             finally:
                 if context is not None:

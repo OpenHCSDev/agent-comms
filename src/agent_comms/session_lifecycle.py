@@ -114,6 +114,17 @@ class SessionLifecycle:
             raise RequestError.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
         return name
 
+    def require_owned_session(self, thread: Thread) -> str:
+        """Resolve an original loaded resource; registration grants no attachment."""
+        for session_id, name in self.bindings.items():
+            if self.comms.registry.canonical_name(name) == thread.name:
+                return session_id
+        raise RequestError.invalid_params({
+            "reason": f"Registered owner {thread.name!r} has no loaded ACP session. "
+                      "PID registration does not attach a session.",
+            "owner": thread.name,
+        })
+
     @staticmethod
     def reject_foreign_mcp(mcp_servers: list[Any] | None) -> None:
         if mcp_servers is not None and (type(mcp_servers) is not list or mcp_servers):

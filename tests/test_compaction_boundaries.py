@@ -33,7 +33,9 @@ def test_witness_has_one_owner_and_preserves_external_source_json():
     assert witness.leaf_id == "leaf"
     with pytest.raises(FrozenInstanceError):
         witness.leaf_id = "changed"
-    source = CompactionSource(witness, "/wire:1:2", "owner", 3, "turn", None, None, "bus", "inputs")
+    from agent_comms.retained_task_facts import RetainedTaskFacts
+
+    source = CompactionSource(witness, "/wire:1:2", "owner", 3, "turn", None, None, "bus", "inputs", RetainedTaskFacts(()))
     encoded = FieldCodec.project(source, "journal")
     assert "native" not in encoded
     assert encoded["native_json"] == json.dumps(
@@ -49,6 +51,7 @@ def test_witness_has_one_owner_and_preserves_external_source_json():
         "goal_revision",
         "bus_revision",
         "input_revision",
+        "retained",
         "pending_input_key",
         "settings_paths",
         "settings_revision",

@@ -33,10 +33,9 @@ class PauseSource(DeclaredFamily, affix="Pause"):
 
 class OwnerPause(PauseSource):
     def instruction(self) -> str:
-        return (
-            "This goal was paused by the owner. Do not resume or continue it; "
-            "wait for the owner to explicitly resume it using the goal controls."
-        )
+        from .turn_context import InstructionFile
+
+        return InstructionFile.read("owner-pause.md").content
 
 
 class ModelPause(PauseSource):

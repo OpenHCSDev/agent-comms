@@ -194,8 +194,8 @@ def publish_selected_resource_claim(
             ):
                 return existing
             raise ClaimConflict(existing)
-        for record in bus.log.verified_records_unlocked(metadata):
-            transition = record.message.claim_transition
+        for message in bus.log._iter_log_unlocked():
+            transition = message.claim_transition
             if (
                 transition is not None
                 and transition.admission is not None

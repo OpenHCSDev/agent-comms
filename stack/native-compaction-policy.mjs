@@ -134,6 +134,26 @@ export class CompactionPolicy {
         if (!this.contextFits(messages, model, reserveTokens))
             throw new Error('Compaction result exceeds its selected context budget');
     }
+    packSummary(exactText, narrative, annotations, tokensBefore, retainedMessages,
+                model, reserveTokens, createSummary) {
+        // Only narrative may be shortened. Original tool pairs/recent messages
+        // remain in Pi's preparation; mandatory source text is never reduced.
+        const compose = text => `${exactText}\n\n${text}${annotations}`;
+        const fits = text => {
+            const synthesized = createSummary(compose(text), tokensBefore, Date.now());
+            function* context() { yield synthesized; yield* retainedMessages; }
+            return this.contextFits(context(), model, reserveTokens);
+        };
+        if (!fits('')) throw new Error('Mandatory exact task source exceeds the selected context budget');
+        if (fits(narrative)) return compose(narrative);
+        let lower = 0, upper = narrative.length;
+        while (lower < upper) {
+            const middle = Math.ceil((lower + upper) / 2);
+            if (fits(narrative.slice(0, middle).toWellFormed())) lower = middle;
+            else upper = middle - 1;
+        }
+        return compose(narrative.slice(0, lower).toWellFormed());
+    }
     retainedBytes(model, reserveTokens) {
         // The existing source allocation leaves room for synthesized context.
         return Math.floor(this.inputBytes(model, reserveTokens) * this.sourceBudgetRatio);

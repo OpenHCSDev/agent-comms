@@ -84,7 +84,7 @@ async def compact_owner_once(
     owner: Thread,
     owner_generation: int,
     persistent: PersistentPiSession,
-    summarize: Callable[[NativePreparation], Awaitable[OwnerSummaryOutcome]],
+    summarize: Callable[[NativePreparation, CompactionSource], Awaitable[OwnerSummaryOutcome]],
     *,
     settings: PiCompactionSettings,
     context_window: int,
@@ -114,7 +114,8 @@ async def compact_owner_once(
     prepared, source = prepared_source
     if on_event is not None:
         await on_event(CompactionStart(reason="adaptive"))
-    result = await summarize(prepared)
+    await asyncio.to_thread(bridge.require_source_current, owner, owner_generation, source)
+    result = await summarize(prepared, source)
 
     async def write(summary: NativeSummary) -> CompactionOperation:
         return await _commit_native_summary(

@@ -1,0 +1,35 @@
+{
+  "owner": "Schrodinger #475 + Einstein #473",
+  "source_head": "7730c74a6009de74fdfe8c92e42c9c9e77667ddd",
+  "stock_recipe_exit": 0,
+  "capture": "/home/ts/.cache/agent-scratch/s2-s5-native-bundle-20261001/fresh-unverified/node_modules/@earendil-works/pi-coding-agent",
+  "package_bytes": 138387829,
+  "native_manifest_sha256": "4519164ef97bb5ece65f98544179e544e0ac0b486d8976023b610f2397d937f8",
+  "tree_sha256": "a2b40e1da14b8db418c4d950c703273942a51ced0021e1280dea9b1625fbcd9f",
+  "diagnostic_paths": 49,
+  "changed_diagnostic_paths": [
+    {
+      "path": "dist/core/compaction/compaction.js",
+      "before": "1ac63aa7598f1d8c4850acaf514ecc86126048e9a33654ad63e08f9e53f07f9e",
+      "after": "bfb76a0e347c27dd0d09e87b15d2b6e6d6ac7c4f9a9eb7073d05bf8dee048686"
+    },
+    {
+      "path": "dist/core/compaction/compaction.d.ts",
+      "before": null,
+      "after": "22b5629822ee21718882966f368f50f389006aee93fd8ee044760140c4cbd029"
+    },
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "before": "adfd33de8dfc0833607fc14fc909dd7559d8b1d1d88b25ba064daeaefd9cc589",
+      "after": "0d0e0118253c8c721555e3154f14ca394700e1d3c589866d7129a78a35607b64"
+    },
+    {
+      "path": "dist/core/compaction/agent-comms-policy.js",
+      "before": "144507e9cbf3c8f99fe403c91ea0fff3ca11cc3249bced63d16d8c7533b7754d",
+      "after": "e01c8f7ca5dc1c2b668c64125137559f315ba643fe477380dc6563798e39a2d1"
+    }
+  ],
+  "provider_calls": 0,
+  "public_changes": [],
+  "acceptance": "candidate pins from fresh stock recipe; canonical verification/publication pending"
+}

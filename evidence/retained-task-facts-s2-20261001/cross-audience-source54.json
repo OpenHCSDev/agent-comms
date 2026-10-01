@@ -1,0 +1,37 @@
+{
+  "state": "CROSS_AUDIENCE_CANONICAL_SOURCE_CUT_PASS_NOT_INSTALLED_READY",
+  "owner": "Existing DecisionAttachment current-root eligibility and retained source consumer",
+  "red": {
+    "path": "cross-audience-red50.txt",
+    "result": "valid three-participant publisher\u2192HeldCompaction.capture raises missing-original0.48s"
+  },
+  "green": {
+    "path": "cross-audience-green52.txt",
+    "result": "same actual canonical three-participant source-cut operation passes0.59s"
+  },
+  "supporting": "cross-audience-green51:16 existing decision/input cases passed; new case reached capture/authority/privacy assertions then failed raw multiline substring in serialized JSON; corrected to full original Message equality",
+  "closure": [
+    "A original private choice to B; original USER supersession and same-author later correction target#team includingC",
+    "Frozen original audience stays unchanged; all A/B/C capture original held registry/wire/input resource cut",
+    "C retains exactly both original public correction Message records as historical neutral facts",
+    "C receives no unauthorized original private body/alternatives; no additional source read or private ancestor fetch",
+    "A current human supersession remains effective; later agent cannot override it",
+    "Applicable owned correction omitting its original still refuses strictly",
+    "Existing temporary lineage maps and public source/index schemas unchanged"
+  ],
+  "declaration_delta": "DecisionAttachment owns current_roots family contract; Decision uses original applicability before strict root resolution; UserDecisionSupersession changes only eligible original lineage already captured",
+  "native_manifest_sha256": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "js_or_native_pins_changed": false,
+  "new_provider_calls": 0,
+  "original_inputs_replayed": 0,
+  "public_changes": [],
+  "patterns": [
+    "BOUND-2",
+    "MEMB-1",
+    "IDEN-5"
+  ],
+  "remaining": [
+    "Parent review and single coherent installed new-goal/new-source-cut receiving gate",
+    "Full S2 draft481"
+  ]
+}
