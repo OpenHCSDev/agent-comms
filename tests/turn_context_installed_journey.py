@@ -45,11 +45,144 @@ async def run(root):
         print(json.dumps(receipt), flush=True)
 
 
+async def run_configured(options):
+    """One original configured-model input on an SDK-owned retained fork."""
+    import hashlib
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.comms import Comms
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_entries import NativeEntry
+    from agent_comms.native_package import verify_native_package
+    from agent_comms.threads import Thread
+    from delivery_owner_fixture import canonical_agent
+    from original_owner_capture import CurrentTypedCapture
+    from retained_input_origin_observer import actual_s2_ingress
+
+    started = time.monotonic()
+    root = options.root
+    root.mkdir(mode=0o700)
+    output = root / 'configured-context-journey'
+    output.mkdir(mode=0o700)
+    receipt = {'state': 'PREPARING_ORIGINAL_CONFIGURED_SOURCE',
+        'python': sys.executable, 'core': agent_comms.__file__,
+        'fixture': str(root), 'public_inputs': 0, 'original_inputs_retried': 0}
+    owner = None
+    try:
+        captured = CurrentTypedCapture(options.configured_source_root,
+            options.original_python).read('nra-architecture')
+        source = captured.require_current()
+        original_file = Path(source.require_saved_session())
+        original_digest = hashlib.sha256(original_file.read_bytes()).hexdigest()
+        receipt.update(model=source.model, thinking=source.thinking_level.declared_name,
+            source_file=str(original_file), source_bytes=original_file.stat().st_size,
+            original_process=FieldCodec.encode(source.require_process()),
+            original_sha256=original_digest)
+        package = Path(os.environ['PI_COMPACTION_TEST_PACKAGE'])
+        verify_native_package(package)
+        project = root / 'project'
+        project.mkdir(mode=0o700)
+        environment = dict(captured.retained.environment)
+        fork_environment = dict(environment, PI_CODING_AGENT_DIR=str(root / 'native-forks'))
+        identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
+            str(original_file), str(project)), cwd=project, env=fork_environment)
+        assert Path(identity.session_file).is_relative_to(root)
+        captured.require_current()
+        service = Comms(root / 'wire')
+        root_id = service.messaging.initialize_private_initial_protocol()
+        runtime = Path(sys.executable).parent
+        environment.update(AGENT_COMMS_ROOT=str(service.root),
+            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
+            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
+            PI_COMPACTION_TEST_PACKAGE=str(package),
+            AGENT_COMMS_AGENT_BIN=str(runtime / 'pi-comms-native'),
+            PATH=str(runtime) + os.pathsep + environment.get('PATH', os.defpath),
+            XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
+            XDG_DATA_HOME=str(root / 'data'))
+        for name in ('PYTHONPATH', 'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY',
+            'PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID'):
+            environment.pop(name, None)
+        # Credentials remain only in the acquired launch environment. The
+        # explicit fork path owns all native writes; original accounts stay intact.
+        os.environ.clear()
+        os.environ.update(environment)
+        owner = canonical_agent(service, agent_bin=str(runtime / 'pi-comms-native'),
+            agent_args=list(captured.retained.arguments or ()), auto_wake=False,
+            runtime_enabled=True)
+        thread = Thread('configured-source', frozenset(), str(project),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+            session_file=identity.session_file, model=source.model,
+            thinking_level=source.thinking_level,
+            task='Bounded acceptance only. Do not resume inherited work or use tools.')
+        service.registry.declare(thread)
+        await owner._runtime.start()
+        await owner.load_session(str(project), thread.name)
+        await owner.turns.prepare_selected_session(thread.name, thread)
+
+        async def query(*arguments):
+            child = await asyncio.create_subprocess_exec(sys.executable, '-m',
+                'agent_comms.cli', '--root', str(service.root), 'context', thread.name,
+                *arguments, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            data, error = await child.communicate()
+            assert child.returncode == 0, error.decode()
+            return json.loads(data)
+
+        selected = Path(identity.session_file)
+        before = selected.read_bytes()
+        preview = await query()
+        (output / 'next-context.json').write_text(json.dumps(preview))
+        assert selected.read_bytes() == before
+        baseline = service.bus.log.latest_sequence()
+        receipt['state'] = 'ONE_CONFIGURED_INPUT_ABOUT_TO_BE_SUBMITTED_NO_RETRY'
+        (root / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
+        token = 'S5_CONFIGURED_RETAINED_ONCE_473'
+        async with actual_s2_ingress(owner, thread, output) as observer:
+            original = await observer.submit('Bounded acceptance only. Do not resume '
+                f'inherited work, use tools or change files. Reply exactly {token}.',
+                observation_seconds=300)
+        stored = InputDispositions(service.root / InputDispositions.filename).read()
+        assert len(stored.rows) == 1
+        assert stored.lookup(original.key).has_started
+        with NativeEntry.open_evidence(selected) as reader:
+            _, entries = reader.observe()
+        user, = (entry for entry in entries if entry.input_id == original.native_id)
+        terminal_replies = tuple(entry for entry in entries[entries.index(user) + 1:]
+            if entry.final_reply)
+        assert terminal_replies[-1].message.authoritative_text.strip() == token
+        manifests = service.bus.log.context_manifests(thread.incarnation)
+        assert manifests
+        historical = await query('--turn', str(manifests[-1].turn.occurrence.generation))
+        (output / 'recorded-context.json').write_text(json.dumps(historical))
+        assert historical['text_recorded'] is False
+        assert service.bus.log.latest_sequence() == baseline
+        assert selected.read_bytes().startswith(before)
+        assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
+        captured.require_current()
+        receipt.update(state='SCOPED_CONFIGURED_SAVED_FORK_TOAD_ACP_NATIVE_CONTEXT_PASS',
+            original_inputs=FieldCodec.encode(tuple(stored.rows.values())),
+            manifests=len(manifests), source_unchanged=True, query_preserved_journal=True,
+            original_native_user=user.id, original_native_reply=terminal_replies[-1].id)
+    except BaseException as error:
+        receipt.update(state='FAILED_NO_REPLAY', error=repr(error))
+        raise
+    finally:
+        if owner is not None:
+            receipt['original_dispositions'] = FieldCodec.encode(
+                InputDispositions(owner._comms.root / InputDispositions.filename).read())
+            await owner.shutdown()
+        receipt['elapsed_seconds'] = time.monotonic() - started
+        (root / 'terminal-receipt.json').write_text(json.dumps(receipt, indent=2))
+        print(json.dumps(receipt), flush=True)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
     parser.add_argument("--test-support-site", type=Path, required=True)
     parser.add_argument("--toad-driver-dir", type=Path, required=True)
+    parser.add_argument('--configured-source-root', type=Path)
+    parser.add_argument('--original-python', type=Path)
     options = parser.parse_args()
     if "site-packages" not in Path(agent_comms.__file__).parts:
         raise RuntimeError("This acceptance requires the paired installed Core wheel")
@@ -57,5 +190,6 @@ if __name__ == "__main__":
     # Core first and append the support directory; do not process donor .pth files.
     sys.path.append(str(options.test_support_site))
     sys.path.append(str(options.toad_driver_dir))
+    sys.path.append(str(Path(__file__).resolve().parents[1] / 'tools' / 'cutover'))
     os.environ['PATH'] = os.pathsep.join((str(Path(sys.executable).parent), os.environ.get('PATH', os.defpath)))
-    asyncio.run(run(options.root))
+    asyncio.run(run_configured(options) if options.configured_source_root else run(options.root))
