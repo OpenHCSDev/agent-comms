@@ -19,26 +19,30 @@ Package/source/native equality passes, but actual workflow acceptance fails.
 Preserve that prefix and all original failing artifacts. Do not execute its
 prepared quiet-cutover operator or publish its defaults as ready.
 
-Parent Toad250187cd59f normally includes2512835a566 and252917c2343.
-Original physical submission/member-container controls and the captured-loader/
-canonical-history admission correction are integrated. No new package freeze
-has been declared. Heisenberg252 continues channel disclosure lifetime. Integrate published source before a new immutable
-package assembly. Full254 performance work does not hold the critical release.
+Parent Toad25085d45b512cac88bdf5dd8870f41e53768ab3c009 is frozen and pushed.
+It normally includes251214aaacb,2526d58fe3a and25562d6a36c plus current253/main.
+Existing metadata pins Core970/Textual6b; SDK/native/audit unchanged. Corrected
+stage runtime-source-publication-custody-20260930 is assigned to Schrodinger's
+original normal builder. Einstein's native/ACP/Linux terminal and Schrodinger's
+bus journeys may run in parallel on separate fresh private roots after preflight.
+Full254 performance continues independently and does not hold this release.
 
 ## Active ownership
 
 | Workflow | Integration owner | Current work and acceptance |
 | --- | --- | --- |
-| Transcript source and sidebar publication | Heisenberg, Toad252 | Source917c2343 closes reproduced undefined captured-agent and concurrent duplicate-history publication through the existing resource/window lock; actual saved-resource pilot passes one history/one readable answer. Trace expanded channel with no members through original shared SidebarGroup preparation lifetime. |
-| Continuous physical queue/fork/cancel journey | Einstein, Core458; original input controls Kepler251 | First physical Enter pending-before-Started and once-chat passed u02/u03. Remaining fork/five-input journey incomplete. u04 original cleanup finished; fix fixture cleanup gap without weakening the original UI failure. |
+| Transcript source and sidebar publication | Heisenberg, Toad252 | Source6d58fe3a includes917c pivot and shared SidebarGroup member custody. Actual saved-resource/held-preparation source pilots pass one history/answer, readable channel member, collapse during held work and original relationship-row reuse. Same-cohort installed gate remains due. |
+| Continuous physical queue/fork/cancel journey | Einstein, Core458; original input controls Kepler251 | First physical Enter pending-before-Started and once-chat passed u02/u03. Remaining fork/five-input journey incomplete. Reviewed25562/251214 cleanup and native mounted/focused dialog helpers are integrated. Run the corrected immutable pair after preflight, retaining strict original queue/frame assertions. |
 | Canonical bus and open DM/IRC/tab-return projection | Schrodinger, Core460 | u05 hot original/reply/status and 31-second open-view uniqueness pass; first return response is saved once and delivered through ACP, but UI predicate fails. Capture original worker/resource/frame state before cleanup on the corrected build. |
 | Paired source, metadata, merging and public cutover | Parent, Toad250/Core432 | Review whole affected owners/consumers, merge coherent source, freeze exact pins, require actual same-build journeys, then canonical quiet cutover. |
 | Full warm-history/scroll/CPU/resources | Heisenberg, Toad254 | Source4ad3c6aa preserves original body readiness, native geometry reuse and shared retirement/page admission. Source controls pass; physical CPU/tab/fast-reverse-End improvement remains unverified. |
 
-Three existing Codex workers are active after reopening the same interrupted
-threads. Completed Mendel and Arendt work stays available without another
-provider/test fleet. Kepler's original readonly modal diagnosis is published;
-no competing binding patch or unchanged full test is scheduled.
+Existing Codex threads are reused. Heisenberg resumes254 after publishing252;
+Einstein and Schrodinger own independent same-cohort actual journeys. Arendt
+updates the existing prepared operator for the new target without executing it.
+Kepler251 published shared original dialog readiness/fixture integration; no
+competing binding patch or unchanged failed-prefix test is scheduled. Mendel
+remains available for the deferred value-type inventory; no new provider fleet.
 
 ## Prepared and completed independent contributions
 
@@ -46,7 +50,7 @@ no competing binding patch or unchanged full test is scheduled.
   controls complete. Original 44.7MB read-latency checkpoint retains source
   evidence, incremental checks38–43ms versus full decode about2s. Full paired
   UI gate remains separate. Quiet operator74060d48 is prepared, not executed;
-  update its target and artifact hashes after the next source freeze.
+  Arendt updates its target now; artifact hashes follow the new package receipts and actual acceptance gates.
 - Mendel457/462: coordination/certified-reply source closure and explicit
   None-state dispositions published29a25b4b/0ebd4a77. Core970 contains product
   changes. Verified disposable cleanup and SessionRevision inventory complete.
