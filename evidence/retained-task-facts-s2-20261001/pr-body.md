@@ -1,6 +1,6 @@
 # S2: canonical retained task facts
 
-**Owner:** Schrodinger. **Draft, source checkpoint; not ready or installed.**
+**Owner:** Schrodinger. **Draft; source/package and scoped installed-native checks passed. Full S2 is not ready or live.**
 
 ## Working source
 
@@ -21,6 +21,8 @@ Receipts are in `evidence/retained-task-facts-s2-20261001/`.
 - Three policy packing rounds passed using the original Pi summary envelope, exact source prefix and tool pair. These are not three native checkpoints or model recall evidence.
 - The canonical stock native builder and complete package trust check passed for the combined S2/S5 artifact (`native-canonical-ready04.json`). Both earlier build failures, their exact corrections and all logs remain retained. 49 diagnostic paths include the updated compaction type declaration; the whole tree is pinned. No public runtime or provider request changed.
 
-Remaining: general user-constraint applicability; completed tool/artifact provenance where original revision/hash ownership is missing; non-selected native retention and recent-window reduction with pair custody; matched installed checkpoints; separate S4 recall authorization.
+Remaining: general user-constraint applicability; completed tool/artifact provenance where original revision/hash ownership is missing; non-selected native retention and recent-window reduction with pair custody; three continuous native checkpoints; separate S4 recall authorization.
+
+The normal parent270 installed cohort passed the affected selected-native journey in 9.59s: exact original USER/Decision/Goal/Input prefix committed in the native journal, followed by one-use original admission. Installed imports and full native trust were asserted. This single journey is not three continuous checkpoints, UI acceptance or configured-model recall.
 
 Original source01 interruption, source02 prior-format proof and u05 uncertainty remain protected. No original input, provider call or unknown outcome was replayed. Global install/cutover remains with the parent.
