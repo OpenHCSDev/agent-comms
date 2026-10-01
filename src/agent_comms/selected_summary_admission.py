@@ -17,7 +17,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
-from .backend import _session_revision
 from .child_process import ProcessIdentity
 from .compaction_errors import CompactionJournalError
 from .compaction_identity import JournalCustody, ReturnedSummaryTerminal
@@ -26,7 +25,7 @@ from .compaction_records import SelectedSummarySource
 from .compaction_summaries import _consume_selected_ack
 from .field_codec import FieldCodec
 from .reservation_rules import ReservationViolationError
-from .selected_source import SelectedAdmissionSource, SessionRevision
+from .selected_source import SelectedAdmissionSource, SessionRevision, SessionRevisionUnavailable
 
 if TYPE_CHECKING:
     from .compaction_states import CommittedNativeOutcome
@@ -52,7 +51,7 @@ class SelectedAdmissionIdentity:
     def require_current_revision(self, session: str) -> None:
         if self.source.owner != ProcessIdentity.capture(os.getpid()):
             raise CompactionJournalError("Selected input process incarnation changed")
-        if self.session_revision is None or _session_revision(session) != self.session_revision:
+        if not self.session_revision.current(session):
             raise CompactionJournalError("Selected native source revision changed")
 
     def require_current(self, source: SelectedSummarySource, session: str) -> None:
@@ -66,11 +65,12 @@ class SelectedAdmissionIdentity:
             raise CompactionJournalError("Selected decline source revision changed")
 
     def after_native_commit(self, session: str, evidence: CommittedNativeOutcome) -> SelectedAdmissionIdentity:
-        revision = _session_revision(session)
-        if revision is None:
-            raise CompactionJournalError("Selected native result is unavailable: saved session missing")
+        try:
+            revision = SessionRevision.observe(session).require_available()
+        except SessionRevisionUnavailable as error:
+            raise CompactionJournalError("Selected native result is unavailable: saved source missing") from error
         evidence.require_saved_revision(revision)
-        if revision[1] != self.source.reserved_revision[1]:
+        if not revision.same_input_proof(self.source.reserved_revision):
             raise CompactionJournalError("Selected native result is unavailable: input proof changed")
         return replace(self, session_revision=revision)
 
@@ -92,6 +92,11 @@ class SelectedSummaryAdmission:
 
     def __reduce__(self) -> NoReturn:
         raise TypeError("Selected admission cannot cross a process boundary")
+
+    @property
+    def original_source(self) -> SelectedAdmissionSource:
+        """The original immutable reservation; observing it grants no new token."""
+        return self._identity.source
 
     @classmethod
     def _from_returned_ack(

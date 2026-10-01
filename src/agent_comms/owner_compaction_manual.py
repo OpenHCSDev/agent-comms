@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .backend import PersistentPiSession, _session_revision
+from .backend import PersistentPiSession
 from .compaction_errors import CompactionJournalError
 from .compaction_records import SelectedSummaryAttempt
 from .compaction_result import CommittedCompactionResult
@@ -25,7 +25,7 @@ from .owner_compaction_runtime import compact_owner_once
 from .pi_payloads import StateData
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
-from .selected_source import ManualSource, SelectedSource
+from .selected_source import ManualSource, SelectedSource, SessionRevision
 from .thread_identity import TurnId
 
 
@@ -110,7 +110,7 @@ async def compact_manual_owner(
                     incarnation=owner.incarnation,
                     owner=owner.process_identity,
                     turn=TurnId(turn.id),
-                    reserved_revision=_session_revision(session_file),
+                    reserved_revision=SessionRevision.observe(session_file).require_available(),
                 )
             ),
             "selected": {
