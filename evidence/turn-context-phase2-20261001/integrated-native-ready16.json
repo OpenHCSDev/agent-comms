@@ -1,0 +1,319 @@
+{
+  "state": "SCOPED_READY_INTEGRATED_AUTHORED_CONTEXT",
+  "tested_source": "cd08d8564143026348d681fb467da1458c6db236",
+  "installed_production_source": "8295710db0d1e71759d21bf6436c2ffc135ccc54",
+  "installed_module_count": 309,
+  "builder_receipt": "evidence/combined474-global491-native-20261001/combined-native-ready.json",
+  "wheel": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "5b93442bdf0b46b157a6cf6f70b4027aca25e235059e8ef064197b40ad6fe4b9",
+  "native": {
+    "package": "/home/ts/wt/comms-combined474-global491-native-20261001/stack/.pi-native-53b8c413d90aa6b1/node_modules/@earendil-works/pi-coding-agent",
+    "manifest_sha256": "53b8c413d90aa6b1b8fe17fad35d2261cb7fe8c53eaa852f6ac4a073016fd9f6",
+    "tree": "5a023e9f2713c1902db3cc947543f8fad191532b849e1d12899a0489184e8ce3",
+    "imports_sha256": "77559b1b0b2b808e2b9b01435093760eebe4d2df2bcffb180fd98dac470bb3b1"
+  },
+  "original_journey": {
+    "python": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/bin/python",
+    "core": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "fixture": "/home/ts/wt/s5integrated01",
+    "public_inputs": 0,
+    "paid_provider_calls": 0,
+    "state": "SCOPED_PASS",
+    "local_provider_posts": 2,
+    "original_provider_requests": "/home/ts/wt/s5integrated01/original-provider-requests.json",
+    "elapsed_seconds": 42.53305274399463
+  },
+  "original_result": {
+    "scope": "original human wire pin -> actual selected compaction -> atomic export -> fresh native ACP/Toad input",
+    "source": {
+      "seq": 1,
+      "message_id": "32d88a0e5205"
+    },
+    "pin": {
+      "seq": 2,
+      "message_id": "0959fc2c8ecb"
+    },
+    "human_author": {
+      "name": "user",
+      "created_at": 1790883949.405275
+    },
+    "selected_commit": "07c6591fa7634140a57e7402e70264e5",
+    "native_compaction_entry": "5e09d6a3",
+    "fresh_native_input": {
+      "kind": "started",
+      "key": "acp:fe677f3f463348209618c4c94b946594",
+      "sequence": null,
+      "owner": "authored-context-fresh",
+      "admission": 3,
+      "target": "authored-context-fresh",
+      "source_text": "S5_EXPORTED_CONTEXT_FIRST_INPUT",
+      "origin": {
+        "kind": "human",
+        "root_id": "edaa7d8f5d4449cbbe47a877844b3c3a",
+        "author": {
+          "sender": "user",
+          "created_at": 1790883949.405275,
+          "worktree": "/home/ts/wt/s5integrated01/sdk-source/project"
+        },
+        "admission": {
+          "incarnation": {
+            "name": "authored-context-fresh",
+            "created_at": 1790883966.3111374
+          },
+          "admission_generation": 3
+        },
+        "project": "/home/ts/wt/s5integrated01/project",
+        "goal": {
+          "kind": "absent"
+        }
+      },
+      "turn_id": "8c4297e062d64339b6db6cd25199a46b",
+      "native_id": "6d7885de307f28f0d5a70ded739583e6",
+      "sent_text": "Coordination context: you are thread 'authored-context-fresh'; parent=None. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/wt/s5integrated01/project'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: [{\"name\": \"context-source\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}]\n\nS5_EXPORTED_CONTEXT_FIRST_INPUT"
+    },
+    "export": {
+      "destination": "/home/ts/wt/s5integrated01/project/AGENTS.md",
+      "format": "retained",
+      "scope": {
+        "kind": "authored_source",
+        "sources": [
+          {
+            "seq": 2,
+            "message_id": "0959fc2c8ecb"
+          }
+        ]
+      },
+      "limit": {
+        "kind": "full"
+      },
+      "boundary": {
+        "through_seq": 2,
+        "export_started_at": 1790883966.0939796
+      },
+      "source_messages": 1,
+      "exported_messages": 1,
+      "omitted_messages": 0,
+      "time_filtered_messages": 0,
+      "invalid_time_messages": 0,
+      "oversized_messages": 0,
+      "bytes_written": 881,
+      "output_sha256": "c21eea202281c80e4421e739bf3f1723c92eff13417362aa40d3efc371eb591e",
+      "truncated": false,
+      "redacted_messages": 0,
+      "first_sequence": 2,
+      "last_sequence": 2,
+      "first_timestamp": 1790883949.9683588,
+      "last_timestamp": 1790883949.9683588
+    },
+    "verbatim_source_intact": true,
+    "fresh_session_had_no_parent_summary": true,
+    "local_provider_posts": 2,
+    "paid_public_inputs": 0,
+    "original_inputs_retried": 0,
+    "core": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "toad": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001/lib/python3.14/site-packages/toad/__init__.py"
+  },
+  "cleanup": {
+    "fixture": "/home/ts/wt/s5integrated01",
+    "readable_same_uid_fixture_refs": [],
+    "unreadable_same_uid_pids": [
+      216738,
+      1561676,
+      1786010,
+      1786012,
+      1953373
+    ],
+    "custody": "Existing native fixture generator finally closes PersistentPiSession, explicitly stops every observed native child, closes server/connections; authored owner finally shutdown + actual ingress closure. Census corroborates custody, not replacing it.",
+    "fixture_bytes": 1121852,
+    "limit_bytes": 67108864,
+    "public_inputs": 0,
+    "replays": 0
+  },
+  "semantic_contract_receipt": "evidence/turn-context-phase2-20261001/integrated-semantic-owner-search16.json",
+  "production_deletions": 444,
+  "production_additions": 1235,
+  "production_deltas": [
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/agent_comms/bus_publication.py"
+    },
+    {
+      "added": 85,
+      "deleted": 2,
+      "path": "src/agent_comms/cli_commands.py"
+    },
+    {
+      "added": 22,
+      "deleted": 18,
+      "path": "src/agent_comms/compaction_boundary.py"
+    },
+    {
+      "added": 17,
+      "deleted": 2,
+      "path": "src/agent_comms/exporting.py"
+    },
+    {
+      "added": 11,
+      "deleted": 10,
+      "path": "src/agent_comms/messages.py"
+    },
+    {
+      "added": 34,
+      "deleted": 10,
+      "path": "src/agent_comms/messaging.py"
+    },
+    {
+      "added": 83,
+      "deleted": 6,
+      "path": "src/agent_comms/native_entries.py"
+    },
+    {
+      "added": 23,
+      "deleted": 0,
+      "path": "src/agent_comms/native_file_artifact.py"
+    },
+    {
+      "added": 24,
+      "deleted": 0,
+      "path": "src/agent_comms/native_revision_text.py"
+    },
+    {
+      "added": 12,
+      "deleted": 2,
+      "path": "src/agent_comms/native_tools.py"
+    },
+    {
+      "added": 18,
+      "deleted": 10,
+      "path": "src/agent_comms/owner_compaction_prepare.py"
+    },
+    {
+      "added": 133,
+      "deleted": 14,
+      "path": "src/agent_comms/pi_payloads.py"
+    },
+    {
+      "added": 64,
+      "deleted": 0,
+      "path": "src/agent_comms/retained_context.py"
+    },
+    {
+      "added": 118,
+      "deleted": 31,
+      "path": "src/agent_comms/retained_task_facts.py"
+    },
+    {
+      "added": 2,
+      "deleted": 5,
+      "path": "src/agent_comms/selected_source.py"
+    },
+    {
+      "added": 0,
+      "deleted": 301,
+      "path": "src/agent_comms/task_decisions.py"
+    },
+    {
+      "added": 508,
+      "deleted": 0,
+      "path": "src/agent_comms/task_sources.py"
+    },
+    {
+      "added": 5,
+      "deleted": 5,
+      "path": "src/agent_comms/threads.py"
+    },
+    {
+      "added": 59,
+      "deleted": 27,
+      "path": "src/agent_comms/tools.py"
+    },
+    {
+      "added": 16,
+      "deleted": 0,
+      "path": "src/agent_comms/wire_log.py"
+    },
+    {
+      "added": 2,
+      "deleted": 0,
+      "path": "stack/bin/prepare-pi-native"
+    },
+    {
+      "added": 7,
+      "deleted": 0,
+      "path": "stack/native-file-artifact-schema.mjs"
+    },
+    {
+      "added": 26,
+      "deleted": 0,
+      "path": "stack/native-file-artifact.mjs"
+    },
+    {
+      "added": 39,
+      "deleted": 0,
+      "path": "stack/patch-native-file-artifact.py"
+    },
+    {
+      "added": 5,
+      "deleted": 1,
+      "path": "stack/pi-native.sha256"
+    }
+  ],
+  "validation_order": "Owner/caller and artifact-contract analysis -> normal whole-source integration -> final installed continuous journey and deferred IPC control. No repeated16check suite, optional3compaction/research gate, or symptom patch.",
+  "deferred_ipc_end_control": {
+    "state": "PASS",
+    "checks": 1,
+    "elapsed_seconds": 2.57,
+    "scope": "Original owned project socket query across original rename/project change and foreign owner/thread refusal; installed Core;0provider/public input"
+  },
+  "setup_failure": {
+    "log": "evidence/turn-context-phase2-20261001/integrated-native14.log",
+    "cause": "runpy wrapper initially omitted original tests directory; failed import before fixture creation/provider/native/input; corrected wrapper preserves logs; no original replay"
+  },
+  "scope_limits": [
+    "Actual installed Toad compositor + ACP/native/SDK/CLI, no physical-pixel/global Ready claim.",
+    "Wire USER feature only; later direct-StoredInput/fullS2/S3/S4 remains Sch481 follow-up.",
+    "Runtime lifecycle/payloadbudget reservation-intent-recovery/custody-cursor map belongs Arendt; no independent production implementation here.",
+    "Compaction policy/native workflow belongs Sch; original approved producer and fresh full native artifact normally integrated.",
+    "Original fixture/source/journals/inputs/proofs retained; public carry/default activation belongs parent."
+  ],
+  "artifacts": {
+    "/home/ts/wt/s5integrated01/terminal-receipt.json": {
+      "bytes": 516,
+      "sha256": "494b484a1c014a4a05711cc9f51b12552efbec5509c3b1f0c574f9ed9b832804"
+    },
+    "/home/ts/wt/s5integrated01/original-provider-requests.json": {
+      "bytes": 28976,
+      "sha256": "4b800e86094ed863716dccd05dd8ea89b379a7d1a90e565f21309ec472fcc277"
+    },
+    "/home/ts/wt/s5integrated01/authored-context-journey/phase2-receipt.json": {
+      "bytes": 3752,
+      "sha256": "21a464c28b2dd7db83d0cf7fb5cd80ba201e9cfe04ee25aef2fba78e49a2e526"
+    },
+    "/home/ts/wt/s5integrated01/authored-context-journey/original-human-pin.json": {
+      "bytes": 1476,
+      "sha256": "b1c739a10e8094455f6548a8128d2df69464c955d565c178670235777531d5c6"
+    },
+    "/home/ts/wt/s5integrated01/authored-context-journey/source-ui/actual-committed-summary.svg": {
+      "bytes": 95481,
+      "sha256": "d959bc86879127b18e186aa35eef4490cc50e968bf77efd3197add15e1e832d8"
+    },
+    "/home/ts/wt/s5integrated01/project/AGENTS.md": {
+      "bytes": 881,
+      "sha256": "c21eea202281c80e4421e739bf3f1723c92eff13417362aa40d3efc371eb591e"
+    },
+    "evidence/turn-context-phase2-20261001/integrated-project-ipc-end16.log": {
+      "bytes": 293,
+      "sha256": "72dfd3e227981f91e83fed97f3744753b6d407cda11b6f6f4f7687a541b5d0e3"
+    },
+    "evidence/turn-context-phase2-20261001/integrated-semantic-owner-search16.json": {
+      "bytes": 6205,
+      "sha256": "a5495be69bc3e5f9823fd73c848badd5f0e220b47c54f79572830d6dc03d426a"
+    },
+    "/home/ts/wt/s5integrated01/authored-context-journey/fresh-ui/toad-ingress/original-reply-1.svg": {
+      "bytes": 66579,
+      "sha256": "837b5f4358bd42caf52115789d8bdacf242832033701236d7aa8949b6918be51"
+    }
+  },
+  "existing_owner_receipt": "Search/read existing ContextSegment/provenance, TaskAttachment/scoped declaration, NativeTool/Details, original export scope/limit/writer, native journal reader and CompactionBoundary. No new production types this normal main/492 integration."
+}

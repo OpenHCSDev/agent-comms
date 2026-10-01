@@ -1,9 +1,48 @@
 # S5 phase 2: authored retained context operations
 
-Owner: Einstein, the same S5 integration owner. Dependency: accepted S2 retained
-classes and S5 phase 1, tracked by Core PR473. This PR now implements the human
-operations, retained contributor and file export. Full native journeys remain
-unverified; no public installation or live readiness is claimed.
+## Current authored wire checkpoint
+
+Owner: Einstein474 consumer/integration. Runtime lifecycle, retained-context
+payload-budget reservation/intent/recovery and custody/cursor fact-map belong to
+Arendt. Compaction policy/native preparation belongs to Schrodinger. No parallel
+family or independent symptom patch is authorized here.
+
+Normally integrated main485/487/488, merged491 and whole approved79 producer
+through492: tested sourcecd08d856, exact309 installed modules, native53b8c413.
+Final actual installed original HUMAN pin -> genuine selected native compaction
+-> atomic export -> EMPTY fresh native thread -> Toad/ACP/native answer PASS
+42.533s/2localhostPOST/0paid/public/replay. Deferred original projectIPC control
+alsoPASS2.57s at END. Exact receipt
+`evidence/turn-context-phase2-20261001/integrated-native-ready16.json`.
+This authored feature is useful-checkpoint Ready for parent review/merge;
+publication and original source carry remain parent's boundary. Full481 direct
+StoredInput/research/global readiness is not claimed or a hold.
+
+Current work order: inspect existing owners/families/capabilities and all consumers
+FIRST; extend the existing original owner, delete replaced copies in the same
+change; batch validation only at the END. A new class does not establish nominal
+ownership if it repeats an existing authority or behavior. Do not create parallel
+PayloadBudget/RetainedContext/SessionIdentity/Cursor/Custody families.
+
+Existing-owner search and single-declaration output are committed in
+`integrated-semantic-owner-search16.json`. RetainedSegment extends the EXISTING
+ContextSegment family for a frozen certified inspection/export resource; original
+RetainedTaskFacts owns exact fact projection and TaskAttachment/HumanConstraintPin
+owns author and applicability. The new segment has no independent selection
+policy, budget, mutation lifecycle, journal or copied original wording.
+AuthoredSourceScope/WireExportBoundary reuse original immutable export resources;
+RetainedFormat extends EXISTING WireExportFormat for the new instruction-artifact
+representation, while WireTranscriptExporter owns ALL file effects. Original
+NativeToolDetails family/FileMutationTool capability decodes successful file
+results; NativeFileArtifact is new original successful operation evidence,
+not another filesystem/session identity owner. CompletedFileMutation attaches
+that evidence at the original SDK write; its schema comes from the Python owner.
+
+## Historical initial scope and checkpoints
+
+The following retains original preparation/history; its earlier unverified and
+waiting statuses do not describe the current accepted combined checkpoint.
+Semantic-owner-first order above supersedes every earlier contrary instruction.
 
 Extend the existing ContextSegment family with RetainedSegment from S2's original
 source-owned retained classes. Pin, supersede, drop and export are authored
