@@ -1,5 +1,5 @@
 {
-  "state": "PREPARED-BOTH-GATES-ACCEPTED-PUBLIC-CLIENT-RETIREMENT-PENDING",
+  "state": "EXECUTED-PARENT-DEFAULT-ACCEPTED-EXECUTABLE-RETIRED",
   "operator_sha256": "eebb84b981da9bdf308cae5d4bc05671a286b79f8e097f9ff66574176127a5e3",
   "source_interpreter": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/python",
   "current_defaults": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
@@ -36,13 +36,9 @@
   "current_observation": "evidence/native-input-custody/applied-cohort-current-public-observation.json",
   "prior_operator_sha256": "d8baaf37fa9a11dc5809fbe9a79c69cfd0eb139717f9b8ac96aaf5009f6327b8",
   "prior_operator_commit": "a1d20a7115fefba37dad84da79b419bb4a94c70f",
-  "activation_authorized": false,
-  "next_requirement": "parent-reviewed graceful client/draft disposition then fresh canonical complete idle/identity preflight; parent sole executor",
+  "activation_authorized": "parent executed once after reviewed client closure; no ongoing authorization to rerun",
+  "next_requirement": "independent Goal254/472/performance remain",
   "source_freeze_sha256": "67e9d7b65cdc5e26b21c707eb0a541d15a50e1e1f298605a5894e5bdc1e2a90c",
-  "current_blocker": {
-    "owners": "13 idle, all exact source interpreter; observation only, fresh barrier still mandatory",
-    "clients": "4091704 and three public ACP children unretired",
-    "draft_custody": "parent async request: save drafts and close existing Toad normally; required user/client action pending",
-    "native_receipt": "final sanitized receipt read and exact hash/pins verified"
-  }
+  "current_blocker": "scoped release closed; no additional public action",
+  "closure_receipt": "evidence/native-input-custody/activation-closure.json"
 }
