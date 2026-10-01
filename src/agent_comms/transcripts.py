@@ -404,7 +404,8 @@ class Transcripts:
             )
             if source is None:
                 raise ValueError("Historical source detached; refresh history")
-            registry = source.registry().snapshot()
+            source.validate()
+            registry = source.provenance
             thread = registry.require(name)
             session_file, inherited = thread.session_file or "", False
             routes_owner = TranscriptRoutes(Path(source.root))

@@ -21,6 +21,7 @@ from .thread_identity import ThreadIncarnation
 if TYPE_CHECKING:
     from .messages import Message
     from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadRole
 
 
@@ -55,7 +56,7 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
         return info.st_dev, info.st_ino
 
     @staticmethod
-    def conversation(message: Message, snapshot: RegistrySnapshot) -> Conversation:
+    def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
         from .channel_targets import BuiltinChannel, is_channel_target
 
         builtin = BuiltinChannel.lookup(message.target)
@@ -84,7 +85,7 @@ class ReadLedger(Sealed, LockedStore[ReadDocument]):
         snapshot: RegistrySnapshot,
         bus_path: Path,
         *,
-        conversation_snapshot: RegistrySnapshot | None = None,
+        conversation_snapshot: RegistryProvenance | None = None,
     ) -> DisplayBasis:
         viewer = snapshot.aliases.get(viewer, viewer)
         grouped: dict[Conversation, list[int]] = {}

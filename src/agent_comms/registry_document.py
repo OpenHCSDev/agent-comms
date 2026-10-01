@@ -26,6 +26,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
+from .registry_provenance import RegistryProvenance
 from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence
 
 
@@ -53,22 +54,18 @@ class RegistryDocument:
 
     def snapshot(self) -> RegistrySnapshot:
         return RegistrySnapshot(
-            dict(self.threads),
-            dict(self.statuses),
-            dict(self.last_seen),
-            dict(self.aliases),
-            dict(self.owners.generations),
-            dict(self.admissions.generations),
+            threads=dict(self.threads),
+            statuses=dict(self.statuses),
+            last_seen=dict(self.last_seen),
+            aliases=dict(self.aliases),
+            owner_generations=dict(self.owners.generations),
+            admission_generations=dict(self.admissions.generations),
         )
 
     @classmethod
     def from_wire(cls, raw: dict) -> RegistryDocument:
         try:
             document = FieldCodec.decode(cls, raw)
-            # Creation identity is supplied by storage, never synthesized from
-            # the clock or a session file during a read.
-            if any("created_at" not in record for record in raw["threads"].values()):
-                raise ValueError("missing stored creation identity")
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
                 raise ValueError("thread presence does not match declarations")
@@ -344,20 +341,13 @@ class RegistryDocument:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistrySnapshot:
+class RegistrySnapshot(RegistryProvenance):
     threads: Mapping[str, Thread]
     statuses: Mapping[str, ThreadStatus]
     last_seen: Mapping[str, float]
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
-
-    def require(self, name: str) -> Thread:
-        canonical = self.aliases.get(name, name)
-        try:
-            return self.threads[canonical]
-        except KeyError as error:
-            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
 
     def restorable_aliases(
         self, available: Mapping[str, Thread], retained: Mapping[str, str]

@@ -213,7 +213,7 @@ def test_older_than_registry_incarnation_stays_unattributed(migrated):
     _, _, live, source = migrated
     original = live.bus.log.full_history()[0]
     projected = HistoricalMessage.project(
-        replace(original, timestamp=1.0), source, 0, source.registry().snapshot()
+        replace(original, timestamp=1.0), source, 0, source.provenance
     )
     assert projected.sender_created_at is None
     assert projected.timestamp == 1.0
@@ -227,3 +227,36 @@ def test_missing_historical_peer_is_browsable_without_live_registration(migrated
     assert page.messages
     assert all(isinstance(message, HistoricalMessage) for message in page.messages)
     assert "alice" not in live.registry
+
+
+def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migrated):
+    from dataclasses import fields
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.registry_provenance import RegistryProvenance
+    from agent_comms.thread_provenance import ThreadProvenance
+
+    old, _, live, source = migrated
+    recorded = source.provenance.require("alice")
+    assert type(recorded) is ThreadProvenance
+    assert recorded.incarnation == old.registry.require("alice").incarnation
+    assert set(FieldCodec.encode(recorded)) == {item.name for item in fields(ThreadProvenance)}
+    assert not hasattr(recorded, "process_identity")
+    assert not hasattr(recorded, "active_turn")
+    assert not hasattr(source.provenance, "admission_generations")
+    # Required creation is parsed before any constructor clock/default can run.
+    raw = FieldCodec.encode(recorded)
+    raw.pop("created_at")
+    with pytest.raises(ValueError, match="Missing required"):
+        FieldCodec.decode(ThreadProvenance, raw)
+    # Original finite historical timestamps are preserved, never synthesized.
+    zero = replace(recorded, created_at=0.0)
+    assert FieldCodec.decode(ThreadProvenance, FieldCodec.encode(zero)) == zero
+    aliased = RegistryProvenance(threads={"alice": recorded}, aliases={"original-alice": "alice"})
+    assert aliased.require("original-alice") is recorded
+    with pytest.raises(ValueError):
+        FieldCodec.decode(ThreadProvenance, {**FieldCodec.encode(recorded), "active_turn": None})
+    # Source identity is separate from today's live owner, including renames.
+    before = FieldCodec.encode(source.provenance)
+    live.registry.rename("alice", "new-alice")
+    assert FieldCodec.encode(source.provenance) == before
+    assert live.views.historical_threads("alice")

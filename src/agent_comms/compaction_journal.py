@@ -18,13 +18,13 @@ from .compaction_identity import JournalCustody
 from .compaction_summaries import SelectedSummaries
 from .typed_table import TypedTable
 from .thread_identity import ThreadIncarnation
-from .registry_document import RegistrySnapshot
+from .registry_provenance import RegistryProvenance
 
 
 class CompactionJournal:
     @classmethod
     def snapshot(cls, path: Path, session_file: str, incarnation: ThreadIncarnation,
-                 registry: RegistrySnapshot):
+                 registry: RegistryProvenance):
         """Observe the original journal without the writer's creation/durability path.
 
         mode=ro respects commits; immutable=1 would conceal genuine transitions.

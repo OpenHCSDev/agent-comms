@@ -67,8 +67,10 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
             Registration(path).live_owner_with_generation("owner")
     raw["threads"]["owner"].pop("created_at")
     path.write_text(json.dumps(raw))
-    with pytest.raises(RelationViolationError, match="creation identity"):
+    with pytest.raises(RelationViolationError) as rejected:
         Registration(path).require("owner")
+    assert isinstance(rejected.value.__cause__, ValueError)
+    assert "Missing required fields for Thread" in str(rejected.value.__cause__)
 
 
 def test_retained_colliding_creation_dates_remain_readable(tmp_path):

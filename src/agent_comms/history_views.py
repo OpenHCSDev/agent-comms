@@ -129,7 +129,7 @@ class HistoryViews:
         source = self.bus.history.attach(Path(source_root))
         catalog = ChannelCatalog(Path(source.root) / ChannelCatalog.filename)
         incoming = catalog.read()
-        source_threads = source.registry().all_threads()
+        source_threads = source.provenance.threads
         with _store_lock(self._wire_lock_path):
             existing = self.channels.catalog.path.exists()
             with self.channels.catalog.editing() as document:
