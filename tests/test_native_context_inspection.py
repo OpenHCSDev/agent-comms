@@ -15,6 +15,10 @@ from agent_comms.runtime import RuntimeConnection, socket_path
 from agent_comms.threads import Thread
 from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, RuntimeInvocable, SetGoalAction, StandbyGoalAction
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_entries import NativeEntry
+from agent_comms.task_decisions import CurrentDecisionScopeSelection, OriginalDecisionChange
+from agent_comms.tools import tool_catalog
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -63,13 +67,14 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
 
 
 async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
-    """Two original inputs, real native owner/ACP and actual CLI processes.
+    """Actual Toad originals/followup, native Core tool and CLI on one source.
 
     The existing SDK source contract seeds real history/summary/image/resource
     entries. Provider transport is localhost; no application/protocol substitute.
     Run with the paired installed interpreter to establish installed acceptance.
     """
     fixture = native_backend
+    from retained_input_origin_observer import actual_s2_ingress
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     started = time.monotonic()
     seed = await asyncio.create_subprocess_exec(
@@ -91,7 +96,9 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
     owner = canonical_agent(
         Comms(fixture.root), agent_bin="pi",
         agent_args=["--model", "response-local/fixture", "--thinking", "off", "--offline",
-                    "--no-extensions", "--no-skills", "--no-prompt-templates"],
+                    "--no-extensions", "--no-skills", "--no-prompt-templates",
+                    "--no-builtin-tools", "--extension",
+                    str(package / "agent-comms-extensions/global-agent-comms/index.mjs")],
         auto_wake=False, runtime_enabled=True,
     )
     failures, updates = [], []
@@ -146,34 +153,80 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         assert "Original source summary." in json.dumps(preview["native_provider_context"])
         assert fixture.session.read_bytes() == before_query
         baseline_sequence = owner._comms.bus.log.latest_sequence()
-        inputs = ("S5_CONTEXT_FIRST_ORIGINAL", "S5_CONTEXT_SECOND_ORIGINAL")
-        for index, text in enumerate(inputs, 1):
-            blocks = [{"type": "text", "text": text}]
-            if index == 1:
-                blocks.append({"type": "image", "mimeType": "image/png",
-                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=="})
-            response = await owner.prompt(thread.name, blocks)
-            assert response.stop_reason == "end_turn" and not failures, failures
-            manifests = owner._comms.bus.log.context_manifests(thread.incarnation)
-            assert len(manifests) == index
-            manifest = manifests[-1]
-            assert {segment.kind for segment in manifest.segments} >= {
-                "system_layer", "transcript", "compaction_summary", "injection_message", "tool_catalog"}
-            assert all(segment.provenance for segment in manifest.segments)
-            contributors = tuple(part for segment in manifest.segments for part in segment.contributors)
-            assert {part.kind for part in contributors} >= {'coordination', 'goal', 'user_input'}
+        inputs = ("S5_CONTEXT_FIRST_ORIGINAL", "S5_CONTEXT_QUEUED_ORIGINAL", "S5_CONTEXT_SECOND_ORIGINAL")
+        declaration = next(tool for tool in tool_catalog() if tool['name'] == 'comms_decision')
+        choice = 'Preserve the original context source'
+        fixture.provider.tool_call = ('comms_decision', {
+            'chosen': choice, 'rejected': ['Reconstruct author from the native user role'],
+            'to': peer.name, 'scope': FieldCodec.encode(CurrentDecisionScopeSelection()),
+            'change': FieldCodec.encode(OriginalDecisionChange()),
+        })
+        fixture.provider.response_gate = asyncio.Event()
+        originals = []
+
+        async def queue_during_original(observer, original):
+            assert original.has_started
+            originals.append(await observer.queue_followup(inputs[1]))
+            fixture.provider.response_gate.set()
+
+        async with actual_s2_ingress(owner, thread, output) as observer:
+            for index, text in enumerate((inputs[0], inputs[2]), 1):
+                previous = owner._comms.bus.log.context_manifests(thread.incarnation)
+                image = {'mimeType': 'image/png',
+                    'data': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='} if index == 1 else None
+                original = await observer.submit(text, image=image,
+                    while_running=queue_during_original if index == 1 else None)
+                originals.append(original)
+                assert not failures, failures
+                manifests = owner._comms.bus.log.context_manifests(thread.incarnation)
+                assert len(manifests) > len(previous)
+                manifest = manifests[-1]
+                assert {segment.kind for segment in manifest.segments} >= {
+                    'system_layer', 'transcript', 'compaction_summary', 'injection_message', 'tool_catalog'}
+                assert all(segment.provenance for segment in manifest.segments)
+                assert manifest.counter == 'pi.estimateTokens'
+                selected = await cli('--turn', str(manifest.turn.occurrence.generation))
+                assert selected['manifests'] == FieldCodec.encode(tuple(item for item in manifests
+                    if item.turn.matches_generation(manifest.turn.occurrence.generation)))
+                assert selected['text_recorded'] is False and text not in json.dumps(selected)
+                (output / f'recorded-turn-{index}.json').write_text(json.dumps(selected))
+            contributors = tuple(part for manifest in manifests for segment in manifest.segments
+                                 for part in segment.contributors)
+            # Manual owner inputs intentionally omit goal instructions unless
+            # an original goal permit owns this turn. The unchanged CLI preview
+            # above covers declared goal contributors; never inject new bytes
+            # merely to satisfy this manual-input oracle.
+            assert {part.kind for part in contributors} >= {'coordination', 'user_input', 'user_followup'}
             assert all(part.provenance for part in contributors)
-            assert any(source.declared_name == 'input' for part in contributors for source in part.provenance)
-            assert manifest.counter == "pi.estimateTokens"
-            selected = await cli("--turn", str(manifest.turn.occurrence.generation))
-            assert len(selected["manifests"]) == 1 and selected["text_recorded"] is False
-            assert text not in json.dumps(selected)
-            (output / f"recorded-turn-{index}.json").write_text(json.dumps(selected))
+            stored = InputDispositions(owner._comms.root / InputDispositions.filename).read()
+            terminals = tuple(stored.lookup(original.key) for original in originals)
+            assert all(item.has_started for item in terminals)
+            assert len({item.native_id for item in terminals}) == 3
+            for item in terminals:
+                item.origin.require_human()
+                assert any(item.context_provenance() in part.provenance for part in contributors)
+            with NativeEntry.open_evidence(fixture.session) as reader:
+                _, entries = reader.observe()
+            for item in terminals:
+                user, = [entry for entry in entries if entry.input_id == item.native_id]
+                assert user.message.user
+            (output / 'original-inputs.json').write_text(json.dumps(FieldCodec.encode(terminals)))
         difference = await cli("--diff")
         assert difference["turn"] != difference["previous_turn"]
         (output / "context-diff.json").write_text(json.dumps(difference))
-        assert fixture.provider.posts == 2
-        assert owner._comms.bus.log.latest_sequence() == baseline_sequence
+        # Pi drains a queued followup after the tool result into the same next
+        # synthesis request; one request serves both originals in this turn.
+        assert fixture.provider.posts == 3
+        assert owner._comms.bus.log.latest_sequence() == baseline_sequence + 1
+        decision, = owner._comms.bus.log.full_history()
+        assert decision.decision.chosen == choice
+        assert decision.decision.author == thread.incarnation
+        first_request = fixture.provider.requests[0]
+        actual_tool = next(tool['function'] for tool in first_request['tools']
+                           if tool['function']['name'] == declaration['name'])
+        assert actual_tool['parameters'] == declaration['parameters']
+        assert any(message['role'] == 'tool' and decision.reference.message_id in message['content']
+                   for request in fixture.provider.requests for message in request['messages'])
         assert fixture.session.read_bytes().startswith(original_source)
         rows = list(map(json.loads, fixture.session.read_text().splitlines()))
         users = [json.dumps(row["message"]) for row in rows
@@ -187,6 +240,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         print("S5_CONTEXT_JOURNEY", json.dumps({"elapsed_seconds": time.monotonic()-started,
             "local_posts": fixture.provider.posts, "original_inputs": inputs,
             "manifests": len(manifests), "query_preserved_journal": True,
+            "actual_toad_originals": 2, "actual_controller_followups": 1,
+            "nested_core_tool": 'comms_decision', "original_decision": FieldCodec.encode(decision.reference),
             "source_render_bytes_identical": source["provider_bytes_identical"],
             "public_changes": [], "failures": [], "artifact_root": str(output),
             "python": sys.executable}), flush=True)

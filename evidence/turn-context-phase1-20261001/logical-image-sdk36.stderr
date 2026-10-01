@@ -1,0 +1,20 @@
+node:internal/modules/run_main:111
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ 'source_input'
+- 'transformed_input'
+
+    at file:///home/ts/wt/comms-turn-context-phase1-20261001/tests/native_turn_context_contract.mjs:65:12 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 'source_input',
+  expected: 'transformed_input',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v26.10.0

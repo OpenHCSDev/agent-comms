@@ -1,0 +1,73 @@
+{
+  "state": "FAILED_BEFORE_ORIGINAL_INPUT_NO_REPLAY",
+  "fixture": "/home/ts/wt/s5i04",
+  "driver_head": "544bd296c5e6c3d3a48bc7d2d2e5d8711afd5e96",
+  "installed_core": "3f0af4940bfd9f3ade523f230e4240e3acd8ab2a",
+  "native_manifest": "f1178500e5154c38152aeb5d1133ab9fbd84774e2a8bc6b6233ba9b490b4eb4c",
+  "scope": "Same continuous journey; actual CLI next-context passed, actual Toad attachment deadlocked before submission",
+  "cause": "Combined fixture owner and UI share one event loop. Toad launch thread holds wire lock while waiting for AttachedChild.start on that loop; owner input_drain.observe calls synchronous goal_snapshot waiting for the same lock. Original event loop cannot dispatch timeout/cancellation.",
+  "stack_proof": "evidence/turn-context-phase1-20261001/installed-context-toad-core-tool32-stacks-sudo.txt",
+  "original_input_store_exists": false,
+  "original_inputs_replayed": 0,
+  "paid_provider_calls": 0,
+  "public_changes": [],
+  "remaining_original_identities": [],
+  "directory_observer_alive": false,
+  "forced_cleanup": {
+    "scope": "Owned pre-input deadlocked fixture only",
+    "leader": {
+      "pid": 1030085,
+      "start_time": 32085288
+    },
+    "original_children": [
+      {
+        "pid": 1030670,
+        "start_time": 32086983
+      },
+      {
+        "pid": 1037028,
+        "start_time": 32115084
+      }
+    ],
+    "signals": [
+      {
+        "identity": {
+          "pid": 1030085,
+          "start_time": 32085288
+        },
+        "signal": "SIGTERM",
+        "mechanism": "original Platform.send pidfd plus birth-time recheck"
+      },
+      {
+        "identity": {
+          "pid": 1030670,
+          "start_time": 32086983
+        },
+        "signal": "SIGTERM",
+        "mechanism": "direct original parent-child ancestry captured before leader retirement"
+      },
+      {
+        "identity": {
+          "pid": 1037028,
+          "start_time": 32115084
+        },
+        "signal": "SIGTERM",
+        "mechanism": "direct original parent-child ancestry captured before leader retirement"
+      }
+    ],
+    "input_store_exists": false,
+    "public_changes": [],
+    "replays": 0,
+    "retirement_sent_at": 1790845554.5962205,
+    "remaining_original_identities": [],
+    "directory_observer_previous_identity_pid": 1030685,
+    "directory_observer_alive": false,
+    "input_store_exists_after_cleanup": false
+  },
+  "readonly_query": {
+    "path": "/home/ts/wt/s5i04/context-journey/next-context.json",
+    "sha256": "4015a09e7b1d5db2dd89946575f7d4da8f9bd9db5538f70de2d67f97cdf0b22f"
+  },
+  "owner": "Sch actual Toad ingress helper; source event-loop/process isolation",
+  "whole_phase1_ready": false
+}
