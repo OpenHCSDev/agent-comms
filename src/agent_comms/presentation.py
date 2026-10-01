@@ -85,11 +85,14 @@ class MessageNotification:
         )
         snapshot = registry.snapshot()
         owners = NotificationAssignment.active_owners(snapshot)
+        from .agent_activity import AgentActivity
+
+        activities = AgentActivity(root, registry).all_activity(snapshot=snapshot)
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
         originals = {message.reference: message for message in messages}
         for receipt in rows:
-            notification = receipt.project(owners)
+            notification = receipt.project(owners, activities)
             source = receipt.assignment.source
             key = (source.seq, source.message_id)
             if key in result:

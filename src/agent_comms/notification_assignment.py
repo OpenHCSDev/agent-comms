@@ -14,6 +14,7 @@ from .coordination_tables.executions import CurrentExecutions
 from .typed_table import SQLiteUserVersion, TypedRow
 
 if TYPE_CHECKING:
+    from .activity import Activity
     from .presentation import MessageNotification
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -101,10 +102,18 @@ class NotificationAssignment:
             )
             return tuple(cls(assignment, activity) for assignment, activity in rows)
 
-    def project(self, owners: Mapping[str, Thread]) -> MessageNotification:
+    def project(
+        self, owners: Mapping[str, Thread], activities: Mapping[str, Activity]
+    ) -> MessageNotification:
         owner = owners.get(self.assignment.recipient_lookup)
+        recipient = FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
+        lifecycle = self.assignment.lifecycle
+        if owner is not None and (lifecycle.triage_pending or lifecycle.full_pending):
+            diagnostic = activities[owner.name].diagnostic
+            if diagnostic is not None:
+                return diagnostic.pending_notification(recipient)
         return self.assignment.lifecycle.notification(
-            FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient),
+            recipient,
             owner_active=owner is not None,
             current_turn=(
                 owner.turn_started_by(self.assignment.updated_at_ms) if owner is not None else False

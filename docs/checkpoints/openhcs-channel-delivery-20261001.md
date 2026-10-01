@@ -85,3 +85,58 @@ place: reply to the original get_state request ID, and use the current model-wai
 budget instead of the deleted whole-turn timeout. No production trust relaxation.
 Original source deletion counts and affected installed contention/cancel proof
 will be published after the continuous gate, before claiming Ready.
+
+## Installed native checkpoint and original feedback
+
+The unmodified installed old wheel fails with zero localhost POSTs and zero
+native prompt entries when an original certified bus reader holds custody past
+the old five-second acquisition bound. This controlled holder is the bus reader;
+the live error was at the outer wire lock and its historical holder is unknown.
+Do not conflate the controlled cause with attribution of the original incident.
+
+The candidate completes all three actual collective triages through a full
+12.000-second reader hold. Its original fixture exit remains 1: the final test
+compared newly typed Python stage/verdict projections with strings. Raw SQL still
+contains the unchanged `triage`/`ignore` spelling. A separate read-only check joins
+all three committed native references to their exact original PromptBinding and
+durable journal digest, plus the original ignored assignments. No completed input
+was replayed to repair the assertion. Both receipts are preserved.
+
+Cancellation previously cancelled the sole selected inbox task and then bulk
+acknowledged the entire inbox. Delete that bulk ACK. Join the original cancelled
+task, then let the existing InputDrain.ensure_live_drain resume its one observation
+loop. Its selector skips the old deferred reservation and can select independent
+saved messages. No alternate scheduler, drain authority or goal state is added.
+
+Actual installed continuous cancellation acceptance: **20.548 seconds / exit 0**.
+The ACP attachment is warm before two original channel publications. A read-only
+process stack witnesses the actual dedicated writer waiting in _enter_admission
+under original certified-reader custody. Actual ACP cancel joins that writer
+with zero provider POSTs. The cancelled reservation remains unchanged/deferred.
+The same open attachment then handles the second original through triage FULL
+and one full native response: two localhost POSTs, two native prompt entries,
+one canonical channel reply, twelve ACP notifications. All owned workers retire.
+No public input, paid call or original replay. The 220 saved wire rows and 120
+unrelated registry records remain representative fixture data.
+
+Receiver readiness uses the existing Activity/DrainDiagnostic authority.
+MessageNotification.window captures the same RegistrySnapshot for owner selection
+and AgentActivity.for_owner diagnostic fencing. Pending assignments delegate to
+the diagnostic's presentation; deferred/ignored/completed outcomes retain their
+original assignment meaning. HistoryViews already watches the original activity
+revision. No new status store, copied error reason or invalidation token exists.
+
+Read-only projection of the original twelve seq262/266 recipient rows confirms:
+all three stopped drains change seq266 from misleading Pending to Waiting for
+recovery. The three original seq262 UNKNOWN outcomes remain Outcome uncertain;
+helper2 remains Checked—no response and stopped participants Waiting for agent.
+No ActivityLog checkpoint writer or public mutation was used for this evidence.
+
+Controls: 36 writer/outbound source controls pass, and 14 affected outbound/
+readiness controls pass including rejection of a foreign diagnostic generation.
+Sanitized actual receipts are in evidence/openhcs-channel-delivery/native-gates;
+the immutable failed originals, private native journals, bindings and coordinator
+proofs remain at /home/ts/wt/ac476-{b03,d04,e05}. SourceABI, runtime schema and native
+package are unchanged. This checkpoint establishes installed backend/ACP behavior
+and actual original read projections; final paired TUI paint/public activation
+remains the parent's separate acceptance boundary.

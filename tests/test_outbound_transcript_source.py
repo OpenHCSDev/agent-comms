@@ -18,6 +18,30 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 import pytest
 
 
+def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path):  # noqa: F811
+    from dataclasses import replace
+    from agent_comms.activity import StoppedDrainDiagnostic
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    owner = comms.registry.snapshot().owner_identity('beta')
+    diagnostic = StoppedDrainDiagnostic(owner, 'NativePiUnavailable', 'Original outcome uncertain')
+    assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
+    notice = next(item for item in comms.views.recent_notifications('sender')
+                  if item.recipient=='beta')
+    assert notice.state=='Waiting for recovery'
+    assert diagnostic.summary in notice.detail
+    assert notice.message.reference==initial.message.reference
+    assert not notice.busy
+    # A diagnostic from another owner generation cannot block a current
+    # participant; neither its text nor a running PID grants that relation.
+    foreign = replace(diagnostic,owner=replace(owner,generation=owner.generation+1))
+    activity = comms.agents.activity_of('beta')
+    comms.agents.activity.emit(replace(activity,diagnostic=foreign))
+    current = next(item for item in comms.views.recent_notifications('sender')
+                   if item.recipient=='beta')
+    assert current.state=='Pending'
+
+
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
     from dataclasses import replace
     from agent_comms.field_codec import FieldCodec

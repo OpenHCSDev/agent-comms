@@ -1,0 +1,49 @@
+{
+  "original_fixture_exit": 1,
+  "original_receipt_sha256": "eccd60fc2e47e7061ecde1f4f4dffa872ea26a1c225b1cf9b540b718b3a073c1",
+  "verification": "read-only retained completion; no rerun",
+  "raw_sql_rows": [
+    [
+      "774cdd9deac03953391fd45c194dea4d",
+      "triage",
+      "ignore"
+    ],
+    [
+      "93597b2e21c6196bce0cd2c9e6c55166",
+      "triage",
+      "ignore"
+    ],
+    [
+      "b1b5f33a87720ce60e28be7b09341eaf",
+      "triage",
+      "ignore"
+    ]
+  ],
+  "native_completion_proofs": [
+    {
+      "input_id": "774cdd9deac03953391fd45c194dea4d",
+      "stage_member": "TriageNativeExecution",
+      "verdict_member": "IgnoreSelectedTriage",
+      "native_entry_id": "973495b1",
+      "original_prompt_binding_matches_native_journal": true
+    },
+    {
+      "input_id": "93597b2e21c6196bce0cd2c9e6c55166",
+      "stage_member": "TriageNativeExecution",
+      "verdict_member": "IgnoreSelectedTriage",
+      "native_entry_id": "3a617830",
+      "original_prompt_binding_matches_native_journal": true
+    },
+    {
+      "input_id": "b1b5f33a87720ce60e28be7b09341eaf",
+      "stage_member": "TriageNativeExecution",
+      "verdict_member": "IgnoreSelectedTriage",
+      "native_entry_id": "136338be",
+      "original_prompt_binding_matches_native_journal": true
+    }
+  ],
+  "old_assertion": "row.stage == triage string and row.verdict == ignore string",
+  "correction": "Canonical Python values are TriageNativeExecution and IgnoreSelectedTriage classes; original SQL remains triage/ignore unchanged",
+  "public_mutations": 0,
+  "original_replays": 0
+}

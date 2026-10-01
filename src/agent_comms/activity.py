@@ -59,6 +59,17 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     def summary(self) -> str:
         return f"Inbox unavailable · {self.error_type}: {self.reason} · {self.recovery}"
 
+    def pending_notification(self, recipient):
+        """Readiness for independent saved work, never a prior input verdict."""
+        from .presentation import MessageNotification
+
+        return MessageNotification(
+            recipient,
+            "Waiting for recovery",
+            f"{self.summary}. This message is saved and has not started.",
+            priority=4,
+        )
+
 
 class UnavailableDrainDiagnostic(DrainDiagnostic):
     @property
