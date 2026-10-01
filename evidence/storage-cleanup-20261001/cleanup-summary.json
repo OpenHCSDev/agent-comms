@@ -1,13 +1,14 @@
 {
   "status": "owner-scoped-cleanup-completed",
-  "allocated_reclaimed_bytes_total": 842596352,
+  "allocated_reclaimed_bytes_total": 988819456,
   "actual_df_deltas_bytes": {
     "generated_envs": 532959232,
     "flat_243_worktree": 75546624,
     "retired_ui_prefixes": 85041152,
-    "terminal_capture_archival": 148504576
+    "terminal_capture_archival": 148504576,
+    "five_retired_published_prefixes": 147689472
   },
-  "home_available_after_last_removal": 26596446208,
+  "home_available_after_last_removal": 24177283072,
   "removed_paths": [
     "/home/ts/.cache/agent-scratch/comms-presentation-subscription-20260930/installed",
     "/home/ts/.cache/agent-scratch/comms-native-compaction-latency-20260929/installed",
@@ -50,7 +51,12 @@
     "/home/ts/.cache/agent-scratch/comms-default-viewport-native-cost-20260930/capture",
     "/home/ts/.cache/agent-scratch/comms-default-viewport-native-residency-20260930/capture",
     "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930/capture",
-    "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930-02/capture"
+    "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930-02/capture",
+    "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-owner-cli-config-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-all-merged-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930"
   ],
   "remaining_owned_protected_paths": {
     "/home/ts/wt/comms-c1-terminal-data-20260930": "current functional/native proof owner; unreviewed source/raw traces retained",
@@ -72,5 +78,11 @@
     "entries": 764,
     "manifest": "/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/storage-cleanup-20261001/terminal-capture-manifest.json",
     "mode": "0600"
-  }
+  },
+  "retired_prefix_metadata_archive": "/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/storage-cleanup-20261001/retired-published-prefix-metadata.tar.gz",
+  "retired_prefix_metadata_archive_sha256": "c1e50ec09a45742d265c33899955ab71d9e509ee6af0b57f8303aea29e17fe03",
+  "retained_recent_negative_runtime_prefixes": [
+    "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+    "/home/ts/.local/share/agent-comms/runtime-native-publication-joined-20261001"
+  ]
 }
