@@ -362,6 +362,18 @@ after goal replacement. Parent authorized one fresh controlled journey on the
 unchanged final prefix; Einstein owns the run and Kepler its receiving oracle.
 Foundation475 and the final paired checkpoints still await that acceptance.
 
+Fresh49 reaches five localhost requests and a real manual selected compaction
+commit in C. Parent read its original certified retained facts and actual SVG:
+public corrections remain historical, with no unrelated private original body.
+The run then stops at a later fixture goal-clear call: it supplied owner_store
+to ClearGoalAction, although that grant is reserved for creation/resume. The
+existing goal authority correctly rejects it before changing the goal. Original
+terminal69.820s negative remains /home/ts/wt/s5final02/terminal-receipt.json.
+This is narrower installed acceptance, not continuous49 PASS. Parent authorized
+only zero-provider original goal controls and fresh durable-origin/read-only
+checks on that completed private root; no replay of its three native originals,
+new full provider run, public mutation or bypass of the original authority.
+
 Textual18's ba65da3d completes one original cached-geometry owner: immutable
 SubtreeGeometry owns matching, restoration and retired-widget membership;
 construction, cache hits and disposal all use it. Unrelated warm branches are
