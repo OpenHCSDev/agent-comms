@@ -1,0 +1,13 @@
+{
+  "state": "PASS-driver-import-only",
+  "application_origins": {
+    "agent_comms": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/lib/python3.14/site-packages/toad/__init__.py",
+    "textual": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/lib/python3.14/site-packages/textual/__init__.py"
+  },
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "public_effects": 0,
+  "fixture_created": false,
+  "cli_note": "Driver is environment-driven; initial --help invocation lacked requiredstage key and stopped before main/fixture creation, not a product failure"
+}
