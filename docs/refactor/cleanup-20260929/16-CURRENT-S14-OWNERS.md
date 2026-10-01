@@ -62,9 +62,9 @@ Full live channel acceptance follows quiet history carry, not before it.
 | Quiet release | Arendt prepares; parent sole executor | Existing StoppedOwnerInstallation batch only. Exact next operator reviewed and invocation frozen with actual UI/archive hashes. Readback stays under the original wire custody. Fresh guard finds13idle original owners and openToad519107; SAVE/CLOSE question pending before execution. |
 | Original closure and storage | Parent432 | Original T2/C0/round-two/T4/checklist remains active. Current C0 census has no separate unclaimed family site. Toad50 current real Chromium serving/ACP/settings/security/download acceptance passes without provider calls. Preserve protected prefixes, sessions, uncertain inputs and private owners. |
 
-The next S2/S5 private pair is independent of the frozen receiver release.
+The earlier S2/S5 private pair is independent of the frozen receiver release.
 Mendel owns its single normal69-package stage in parent270; Schrodinger and
-Einstein own the shared installed journey. Current source pins are Core43df95f0, Toad89655a17 and verified native0064a96b.
+Einstein own the shared installed journey. Its earlier source pins are Core43df95f0, Toad89655a17 and verified native0064a96b.
 The older Core3f0/Toad38614/f117 stage remains immutable.
 Receiving proof1cc84de8 confirms the new0064 pair's323 Core/305 Toad/266
 Textual Git code and asset files,69 normal packages, entrypoints and full native
@@ -342,3 +342,37 @@ and idle15.84%. No CPU target or complete warm raster-cache claim follows.
 Full original performance scope is preserved in OPEN draft275 before271 merge.
 Heisenberg405a9d34 normally integrates main274; its remaining Toad production
 delta is only the original ToolContent pure-layout declaration,2 added lines.
+
+## Final receiving stage and current continuation
+
+Mendel's final normal69-package stage is PACKAGE-READY, not live: Core0ea6dccb,
+Toad a87de510, Textual4e9016c1, Diff8fa7d4d0 and verified native0064a96b.
+Source and assets, ordinary dependency graph and native trust are verified;
+protected prior prefixes are unchanged. The stage lives in parent270 at
+`.artifacts/runtime-s2-s5-final-cohort-20261001`.
+
+Actual continuous gate48 reached four localhost provider requests, the three
+original A inputs, nested native decision and public correction, then failed
+C's actual ACP load with StopIteration. The fixture had declared C under its
+owner but omitted the original owner.load_session call that establishes its
+runtime binding. No C compaction was sent, no old input was replayed, and this
+negative remains at /home/ts/wt/s5final01/terminal-receipt.json. Einstein's
+test-only e474d52f uses that original lifecycle and rereads durable input origins
+after goal replacement. Parent authorized one fresh controlled journey on the
+unchanged final prefix; Einstein owns the run and Kepler its receiving oracle.
+Foundation475 and the final paired checkpoints still await that acceptance.
+
+Textual18's ba65da3d completes one original cached-geometry owner: immutable
+SubtreeGeometry owns matching, restoration and retired-widget membership;
+construction, cache hits and disposal all use it. Unrelated warm branches are
+retained when another branch retires. There is no second cache, saved membership
+union or changed capacity/key/whole-screen disposal policy. Parent read the
+complete closure; actual native App controls pass, but it is not installed in
+the frozen final stage or public runtime. Heisenberg owns this code-bearing275
+continuation and its subsequent installed, physically recorded CPU acceptance.
+
+The latest direct original registry/activity observation again finds all three
+screenshot receivers alive and idle with the same owner-fenced stopped drain;
+both original files are byte-unchanged. Actual public Toad519107 is still open.
+The frozen receiver fix and quiet publication remain separate from the new
+S2/S5 stage. No public defaults, receiver processes or uncertain inputs changed.
