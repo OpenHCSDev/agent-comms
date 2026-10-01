@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .private_bus_checkpoint import CertifiedSourceRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -104,3 +105,19 @@ class Decision:
             raise RelationViolationError("An agent cannot correct another author's decision")
         if previous.scope != self.scope:
             raise RelationViolationError("Decision correction must preserve its original scope")
+
+    def require_publication(
+        self, sender: str, registry: RegistrySnapshot,
+        original_source: CertifiedSourceRead | None,
+    ) -> None:
+        author = registry.require(sender)
+        author.require_turn(self.source_turn_id, registry.admission_generations[sender])
+        self.require_emission(author)
+        if self.supersedes is None:
+            return
+        if original_source is None:
+            raise RelationViolationError("Decision correction requires the original publication read")
+        from .private_bus_checkpoint import source_references_unlocked
+
+        original, = source_references_unlocked(original_source, (self.supersedes,))
+        self.require_correction(original, registry)

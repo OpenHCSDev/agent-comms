@@ -105,6 +105,14 @@ class Message:
             raise RelationViolationError("Original wire message has no declared decision")
         return self.decision
 
+    @property
+    def retains_authored_choice(self) -> bool:
+        return self.decision is not None
+
+    def require_task_publication(self, sender, snapshot, original_source) -> None:
+        if self.decision is not None:
+            self.decision.require_publication(sender, snapshot, original_source)
+
     def require_claim_transition(self) -> ClaimTransition:
         if self.claim_transition is None:
             raise RelationViolationError("Original wire message has no claim transition")

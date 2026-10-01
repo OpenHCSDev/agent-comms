@@ -95,7 +95,7 @@ class WireLog:
         for message in self._iter_log_unlocked():
             authored_decision = (
                 delivery.canonical(message.sender) == delivery.actor
-                and message.decision is not None
+                and message.retains_authored_choice
             )
             if authored_decision or delivery.delivers(message.sender, message.target):
                 digest.update(json.dumps(FieldCodec.encode(message), sort_keys=True).encode())
