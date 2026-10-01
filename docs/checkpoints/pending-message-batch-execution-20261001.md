@@ -272,3 +272,62 @@ replacement and retained-context API. Do not invent a second budget type or
 remove the bound without the canonical replacement. Compaction remains Sch's
 sole scope. This is part of the explicit runtime integration dependency, not
 hidden behind previous tests or a new local limit.
+
+## Main493 integration and original-route publication consumers
+
+Normal main537 merge e64ddbd5 retains #493's NativeEvidenceScope acquisition
+and acquired journal bytes while projecting every original through the native
+stage membership. The single conflict was the obsolete scalar binding.source
+comparison: the canonical membership JOIN proves each source, binding.identity
+and wire root fence the physical input, and expected_prompt_matches_journal
+borrows the same evidence resource. No source reader or proof cache added.
+
+Checkpoint ade42c6e replaces ResponseConversation's copied target with its
+existing ResponseObligation. It selects original execution claims for that
+obligation's exact target, requires complete cohort/reference membership, and
+corroborates each original reply route before deriving the frozen audience.
+Preparation derives its envelope target from that obligation; CoordinatedTurn
+derives the published target from the actual receipt. Cohort validation checks
+each engagement against its own original source route instead of a scalar
+execution target. Both existing direct capture consumers were migrated.
+
+Batch framing previously discarded every expectation and retained only the
+last original's obligation line. Every selected original now carries its own
+policy expectation and response-obligation projection in the existing selected
+JSON, with shared work context once. This is a native prompt projection, not
+another response store or state family. Checkpoint deleted 22 production lines,
+24 lines including migrated consumers, with no new class declarations.
+
+Singer #495 is sole carried-schema integration owner. The unexecuted tool at
+c1df72eb was handed to #495 with source/DDL/meta/raw-cell preservation and
+separate binding-artifact contract; Kepler does not compete on installer carry.
+
+Actual declaration/consumer searches:
+
+- ResponseConversation: one declaration, one production capture caller, two
+  existing test capture callers; all migrated to explicit obligation custody.
+- NativeInputExecution: one family; FullNativeExecution derives execution_claims;
+  TriageNativeExecution owns the sole preexecution native source relation.
+- SourceCoverage: one owner; historical membership joins the stage family and
+  borrows #493 evidence scopes. CursorOwner and NativeSourceCursor retain their
+  original live generation/canonical prefix/committed input fences, without a
+  per-source native anchor. No old scalar assignment consumers remain in src.
+- NativeRuntimeInput.published_replies: one plural declaration and one production
+  transcript_receipts consumer. Full publication requires all existing route
+  obligations to have receipts; native assistant history is suppressed only
+  after their committed original messages are joined.
+
+One-route enforcement remains in ExecutionStore.create, ExecutionRecord's
+scalar exact_target, ExecutionAssignmentLink's insert constraint, response and
+publication table primary keys, RecoverySnapshot's singular publication fields,
+lifecycle terminal/retry checks, and FullNativeSend.commit. The exact extension
+requested from Arendt's lifecycle owner retains one execution/attempt/link set,
+keys existing obligations/publication records by execution plus original route,
+and derives terminal/recovery only when all route obligations settle. Kepler
+owns original-audience/publication/selected-response consumers. All-pending
+mixed-route selection remains incomplete until that shared extension lands;
+no identical combined reply is broadcast across unrelated route audiences.
+
+No validation of the new shape has run. Final sanity and continuous installed
+batch/late-arrival/cancel/UNKNOWN acceptance follows coherent implementation.
+The earlier 3e14 prototype's native result remains historical evidence only.
