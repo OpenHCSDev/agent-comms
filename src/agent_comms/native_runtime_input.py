@@ -18,7 +18,8 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .coordination_errors import StaleFence
 from .native_admission_epoch import NativeAdmissionEpoch, UnrecordedNativeAdmission
-from .native_input_record import NativeInputRecord, NativeInputContext
+from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
+from .selected_triage import SelectedTriage
 from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -38,7 +39,7 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         install_native_runtime_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[4]
+    version: Literal[5]
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
 
     @classmethod
@@ -110,7 +111,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                     "ON e.execution_id=n.execution_id AND e.owner_lookup=n.owner_lookup "
                     "AND e.current_attempt_ordinal=n.attempt_ordinal "
                     f"JOIN {ResponseObligation.declared_name} o ON o.execution_id=n.execution_id "
-                    "WHERE n.stage='full' AND n.owner_lookup=? AND n.session_file=? "
+                    "WHERE n.owner_lookup=? AND n.session_file=? "
                     "AND n.session_id=? AND n.session_entry_id IS NOT NULL "
                     "AND o.receipt_seq IS NOT NULL",
                     (owner_lookup, str(reader.path), reader.session_id),
@@ -133,7 +134,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         with cls._publication_read(root) as db:
             if db is None:
                 return None
-            rows = cls.select(db, where="input_id=? AND stage='full'", parameters=(user.input_id,))
+            rows = cls.select(db, where="input_id=? AND execution_id IS NOT NULL", parameters=(user.input_id,))
             if not rows:
                 return None
             original = rows[0]
@@ -144,11 +145,9 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 original.session_entry_id,
             ) != (owner_lookup, str(reader.path), session_id, user.id):
                 return None
-            execution = ExecutionRecord.one(db, execution_id=original.execution_id)
-            if (execution.owner_lookup, execution.lifecycle.current_attempt_ordinal) != (
-                original.owner_lookup,
-                original.attempt_ordinal,
-            ):
+            attempt = original.execution.require_attempt()
+            execution = ExecutionRecord.one(db, execution_id=attempt.execution_id)
+            if not attempt.matches_execution(execution, original.owner_lookup):
                 return None
             return next(
                 (
@@ -156,7 +155,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                         obligation.lifecycle.receipt_seq, obligation.lifecycle.receipt_message_id
                     )
                     for obligation in ResponseObligation.select(
-                        db, where="execution_id=?", parameters=(original.execution_id,)
+                        db, where="execution_id=?", parameters=(attempt.execution_id,)
                     )
                     if obligation.lifecycle.published
                 ),
@@ -170,14 +169,22 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             )
         }
     )
-    stage: Literal["triage", "full"]
+    execution: NativeInputExecution
+    stage: type[NativeInputExecution] = field(
+        init=False, compare=False, repr=False,
+        metadata={"sql": Column(generated="json_extract(execution, '$.kind')")},
+    )
     assignment_id: str = field(
         metadata={"sql": Column(references=(WakeAssignment, "assignment_id"))}
     )
     execution_id: str | None = field(
-        metadata={"sql": Column(references=(ExecutionRecord, "execution_id"))}
+        init=False, compare=False, repr=False,
+        metadata={"sql": Column(generated="json_extract(execution, '$.execution_id')", references=(ExecutionRecord, "execution_id"))},
     )
-    attempt_ordinal: int | None
+    attempt_ordinal: int | None = field(
+        init=False, compare=False, repr=False,
+        metadata={"sql": Column(generated="json_extract(execution, '$.attempt_ordinal')")},
+    )
     owner_lookup: str = field(
         metadata={"sql": Column(references=(Participants, "participant_lookup"))}
     )
@@ -194,20 +201,18 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
-    verdict: Literal["ignore", "full"] | None = None
+    verdict: type[SelectedTriage] | None = None
 
     without_rowid = True
     unique = (("stage", "assignment_id"), ("execution_id", "attempt_ordinal"))
     checks = (
-        "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
-        "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
         "(session_id IS NULL AND session_file IS NULL AND session_entry_id IS NULL "
         "AND request_generation IS NULL AND llm_context_digest IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
         "AND length(session_file)>0 AND session_entry_id IS NOT NULL AND "
         "length(session_entry_id)>0 "
         "AND request_generation>0 AND length(llm_context_digest)=64)",
-        "stage='triage' OR verdict IS NULL",
+        "execution_id IS NULL OR verdict IS NULL",
     )
 
     def require_unproven(self, token_digest: str) -> None:
@@ -220,7 +225,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         db: sqlite3.Connection,
         context: NativeContextProof,
         *,
-        verdict: Literal["ignore", "full"] | None = None,
+        verdict: type[SelectedTriage] | None = None,
     ) -> None:
         """Commit the five context facts together, once, after live verification."""
         if context.input_id != self.input_id:
@@ -245,10 +250,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         return {
             f"{name}_identity_guard": f"""CREATE TRIGGER {name}_identity_guard
             BEFORE UPDATE ON {name}
-            WHEN NEW.input_id IS NOT OLD.input_id OR NEW.stage IS NOT OLD.stage
+            WHEN NEW.input_id IS NOT OLD.input_id OR NEW.execution IS NOT OLD.execution
                 OR NEW.assignment_id IS NOT OLD.assignment_id
-                OR NEW.execution_id IS NOT OLD.execution_id
-                OR NEW.attempt_ordinal IS NOT OLD.attempt_ordinal
                 OR NEW.owner_lookup IS NOT OLD.owner_lookup
                 OR NEW.owner_thread IS NOT OLD.owner_thread
                 OR NEW.owner_generation IS NOT OLD.owner_generation
@@ -300,7 +303,7 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
         metadata={"sql": Column(references=(NativeRuntimeInput, "input_id")), "native_context": str}
     )
     assignment_id: str | None = field(metadata={"native_context": str})
-    stage: Literal["triage", "full"] | None = field(metadata={"native_context": Literal["triage", "full"]})
+    stage: type[NativeInputExecution] | None = field(metadata={"native_context": type[NativeInputExecution]})
     session_id: str | None = field(metadata={"native_context": str})
     request_generation: int | None = field(metadata={"native_context": int})
 

@@ -9,6 +9,8 @@ from native_proof_cases import read_proof_rows, write_proof_rows
 
 import pytest
 
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.field_codec import FieldCodec
@@ -182,10 +184,8 @@ from agent_comms.native_admission_epoch import RecordedNativeAdmission
         with store.session.transaction() as db:
             NativeRuntimeInput(
                 input_id="a" * 32,
-                stage="triage",
+                execution=TriageNativeExecution(),
                 assignment_id="claim",
-                execution_id=None,
-                attempt_ordinal=None,
                 owner_lookup="f" * 32,
                 owner_thread="foreign" if damage == "foreign" else "owner",
                 owner_generation=1,
@@ -198,7 +198,7 @@ from agent_comms.native_admission_epoch import RecordedNativeAdmission
                 llm_context_digest=(
                     None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
                 ),
-                verdict="ignore",
+                verdict=IgnoreSelectedTriage,
             ).insert(db)
     refresh_source(source, session)
     if damage in {"context", "unsettled", "foreign"}:

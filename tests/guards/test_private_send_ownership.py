@@ -95,3 +95,26 @@ def test_selected_lifetime_cannot_reintroduce_partial_runner_authority():
             isinstance(node, ast.ImportFrom) and node.module == "coordinated_runtime"
             for node in ast.walk(body)
         ), module
+
+
+def test_native_execution_consumers_cannot_rebuild_stage_or_nullable_identity():
+    """The admitted execution family replaces the repeated original raw tuple."""
+    from dataclasses import fields
+    from agent_comms.native_input_record import NativeInputIdentity
+
+    assert {item.name for item in fields(NativeInputIdentity)} == {
+        "input_id", "assignment_id", "execution", "owner",
+    }
+    for module in (
+        "private_send_stage", "historical_native_inputs", "source_proof_requirement",
+        "selected_turn", "selected_tool_broker", "attempt_recovery",
+    ):
+        tree = ast.parse((SOURCE / f"{module}.py").read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare):
+                assert not (
+                    any(isinstance(term, ast.Attribute) and term.attr in {"stage", "triage_result"}
+                        for term in (node.left, *node.comparators))
+                    and any(isinstance(term, ast.Constant) and term.value in {"triage", "full", "ignore"}
+                            for term in (node.left, *node.comparators))
+                ), (module, node.lineno)

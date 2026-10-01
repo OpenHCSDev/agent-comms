@@ -22,8 +22,9 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_pi import NativeContextProof, NativePiUnavailable
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 from .native_runtime_input import NativeRuntimeInput
-from .native_input_record import NativeInputRecord, NativeInputReference
+from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution
 from .message_reference import MessageReference
+from .selected_triage import SelectedTriage
 from .typed_table import TypedRow
 
 
@@ -33,14 +34,12 @@ class HistoricalNativeInput(NativeInputRecord):
     source_seq: int
     source_message_id: str
     assignment_id: str = field(metadata={"wire_name": "claim_id"})
-    stage: str
+    execution: NativeInputExecution
     input_id: str
     owner_lookup: str
     owner_thread: str
     owner_generation: int
-    execution_id: str | None
-    attempt_ordinal: int | None
-    triage_result: str | None  # 'ignore' or 'full'; FULL stage has no triage verdict.
+    triage_result: type[SelectedTriage] | None  # Original recorded decision; full input has none.
     context: NativeContextProof
     # Prelaunch binding facts: None means no binding was durably written
     # before launch (crash ordering), so equality cannot be established.
@@ -48,10 +47,15 @@ class HistoricalNativeInput(NativeInputRecord):
     expected_prompt_equality_established: bool = False
 
 
+    def require_triage_decision(self) -> type[SelectedTriage]:
+        if self.triage_result is None:
+            raise IdentityConflict("Recorded native triage lacks its original decision")
+        return self.triage_result
+
     @property
     def reference(self) -> NativeInputReference:
         return NativeInputReference(
-            self.input_id, self.assignment_id, self.stage,
+            self.input_id, self.assignment_id, type(self.execution),
             self.context.session_id, self.context.request_generation,
         )
 
@@ -104,7 +108,7 @@ def read_historical_native_inputs(
                 "AND d.recipient_lookup=n.owner_lookup AND d.kind='selected' "
                 "WHERE r.wire_root_id=? AND c.recipient_lookup=? AND c.wire_seq=? "
                 "AND n.owner_lookup=c.recipient_lookup AND n.session_id IS NOT NULL "
-                "ORDER BY CASE n.stage WHEN 'triage' THEN 0 ELSE 1 END LIMIT 3",
+                "LIMIT 3",
                 (wire_root_id, recipient_lookup, source_seq),
             )
         )
@@ -113,8 +117,9 @@ def read_historical_native_inputs(
         ]
         if any(row is None for _source, row in rows):
             raise IdentityConflict("historical native input disappeared inside its snapshot")
-    if len(rows) > 2 or len({row.stage for _source, row in rows}) != len(rows):
+    if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
         raise IdentityConflict("historical source has ambiguous native input evidence")
+    rows.sort(key=lambda item: item[1].execution.proof_order)
     expected_dir = (store.session.path.parent / "native-sessions" / recipient_lookup).absolute()
     evidence: list[HistoricalNativeInput] = []
     for source, row in rows:
@@ -157,13 +162,11 @@ def read_historical_native_inputs(
                 source.wire_seq,
                 source.message_id,
                 row.assignment_id,
-                row.stage,
+                row.execution,
                 row.input_id,
                 row.owner_lookup,
                 row.owner_thread,
                 row.owner_generation,
-                row.execution_id,
-                row.attempt_ordinal,
                 row.verdict,
                 recorded,
                 binding.expected_prompt_digest if binding is not None else None,

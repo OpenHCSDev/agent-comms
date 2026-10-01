@@ -26,6 +26,10 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
         except (ValueError, TypeError) as error:
             raise IdentityConflict("triage response is not an unambiguous decision") from error
 
+    @classmethod
+    @abstractmethod
+    def proves_source(cls, evidence) -> bool: ...
+
     @abstractmethod
     def settle(self, store, db, current: WakeAssignment) -> None: ...
 
@@ -35,6 +39,10 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
 
 @dataclass(frozen=True)
 class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
+    @classmethod
+    def proves_source(cls, evidence) -> bool:
+        return True
+
     def settle(self, store, db, current):
         # Both declared edges stay in the native proof's one transaction. Never
         # publish a retryable TRIAGE_PENDING state after the input has been sent.
@@ -65,6 +73,10 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
 
 @dataclass(frozen=True)
 class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
+    @classmethod
+    def proves_source(cls, evidence) -> bool:
+        return any(proof.execution.proves_full_source(proof) for proof in evidence)
+
     def settle(self, store, db, current):
         # Deferred until the execution owner atomically engages this exact claim.
         pass

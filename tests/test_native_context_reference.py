@@ -5,6 +5,8 @@ import sqlite3
 
 import pytest
 
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import NativeInputReference, UnrecordedNativeInputReference
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
@@ -15,16 +17,16 @@ def cursor():
     return CurrentNativeCursor(
         wire_root_id="a" * 32, recipient_lookup="b" * 32, owner_thread="owner",
         owner_generation=1, owner_admission_generation=2, covered_seq=1, injected_seq=1,
-        input_id="c" * 32, assignment_id="d" * 32, stage="full", session_id="original-session",
+        input_id="c" * 32, assignment_id="d" * 32, stage=FullNativeExecution, session_id="original-session",
         request_generation=1,
     )
 
 
 def reservation():
     return NativeRuntimeInput(
-        input_id="c" * 32, assignment_id="d" * 32, stage="triage",
+        input_id="c" * 32, assignment_id="d" * 32, execution=TriageNativeExecution(),
         owner_lookup="b" * 32, owner_thread="owner", owner_generation=1,
-        owner_token_digest="e" * 64, execution_id=None, attempt_ordinal=None,
+        owner_token_digest="e" * 64,
     )
 
 
@@ -66,7 +68,7 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
                        session_entry_id="original-entry", request_generation=1,
                        llm_context_digest="f" * 64)
     assert recorded.reference == NativeInputReference(
-        recorded.input_id, recorded.assignment_id, recorded.stage, recorded.session_id, 1
+        recorded.input_id, recorded.assignment_id, type(recorded.execution), recorded.session_id, 1
     )
     for name in ("session_file", "session_entry_id", "llm_context_digest"):
         with pytest.raises(IdentityConflict, match="partial"):

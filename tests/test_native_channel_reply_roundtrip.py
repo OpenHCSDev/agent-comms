@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
@@ -259,7 +261,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             if fact.envelope.observation.cursor.injected_seq == reply.seq
         ]
         assert delivered[-1].covered_seq == reply.seq
-        assert delivered[-1].stage == "triage"
+        assert delivered[-1].stage is TriageNativeExecution
         assert delivered[-1].input_id in {row[0] for row in rows}
         assert len(rows) == 2 and all(row[2] for row in rows)
         assert len({row[0] for row in rows}) == 2

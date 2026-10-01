@@ -27,17 +27,14 @@ class NoSourceProof(SourceProofRequirement):
 class FullSourceProof(SourceProofRequirement):
     def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return any(
-            proof.stage == "full" and proof.expected_prompt_equality_established
+            proof.execution.proves_full_source(proof)
             for proof in evidence
         )
 
 
 class TriageSourceProof(FullSourceProof):
     def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
-        stages = {proof.stage: proof for proof in evidence}
-        triage = stages.get("triage")
-        if triage is None or not triage.expected_prompt_equality_established:
-            return False
-        if triage.triage_result == "ignore":
-            return True
-        return triage.triage_result == "full" and super().proves_source(evidence)
+        return any(
+            proof.execution.proves_triage_source(proof, evidence)
+            for proof in evidence
+        )

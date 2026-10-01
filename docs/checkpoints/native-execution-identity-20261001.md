@@ -53,3 +53,51 @@ default mutation, optional CI matrix or competing process fleet. Publish exact
 source, deleted lines, installed receipts, process cleanup and proof limits.
 
 Initial scope checkpoint only. No implementation or acceptance claimed.
+
+## Working source checkpoint
+
+Arendt #470 is normally integrated. One NativeInputExecution family now owns
+triage versus the required full execution/attempt. Original NativeSendStage
+produces that value; native input identity, historical evidence, cursor
+references, source policies, original reply joins, recovery and managed-tool
+identity consumers derive it. SelectedTriage owns the original IGNORE/FULL
+source proof consequence. Runtime stage/execution/ordinal SQL fields are
+generated query projections of the sole stored execution value, never copied
+or consumer-interpreted state. Runtime native schema changes from 4 to 5.
+
+The durable prelaunch binding is explicitly protected. Its entire original
+schema object set matches the installed f076 source exactly. FamilyName
+decodes its stored stage spelling at the original TypedTable boundary; the
+owning member validates/acquires the original external nullable SQL columns.
+The execution property derives that value and caches nothing. Malformed
+triage/attempt combinations reject at acquisition, before any consumer.
+No durable sidecar reset, conversion, new identity issuance or proof rewriting.
+
+Bounded source controls: 43 passed in 3.00s for original partial-context,
+reservation and durable-sidecar behavior; 26 passed in 12.92s for whole
+binding/source proof, uncertainty and existing private-send guards. Earlier
+failed controls and their correction are retained under the owned persistent
+scratch. These source controls do not establish installed native readiness.
+
+### None-state disposition
+
+- NativeInputIdentity and historical execution no longer contain optional
+  execution/attempt identity. Triage carries no such fields; full requires both.
+- Runtime execution_id/attempt_ordinal are non-init generated SQL query
+  projections. Their null value for triage is an external physical projection,
+  not a second domain state; semantic callers use the required family member.
+- PromptBinding retains existing nullable columns because they are its exact
+  original durable SQL contract. The owner validates them at acquisition;
+  consumers do not interpret them. Its execution is derived, never cached.
+- Existing optional emitted triage decision remains an original SQL resource:
+  full inputs have no triage response. HistoricalNativeInput owns required
+  triage-decision acquisition; a recorded triage lacking it is corruption.
+- Existing nullable cursor/reference context remains original unrecorded SQL
+  context. NativeInputContext still refuses partial groups. No new nullable
+  semantic state, fallback reader, boolean mirror or caller inference is added.
+
+Scratch owner Mendel:
+/home/ts/.cache/agent-scratch/mendel-native-execution-472-20261001.
+Private installed gate preparation uses the short owned prefix
+/home/ts/.cache/agent-scratch/ni472; original accepted sr468/native593 resources
+remain protected. No public/default process, store or installed package changed.
