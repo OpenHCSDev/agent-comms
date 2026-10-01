@@ -1,0 +1,29 @@
+{
+  "original_git_source": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+  "copied_test_and_css_resources": {
+    "tests/canonical_wire_conversation_installed_pilot.py": {
+      "sha256": "e16b3033d24d082645502d868e884dfaa0a72e384b08775c14ab0b8c88ac4552",
+      "bytes": 31750
+    },
+    "tests/l0a_native_installed_pilot.py": {
+      "sha256": "6086cbc3c671537d92b8c95c8f6f80c28a88813d001090c18fa04b7eb963878b",
+      "bytes": 30913
+    },
+    "tests/runtime_fixture.py": {
+      "sha256": "2080002916a9d42ae98941e4548be3359ece5a6d6ce8d9391fb14399f40eb08f",
+      "bytes": 7636
+    },
+    "src/toad/toad.tcss": {
+      "sha256": "8569c3275b198cb1f1e30e4ebb804b48fb61d33585fb3277b3a39a37c4e08636",
+      "bytes": 5498
+    }
+  },
+  "patches": [
+    "../next-cohort-driver/original-execution-oracle.patch",
+    "../next-cohort-driver/failure-resource-witness.patch"
+  ],
+  "actual_driver_sha256": "8c1a6d48279463d767d5aaca2c1d0f34b5bab585d8714e33cdbb0842195bb784",
+  "application_code": "installed970/85/6b prefix only; copied src containsCSSonly",
+  "production_changes": 0,
+  "new_UI_or_provider_runs": 0
+}

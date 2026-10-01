@@ -1,5 +1,6 @@
 """Verify the frozen installed cohort before any native/application input."""
 
+import argparse
 import hashlib
 import importlib
 import importlib.metadata as metadata
@@ -9,15 +10,20 @@ import subprocess
 import sys
 
 
-stage = Path("/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930")
-evidence = Path("/home/ts/.cache/agent-scratch/native-source-queue-cohort-stage-20260930")
+parser = argparse.ArgumentParser()
+parser.add_argument("--stage", type=Path, required=True)
+parser.add_argument("--evidence", type=Path, required=True)
+parser.add_argument("--metadata-repo", type=Path, required=True)
+args = parser.parse_args()
+stage, evidence = args.stage, args.evidence
+build = json.loads((evidence / "package-build-receipt.json").read_text())
+assert build["stage"] == str(stage)
 assert Path(sys.prefix) == stage
 components = {
-    "agent-comms": ("agent_comms", "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "agent-comms": ("agent_comms", build["core"],
                     Path("/home/ts/wt/comms-bus-projection-ownership-s14-20260930"), "src/agent_comms"),
-    "batrachian-toad": ("toad", "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
-                       Path("/home/ts/wt/toad-native-custody-pair-20260930"), "src/toad"),
-    "textual": ("textual", "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+    "batrachian-toad": ("toad", build["toad"], args.metadata_repo, "src/toad"),
+    "textual": ("textual", build["textual"],
                 Path("/home/ts/wt/textual-lazy-geometry-publication-damage-20260930"), "src/textual"),
 }
 source_proof = {}

@@ -1,5 +1,6 @@
 """Existing recorder admission against a fresh canonical no-input private root."""
 
+import argparse
 import hashlib
 import importlib.util
 import json
@@ -7,10 +8,15 @@ import os
 from pathlib import Path
 import sys
 
-stage = Path("/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930")
-base = Path("/home/ts/.cache/agent-scratch/native-source-queue-cohort-stage-20260930")
-root = Path("/home/ts/wt/g460b/meta05/wire")
+parser = argparse.ArgumentParser()
+parser.add_argument("--stage", type=Path, required=True)
+parser.add_argument("--evidence", type=Path, required=True)
+parser.add_argument("--private-root", type=Path, required=True)
+parser.add_argument("--metadata-repo", type=Path, required=True)
+args = parser.parse_args()
+stage, base, root = args.stage, args.evidence, args.private_root
 assert Path(sys.prefix) == stage
+assert root.is_relative_to("/home/ts/wt")
 assert not root.exists(), "Never reset or reuse a previous private root"
 from agent_comms.comms import Comms
 comms = Comms(root)
@@ -27,7 +33,7 @@ receipt = {**source, "pins": pins, "owner": "Schrodinger460",
 staging = stage / "staging-receipt.json"
 staging.write_text(json.dumps(receipt, indent=2) + "\n")
 (base / "paired-staging-receipt.json").write_bytes(staging.read_bytes())
-path = Path("/home/ts/wt/toad-native-custody-pair-20260930/tests/tools/record_installed_tui.py")
+path = args.metadata_repo / "tests/tools/record_installed_tui.py"
 spec = importlib.util.spec_from_file_location("cohort_runtime_recorder", path)
 recorder = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = recorder
