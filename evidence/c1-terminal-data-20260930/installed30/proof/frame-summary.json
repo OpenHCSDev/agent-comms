@@ -1,0 +1,15 @@
+{
+  "frames": 130,
+  "drivers": [
+    "LinuxDriver"
+  ],
+  "headless": [
+    false
+  ],
+  "submission_frames": 0,
+  "queue_frames": 0,
+  "native_start_frames": 0,
+  "first_ns": 289142806439835,
+  "last_ns": 289150861550041,
+  "strict_five_input_review": "NOT RUN: five inputs never reached; no PASS inference"
+}

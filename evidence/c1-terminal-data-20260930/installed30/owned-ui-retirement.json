@@ -1,0 +1,24 @@
+{
+  "pid": 125495,
+  "birth": 1790813499.87,
+  "parent_pid": 125494,
+  "parent_command": [
+    "script",
+    "-q",
+    "-e",
+    "-f",
+    "-T",
+    "/home/ts/wt/g458h/u01/terminal.timing",
+    "-c",
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python /home/ts/wt/g458h/continuous-with-menu-preflight.py",
+    "/home/ts/wt/g458h/u01/terminal.ansi"
+  ],
+  "cwd": "/home/ts/wt/toad-input-delivery-visibility-20260930/tests",
+  "reason": "original no-input predicate failed; canonical owner stop and cleanup footer complete; owned UI lingered after original exception",
+  "original_provider_posts": 0,
+  "manual_signals": 1,
+  "signal": "SIGTERM via pidfd",
+  "sent_ns": 289312803465717,
+  "public_effects": 0,
+  "native_replay": false
+}
