@@ -6,13 +6,17 @@ remains active. Historical decisions and evidence are retained in
 
 ## Live installation
 
-Default: /home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001.
-Coree191bcf4 / Toad1edd96c0 / Textual6b5895fa / SDK0.12.1 / native593b978a.
-The accepted default covers Core production through e191 and Toad production
-through 1edd. Core469 adds documents only. Core472 and Toad254 are now merged
-and await publication; each has scoped installed proof, not default acceptance.
-Toad254 merged as a5f372ed after review of head91a4a71e and the actual ordinary
-wrapper running its immutable installed candidate.
+Default now points to the protected persistent installed candidate:
+/home/ts/wt/toad-foreground-readiness-remainder-20260930/.artifacts/runtime-reader-geometry-254-20261001.
+Coree191bcf4 / Toad187f380e / Textual6b5895fa / SDK0.12.1 / native593b978a.
+Parent reviewed and published the five matched CLI links; no root, native,
+owner or data change. This prefix and its owning worktree must not be cleaned.
+The old runtime-native-applied-cohort-20261001 remains protected as original
+accepted evidence. Fresh ordinary-default acceptance of the newly published
+links is assigned to Kepler and pending; actual installed candidate acceptance
+is already reviewed. Toad254 merged as a5f372ed with the same production and
+metadata as the tested187 prefix. Core472 is merged but not installed publicly.
+Core469 adds documents only.
 
 Parent executed the existing quiet operator once after saved-draft/normal-client
 closure. Thirteen original owners preserve configurations; all five default
@@ -75,8 +79,12 @@ last_goal_report_turn field in two immutable source registries (104/104 and7/7).
 The public registry is valid. Required historical provenance belongs to the
 existing HistorySource manifest, with original snapshots remaining validated
 evidence. No legacy reader, field stripping or original snapshot mutation.
-Any needed one-shot manifest carry stays outside src and preserves determining
-source relationships; runtime owner/turn/goal flags are not historical authority.
+The approved shared ThreadProvenance/RegistryProvenance declarations own the
+historical facts, with live declarations extending them. One-shot carry changes
+only history_sources.json for111 original declarations; preserve separate source
+incarnations, aliases and sessions and every frozen snapshot hash. Isolated
+carry proof may proceed now. Parent performs public carry only after the new
+reader is installed. Runtime owner/turn/goal flags are not historical authority.
 
 ## Completed structural contributions
 
