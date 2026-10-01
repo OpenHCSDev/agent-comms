@@ -331,3 +331,26 @@ no identical combined reply is broadcast across unrelated route audiences.
 No validation of the new shape has run. Final sanity and continuous installed
 batch/late-arrival/cancel/UNKNOWN acceptance follows coherent implementation.
 The earlier 3e14 prototype's native result remains historical evidence only.
+
+## Independent original-route consumer closure
+
+SelectedSourceBatch now derives all distinct original reply targets in source
+order; its previous copied-first-target accessor and one-route resource
+constraint are deleted. Selection still intentionally retains its existing
+same-route subset until Arendt's canonical execution/obligation schema extension
+is integrated: no unauthorized multi-route execution or audience broadcast.
+
+SelectedAttempt and SelectedPrompt carry tuples of existing ResponseObligation
+records. The frame matches each original engagement's route to its obligation,
+rejects ambiguous matches, and lets the original AssignmentState validate
+execution/route/preparation. The current runtime captures its one obligation
+through require_wire_response; the tuple consumer itself no longer singles out
+one original. Failure notices publish once per derived original route, not only
+the first source route. Preparing status renders those same derived targets.
+No new type, store, registry, budget or lifecycle algorithm was added.
+
+Exact lifecycle method/tuple/storage handoff was sent directly to Arendt once
+the Codex thread messaging capability became available. Sch494 receives a
+separate bounded tests-only contribution in
+/home/ts/wt/comms-494-typed-journal-fixtures-20261001; no production compaction
+edits or functional-release hold. Singer retains all schema carry integration.

@@ -32,9 +32,8 @@ class SelectedSourceBatch(InputBatch):
             raise IdentityConflict("Selected batch changed original source order")
         if len({row.recipient_lookup for row in assignments}) != 1:
             raise IdentityConflict("Selected batch crosses recipient ownership")
-        targets = {derive_exact_reply_target(source.delivery.message) for source in self.sources}
-        if len(targets) != 1 or None in targets:
-            raise IdentityConflict("Selected response batch needs one original reply route")
+        if any(derive_exact_reply_target(source.delivery.message) is None for source in self.sources):
+            raise IdentityConflict("Selected source lacks an original reply route")
 
     @property
     def admits_multiple(self) -> bool:
@@ -55,7 +54,8 @@ class SelectedSourceBatch(InputBatch):
         return all(row.lifecycle.requires_selected_triage() for row in self.assignments)
 
     @property
-    def target(self) -> str:
-        target = derive_exact_reply_target(self.sources[0].delivery.message)
-        assert target is not None
-        return target
+    def targets(self) -> tuple[str, ...]:
+        """Original reply routes in first-source order, never a second route store."""
+        return tuple(dict.fromkeys(
+            derive_exact_reply_target(source.delivery.message) for source in self.sources
+        ))

@@ -124,7 +124,7 @@ class SelectedParticipant(MroDispatch):
                 provider,
                 model,
             )
-            selected.transition(PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}"))
+            selected.transition(PreparingPhase(f"Preparing {len(batch.sources)} messages in {', '.join(batch.targets)}"))
             yield selected
 
     @staticmethod

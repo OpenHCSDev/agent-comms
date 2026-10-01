@@ -64,13 +64,13 @@ class SelectedPrompt:
         self.remaining(prompt)
         return prompt
 
-    async def full(self, assignments, obligation, action: SelectedAction) -> str:
+    async def full(self, assignments, obligations, action: SelectedAction) -> str:
         participant = self.participant
         frame = render_selected_batch_frame(
             tuple((source.delivery, assignment)
                   for source, assignment in zip(participant.batch.sources, assignments, strict=True)),
             participant.owner.thread,
-            obligation=obligation,
+            obligations=obligations,
         )
         suffix = (
             f"You are {participant.owner.thread.name}; use the current work context above. "
@@ -102,12 +102,12 @@ class SelectedAttempt:
     participant: SelectedParticipant
     stage: FullNativeSend
     token: str
-    obligation: ResponseObligation | None
+    obligations: tuple[ResponseObligation, ...]
 
     @classmethod
     def engage(cls, participant: SelectedParticipant) -> SelectedAttempt:
         participant.owner.require_registry(participant.comms.registry)
-        target = participant.batch.target
+        (target,) = participant.batch.targets
         store = participant.store
         with store.session.read():
             participant.identity.require(store, participant.lookup)
@@ -152,7 +152,8 @@ class SelectedAttempt:
             PreparingPhase(f"Preparing response to {len(selected)} messages in {target}")
         )
         return cls(
-            participant, FullNativeSend(selected, progress), token, started.snapshot.obligation
+            participant, FullNativeSend(selected, progress), token,
+            (started.snapshot.require_wire_response(),)
         )
 
     def tool_owner(self, session, input_id, action) -> CodingToolOwner:
@@ -195,7 +196,7 @@ class SelectedAttempt:
                 for assignment in self.stage.assignments
             ))
             prompt = await SelectedPrompt(participant).full(
-                self.stage.assignments, self.obligation, action
+                self.stage.assignments, self.obligations, action
             )
             request = SelectedRequest.reserve(participant, session, self.stage, self.token, prompt)
         except NativePiUnavailable:
@@ -262,7 +263,7 @@ class SelectedConsideration:
         if not participant.batch.requires_triage:
             return session, None
         participant.transition(
-            PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {participant.batch.target}")
+            PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {', '.join(participant.batch.targets)}")
         )
         stage = TriageNativeSend(participant.batch.assignments)
         request = SelectedRequest.reserve(

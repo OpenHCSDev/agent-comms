@@ -29,15 +29,30 @@ def render_selected_wake_frame(
     live owner. These exact-data checks are defense in depth, not admission.
     A bounded triage has no response obligation until it engages FULL work.
     """
-    return render_selected_batch_frame(((initial, assignment),), owner, obligation=obligation)
+    return render_selected_batch_frame(
+        ((initial, assignment),), owner,
+        obligations=() if obligation is None else (obligation,),
+    )
 
 
-def render_selected_batch_frame(sources, owner: Thread, *, obligation=None) -> str:
+def render_selected_batch_frame(
+    sources, owner: Thread, *, obligations: tuple[ResponseObligation, ...] = (),
+) -> str:
     """Validate every original and render common owner context exactly once."""
     selected = []
     for initial, assignment in sources:
         assignment.require_selected_source(initial, owner)
-        expectation, obligation_line = assignment.lifecycle.wake_frame(initial.message, obligation)
+        matching = tuple(
+            obligation for obligation in obligations
+            if obligation.exact_target == assignment.lifecycle.exact_target
+        )
+        if len(matching) > 1:
+            from .coordination_errors import IdentityConflict
+
+            raise IdentityConflict("Selected source has ambiguous response obligations")
+        expectation, obligation_line = assignment.lifecycle.wake_frame(
+            initial.message, next(iter(matching), None)
+        )
         selected.append({
             "source_seq": assignment.wire_seq,
             "claim_id": assignment.assignment_id,
