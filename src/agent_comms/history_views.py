@@ -83,15 +83,15 @@ class HistoryViews:
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications(self, messages: Sequence[Message]):
-        return MessageNotification.window(self.root, self.registry, messages)
+        return MessageNotification.window(self.root, self.registry, self.bus.log, messages)
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         """Read mounted references in the notification owner's bounded windows."""
         result = {}
         limit = MessageNotification.window_limit
         for start in range(0, len(references), limit):
-            messages = self.bus.log.messages_for_references(references[start : start + limit])
-            result.update(self.message_notifications(messages))
+            sources = self.bus.log.deliveries_for_references(references[start : start + limit])
+            result.update(MessageNotification.delivery_window(self.root, self.registry, sources))
         return result
 
     def recent_notifications(self, name: str, *, limit: int = 5):
@@ -129,7 +129,7 @@ class HistoryViews:
         source = self.bus.history.attach(Path(source_root))
         catalog = ChannelCatalog(Path(source.root) / ChannelCatalog.filename)
         incoming = catalog.read()
-        source_threads = source.registry().all_threads()
+        source_threads = source.provenance.threads
         with _store_lock(self._wire_lock_path):
             existing = self.channels.catalog.path.exists()
             with self.channels.catalog.editing() as document:

@@ -11,14 +11,15 @@ from typing import TYPE_CHECKING
 from .channels import Channel
 from .field_codec import FieldCodec
 from .message_page import MessagePage, MessagePageRequest, PageTraversal
+from .message_reference import MessageReference
 from .messages import Message
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import ChannelDisplayScope, DisplayBasis, DMDisplayScope, MessageDisplayScope
 from .registration import Registration
-from .registry_document import RegistrySnapshot
+from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock, file_revision
-from .threads import Thread
+from .thread_provenance import ThreadProvenance
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
@@ -43,6 +44,7 @@ class HistoryView(ABC):
         if self.viewer is None:
             return None
         source = page.messages[0].source
+        source.validate()
         return HistoricalDisplay(
             source,
             presentation.bus.reads.capture(
@@ -50,7 +52,7 @@ class HistoryView(ABC):
                 page.messages,
                 presentation.registry.snapshot(),
                 Path(source.root) / "bus.jsonl",
-                conversation_snapshot=source.registry().snapshot(),
+                conversation_snapshot=source.provenance,
             ),
         )
 
@@ -63,7 +65,7 @@ class HistoryView(ABC):
         return [message for rows in reversed(pages) for message in rows]
 
     @abstractmethod
-    def capture(self, snapshot: RegistrySnapshot) -> MessageDisplayScope:
+    def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
         """Retain the source's aliases/membership without borrowing live identity."""
 
 
@@ -75,7 +77,7 @@ class ChannelHistory(HistoryView):
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.bus.channel_history_page(self.target, **paging)
 
-    def capture(self, snapshot: RegistrySnapshot) -> ChannelDisplayScope:
+    def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope(self.target, self.targets)
 
 
@@ -87,7 +89,7 @@ class ChannelDisplayHistory(HistoryView):
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
 
-    def capture(self, snapshot: RegistrySnapshot) -> ChannelDisplayScope:
+    def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope.capture(self.channel, snapshot)
 
 
@@ -99,7 +101,7 @@ class DMHistory(HistoryView):
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.bus.dm_history_page(self.first, self.second, **paging)
 
-    def capture(self, snapshot: RegistrySnapshot) -> DMDisplayScope:
+    def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
         return DMDisplayScope.capture(self.first, self.second, snapshot)
 
 
@@ -145,6 +147,7 @@ class HistorySource:
     size: int
     snapshot_bus_revision: tuple[int, int, int, int]
     snapshot_registry_revision: tuple[int, int, int, int]
+    provenance: RegistryProvenance
 
     @property
     def key(self) -> str:
@@ -158,10 +161,6 @@ class HistorySource:
         ):
             raise ValueError("Historical snapshot changed; restore it before browsing")
 
-    def registry(self) -> Registration:
-        self.validate()
-        return Registration(Path(self.root) / "registry.json")
-
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class HistoricalMessage(Message):
@@ -172,7 +171,7 @@ class HistoricalMessage(Message):
 
     @classmethod
     def project(
-        cls, message: Message, source: HistorySource, order: int, snapshot: RegistrySnapshot
+        cls, message: Message, source: HistorySource, order: int, snapshot: RegistryProvenance
     ) -> HistoricalMessage:
         def creation(name: str) -> float | None:
             declaration = snapshot.threads.get(snapshot.aliases.get(name, name))
@@ -191,6 +190,10 @@ class HistoricalMessage(Message):
             sender_created_at=creation(message.sender),
             target_created_at=creation(message.target),
         )
+
+    def notification_references(self) -> tuple[MessageReference, ...]:
+        """An archived row has no current recipient handling authority."""
+        return ()
 
     @property
     def response_policy(self) -> ResponsePolicy:
@@ -228,7 +231,7 @@ class HistoricalMessage(Message):
 @dataclass(frozen=True, slots=True)
 class HistoricalThread:
     source: HistorySource
-    thread: Thread
+    thread: ThreadProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -290,6 +293,7 @@ class HistoryArchive:
         import tempfile
 
         from .catalog_store import ChannelCatalog
+        from .private_bus_checkpoint import install_private_bus_checkpoint
         from .historical_views import HistorySource
         from .transcript_routes import TranscriptRoutes
 
@@ -336,6 +340,10 @@ class HistoryArchive:
                 guard.create_pending()
                 archived.write_metadata_unlocked(marker)
                 guard.commit_initial()
+                # The original snapshot remains a certified source for native/wire
+                # composition as well as public paging. This existing installer
+                # changes destination metadata/index only, never original bytes.
+                install_private_bus_checkpoint(archived)
                 source = HistorySource(
                     str(stage.resolve()),
                     str(source_root),
@@ -344,8 +352,9 @@ class HistoryArchive:
                     bus_info.st_size if bus_info else 0,
                     file_revision(stage / "bus.jsonl"),
                     file_revision(stage / "registry.json"),
+                    RegistryProvenance.capture(Registration(stage / "registry.json").snapshot()),
                 )
-                declarations = source.registry().all_threads()
+                declarations = source.provenance.threads
                 previous = 0
                 for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
                     message, _ = archived._public_page_record(record, size, marker)
@@ -380,7 +389,8 @@ class HistoryArchive:
             raise ValueError("Historical source detached; reload history")
         for index in traversal.source_indexes(start, len(sources)):
             source = sources[index]
-            snapshot = source.registry().snapshot()
+            source.validate()
+            snapshot = source.provenance
             request = MessagePageRequest(
                 view.capture(snapshot), traversal.for_source(index == start), limit, max_bytes
             )
@@ -453,9 +463,10 @@ class HistoryArchive:
         return replace(history if historical else page, history_revision=history_revision)
 
     def threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
-        return tuple(
-            HistoricalThread(source, thread)
-            for source in self.sources()
-            for thread in source.registry().snapshot().threads.values()
-            if name is None or thread.name == name
-        )
+        result = []
+        for source in self.sources():
+            source.validate()
+            result.extend(HistoricalThread(source, thread)
+                          for thread in source.provenance.threads.values()
+                          if name is None or thread.incarnation.matches_recorded_name(name, source.provenance))
+        return tuple(result)

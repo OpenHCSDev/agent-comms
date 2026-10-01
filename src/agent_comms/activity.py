@@ -10,6 +10,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -23,6 +24,9 @@ from .store_files import (
 )
 from .thread_identity import OwnerIdentity
 from .thread_presentation import ThreadPresentation
+
+if TYPE_CHECKING:
+    from .presentation import MessageNotification
 
 
 class ActivityState(Enum):
@@ -72,14 +76,63 @@ class StoppedDrainDiagnostic(DrainDiagnostic):
         return "Drain stopped; fix the error and restart the owner"
 
 
-@dataclass(frozen=True, slots=True)
-class Activity:
-    """Declares one thread's current activity (what it is doing right now).
+class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
+    """Owner-fenced interpretation of the original activity event, not a store."""
 
-    Emitted by participants and agent turns so other clients can show live
-    feedback. Appended to ``activity.jsonl``; the latest event per thread is
-    the thread's state. Empty detail is valid (plain thinking).
-    """
+    @classmethod
+    def acquire(cls, diagnostic: DrainDiagnostic | None, owner: OwnerIdentity) -> DrainReadiness:
+        # Nullable metadata is classified only at the original source boundary.
+        if diagnostic is None or diagnostic.owner != owner:
+            return ReadyDrainReadiness()
+        return UnavailableDrainReadiness(diagnostic)
+
+    @abstractmethod
+    def source_diagnostic(self) -> DrainDiagnostic | None: ...
+
+    @abstractmethod
+    def pending_notification(self, notification: MessageNotification) -> MessageNotification: ...
+
+    @abstractmethod
+    def presentation(self, ordinary: ThreadPresentation, *, busy: bool) -> ThreadPresentation: ...
+
+    def require_available(self) -> None:
+        pass
+
+
+class ReadyDrainReadiness(DrainReadiness):
+    def source_diagnostic(self):
+        return None
+
+    def pending_notification(self, notification: MessageNotification) -> MessageNotification:
+        return notification
+
+    def presentation(self, ordinary, *, busy):
+        return ordinary
+
+
+@dataclass(frozen=True)
+class UnavailableDrainReadiness(DrainReadiness):
+    diagnostic: DrainDiagnostic
+
+    def source_diagnostic(self):
+        return self.diagnostic
+
+    def pending_notification(self, notification: MessageNotification) -> MessageNotification:
+        return replace(notification, state="Waiting for recovery",
+            detail=f"{self.diagnostic.summary}. This message is saved and has not started.",
+            priority=4, busy=False)
+
+    def presentation(self, ordinary, *, busy):
+        return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
+                                  busy=busy, attention=True)
+
+    def require_available(self):
+        raise RelationViolationError(self.diagnostic.summary)
+
+
+@dataclass(frozen=True, slots=True)
+class ActivityData:
+    """Shared declared activity fields; observations and events own their boundary."""
 
     thread: str
     state: ActivityState
@@ -88,18 +141,7 @@ class Activity:
         default_factory=time.time, metadata={"wire_name": "ts", "wire_required": True}
     )
 
-    diagnostic: DrainDiagnostic | None = field(default=None, metadata={"wire_omit_default": True})
-
-    def for_owner(self, owner: OwnerIdentity) -> Activity:
-        if self.diagnostic is not None and self.diagnostic.owner != owner:
-            return replace(self, diagnostic=None)
-        return self
-
     def presentation(self, title: str) -> ThreadPresentation:
-        if self.diagnostic is not None:
-            return ThreadPresentation(
-                title, "!", self.diagnostic.summary, busy=self.state.busy, attention=True
-            )
         return self.state.presentation(title, self.detail)
 
     def __post_init__(self) -> None:
@@ -110,10 +152,37 @@ class Activity:
         if len(self.detail) > 200:
             raise ValueError("Activity detail cannot exceed 200 characters.")
 
+
+@dataclass(frozen=True, slots=True)
+class Activity(ActivityData):
+    """Original persisted event; its nullable diagnostic is external metadata."""
+
+    diagnostic: DrainDiagnostic | None = field(default=None, metadata={"wire_omit_default": True})
+
     @classmethod
     def from_wire(cls, data: Mapping) -> Activity:
         # Historical event timestamps may be absent; they remain unknown.
         return FieldCodec.decode(cls, {"ts": 0.0, **data})
+
+
+@dataclass(frozen=True, slots=True)
+class ObservedActivity(ActivityData):
+    """Acquired activity has one required readiness, no nullable diagnostic copy."""
+
+    readiness: DrainReadiness = field(kw_only=True)
+
+    @classmethod
+    def acquire(cls, event: Activity, owner: OwnerIdentity) -> ObservedActivity:
+        return cls(event.thread, event.state, event.detail, event.timestamp,
+                   readiness=DrainReadiness.acquire(event.diagnostic, owner))
+
+    def source_event(self) -> Activity:
+        """Write through the original event boundary; never persist a second state."""
+        return Activity(self.thread, self.state, self.detail, self.timestamp,
+                        self.readiness.source_diagnostic())
+
+    def presentation(self, title):
+        return self.readiness.presentation(super().presentation(title), busy=self.state.busy)
 
 
 class ActivityLog:

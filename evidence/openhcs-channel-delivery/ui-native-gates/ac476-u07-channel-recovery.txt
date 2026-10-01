@@ -1,0 +1,24 @@
+                                                                                
+  ☰     <──    ──>   ! beta (1) ×  #team ×                                     
+                                    ━━━━━                                       
+▼ Channels           Name ▾    │▌▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔      
++ New Session                  │▌▼ Waiting for recovery (1)                     
+▾ #any (220) Date created ▾    │▌beta: Waiting for recovery — Inbox             
+  ✓ history-recipient          │▌unavailable · NativePiTerminalFailure:         
+    Ready                      │▌Native Pi assistant did not finish             
+  ✓ history-sender             │▌successfully: 503 data: {"id": "offline",      
+    Ready                      │▌"object": "chat.completion.chunk",             
+  (1) ! beta                   │▌"created": 1, "model": "fixture",              
+    Inbox unavailable · Nat    │▌"choices": [{"index": 0, "delta":              
+▸ #none      Date created ▾  < │▌{"role": "assistant", "content":             < 
+▸ #all       Date created ▾    │▌"{\"decision\":\"IGNORE\"}"},            ▅▅    
+▸ #team      Date created ▾    │▌"finish_reason": null}]}                       
+                               │▌                                               
+                               │▌data: {"id": "offline", "object":              
+                               │                                                
+                               │ No active turns                                
+                               │                                                
+ ▋                             │▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎   
+40% ────────────────●───────   │▊ ❯ Message #team                           ▎   
+  ──>   Float                  │▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎   
+ ⏎ Open sender  shift+⏎ Open destination  end Latest / prompt  ^c ▏ ^p palette  
