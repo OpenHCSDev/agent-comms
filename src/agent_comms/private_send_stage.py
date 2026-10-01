@@ -10,7 +10,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from collections.abc import Iterator
 
-from .assignment_states import DeferredAssignment
+from .assignment_states import DeferredAssignment, FailedAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_tables.assignments import WakeAssignment
@@ -25,6 +25,7 @@ from .native_admission_rules import (
 from .native_input_owner import ParticipantOwner
 from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
 from .native_pi import NativeContextProof
+from .native_entries import NativeEntry
 from .native_prompt_binding import (
     PromptBinding,
     expected_prompt_matches_journal,
@@ -117,22 +118,23 @@ class NativeSendStage(ABC):
     ) -> None:
         # The native boundary validated the live RPC events before returning.
         # Disk evidence corroborates those events, never authorizes recovery.
-        if not context.corroborates_input(input_id, session_dir):
-            raise IdentityConflict(
-                "Pi live assembled context differs from its reserved input proof"
-            )
-        with store.session.read():
-            self.pending_input(store, input_id, owner, token_digest)
-            binding = self.require_binding(
-                store,
-                input_id,
-                owner,
-                wire_root_id,
-                prompt,
-                blocking=True,
-            )
-            if not expected_prompt_matches_journal(context.session_file, binding):
-                raise IdentityConflict("live native input lacks exact bound source prompt equality")
+        with NativeEntry.open_evidence(context.session_file) as evidence:
+            if not context.corroborates_input(input_id, session_dir, evidence=evidence):
+                raise IdentityConflict(
+                    "Pi live assembled context differs from its reserved input proof"
+                )
+            with store.session.read():
+                self.pending_input(store, input_id, owner, token_digest)
+                binding = self.require_binding(
+                    store,
+                    input_id,
+                    owner,
+                    wire_root_id,
+                    prompt,
+                    blocking=True,
+                )
+                if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
+                    raise IdentityConflict("live native input lacks exact bound source prompt equality")
 
     def require_claim(self, store: Coordination) -> None:
         current = store.assignments.get(self.assignment.assignment_id)
@@ -205,6 +207,24 @@ class NativeSendStage(ABC):
 
 
 class TriageNativeSend(NativeSendStage):
+    def reject(self, store, owner, input_id, token_digest, context):
+        """Settle this proved result atomically; never reserve a replacement input."""
+        with store.session.transaction() as db:
+            row = self.pending_input(store, input_id, owner, token_digest)
+            current = store.assignments.get(self.assignment.assignment_id)
+            self.require_phase(store, current)
+            row.commit_context(db, context)
+            updated = WakeAssignment.update(
+                db,
+                where="assignment_id=? AND revision=?",
+                parameters=(current.assignment_id, current.revision),
+                lifecycle=current.lifecycle.preengagement(FailedAssignment),
+                revision=current.revision + 1,
+                updated_at_ms=store.session.now(current.updated_at_ms),
+            )
+            if updated.rowcount != 1:
+                raise StaleFence("rejected triage lost its original claim")
+
     @property
     def execution(self) -> TriageNativeExecution:
         return TriageNativeExecution()

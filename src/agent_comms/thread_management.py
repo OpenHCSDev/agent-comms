@@ -439,6 +439,7 @@ class ThreadManagement:
             raise ValueError("Thread model cannot be empty.")
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
+            thread.execution.require_native()
             updated = replace(thread, model=selected)
             self.registry.register(updated, self.registry.status(thread.name))
             return updated
@@ -447,6 +448,7 @@ class ThreadManagement:
         """Persist Pi's thinking level for every future turn of a thread."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
+            thread.execution.require_native()
             updated = replace(thread, thinking_level=level)
             self.registry.register(updated, self.registry.status(thread.name))
             return updated
@@ -516,6 +518,7 @@ class ThreadManagement:
         if the launch fails the registration is rolled back.
         """
         parent = self.registry.require(spec.parent)
+        parent.execution.require_native()
         if self.registry.name_reserved(spec.name):
             raise RelationViolationError(
                 f"Thread {spec.name!r} already exists; reuse it instead of forking it again."

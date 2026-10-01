@@ -32,11 +32,13 @@ from .exporting import (
     JsonlFormat,
     MaxBytesLimit,
     RecentLimit,
-    WireExportFormat,
+    SelectableWireExportFormat,
 )
 from .importing import ImportFormat, ImportLimits
 from .messages import MessageType
+from .message_reference import MessageReference
 from .thread_management import ForkSpec
+from .thread_execution import ThreadExecution, ExternalThreadExecution
 
 
 def _duration_seconds(value: str) -> float:
@@ -62,6 +64,14 @@ def _tags(value: str) -> list[str]:
 
 def _shell_words(value: str | None) -> list[str] | None:
     return shlex.split(value) if value is not None else None
+
+
+def _message_reference(value: str) -> dict[str, object]:
+    """CLI spelling decodes once into the original wire reference."""
+    sequence, message_id = value.split(":", 1)
+    if int(sequence) <= 0 or not message_id:
+        raise ValueError("Source must be a committed sequence:message_id reference")
+    return {"seq": int(sequence), "message_id": message_id}
 
 
 def option(
@@ -249,6 +259,80 @@ class SendCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
+class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
+    help = "Pin a certified original human message for its recipient"
+    thread: str = option("thread")
+    source: MessageReference = option("--source", normalize=_message_reference,
+                                      help="Original sequence:message_id")
+    worktree: str = option("--worktree", default_factory=os.getcwd)
+
+    def apply(self, ctx: Comms) -> Any:
+        from .field_codec import FieldCodec
+
+        pin = ctx.messaging.pin_user_constraint(self.thread, self.source, worktree=self.worktree)
+        return {"pin": FieldCodec.encode(pin.reference), "source": FieldCodec.encode(self.source)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constraint"):
+    help = "Publish a human's exact replacement for an authored constraint"
+    thread: str = option("thread")
+    source: MessageReference = option("--source", normalize=_message_reference)
+    body: str = option("--body")
+    worktree: str = option("--worktree", default_factory=os.getcwd)
+
+    def apply(self, ctx: Comms) -> Any:
+        from .field_codec import FieldCodec
+        from .task_sources import CorrectionTaskChange, UserTaskSupersession
+
+        message = ctx.messaging.send_user_message(self.thread, self.body, worktree=self.worktree,
+            task=UserTaskSupersession(CorrectionTaskChange(self.source)))
+        return {"supersession": FieldCodec.encode(message.reference)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
+    help = "Retire a constraint by original reference, preserving its evidence"
+    thread: str = option("thread")
+    source: MessageReference = option("--source", normalize=_message_reference)
+    worktree: str = option("--worktree", default_factory=os.getcwd)
+
+    def apply(self, ctx: Comms) -> Any:
+        from .field_codec import FieldCodec
+        from .task_sources import CorrectionTaskChange, UserTaskDrop
+
+        message = ctx.messaging.send_user_message(self.thread,
+            f"Dropped constraint {self.source.seq}:{self.source.message_id}", worktree=self.worktree,
+            task=UserTaskDrop(CorrectionTaskChange(self.source)))
+        return {"drop": FieldCodec.encode(message.reference)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
+    help = "Export current authored context from original certified sources"
+    thread: str = option("thread")
+    output: str = option("--output")
+    overwrite: bool = option("--overwrite", default=False)
+
+    def apply(self, ctx: Comms) -> Any:
+        return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
+            self.output, overwrite=self.overwrite).to_wire()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetainedContextCliCommand(CliCommand, declared_name="retained-context"):
+    help = "Inspect retained context and original provenance without native input"
+    thread: str = option("thread")
+
+    def apply(self, ctx: Comms) -> Any:
+        from .field_codec import FieldCodec
+
+        segment = ctx.bus.log.retained_context(self.thread, ctx.registry)
+        return {"kind": segment.declared_name, "text": segment.text(),
+                "provenance": FieldCodec.encode(segment.provenance), "input_supplied": False}
+
+
+@dataclass(frozen=True, kw_only=True)
 class InboxCliCommand(CliCommand):
     help = "Undelivered messages for a thread"
     thread: str = option("--thread")
@@ -333,7 +417,7 @@ class HistoryCliCommand(CliCommand):
 class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
     help = "Export durable IRC/wire message history"
     output: str = option("--output", help="Destination file")
-    format: WireExportFormat = option("--format", default=JsonlFormat())
+    format: SelectableWireExportFormat = option("--format", default=JsonlFormat())
     everything: bool = option(
         "--everything", help="Every wire message", group="scope", default=False
     )
@@ -429,6 +513,8 @@ class RegisterCliCommand(CliCommand):
     parent: str | None = option("--parent", default=None)
     task: str | None = option("--task", default=None)
     pid: int = option("--pid", default=0)
+    execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution,
+                                            parser_default=ExternalThreadExecution.declared_name)
 
     def apply(self, ctx: Comms) -> Any:
         from .threads import Thread
@@ -440,6 +526,7 @@ class RegisterCliCommand(CliCommand):
             parent=self.parent,
             task=self.task,
             process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
+            execution=self.execution,
         )
         ctx.registry.declare(thread)
         return {"registered": self.name}

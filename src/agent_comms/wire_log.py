@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import stat
+import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
@@ -31,6 +32,7 @@ from .errors import (
 from .field_codec import FieldCodec
 from .messages import Message
 from .store_files import (
+    StoreLockContention,
     _atomic_write_text,
     _iter_jsonl_records,
     _iter_jsonl_stream,
@@ -50,15 +52,17 @@ class WireLog:
         self.path = Path(path)
 
     @contextmanager
-    def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None):
+    def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
+               contention: StoreLockContention | None = None):
         """The existing canonical bus lock and durability read barrier."""
-        with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as lock:
+        with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
+                         contention=contention) as lock:
             yield lock
 
     @contextmanager
-    def certified_read(self, *, blocking: bool = True):
+    def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
         """Borrow the original source verified by this canonical lock barrier."""
-        with _store_lock(self.path, blocking=blocking) as lock:
+        with _store_lock(self.path, blocking=blocking, contention=contention) as lock:
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
             source.require_marker(marker)
@@ -121,6 +125,21 @@ class WireLog:
                 digest.update(b"\n")
                 facts.extend(message.retained_task_facts())
         return digest.hexdigest(), tuple(facts)
+
+    def retained_context(self, name: str, registry):
+        """One certified source cut for read-only context inspection/export."""
+        from .exporting import WireExportBoundary
+        from .retained_context import RetainedSegment
+        from .retained_task_facts import RetainedTaskFacts
+        from .turn_context import OwnerProvenance
+
+        with _store_lock(self.path.parent / "wire"), self.locked():
+            snapshot = registry.snapshot()
+            owner = snapshot.require(name)
+            digest, facts = self.compaction_messages_unlocked(owner.incarnation)
+            retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
+            return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest),
+                owner, snapshot, WireExportBoundary(self._private_marker_unlocked().last_seq, time.time()))
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""

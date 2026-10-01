@@ -8,7 +8,6 @@ under wire→bus→registry→SQL locks. Reads recheck both owner and SQL after 
 from __future__ import annotations
 
 import sqlite3
-import time
 
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -17,6 +16,7 @@ from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .historical_native_inputs import HistoricalNativeInput
+from .native_entries import NativeEvidenceScope
 from .native_input_record import UnrecordedNativeInputReference
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
@@ -24,6 +24,7 @@ from .native_runtime_input import CurrentNativeCursor
 from .proven_source_coverage import ProvenSourceCoverage, SourceCoverage
 from .threads import Thread
 from .field_codec import FieldCodec
+from .store_files import StoreLockContention
 
 
 class NativeSourceCursor:
@@ -34,9 +35,10 @@ class NativeSourceCursor:
             raise ValueError("current native cursor needs actual private stores")
         self.bus, self.store, self.wire_root_id = bus, store, wire_root_id
 
-    def _coverage(self, lookup: str) -> SourceCoverage:
+    def _coverage(self, lookup: str, contention: StoreLockContention | None = None) -> SourceCoverage:
         return SourceCoverage(
-            self.bus, self.store, wire_root_id=self.wire_root_id, recipient_lookup=lookup
+            self.bus, self.store, wire_root_id=self.wire_root_id, recipient_lookup=lookup,
+            contention=contention
         )
 
     def advance(
@@ -54,33 +56,25 @@ class NativeSourceCursor:
             generation=owner_generation,
             admission_generation=owner_admission_generation,
         )
-        if committed_input_id is None:
-            return self._advance_proven(identity, committed_input_id)
-        # The native result is already settled. A competing wire reader must
-        # not permanently erase its auxiliary cursor proof. Retry only a lock
-        # refusal; no input, claim, or provider operation is repeated here.
-        deadline = time.monotonic() + 2.0
-        while True:
-            try:
-                return self._advance_proven(identity, committed_input_id)
-            except BlockingIOError:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise
-                time.sleep(min(remaining, 0.025))
+        with NativeEvidenceScope() as source_reads:
+            return self._advance_proven(identity, committed_input_id, source_reads,
+                StoreLockContention(2.0) if committed_input_id is not None else None)
 
     def _advance_proven(
-        self, identity: CursorOwner, committed_input_id: str | None
+        self, identity: CursorOwner, committed_input_id: str | None,
+        source_reads: NativeEvidenceScope,
+        contention: StoreLockContention | None,
     ) -> CurrentNativeCursor | None:
-        sources = self._coverage(identity.lookup)
+        sources = self._coverage(identity.lookup, contention)
         witness = sources.witness()
-        coverage = sources.prefix()
+        coverage = sources.prefix(source_reads=source_reads)
         proof = sources.last_proof(
-            coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0
+            coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
+            source_reads=source_reads,
         )
-        evidence = sources.evidence(coverage)
+        evidence = sources.evidence(coverage, source_reads=source_reads)
         with (
-            _response_boundary(self.bus, blocking=False) as registry,
+            _response_boundary(self.bus, blocking=False, contention=contention) as registry,
             self.store.session.transaction() as db,
         ):
             if sources.witness_unlocked() != witness:
@@ -181,7 +175,8 @@ class NativeSourceCursor:
         witness = None
         if cursor is not None:
             witness = sources.witness()
-            self._require_source(identity, cursor, sources)
+            with NativeEvidenceScope() as source_reads:
+                self._require_source(identity, cursor, sources, source_reads)
         with _response_boundary(self.bus, blocking=False) as registry:
             if cursor is not None and sources.witness_unlocked() != witness:
                 raise IdentityConflict("current cursor canonical source changed while reading")
@@ -197,21 +192,22 @@ class NativeSourceCursor:
         return cursor
 
     def _require_source(
-        self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage
+        self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage,
+        source_reads: NativeEvidenceScope,
     ) -> None:
         if cursor.owner_identity != owner.participant_identity:
             raise IdentityConflict("current native cursor owner identity differs")
-        coverage = sources.prefix(through_seq=cursor.covered_seq)
+        coverage = sources.prefix(through_seq=cursor.covered_seq, source_reads=source_reads)
         if cursor.covered_seq > coverage.covered_seq or (
             cursor.injected_seq > 0 and cursor.injected_seq not in coverage.injected_source_seqs
         ):
             raise IdentityConflict("current native cursor exceeds canonical source proof")
-        evidence = sources.evidence(coverage, through_seq=cursor.covered_seq)
+        evidence = sources.evidence(coverage, through_seq=cursor.covered_seq, source_reads=source_reads)
         with self.store.session.read():
             assert_native_runtime_schema(self.store.session._connection)
             if not owner.matches_prefix(self.store.session._connection, evidence):
                 raise IdentityConflict("current cursor borrows historical owner source proof")
-        proof = sources.last_proof(cursor.injected_seq)
+        proof = sources.last_proof(cursor.injected_seq, source_reads=source_reads)
         expected = proof.reference if proof is not None else UnrecordedNativeInputReference()
         if cursor.reference != expected:
             raise IdentityConflict("current native cursor proof differs from journal")

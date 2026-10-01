@@ -1,0 +1,484 @@
+{
+  "offline": true,
+  "provider_calls": 0,
+  "public_writes": 0,
+  "results": [
+    {
+      "turn": "364a5381962f4b83b32b6ab602897c56",
+      "inputId": "e488c8280b3c34a90a826afe057d866c",
+      "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+      "error_entry": "b77ba643",
+      "source_bytes": 42044804,
+      "source_sha256": "a46d4826d76cac0dfab481586e05cad9583170526155ffdf17b2c2e5a095acdb",
+      "model": {
+        "id": "gpt-6.1-sol",
+        "provider": "openai-codex",
+        "contextWindow": 272000,
+        "maxTokens": 128000
+      },
+      "message_count": 224,
+      "measured_estimate": {
+        "tokens": 259809,
+        "usageTokens": 254272,
+        "trailingTokens": 5537,
+        "lastUsageIndex": 222
+      },
+      "serialized_message_only_estimate": {
+        "tokens": 267723,
+        "usageTokens": 0,
+        "trailingTokens": 267723,
+        "lastUsageIndex": null
+      },
+      "final_message_only_budget_estimate": 267723,
+      "pre_original_input_estimate": {
+        "tokens": 218428,
+        "usageTokens": 218428,
+        "trailingTokens": 0,
+        "lastUsageIndex": 194
+      },
+      "pre_input_compaction_trigger": false,
+      "failed_request_compaction_trigger": true,
+      "system_tools_and_external_hooks": "excluded; serialized count is a lower bound, not exact final body",
+      "native_error": "Estimated input leaves no admissible generation budget",
+      "original_context_observation": {
+        "thread": {
+          "name": "openhcs-architecture-memory",
+          "created_at": 1790654215.0835924
+        },
+        "turn": {
+          "kind": "recorded",
+          "identity": {
+            "value": "364a5381962f4b83b32b6ab602897c56"
+          },
+          "occurrence": {
+            "incarnation": {
+              "name": "openhcs-architecture-memory",
+              "created_at": 1790654215.0835924
+            },
+            "generation": 43
+          }
+        },
+        "counter": "pi.estimateTokens",
+        "segments": [
+          {
+            "kind": "system_layer",
+            "tokens": 1573,
+            "utf8_bytes": 6376
+          },
+          {
+            "kind": "compaction_summary",
+            "tokens": 7677,
+            "utf8_bytes": 31301
+          },
+          {
+            "kind": "transcript",
+            "tokens": 260124,
+            "utf8_bytes": 1528416
+          },
+          {
+            "kind": "tool_catalog",
+            "tokens": 5894,
+            "utf8_bytes": 23574
+          }
+        ],
+        "observation_count": 15,
+        "failed_request": [
+          {
+            "requestId": "71667329-3251-4d2a-8e4c-18339757a838",
+            "inputId": "e488c8280b3c34a90a826afe057d866c",
+            "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+            "stage": "preparing",
+            "elapsedMs": 0.003347,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71667329-3251-4d2a-8e4c-18339757a838",
+            "inputId": "e488c8280b3c34a90a826afe057d866c",
+            "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+            "stage": "callback",
+            "elapsedMs": 245.303902,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71667329-3251-4d2a-8e4c-18339757a838",
+            "inputId": "e488c8280b3c34a90a826afe057d866c",
+            "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+            "stage": "callback_end",
+            "elapsedMs": 245.359858,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71667329-3251-4d2a-8e4c-18339757a838",
+            "inputId": "e488c8280b3c34a90a826afe057d866c",
+            "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+            "stage": "callback",
+            "elapsedMs": 246.833649,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71667329-3251-4d2a-8e4c-18339757a838",
+            "inputId": "e488c8280b3c34a90a826afe057d866c",
+            "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+            "stage": "callback_end",
+            "elapsedMs": 247.20933,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71667329-3251-4d2a-8e4c-18339757a838",
+            "inputId": "e488c8280b3c34a90a826afe057d866c",
+            "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+            "stage": "callback",
+            "elapsedMs": 247.233005,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71667329-3251-4d2a-8e4c-18339757a838",
+            "inputId": "e488c8280b3c34a90a826afe057d866c",
+            "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+            "stage": "callback_end",
+            "elapsedMs": 249.960641,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71667329-3251-4d2a-8e4c-18339757a838",
+            "inputId": "e488c8280b3c34a90a826afe057d866c",
+            "sessionId": "01a0eb51-f263-778e-b2f4-a2d3a9b65d01",
+            "stage": "finished",
+            "elapsedMs": 250.004233,
+            "attempt": 0,
+            "status": null
+          }
+        ]
+      },
+      "context_reserve": 16384,
+      "compaction_trigger_tokens": 255616
+    },
+    {
+      "turn": "81f01ffdc29b4a49ba0bf43ec354d9e2",
+      "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+      "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+      "error_entry": "6515bf3f",
+      "source_bytes": 41937810,
+      "source_sha256": "02c196813b9832e8eb0a05cd1bb4188ec4e8163e2d1db133f689d6b991833a7e",
+      "model": {
+        "id": "gpt-6.1-sol",
+        "provider": "openai-codex",
+        "contextWindow": 272000,
+        "maxTokens": 128000
+      },
+      "message_count": 231,
+      "measured_estimate": {
+        "tokens": 262067,
+        "usageTokens": 247384,
+        "trailingTokens": 14683,
+        "lastUsageIndex": 224
+      },
+      "serialized_message_only_estimate": {
+        "tokens": 268120,
+        "usageTokens": 0,
+        "trailingTokens": 268120,
+        "lastUsageIndex": null
+      },
+      "final_message_only_budget_estimate": 268120,
+      "pre_original_input_estimate": {
+        "tokens": 230322,
+        "usageTokens": 230322,
+        "trailingTokens": 0,
+        "lastUsageIndex": 212
+      },
+      "pre_input_compaction_trigger": false,
+      "failed_request_compaction_trigger": true,
+      "system_tools_and_external_hooks": "excluded; serialized count is a lower bound, not exact final body",
+      "native_error": "Estimated input leaves no admissible generation budget",
+      "original_context_observation": {
+        "thread": {
+          "name": "openhcs-audit-open-prs",
+          "created_at": 1790873496.352646
+        },
+        "turn": {
+          "kind": "recorded",
+          "identity": {
+            "value": "81f01ffdc29b4a49ba0bf43ec354d9e2"
+          },
+          "occurrence": {
+            "incarnation": {
+              "name": "openhcs-audit-open-prs",
+              "created_at": 1790873496.352646
+            },
+            "generation": 1
+          }
+        },
+        "counter": "pi.estimateTokens",
+        "segments": [
+          {
+            "kind": "system_layer",
+            "tokens": 1573,
+            "utf8_bytes": 6376
+          },
+          {
+            "kind": "compaction_summary",
+            "tokens": 7677,
+            "utf8_bytes": 31301
+          },
+          {
+            "kind": "transcript",
+            "tokens": 260518,
+            "utf8_bytes": 1420671
+          },
+          {
+            "kind": "tool_catalog",
+            "tokens": 5894,
+            "utf8_bytes": 23574
+          }
+        ],
+        "observation_count": 5,
+        "failed_request": [
+          {
+            "requestId": "0fa0e636-ddb0-48f6-8869-5d4113d93679",
+            "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+            "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+            "stage": "preparing",
+            "elapsedMs": 0.003136,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "0fa0e636-ddb0-48f6-8869-5d4113d93679",
+            "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+            "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+            "stage": "callback",
+            "elapsedMs": 192.180865,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "0fa0e636-ddb0-48f6-8869-5d4113d93679",
+            "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+            "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+            "stage": "callback_end",
+            "elapsedMs": 192.232553,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "0fa0e636-ddb0-48f6-8869-5d4113d93679",
+            "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+            "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+            "stage": "callback",
+            "elapsedMs": 193.949355,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "0fa0e636-ddb0-48f6-8869-5d4113d93679",
+            "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+            "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+            "stage": "callback_end",
+            "elapsedMs": 355.693058,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "0fa0e636-ddb0-48f6-8869-5d4113d93679",
+            "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+            "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+            "stage": "callback",
+            "elapsedMs": 355.775494,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "0fa0e636-ddb0-48f6-8869-5d4113d93679",
+            "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+            "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+            "stage": "callback_end",
+            "elapsedMs": 358.835249,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "0fa0e636-ddb0-48f6-8869-5d4113d93679",
+            "inputId": "9e39e3b090744f92f8e5d65c6ed38fc5",
+            "sessionId": "01a0f860-e719-7127-8b6d-b4a808991c79",
+            "stage": "finished",
+            "elapsedMs": 358.872529,
+            "attempt": 0,
+            "status": null
+          }
+        ]
+      },
+      "context_reserve": 16384,
+      "compaction_trigger_tokens": 255616
+    },
+    {
+      "turn": "6a1422c369524d5fb3f95d4fd309b85e",
+      "inputId": "6b947bddf4f6d619388a2ff243baec81",
+      "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+      "error_entry": "7b733ab5",
+      "source_bytes": 41920401,
+      "source_sha256": "314daa796c4a090a4ed511b9abc2f3ca9224d4e27cecce95a708fa0b9e7074f2",
+      "model": {
+        "id": "gpt-6.1-sol",
+        "provider": "openai-codex",
+        "contextWindow": 272000,
+        "maxTokens": 128000
+      },
+      "message_count": 224,
+      "measured_estimate": {
+        "tokens": 257923,
+        "usageTokens": 257866,
+        "trailingTokens": 57,
+        "lastUsageIndex": 222
+      },
+      "serialized_message_only_estimate": {
+        "tokens": 264603,
+        "usageTokens": 0,
+        "trailingTokens": 264603,
+        "lastUsageIndex": null
+      },
+      "final_message_only_budget_estimate": 264603,
+      "pre_original_input_estimate": {
+        "tokens": 229558,
+        "usageTokens": 229558,
+        "trailingTokens": 0,
+        "lastUsageIndex": 208
+      },
+      "pre_input_compaction_trigger": false,
+      "failed_request_compaction_trigger": true,
+      "system_tools_and_external_hooks": "excluded; serialized count is a lower bound, not exact final body",
+      "native_error": "Estimated input leaves no admissible generation budget",
+      "original_context_observation": {
+        "thread": {
+          "name": "openhcs-audit-merged-models",
+          "created_at": 1790873447.6164267
+        },
+        "turn": {
+          "kind": "recorded",
+          "identity": {
+            "value": "6a1422c369524d5fb3f95d4fd309b85e"
+          },
+          "occurrence": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-models",
+              "created_at": 1790873447.6164267
+            },
+            "generation": 1
+          }
+        },
+        "counter": "pi.estimateTokens",
+        "segments": [
+          {
+            "kind": "system_layer",
+            "tokens": 1573,
+            "utf8_bytes": 6376
+          },
+          {
+            "kind": "compaction_summary",
+            "tokens": 7677,
+            "utf8_bytes": 31301
+          },
+          {
+            "kind": "transcript",
+            "tokens": 256999,
+            "utf8_bytes": 1404004
+          },
+          {
+            "kind": "tool_catalog",
+            "tokens": 5894,
+            "utf8_bytes": 23574
+          }
+        ],
+        "observation_count": 4,
+        "failed_request": [
+          {
+            "requestId": "71a1696e-9b3c-45f7-98df-992cf24fc78d",
+            "inputId": "6b947bddf4f6d619388a2ff243baec81",
+            "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+            "stage": "preparing",
+            "elapsedMs": 0.003897,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71a1696e-9b3c-45f7-98df-992cf24fc78d",
+            "inputId": "6b947bddf4f6d619388a2ff243baec81",
+            "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+            "stage": "callback",
+            "elapsedMs": 178.419644,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71a1696e-9b3c-45f7-98df-992cf24fc78d",
+            "inputId": "6b947bddf4f6d619388a2ff243baec81",
+            "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+            "stage": "callback_end",
+            "elapsedMs": 178.447818,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71a1696e-9b3c-45f7-98df-992cf24fc78d",
+            "inputId": "6b947bddf4f6d619388a2ff243baec81",
+            "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+            "stage": "callback",
+            "elapsedMs": 179.329487,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71a1696e-9b3c-45f7-98df-992cf24fc78d",
+            "inputId": "6b947bddf4f6d619388a2ff243baec81",
+            "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+            "stage": "callback_end",
+            "elapsedMs": 179.636308,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71a1696e-9b3c-45f7-98df-992cf24fc78d",
+            "inputId": "6b947bddf4f6d619388a2ff243baec81",
+            "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+            "stage": "callback",
+            "elapsedMs": 179.649754,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71a1696e-9b3c-45f7-98df-992cf24fc78d",
+            "inputId": "6b947bddf4f6d619388a2ff243baec81",
+            "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+            "stage": "callback_end",
+            "elapsedMs": 182.270076,
+            "attempt": 0,
+            "status": null
+          },
+          {
+            "requestId": "71a1696e-9b3c-45f7-98df-992cf24fc78d",
+            "inputId": "6b947bddf4f6d619388a2ff243baec81",
+            "sessionId": "01a0f860-273f-749b-b07a-3c8b4cf6290e",
+            "stage": "finished",
+            "elapsedMs": 182.290345,
+            "attempt": 0,
+            "status": null
+          }
+        ]
+      },
+      "context_reserve": 16384,
+      "compaction_trigger_tokens": 255616
+    }
+  ],
+  "limits": [
+    "Message-only serialization excludes original system/tool wire schemas and any onPayload changes; not the exact final body estimate.",
+    "Original context manifests report heuristic sizes, not provider tokenizer counts.",
+    "The request traces prove no recorded dispatch/transport attempt; Started original input and its prior effects remain preserved."
+  ],
+  "frozen_native_budget_sha256": "f9224adad46d6bc83e7ebe6fe1daeb8b1f79dde278dab11ee705574ff10e8c45"
+}

@@ -22,6 +22,7 @@ from .wire_metadata import WireRootIdText
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_pi import NativeContextProof, NativePiUnavailable
+from .native_entries import NativeEvidenceScope
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 from .native_runtime_input import NativeRuntimeInput
 from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution, TriageNativeExecution, FullNativeExecution
@@ -69,6 +70,16 @@ class TriageHistoricalNativeInput(HistoricalNativeInput):
 
 
 @dataclass(frozen=True, kw_only=True)
+class FailedTriageHistoricalNativeInput(HistoricalNativeInput):
+    """Canonical failed claim plus live-recorded context; no decision fabricated."""
+
+    execution: TriageNativeExecution
+
+    def proves_triage_source(self, evidence) -> bool:
+        return self.expected_prompt_equality_established
+
+
+@dataclass(frozen=True, kw_only=True)
 class FullHistoricalNativeInput(HistoricalNativeInput):
     execution: FullNativeExecution
 
@@ -89,6 +100,7 @@ def read_historical_native_inputs(
     wire_root_id: str,
     recipient_lookup: str,
     source_seq: int,
+    source_reads: NativeEvidenceScope | None = None,
 ) -> tuple[HistoricalNativeInput, ...]:
     """Return at most triage and FULL proof for one sealed selected source.
 
@@ -100,6 +112,12 @@ def read_historical_native_inputs(
     current-owner cursor additionally verifies the canonical bus prefix and
     requires a just-settled input in the live admission epoch.
     """
+    if source_reads is None:
+        with NativeEvidenceScope() as acquired:
+            return read_historical_native_inputs(
+                store, wire_root_id=wire_root_id, recipient_lookup=recipient_lookup,
+                source_seq=source_seq, source_reads=acquired,
+            )
     WireRootIdText.decode(wire_root_id)
     StableLookupText.decode(recipient_lookup)
     FieldCodec.decode(int, source_seq)
@@ -155,7 +173,8 @@ def read_historical_native_inputs(
             # The immutable SQL row is already present from the live event;
             # this check only corroborates its message-bearing context facts.
             observed = NativeContextProof.read_evidence(
-                session_file, row.input_id, request_generation=row.request_generation
+                session_file, row.input_id, request_generation=row.request_generation,
+                evidence=source_reads.for_source(session_file),
             )
         except (OSError, ValueError, NativePiUnavailable) as error:
             raise IdentityConflict("historical native context evidence is unavailable") from error
@@ -169,12 +188,15 @@ def read_historical_native_inputs(
                 raise IdentityConflict("prelaunch binding does not match this live proof")
             if binding.wire_root_id != wire_root_id or binding.source != MessageReference(source.wire_seq, source.message_id):
                 raise IdentityConflict("prelaunch binding names another canonical source")
-            equality = expected_prompt_matches_journal(session_file, binding)
+            equality = expected_prompt_matches_journal(
+                session_file, binding, evidence=source_reads.for_source(session_file)
+            )
         else:
             equality = False
         evidence.append(
             row.execution.historical_proof(
                 row,
+                lifecycle=store.assignments.get(row.assignment_id).lifecycle,
                 wire_root_id=wire_root_id,
                 source_seq=source.wire_seq,
                 source_message_id=source.message_id,

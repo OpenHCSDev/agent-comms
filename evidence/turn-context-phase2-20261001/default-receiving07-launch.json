@@ -1,0 +1,20 @@
+{
+  "default_acp": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-s5-receiving61-20261001/bin/agent-comms-acp",
+  "python": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-s5-receiving61-20261001/bin/python",
+  "argv": [
+    "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-s5-receiving61-20261001/bin/python",
+    "/home/ts/wt/comms-turn-context-phase1-20261001/tests/turn_context_installed_journey.py",
+    "/home/ts/wt/s5defaultqueue01",
+    "--test-support-site",
+    "/home/ts/wt/toad-cleanup-tc2-sdk-20260929/.venv/lib/python3.14/site-packages",
+    "--toad-driver-dir",
+    "/home/ts/wt/toad-s5-receiving-coherence-20261001/tests",
+    "--receiving-only"
+  ],
+  "root": "/home/ts/wt/s5defaultqueue01",
+  "native": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent",
+  "deadline_seconds": 90,
+  "fixture_budget_bytes": 67108864,
+  "authorized_local_provider_posts": 2,
+  "paid_public_inputs": 0
+}

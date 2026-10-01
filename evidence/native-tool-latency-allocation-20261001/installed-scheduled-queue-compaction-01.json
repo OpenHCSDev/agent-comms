@@ -1,0 +1,20 @@
+{
+  "result": "passed",
+  "pytest": "1 passed, 3 deselected in 13.13s",
+  "production_head": "41adf8b6",
+  "installed_module": "/home/ts/wt/comms-native-tool-latency-allocation-20261001/.observations/runtime485/lib/python3.14/site-packages/agent_comms/input_drain.py",
+  "module_sha256": "f42e09ffd87c97a899ba53063175255bb32b991853969b1274453998dfa69c2f",
+  "python": "/home/ts/wt/comms-native-tool-latency-allocation-20261001/.observations/runtime485/bin/python",
+  "provider": "localhost controlled",
+  "provider_posts_after_seed": 13,
+  "scheduled_originals_started_once": 1,
+  "queued_originals_started_once": 1,
+  "journaled_compactions": 1,
+  "registry_all_idle": true,
+  "unrelated_reserved_receipt_unchanged": true,
+  "source_native_history_prefix_preserved": true,
+  "public_inputs": 0,
+  "paid_calls": 0,
+  "unknown_replay": 0,
+  "command": "PI_COMPACTION_TEST_PACKAGE=$OWN_NATIVE PATH=$OWN_RUNTIME/bin:$PATH $OWN_RUNTIME/bin/python -m pytest tests/test_goal_failure_native.py -k 'autonomous_goal_compacts and True' -o addopts='' -q -s --basetemp=/var/tmp/arendt-scheduled-queue-485-01"
+}
