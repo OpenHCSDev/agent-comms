@@ -132,3 +132,66 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
             with pytest.raises(NativePiUnavailable, match="prefix changed"):
                 tuple(rows)
             assert source.stream.closed
+
+
+@pytest.mark.parametrize("consumer_error", [BlockingIOError, OSError, ValueError])
+def test_original_consumer_error_survives_acquired_evidence_cleanup(tmp_path, consumer_error):
+    session = _evidence(tmp_path)
+    original = consumer_error("consumer bus/coordination refusal")
+    with pytest.raises(consumer_error) as caught:
+        with NativeEvidenceScope() as scope:
+            reader = scope.for_source(session)
+            NativeContextProof.read_evidence(session, INPUT_ID, evidence=reader)
+            raise original
+    assert caught.value is original
+    assert reader.source.stream.closed and not reader.entries and not scope.readers
+
+
+def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):
+    import sqlite3
+    from agent_comms.native_pi import NativeContextJournal
+
+    session = _evidence(tmp_path)
+    original = sqlite3.OperationalError("consumer transaction refused")
+    with pytest.raises(sqlite3.OperationalError) as caught:
+        with NativeContextJournal.open_evidence(session) as db:
+            assert NativeContextJournal.for_input(db, INPUT_ID) is not None
+            raise original
+    assert caught.value is original
+    with pytest.raises(sqlite3.ProgrammingError):
+        db.execute("SELECT 1")
+
+
+def test_consumer_throw_into_original_rows_is_not_a_file_failure(tmp_path):
+    session = _evidence(tmp_path)
+    original = BlockingIOError("consumer lock was unavailable")
+    with PrivateEvidenceRead.open(session) as source:
+        rows = source.rows()
+        assert next(rows)["type"] == "session"
+        with pytest.raises(BlockingIOError) as caught:
+            rows.throw(original)
+        assert caught.value is original
+        assert source.stream.closed
+
+
+def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
+    from agent_comms.store_files import StoreLockContention, _store_lock
+    lock_target = tmp_path / "custody"
+    with _store_lock(lock_target):
+        with pytest.raises(BlockingIOError):
+            with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
+                pytest.fail("A competing descriptor acquired exclusive custody")
+    # The original and the refused scope both closed: immediate new acquisition
+    # succeeds without any leaked earlier lock or replacement of its evidence.
+    with _store_lock(lock_target, blocking=False):
+        pass
+
+
+def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
+    import time
+    from agent_comms.store_files import StoreLockContention, _store_lock
+    resource = StoreLockContention(.025)
+    with _store_lock(tmp_path / "first", blocking=False, contention=resource):
+        time.sleep(.04)
+    with _store_lock(tmp_path / "second", blocking=False, contention=resource):
+        assert resource.remaining == .025

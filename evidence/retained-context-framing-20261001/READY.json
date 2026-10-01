@@ -1,0 +1,36 @@
+{
+  "status": "READY for reviewed paired installation; not public/live",
+  "production": "153e999e55498e54c3dd73f94e3775a6973be6c6",
+  "base_main": "1f8bf0ef9a23ae75c2b00ea97310ecbfaae37770",
+  "production_deleted": 114,
+  "production_added": 191,
+  "production_paths": 15,
+  "native_manifest": "53b8c413d90aa6b1b8fe17fad35d2261cb7fe8c53eaa852f6ac4a073016fd9f6",
+  "native_changed": false,
+  "wheel": "/home/ts/wt/comms-retained-context-framing-20261001/.artifacts/retained-context-framing-20261001/wheels-final/agent_comms-0.1.0-py3-none-any.whl",
+  "wheel_sha256": "0e4b8a185750ad61d510b9234bdbdb5b3cd9c852a8f76428801f7cd380f2c3f0",
+  "metadata_sanity": "4 passed0.07s after coherentfix",
+  "manual": "manual-installed-receipt.json",
+  "adaptive": "adaptive-installed-receipt.json",
+  "final_readonly_installed_recovery": "final-installed-recovery.json",
+  "required_ratchet": "ratchet-summary.json",
+  "raw_native_and_unknowns_protected": [
+    "/home/ts/wt/comms-retained-context-framing-20261001/evidence/retained-context-framing-20261001/installed-large-retained-01",
+    "/home/ts/wt/comms-retained-context-framing-20261001/evidence/retained-context-framing-20261001/installed-large-retained-02",
+    "/home/ts/wt/comms-retained-context-framing-20261001/evidence/retained-context-framing-20261001/installed-large-retained-03"
+  ],
+  "claims": [
+    "44,661,933-byte original savedsource read-only",
+    "original exactretainedfacts70286/70479bytes retained whole",
+    "manual and adaptive reservation/intent >65536bytes admitted",
+    "native compaction commit +strictreopen +originaljournal recovery/linkdigests",
+    "freshmanual queuedinput answered; adaptive originalandfreshsecond answered exactlyonce",
+    "no paidprovider/no publicoriginalreplay/no newnativeartifact",
+    "native modelmandatory-prefix negative01 guard still rejects infeasiblecontent before provider"
+  ],
+  "remaining": [
+    "Kepler closes independent old raw-fixture callers; no production compatibility API restored",
+    "parent owns reviewed paired globalinstallation and originalfailedinput disposition",
+    "schema unchanged; journal identities/digests untouched"
+  ]
+}

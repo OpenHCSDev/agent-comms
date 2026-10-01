@@ -4,6 +4,9 @@ Only the localhost provider is controlled. Worker, registry, bus, selected
 admission, native process, source proof and response publication remain real.
 """
 import argparse
+import hashlib
+import shutil
+from dataclasses import replace
 import asyncio
 import json
 import os
@@ -23,9 +26,9 @@ from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import ThreadRole
-from agent_comms.bus_publication import HumanOrigin
+from agent_comms.bus_publication import HumanOrigin, stable_thread_lookup
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_runtime_input import NativeRuntimeInput, CurrentNativeCursor
 from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
 from contextlib import closing, contextmanager
@@ -37,6 +40,53 @@ from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.bus_publication import stable_thread_lookup
+
+
+async def retained_owner():
+    """Original installed ACP owner with an explicit saved SelectedExecution."""
+    from agent_comms.acp import CommsAgent
+    from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.private_nk_entrypoint import PrivateNkLaunch
+    from agent_comms.native_source_cursor import NativeSourceCursor
+    import traceback
+    original_advance = NativeSourceCursor._advance_proven
+    def observe_advance(*args, **kwargs):
+        begun = time.perf_counter_ns()
+        try:
+            value = original_advance(*args, **kwargs)
+        except BaseException as error:
+            print(json.dumps({'cursor_probe_ms':(time.perf_counter_ns()-begun)/1e6,
+                'error':type(error).__name__, 'site':traceback.extract_tb(error.__traceback__)[-1].name}), flush=True)
+            raise
+        print(json.dumps({'cursor_probe_ms':(time.perf_counter_ns()-begun)/1e6,
+                         'result':'original_completed'}), flush=True)
+        return value
+    NativeSourceCursor._advance_proven = observe_advance
+    launch = PrivateNkLaunch.from_environment(Path(os.environ['AGENT_COMMS_ROOT']), os.environ)
+    launch.validate()
+    service = Comms(launch.validated_root)
+    name = os.environ['AGENT_COMMS_THREAD']
+    agent = CommsAgent(service, runtime_enabled=True,
+        private_nk_wire_root_id=launch.wire_root_id,
+        private_nk_native_package=launch.native_package)
+    # This receiving case supplies the original saved-session capability to
+    # SelectedExecution. Automatic drains currently omit that argument; their
+    # complete restart/triage path is covered separately by the ordinary mode.
+    agent.inputs.auto_wake = False
+    try:
+        owner = service.registry.require(name)
+        await agent.load_session(owner.worktree, name)
+        assert await asyncio.to_thread(sys.stdin.readline) == 'GO\n'
+        execution = SelectedExecution(root=service.root,
+            wire_root_id=launch.wire_root_id, owner_name=name,
+            native_package=launch.native_package, session_file=Path(owner.session_file))
+        result = await agent.turns.run_selected(name, execution)
+        assert result.cursor_status == 'proven', result
+        await agent.cursors.publish(name, name, selected_status=result.cursor_status)
+        print('RETAINED_CURSOR_COMPLETE', flush=True)
+        await asyncio.to_thread(sys.stdin.readline)
+    finally:
+        await agent.shutdown()
 
 
 class AdmissionContention(DeclaredFamily, affix='Contention'):
@@ -145,6 +195,12 @@ async def run(arguments):
         assert arguments.collective and arguments.owners == 1 and not arguments.cancel_before_grant
     if arguments.cancel_before_grant:
         assert arguments.collective and arguments.contention and arguments.owners == 1
+    if arguments.cursor_contention:
+        assert arguments.collective and arguments.saved_source and not arguments.contention
+    source_hashes = {}
+    if arguments.saved_source:
+        for path in (arguments.saved_source, Path(str(arguments.saved_source)+'.input-proof')):
+            source_hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
     stage = arguments.stage.absolute()
     assert stage.is_relative_to('/home/ts/wt')
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -181,7 +237,8 @@ async def run(arguments):
     provider_type = (BatchReplyProvider if arguments.wave_size > 1 else
                      ChannelReplyProvider if arguments.cancel_before_grant else LoopbackProvider)
     provider = provider_type(status=200, text=(
-        '{"decision":"IGNORE"}' if arguments.collective else 'Unique controlled native reply.'))
+        '{"decision":"IGNORE"}' if arguments.collective else 'Unique controlled native reply.'),
+        response_timeout=60 if arguments.saved_source else 15)
     provider.response_gate = asyncio.Event()
     connections = set()
 
@@ -225,6 +282,19 @@ async def run(arguments):
         service.registry.declare(Thread(name,frozenset({'team'} if arguments.collective else ()),str(project),
             model='restart-local/fixture',thinking_level='off',
             task='Provider-free isolated restart acceptance; reply to each original once'))
+    if arguments.saved_source:
+        for name in names:
+            owner = service.registry.require(name)
+            directory = service.root/'native-sessions'/stable_thread_lookup(owner.created_at)
+            directory.mkdir(mode=0o700, parents=True)
+            saved = directory/'retained.jsonl'
+            shutil.copyfile(arguments.saved_source, saved); saved.chmod(0o600)
+            with closing(sqlite3.connect(Path(str(arguments.saved_source)+'.input-proof').as_uri()+
+                                         '?mode=ro',uri=True)) as original:
+                with closing(sqlite3.connect(str(saved)+'.input-proof')) as copied:
+                    original.backup(copied)
+            Path(str(saved)+'.input-proof').chmod(0o600)
+            service.registry.register(replace(owner, session_file=str(saved)))
     for index in range(arguments.history):
         service.messaging.send_initial_cohort('fixture-sender','history-recipient',
             f'Retained unrelated canonical source {index}: ' + 'history '*250)
@@ -267,26 +337,114 @@ async def run(arguments):
                 return
             contention_release.wait(.01)
 
+    def hold_cursor_publication():
+        from agent_comms.store_files import _store_lock
+
+        deadline = time.monotonic()+90
+        while time.monotonic()<deadline and not contention_release.is_set():
+            with closing(sqlite3.connect((service.root/'coordination.sqlite3').as_uri()+
+                                        '?mode=ro',uri=True)) as db:
+                ignored = {row.recipient for row in WakeAssignment.select(db)
+                           if row.lifecycle.declared_name == 'ignored'}
+            if not set(names) <= ignored:
+                contention_release.wait(.02)
+                continue
+            opened_owners = []
+            for name in names:
+                owner = service.registry.require(name)
+                if not owner.process_alive:
+                    continue
+                open_files = []
+                for descriptor in Path(f'/proc/{owner.pid}/fd').iterdir():
+                    try:
+                        open_files.append(os.readlink(descriptor))
+                    except FileNotFoundError:
+                        pass
+                if owner.session_file not in open_files:
+                    break
+                opened_owners.append(owner)
+            if len(opened_owners) != len(names):
+                contention_release.wait(.02)
+                continue
+            for owner in opened_owners:
+                # The real ignored claim and still-open original journal place
+                # this hold after native result settlement, inside corroboration.
+                with _store_lock(service.root/'wire'):
+                    begun = time.monotonic()
+                    while not contention_release.is_set() and time.monotonic()-begun < 15:
+                        stack = subprocess.run(
+                            ['sudo','-n','/home/ts/.local/bin/py-spy','dump','--pid',
+                             str(owner.pid),'--nonblocking'],capture_output=True,text=True,timeout=3)
+                        frames = stack.stdout
+                        if ('acquire_posix (' in frames and '_response_boundary (' in frames
+                                and 'native_source_cursor.py' in frames):
+                            (stage/'cursor-busy-original-scope.txt').write_text(frames)
+                            contention_observations.append({
+                                'resource':'cursor-publication-wire',
+                                'held_seconds':time.monotonic()-begun,
+                                'original_native_file_open':True,
+                                'ignored_owner':owner.name,
+                                'all_original_sources_open_after_ignore':len(opened_owners),
+                                'original_cursor_lock_refusal_observed':True})
+                            return
+                        contention_release.wait(.03)
+                    raise AssertionError('No actual bounded physical cursor acquisition witnessed')
+            contention_release.wait(.02)
+
     contender = None
+    retained_children = []
+    cutover = PublishOriginalsAtStoppedBatch(service,names,collective=arguments.collective,
+        after_attachment=arguments.cancel_before_grant)
     try:
         for name in names:
-            await asyncio.to_thread(service.owners.start,name,
-                agent_args=['--offline','--no-extensions','--no-skills',
-                            '--no-context-files','--no-prompt-templates','--no-tools'])
+            if arguments.saved_source:
+                output = (stage/(name+'-retained-owner.log')).open('w')
+                child = subprocess.Popen([sys.executable, __file__, '--retained-owner'],
+                    env=dict(env, AGENT_COMMS_THREAD=name), stdin=subprocess.PIPE,
+                    stdout=output, stderr=subprocess.STDOUT, text=True)
+                retained_children.append((child, output))
+                async with asyncio.timeout(30):
+                    while service.registry.require(name).pid != child.pid:
+                        assert child.poll() is None, (stage/(name+'-retained-owner.log')).read_text()
+                        await asyncio.sleep(.03)
+            else:
+                await asyncio.to_thread(service.owners.start,name,
+                    agent_args=['--offline','--no-extensions','--no-skills',
+                                '--no-context-files','--no-prompt-templates','--no-tools'])
             await attach(service,name)
         assert provider.posts == 0
         originals = [service.registry.require(name) for name in names]
         cutover = PublishOriginalsAtStoppedBatch(service,names,collective=arguments.collective,
             after_attachment=arguments.cancel_before_grant, wave_size=arguments.wave_size)
-        if arguments.contention:
-            contender = threading.Thread(target=hold_original_reader,name='original-wire-reader')
+        if arguments.contention or arguments.cursor_contention:
+            contender = threading.Thread(
+                target=hold_cursor_publication if arguments.cursor_contention else hold_original_reader,
+                name='original-cursor-publication' if arguments.cursor_contention else 'original-wire-reader')
             contender.start()
-        result = await asyncio.to_thread(service.owners.restart_owners,names,cutover=cutover)
-        assert len(result)==len(names)
-        assert all(not owner.process_alive for owner in originals)
+        if arguments.saved_source:
+            from agent_comms.store_files import _store_lock
+            with _store_lock(service.root/'wire'):
+                sender = service.registry.require('human')
+                cutover.originals = [service.bus.publisher.publish_ordinary(
+                    Message(sender.name, '#team',
+                        'New isolated retained-source triage: ignore THIS original once.', MessageType.INFO),
+                    _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
+            from agent_comms.coordination_cohort import accept_delivery_cohort
+            initial = service.bus.log.read_delivery_cohort(root_id, cutover.originals[0].seq)
+            with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                for audience in initial.audience.recipients:
+                    store.participants.register(audience.recipient_lookup,
+                        audience.canonical_thread, audience.canonical_thread, committed=True)
+                accept_delivery_cohort(service.bus, root_id, cutover.originals[0].seq, store)
+        else:
+            result = await asyncio.to_thread(service.owners.restart_owners,names,cutover=cutover)
+            assert len(result)==len(names)
+            assert all(not owner.process_alive for owner in originals)
         if not arguments.contention or arguments.cancel_before_grant:
             await asyncio.gather(*(attachment.load_session(
                 cwd=str(project), session_id=name) for name in names))
+        for child, _ in retained_children:
+            child.stdin.write('GO\n'); child.stdin.flush()
         if arguments.cancel_before_grant:
             await asyncio.to_thread(cutover.publish_cancel_and_pending)
             async with asyncio.timeout(30):
@@ -315,7 +473,7 @@ async def run(arguments):
             provider.response_gate.set()
         diagnosed = False
         concurrent_native = False
-        async with asyncio.timeout(45):
+        async with asyncio.timeout(90 if arguments.saved_source else 45):
             while True:
                 diagnostics = list((service.root/'diagnostics').glob('*.json'))
                 for activity in service.agents.all_activity().values():
@@ -427,10 +585,16 @@ async def run(arguments):
                 assert len(inputs)==len(names)
                 assert all(row.reference_stage is TriageNativeExecution and
                            row.verdict is IgnoreSelectedTriage for row in inputs)
+                cursors = CurrentNativeCursor.select(db, where="input_id IS NOT NULL")
+                assert len(cursors) == len(names), "Settled triage lost an auxiliary cursor"
+                assert {row.input_id for row in cursors} == {row.input_id for row in inputs}
+                assert all(row.covered_seq >= cutover.originals[0].seq for row in cursors)
         elif not arguments.cancel_before_grant and arguments.wave_size == 1:
             assert {reply.sender for reply in replies}==set(names)
         facts = [fact for packet in packets
                  for fact in decode_updates(packet['update'].get('_meta'))]
+        if arguments.cursor_contention:
+            assert contention_observations, 'No actual cursor publication contention observed'
         if arguments.contention and not arguments.cancel_before_grant:
             assert contention_held.is_set() and contention_observations
         else:
@@ -445,23 +609,34 @@ async def run(arguments):
             await asyncio.to_thread(contender.join,35)
             assert not contender.is_alive()
         await attachment.shutdown()
+        for child, output in retained_children:
+            if child.poll() is None:
+                child.stdin.close()
+                await asyncio.to_thread(child.wait, 15)
+            output.close()
         for name in reversed(names):
             await asyncio.to_thread(service.owners.stop,name)
         server.close();await server.wait_closed()
         for task in tuple(connections):task.cancel()
         await asyncio.gather(*connections,return_exceptions=True)
         native_inputs=[]
+        for source, expected in source_hashes.items():
+            assert hashlib.sha256(Path(source).read_bytes()).hexdigest() == expected
         for path in (service.root/'native-sessions').rglob('*.jsonl'):
             for row in map(json.loads,path.read_text().splitlines()):
-                if row.get('type')=='message' and row['message'].get('role')=='user':
+                if row.get('type')=='message' and row['message'].get('role')=='user' and any(
+                        original.body in json.dumps(row['message'].get('content')) for original in cutover.originals):
                     native_inputs.append({'session':str(path.relative_to(stage)),
                                           'entry_id':row['id']})
         if failure is None:
             assert len(native_inputs) == (4 if arguments.wave_size > 1 else
                                          2 if arguments.cancel_before_grant else len(names)), native_inputs
         receipt={'elapsed_seconds':time.perf_counter()-started,'owners':len(names),
-            'history_rows':arguments.history,'bus_bytes':(service.root/'bus.jsonl').stat().st_size,
+            'history_rows':arguments.history,'saved_original_hashes':source_hashes,
+            'saved_source_bytes':arguments.saved_source.stat().st_size if arguments.saved_source else 0,
+            'bus_bytes':(service.root/'bus.jsonl').stat().st_size,
             'localhost_provider_posts':provider.posts,'native_originals':native_inputs,
+            'simultaneous_triage_cursor_proofs':len(cursors) if arguments.collective and failure is None and not arguments.cancel_before_grant else None,
             'failure':failure,'all_owned_workers_retired':all(
                 not service.registry.require(name).process_alive for name in names),
             'public_mutations':0,'paid_provider_calls':0,'original_replays':0,
@@ -477,10 +652,15 @@ async def run(arguments):
 
 
 if __name__=='__main__':
+    if sys.argv[1:] == ['--retained-owner']:
+        asyncio.run(retained_owner())
+        raise SystemExit(0)
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--stage',type=Path,required=True)
     parser.add_argument('--package',type=Path,required=True)
     parser.add_argument('--owners',type=int,default=3)
+    parser.add_argument('--saved-source',type=Path)
+    parser.add_argument('--cursor-contention',action='store_true')
     parser.add_argument('--history',type=int,default=259)
     parser.add_argument('--collective',action='store_true')
     parser.add_argument('--registry-size',type=int,default=0)

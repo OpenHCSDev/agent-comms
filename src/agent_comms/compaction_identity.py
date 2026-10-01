@@ -39,13 +39,14 @@ class SelectedCommitReference:
 
     @classmethod
     def from_intent(cls, intent: dict[str, Any]) -> SelectedCommitReference:
-        from .native_compaction_request import NativeIntent
+        from .retained_task_facts import RetainedTaskFacts
 
         intent = FieldCodec.decode(dict[str, Any], intent)
-        NativeIntent.frame_record(intent)
-        return FieldCodec.decode(cls, {
+        reference = FieldCodec.decode(cls, {
             wire: intent[wire] for _, wire in FieldCodec._fields(cls) if wire in intent
         })
+        RetainedTaskFacts.frame_journal(FieldCodec.encode(reference))
+        return reference
 
     def identity(self, session_file: str) -> SummaryOperationIdentity:
         return SummaryOperationIdentity(session_file, self.operation_id)

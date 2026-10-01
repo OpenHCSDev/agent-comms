@@ -33,6 +33,7 @@ from .private_bus_checkpoint import (
     verify_private_bus_checkpoint_unlocked,
 )
 from .wake import NoWakeDecision, WakeDecision
+from .store_files import StoreLockContention
 
 _MAX_SCAN_SECONDS = 0.25
 
@@ -59,11 +60,13 @@ class SourceCoverage:
     page_budget = 32  # Existing bounded pass: 3,200 addressed initials.
 
     def __init__(
-        self, bus: MessageBus, store: Coordination, *, wire_root_id: str, recipient_lookup: str
+        self, bus: MessageBus, store: Coordination, *, wire_root_id: str, recipient_lookup: str,
+        contention: StoreLockContention | None = None,
     ):
         if type(bus) is not MessageBus or type(store) is not Coordination:
             raise ValueError("Source coverage needs the original bus and coordinator")
         self.bus, self.store = bus, store
+        self.contention = contention  # Borrowed lock wait resource; never source evidence.
         self.wire_root_id = FieldCodec.decode(Annotated[str, WireRootIdText], wire_root_id)
         self.recipient_lookup = FieldCodec.decode(Annotated[str, StableLookupText], recipient_lookup)
 
@@ -73,7 +76,7 @@ class SourceCoverage:
         )
 
     def witness(self) -> PrefixWitness:
-        with self.bus.log.locked(blocking=False):
+        with self.bus.log.locked(blocking=False, contention=self.contention):
             return self.witness_unlocked()
 
     def read(
@@ -138,8 +141,10 @@ class SourceCoverage:
 
     def _page(self, request: CoveragePage) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
         deadline = time.monotonic() + _MAX_SCAN_SECONDS
-        with self.bus.log.certified_read(blocking=False) as source:
-            if time.monotonic() > deadline:
+        remaining_before = self.contention.remaining if self.contention is not None else 0.0
+        with self.bus.log.certified_read(blocking=False, contention=self.contention) as source:
+            waited = remaining_before - self.contention.remaining if self.contention is not None else 0.0
+            if time.monotonic() > deadline + waited:
                 raise IdentityConflict("source coverage exceeded its scan deadline")
             if source.marker.root_id != self.wire_root_id:
                 raise IdentityConflict("source coverage private wire root changed")
@@ -211,7 +216,7 @@ class SourceCoverage:
                source_reads: NativeEvidenceScope | None = None) -> ProvenSourceCoverage:
         """Rescan the whole activation prefix; no persisted high-water is trusted."""
         with NativeEvidenceScope.borrow(source_reads) as source_reads:
-            with self.bus.log.locked(blocking=False):
+            with self.bus.log.locked(blocking=False, contention=self.contention):
                 marker = self.bus.log._private_marker_unlocked()
                 if marker.root_id != self.wire_root_id:
                     raise IdentityConflict("current source admission root changed")

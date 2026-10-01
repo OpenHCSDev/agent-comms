@@ -14,7 +14,7 @@ import shutil
 import sqlite3
 import sys
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -265,31 +265,35 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         writes. A cold history view can recover without a model turn or receipt.
         """
         path = Path(str(session_file) + ".input-proof")
-        try:
-            with closing(
-                os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
-            ) as held:
+        with ExitStack() as custody:
+            try:
+                held = custody.enter_context(closing(
+                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
+                ))
                 before = os.fstat(held.fileno())
                 PrivateFileRole.require(before)
                 if before.st_nlink != 1:
                     raise NativePiUnavailable("Native proof must be private and unaliased")
-                with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)) as db:
-                    db.execute("PRAGMA query_only=ON")
-                    db.execute("BEGIN")
-                    actual = SQLiteSchemaObject.read(
-                        db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
-                    )
-                    if {item.name: item.sql for item in actual} != cls.schema_objects():
-                        raise NativePiUnavailable(
-                            "Native proof requires offline durable conversion"
-                        )
-                    if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
-                        raise NativePiUnavailable("Native proof inode changed while opening")
-                    yield db
-                    if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
-                        raise NativePiUnavailable("Native proof inode changed during observation")
-        except (OSError, sqlite3.Error, ValueError, TypeError) as error:
-            raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
+                db = custody.enter_context(closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)))
+                db.execute("PRAGMA query_only=ON")
+                db.execute("BEGIN")
+                actual = SQLiteSchemaObject.read(
+                    db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
+                )
+                if {item.name: item.sql for item in actual} != cls.schema_objects():
+                    raise NativePiUnavailable("Native proof requires offline durable conversion")
+                if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
+                    raise NativePiUnavailable("Native proof inode changed while opening")
+            except (OSError, sqlite3.Error, ValueError, TypeError) as error:
+                raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
+            # Consumer exceptions retain their original boundary and disposition.
+            # Custody closes the database/descriptor without classifying callers.
+            yield db
+            try:
+                if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
+                    raise NativePiUnavailable("Native proof inode changed during observation")
+            except OSError as error:
+                raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
 
     @classmethod
     def for_input(
@@ -686,16 +690,21 @@ class PrivateEvidenceRead:
     @classmethod
     @contextmanager
     def open(cls, path):
-        try:
-            with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
-                yield cls(path, stream)
-        except OSError as error:
-            raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
+        with ExitStack() as custody:
+            try:
+                stream = custody.enter_context(
+                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
+                )
+                source = cls(path, stream)
+            except OSError as error:
+                raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
+            yield source
 
     def close(self):
         self.stream.close()
 
-    def rows(self):
+    def _capture_append(self):
+        """Read original bytes under the file's own I/O exception boundary."""
         try:
             info = os.fstat(self.stream.fileno())
             PrivateFileRole.require(info)
@@ -714,25 +723,35 @@ class PrivateEvidenceRead:
                 PrivateFileRole.require(observed)
                 if revision != FileRevision.from_stat(observed):
                     raise NativePiUnavailable("Native Pi evidence changed during observation")
-            # The byte snapshot has been verified before decoding. Appends by
-            # the native child during expensive typed decoding are observed on
-            # the next read; they cannot change these captured original bytes.
+            return info.st_size, digest, appended
+        except (OSError, ValueError) as error:
+            raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
+
+    @staticmethod
+    def _decode_row(raw):
+        try:
+            row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
+        except (UnicodeError, ValueError) as error:
+            raise NativePiUnavailable("Native Pi evidence JSON is invalid") from error
+        if type(row) is not dict:
+            raise NativePiUnavailable("Native Pi evidence row has wrong type")
+        return row
+
+    def rows(self):
+        try:
+            size, digest, appended = self._capture_append()
+            # Byte acquisition and decoding own their errors. Yielding these
+            # original rows transfers no authority over a consumer's failures.
             for raw in appended.splitlines(keepends=True):
-                try:
-                    row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
-                except (UnicodeError, ValueError) as error:
-                    raise NativePiUnavailable("Native Pi evidence JSON is invalid") from error
-                if type(row) is not dict:
-                    raise NativePiUnavailable("Native Pi evidence row has wrong type")
-                yield row
-            self.verify_snapshot(info.st_size, digest.digest())
-            self.size, self.digest = info.st_size, digest
-        except NativePiUnavailable:
+                yield self._decode_row(raw)
+            try:
+                self.verify_snapshot(size, digest.digest())
+            except (OSError, ValueError) as error:
+                raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
+            self.size, self.digest = size, digest
+        except BaseException:
             self.close()
             raise
-        except (OSError, ValueError) as error:
-            self.close()
-            raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
 
     def verify_snapshot(self, size, expected_digest):
         """Validate the captured prefix after decoding, allowing later appends.

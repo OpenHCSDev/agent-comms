@@ -56,7 +56,7 @@ from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import _store_lock, StoreLockContention
 from agent_comms.typed_table import (
     Column,
     SQLiteForeignKeys,
@@ -200,7 +200,8 @@ def install_private_response_schema(store: Coordination) -> None:
 
 
 @contextmanager
-def _response_boundary(bus: MessageBus, *, blocking: bool = True) -> Iterator[RegistrySnapshot]:
+def _response_boundary(bus: MessageBus, *, blocking: bool = True,
+                       contention: StoreLockContention | None = None) -> Iterator[RegistrySnapshot]:
     """Total lock order: shared wire -> bus -> registry -> SQLite.
 
     Raw keyed appends acquire bus then registry; Comms register takes shared
@@ -208,9 +209,9 @@ def _response_boundary(bus: MessageBus, *, blocking: bool = True) -> Iterator[Re
     this boundary: the bus append receives this immutable loaded revision.
     """
     with (
-        _store_lock(bus.log.path.parent / "wire", blocking=blocking),
-        bus.log.locked(blocking=blocking),
-        _store_lock(bus._registry.store.path, blocking=blocking),
+        _store_lock(bus.log.path.parent / "wire", blocking=blocking, contention=contention),
+        bus.log.locked(blocking=blocking, contention=contention),
+        _store_lock(bus._registry.store.path, blocking=blocking, contention=contention),
     ):
         yield bus._registry.store._read_unlocked().snapshot()
 
