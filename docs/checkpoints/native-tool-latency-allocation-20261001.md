@@ -26,5 +26,13 @@ closure is this follow-up's scope, with representative saved native history.
 Original public/UNKNOWN attempts, native/proof bytes and blocked goals remain
 unchanged and never replayed.
 
-Next: original evidence allocation and complete caller trace; then the owning
-mechanism fix, a useful published checkpoint and affected installed/native gate.
+Installed source finding: the managed project handoff extension launches a new
+CLI process before every ordinary tool. Three actual read-only calls measured
+539–553ms. This callback is outside the model-request observation. The original
+project/owner relation must use the existing owner transport, not cached state.
+See evidence/native-tool-latency-allocation-20261001.
+
+Next: close that authority relation and instrument the existing real retained
+native read fixture at preparation/admission/execution boundaries. The 121s
+model request and 129s historical journal gap remain separately scoped; there
+is no provider-capacity attribution or claim that general latency is fixed.
