@@ -1,0 +1,40 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_____________ test_actual_cold_retained_commit_and_reopen[manual] ______________
+tests/test_retained_manual_compaction.py:163: in test_actual_cold_retained_commit_and_reopen
+    response = await build_agent_router(agent)(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/acp/router.py:184: in __call__
+    return await route.handle(params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/acp/router.py:73: in handle
+    result = await self.func(params)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/acp/router.py:107: in wrapper
+    return await func(**params)  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/acp.py:206: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: in dispatch
+    replacement = await handler(value)
+                  ^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:55: in compact
+    self.response = await self.agent._compact_request(self.session_id, request.instructions)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/acp.py:221: in _compact_request
+    return result.prompt_response()
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/compaction_result.py:58: in prompt_response
+    raise RequestError(-32603, self.error, {"reason": self.error})
+E   acp.exceptions.RequestError: Selected Pi declined manual summary (unsupported)
+____________ test_actual_cold_retained_commit_and_reopen[adaptive] _____________
+tests/test_retained_manual_compaction.py:182: in test_actual_cold_retained_commit_and_reopen
+    (attempt,) = journal.summaries.history(str(session))
+    ^^^^^^^^^^
+E   ValueError: not enough values to unpack (expected 1, got 0)
+=========================== short test summary info ============================
+FAILED tests/test_retained_manual_compaction.py::test_actual_cold_retained_commit_and_reopen[manual]
+FAILED tests/test_retained_manual_compaction.py::test_actual_cold_retained_commit_and_reopen[adaptive]
+2 failed in 25.88s
