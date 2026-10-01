@@ -161,14 +161,15 @@ current provenance and corrected nominal facts. Ordinary merging alone does not
 restore reverted hunks. This dependency has a named owner and original commits. Preserve original branch
 and failed receipts; test the changed scoped477 candidate before release.
 
-266 working production candidate shares original history custody: End reuses
-an existing certified-interval PageView and original update_fragments preserves
-native ordering when admission grows backwards.21 added/10 deleted in one
-history file; source overlap/ordering and installed acceptance still pending.
-Native construction count241 versus261 for80 fragments varies with cadence and
-is not a CPU acceptance claim. Heisenberg granted Mendel268 extraction of the
-shared physical viewport presentation contract; original page/budget methods
-remain Heisenberg's disjoint ownership.
+266 is merged as d0349869. One production file adds21/deletes10 lines:
+End preserves the original certified-interval page and backward admission keeps
+native order. Separate controlled source proof retains17 overlap bodies. Actual
+installed physical st scrolling/End/tab-return/draft/undo passes16 checks in91.23s,
+with original public authority unchanged and owned cleanup empty. End interval
+differed in that recording, so it is not the reuse-branch proof. End CPU69.09%
+versus26482.49%; general scrolling CPU remains high. Default still254.
+Heisenberg continues full resource/admission/CPU/warm rendering scope in draft269,
+without waiting for inbox, archives or retained context.
 
 Latest476 source closure now acquires one named Live/Unavailable recipient
 observation from original AgentActivity/RegistrySnapshot. Recorded/unrecorded
@@ -183,3 +184,29 @@ palette, so it is not evidence of a modal paint cause. Actual click/hit failures
 remain separate. Mendel is checking the current matched native terminal path and
 flags before further modal architecture changes; granted shared viewport
 extraction is conditional on the real contract witness, not a guessed paint fix.
+
+## Current physical inbox verification and retained-context pairing
+
+476 final functional0a76958a deletes154/adds370 production lines across17 files.
+Installed native cancellation and failure/Pilot journeys pass, but the latter is
+not a physical terminal claim. Parent now completed the actual ordinary wrapper
+in separate st against the three original failing OpenHCS receivers:32.728s,
+1983 decoded video frames, public owner identities/native journals/proofs/input
+and wire authority unchanged, cleanup empty. Channel opening/return derives
+Waiting for recovery for all three original failures. PR159 receiver details
+still says Ready while its sidebar says Inbox unavailable. This is a concrete
+remaining canonical-view inconsistency owned by Arendt, not full acceptance or
+recovery. Raw capture and sanitized receipt are preserved; no message replay,
+provider call, restart or public activation occurred.
+
+Mendel268 real st Saved Select now exposed a concrete AgentResponse ancestor
+contract crash in HistoricalSessions. This replaces the disproved black-SVG
+paint inference; no guessed modal/viewport extraction.477 historical scope and
+runtime-index carry remain independent and parent owns the future quiet carry.
+
+Parent metadata-only draft270 packages475+473 through the existing69 dependency
+donor and single canonical native451916 package. Receiving4753f4456c5 includes
+S5 CLI selected-private-root correction, not a new native build. Einstein owns
+continuous installed native/ACP/CLI two-input inspection; Schrodinger retains
+unfinished general constraints/artifact provenance. No S2/S5 public activation
+or complete context inspection claim yet.
