@@ -793,6 +793,10 @@ class ChildProcess(Sealed, ABC):
     def alive(self) -> bool:
         return self.platform.matches(self.identity)
 
+    def force(self) -> None:
+        """Signal the original owned group, including an exited leader's members."""
+        self.platform.force_group(self.identity)
+
     @property
     def retired(self) -> bool:
         """Exact child and its owned group are gone, independent of pipe callbacks."""
@@ -842,6 +846,38 @@ class ChildProcess(Sealed, ABC):
         return await join_retirement(self._stop_task)
 
 
+class ChildStdio(DeclaredFamily, affix="ChildStdio"):
+    """Launch IO selection; process identity and retirement remain ChildProcess-owned."""
+
+    @property
+    @abstractmethod
+    def options(self) -> dict: ...
+
+
+@dataclass(frozen=True)
+class StreamingChildStdio(ChildStdio):
+    input_enabled: bool = True
+    limit: int = 65536
+
+    @property
+    def options(self) -> dict:
+        return {
+            "stdin": subprocess.PIPE if self.input_enabled else subprocess.DEVNULL,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "limit": self.limit,
+        }
+
+
+@dataclass(frozen=True)
+class TerminalChildStdio(ChildStdio):
+    terminal: io.IOBase
+
+    @property
+    def options(self) -> dict:
+        return {"stdin": self.terminal, "stdout": self.terminal, "stderr": self.terminal}
+
+
 class AttachedChild(ChildProcess):
     def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity):
         super().__init__(identity)
@@ -858,8 +894,7 @@ class AttachedChild(ChildProcess):
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
-        input_enabled: bool = True,
-        limit: int = 65536,
+        stdio: ChildStdio = StreamingChildStdio(),
     ) -> AttachedChild:
         if not command:
             raise ValueError("A child command is required")
@@ -869,10 +904,7 @@ class AttachedChild(ChildProcess):
                 *launch.argv,
                 cwd=cwd,
                 env=env,
-                stdin=subprocess.PIPE if input_enabled else subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                limit=limit,
+                **stdio.options,
                 **launch.options,
             )
             identity = platform.identity(process.pid)
@@ -1127,7 +1159,7 @@ class SynchronousProcess(ChildProcess):
 
     def force(self) -> None:
         self.platform.require(self.identity)
-        self.platform.force_group(self.identity)
+        super().force()
 
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
