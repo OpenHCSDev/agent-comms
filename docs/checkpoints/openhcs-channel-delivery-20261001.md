@@ -140,3 +140,13 @@ proofs remain at /home/ts/wt/ac476-{b03,d04,e05}. SourceABI, runtime schema and 
 package are unchanged. This checkpoint establishes installed backend/ACP behavior
 and actual original read projections; final paired TUI paint/public activation
 remains the parent's separate acceptance boundary.
+
+Deletion accounting against integrated current main: eight production files,
+**41 deleted / 92 added**. Added lines separate original cancellable acquisition
+from granted writes, retain the original pipe-closure witness, and move readiness
+presentation onto the existing diagnostic owner. Three fixture/control files:
+**35 deleted / 220 added**, extending the existing native journey rather than
+duplicating its worker/provider infrastructure. Replaced early dispatch/clock
+sites, whole-inbox cancellation ACK and registry-only pending interpretation are
+closed across their callers. Archive provenance is Mendel's separate PR477;
+historical lock-holder attribution remains unavailable from original evidence.
