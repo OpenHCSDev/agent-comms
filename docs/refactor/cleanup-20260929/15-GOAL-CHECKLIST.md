@@ -1,3 +1,7 @@
+## Corrected main-integration claim — 2026-10-01
+
+474 merged into feat/turn-context-phase1-20261001, not main. Earlier parent/agent main claims were wrong. Live acceptedee000781/53b8 feature remains installed and verified; current actual main493 merge537edb8a retains c4d4 native and lacks feature474. Next283candidate full-native qualification refused the mismatch before publication. Original artifact53b8 itself is unchanged/correct. Einstein owns actual complete474→main493 normal integration in a scoped PR; parent receives its real main merge, never rolls back feature or copies native pins by hand. All older main474 claims below are superseded by this correction.
+
 ## Default authored-context release verified — 2026-10-01
 
 474/282 is installed. Same17owners restarted with recorded configs;34 original protected files unchanged; runtime journal preserved, no uncertain replay. Mandatory stopped whole-wire and automatic globals/native saved27-message startup passed. Actual default isolated st/Xvfb openhcs-helper attachment25.219s completed; saved chat, Ready in sidebar/details individually viewed, original owner identity unchanged, cleanup empty. Receipt: evidence/authored474-default-20261001/receipt.json. This does not claim494 compaction framing,489 lifecycle,490 batching or275 scrolling complete.

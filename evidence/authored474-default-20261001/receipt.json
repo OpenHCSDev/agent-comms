@@ -127,5 +127,6 @@
       "bytes": 39817,
       "sha256": "1d08d1dbf3afaf7a59bb2c3a77e51c2530ade3816e0f0436c869dfeafe68225f"
     }
-  }
+  },
+  "core_merge_destination": "feat/turn-context-phase1-20261001, not main; parent discovered destination mistake while next493candidate native pin check refused before publication. Accepted live feature remains intact; actual main integration assigned Einstein."
 }
