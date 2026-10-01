@@ -52,7 +52,7 @@ class WireLog:
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None):
         """The existing canonical bus lock and durability read barrier."""
         with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as lock:
-            yield lock.descriptor
+            yield lock
 
     @contextmanager
     def certified_read(self, *, blocking: bool = True):
@@ -84,41 +84,24 @@ class WireLog:
         with self.locked():
             return list(self._iter_log_unlocked())
 
-    def delivery_revision_unlocked(self, delivery: DeliveryScope) -> str:
-        """Hash the owner's ingress while retaining only one wire record.
+    def compaction_messages_unlocked(self, delivery: DeliveryScope):
+        """One strict wire traversal supplies both the source cut and exact facts.
 
-        Caller holds the canonical wire lock. The revision deliberately excludes
-        unrelated deliveries; all records still undergo sequence validation.
+        Caller owns the original bus lock. Outgoing declared decisions belong
+        to their author's source too; unrelated messages cannot invalidate it.
         """
         digest = hashlib.sha256()
-        try:
-            info = self.path.lstat()
-        except FileNotFoundError:
-            return digest.hexdigest()
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-            raise RelationViolationError("Compaction ingress must be regular storage")
-        previous = 0
-        selected = False
-        try:
-            with self.path.open("rb") as stream:
-                for raw in stream:
-                    if not raw.endswith(b"\n"):
-                        raise ValueError("Incomplete bus row")
-                    line = raw.removesuffix(b"\n").removesuffix(b"\r")
-                    message = Message.from_wire(
-                        json.loads(line, object_pairs_hook=unique_wire_object)
-                    )
-                    if message.seq <= previous:
-                        raise ValueError("Bus sequence is not increasing")
-                    previous = message.seq
-                    if delivery.delivers(message.sender, message.target):
-                        if selected:
-                            digest.update(b"\n")
-                        digest.update(line)
-                        selected = True
-        except (ValueError, KeyError, TypeError, AttributeError) as error:
-            raise RelationViolationError("Invalid compaction ingress bus") from error
-        return digest.hexdigest()
+        facts = []
+        for message in self._iter_log_unlocked():
+            authored_decision = (
+                delivery.canonical(message.sender) == delivery.actor
+                and message.decision is not None
+            )
+            if authored_decision or delivery.delivers(message.sender, message.target):
+                digest.update(json.dumps(FieldCodec.encode(message), sort_keys=True).encode())
+                digest.update(b"\n")
+                facts.extend(message.retained_task_facts())
+        return digest.hexdigest(), tuple(facts)
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""

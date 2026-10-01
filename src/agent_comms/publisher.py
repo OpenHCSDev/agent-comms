@@ -43,6 +43,7 @@ from .messages import Message
 from .private_registry_guard import _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import (
+    StoreLock,
     _store_lock,
     file_revision,
 )
@@ -50,6 +51,7 @@ from .store_files import (
 if TYPE_CHECKING:
 
     from .registration import Registration
+    from .private_bus_checkpoint import CertifiedSourceRead
 
 from .catalog_store import ChannelCatalog
 from .wire_log import WireLog
@@ -114,8 +116,25 @@ class Publisher:
         target: str,
         sequence: int,
         snapshot: RegistrySnapshot | None = None,
+        original_source: CertifiedSourceRead | None = None,
     ) -> Message:
         snapshot = snapshot or self._registry.snapshot()
+        if message.decision is not None:
+            author = snapshot.require(sender)
+            author.require_turn(
+                message.decision.source_turn_id, snapshot.admission_generations[sender]
+            )
+            message.decision.require_emission(author)
+            if message.decision.supersedes is not None:
+                from .private_bus_checkpoint import source_references_unlocked
+
+                if original_source is None:
+                    raise RelationViolationError("Decision correction requires the original publication read")
+                original_source.require_marker(self.log._private_marker_unlocked())
+                original, = source_references_unlocked(
+                    original_source, (message.decision.supersedes,)
+                )
+                message.decision.require_correction(original, snapshot)
 
         def resolve_mention(name: str) -> str | None:
             canonical = snapshot.aliases.get(name, name)
@@ -150,12 +169,12 @@ class Publisher:
 
         if _human_origin is not None and type(_human_origin) is not HumanOrigin:
             raise RelationViolationError("Human origin must be a typed local USER identity.")
-        with guard_original_root_write(self.log.path.parent), self.log.locked():
+        with guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
             self._validate_publish_request(message)
             if not self.log.read_metadata_unlocked().private:
                 self._initialize_private_protocol_unlocked()
             return self.publish_initial_cohort(
-                message, _bus_locked=True, _human_origin=_human_origin
+                message, _bus_lock=bus_lock, _human_origin=_human_origin
             )
 
     def initialize_private_protocol(self) -> str:
@@ -299,7 +318,7 @@ class Publisher:
         message: Message,
         *,
         control: str = "ordinary",
-        _bus_locked: bool = False,
+        _bus_lock: StoreLock | None = None,
         _human_origin: HumanOrigin | None = None,
     ) -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
@@ -319,7 +338,7 @@ class Publisher:
         classification = ControlClassification(control)
         if not classification.supports_initial:
             raise RelationViolationError("System-control initial issuer is not available.")
-        with nullcontext() if _bus_locked else self.log.locked():
+        with nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked() as bus_lock:
             _require_no_private_owner_rename(self.log.path.parent)
             metadata = self.log._private_marker_unlocked()
             metadata.access.require_append()
@@ -396,6 +415,7 @@ class Publisher:
                 target=target,
                 sequence=max(metadata.last_seq, previous_sequence) + 1,
                 snapshot=snapshot,
+                original_source=bus_lock.source,
             )
             if _human_origin is not None:
                 # The marker reserves a sequence before the row. A crash after

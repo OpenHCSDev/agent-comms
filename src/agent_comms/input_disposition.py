@@ -94,6 +94,13 @@ class InputDocument:
             return None
         return tuple(self.rows[key].source_text for key in keys)
 
+    def retained_task_facts(self, owner: Thread):
+        """Original attempted and queued records, without changing dispositions."""
+        from .retained_task_facts import InputTaskFact
+
+        return tuple(InputTaskFact(row) for row in self.rows.values()
+                     if row.matches_owner(owner.incarnation))
+
     def started_for_native(
         self, lease: TurnLeaseFence, native_id: str, sent_text: str,
         *, snapshot: RegistrySnapshot,
