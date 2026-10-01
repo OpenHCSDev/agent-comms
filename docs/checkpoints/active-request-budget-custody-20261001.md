@@ -173,3 +173,43 @@ boundary notice; batch selection/source/receipt semantics remain his ownership.
 Sanitized evidence: evidence/request-budget-custody-20261001/
 retained-greeting-cause-allocation.json. Full private proof root remains protected
 at /var/tmp/arendt-cause-489-jaafsyfi/wire; no input replay to repair the driver.
+
+## Installed evidence-borrow checkpoint
+
+The existing NativeEvidenceRead still owns decoded original bytes and rechecks
+prefix/hash/inode/mode/ancestor custody every time. NativeEvidenceScope extends
+ExitStack for one operation and holds at most one such reader. A source switch
+closes the prior reader; exit clears all handles and decoded entries. It stores
+no context proof, input disposition, receipt, semantic cursor or acceptance bit.
+Optional `evidence`/`source_reads` arguments denote a borrowed resource only;
+when absent the original boundary acquires and closes one, using the same method.
+No persistence/schema/native-protocol/default change is required for this part.
+
+All production callers now borrow through the same original evidence owner:
+NativeSendStage.verify context+prompt; historical input context+prompt; all cursor
+prefix/last-proof/evidence branches, including read revalidation. Current-owner,
+frozen source, SQL binding, exact prompt and UNKNOWN barriers remain unchanged.
+Corrupted source is refused; a refused reader is not reopened as fresh authority.
+The source-control batch passes45 in40.54s, including source switching and closed
+reader refusal, malformed/changed proof, replaced/truncated/prefix-mutated files,
+ancestor/mode changes, missing claims, UNKNOWN and original cursor membership.
+
+Normal installed Core wheel + unchanged deployed native17d, localhost provider:
+**18.0918s PASS**, 2POSTs, paid/public0. Same42,044,804-byte sourceSHA
+`a46d4826d76cac0dfab481586e05cad9583170526155ffdf17b2c2e5a095acdb`.
+Original47.3188s run preserved with its post-completion driver assertion failure;
+its canonical completed reply was independently validated without replay. The
+receiving run verifies exact published response/body, proven current native
+cursor and canonical no-active-turn after cleanup. Seven changed production
+Python files match installed bytes exactly; package dependency check passes.
+Sanitized receiving receipt: evidence/request-budget-custody-20261001/
+retained-greeting-evidence-borrow-installed.json.
+Private receiving proof root: /var/tmp/arendt-cause-489-fixed-bmhpf6b9/wire.
+Original failed and receiving roots are protected; no new public/native calls or
+cleanup of proof/session data was used to hide the failure.
+
+This is meaningful installed selected-workflow latency evidence, not an actual
+TUI gate or completed489 paused-compaction journey. The native budget source
+changes from23284 remain source-only and uncompiled against17d; full489 is still
+draft. Historical45.830s predispatch remains unallocated; do not attribute it to
+these separately proved post-result rereads or provider capacity.

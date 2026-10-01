@@ -25,6 +25,7 @@ from .native_admission_rules import (
 from .native_input_owner import ParticipantOwner
 from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
 from .native_pi import NativeContextProof
+from .native_entries import NativeEntry
 from .native_prompt_binding import (
     PromptBinding,
     expected_prompt_matches_journal,
@@ -117,22 +118,23 @@ class NativeSendStage(ABC):
     ) -> None:
         # The native boundary validated the live RPC events before returning.
         # Disk evidence corroborates those events, never authorizes recovery.
-        if not context.corroborates_input(input_id, session_dir):
-            raise IdentityConflict(
-                "Pi live assembled context differs from its reserved input proof"
-            )
-        with store.session.read():
-            self.pending_input(store, input_id, owner, token_digest)
-            binding = self.require_binding(
-                store,
-                input_id,
-                owner,
-                wire_root_id,
-                prompt,
-                blocking=True,
-            )
-            if not expected_prompt_matches_journal(context.session_file, binding):
-                raise IdentityConflict("live native input lacks exact bound source prompt equality")
+        with NativeEntry.open_evidence(context.session_file) as evidence:
+            if not context.corroborates_input(input_id, session_dir, evidence=evidence):
+                raise IdentityConflict(
+                    "Pi live assembled context differs from its reserved input proof"
+                )
+            with store.session.read():
+                self.pending_input(store, input_id, owner, token_digest)
+                binding = self.require_binding(
+                    store,
+                    input_id,
+                    owner,
+                    wire_root_id,
+                    prompt,
+                    blocking=True,
+                )
+                if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
+                    raise IdentityConflict("live native input lacks exact bound source prompt equality")
 
     def require_claim(self, store: Coordination) -> None:
         current = store.assignments.get(self.assignment.assignment_id)
