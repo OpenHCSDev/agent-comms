@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 
+from agent_comms.retained_task_facts import RetainedTaskFacts
 from agent_comms.child_process import AttachedChild
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -275,6 +276,7 @@ async def test_actual_native_provider_failure_attests_source_and_reopens(tmp_pat
                     source=manual_source(session),
                     selected=selected.to_wire(),
                     settings=dict(reserveTokens=2048, keepRecentTokens=1024),
+                    retained=FieldCodec.encode(RetainedTaskFacts(())),
                 ),
                 expected_package=package,
                 tokens_before=preparation.tokens_before,
@@ -320,6 +322,7 @@ async def test_actual_native_child_disconnect_remains_unknown(tmp_path):
                     source=manual_source(session),
                     selected=selected.to_wire(),
                     settings=dict(reserveTokens=2048, keepRecentTokens=1024),
+                    retained=FieldCodec.encode(RetainedTaskFacts(())),
                 ),
                 expected_package=package,
                 tokens_before=preparation.tokens_before,
@@ -357,6 +360,7 @@ async def test_actual_summary_slot_denies_mutation_and_joins_cancellation(tmp_pa
         request = AgentCommsSummarizeCompaction(
             id="held-summary", version=1, operation_id=operation,
             witness=preparation.witness, selected=selected, settings=settings,
+            retained_text=RetainedTaskFacts(()).text,
         )
         child.stdin.write((json.dumps(request.to_rpc()) + "\n").encode())
         await child.stdin.drain()

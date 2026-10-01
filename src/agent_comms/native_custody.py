@@ -84,6 +84,10 @@ class NativeCustody(ABC):
     def idle(self) -> RetainedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
+    async def inspect_context(self, persistent, prepare):
+        await prepare()
+        return await persistent.custody.idle().inspect_context(persistent, prepare)
+
     async def expected(
         self, launch, session_file, require_input_id
     ) -> NativeSessionIdentity | None:
@@ -174,6 +178,15 @@ class BorrowedNative(NativeCustody):
     successor: NativeCustody
     available = True
 
+    async def inspect_context(self, persistent, prepare):
+        from .pi_commands import AgentCommsInspectContext
+        # The active TurnSession owns receive/correlation. Borrow its original
+        # pending response instead of starting a competing reader.
+        async with AgentCommsInspectContext().pending_response(
+            self.child.reader,self.child.proc.stdin
+        ) as response:
+            return (await response).data.require_payload()
+
     def retire(self, successor=None):
         return RetiringNative(
             asyncio.create_task(self.child.close()),
@@ -211,6 +224,15 @@ class RetainedNative(NativeCustody):
         if self.identity != identity or self.child.key[0].package != package:
             raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
         return self.idle()
+
+    async def inspect_context(self, persistent, prepare):
+        from .pi_commands import AgentCommsInspectContext
+        async with persistent.lock:
+            current = persistent.custody.idle()
+            response = await AgentCommsInspectContext().exchange(
+                current.child.reader,current.child.proc.stdin
+            )
+            return response.data.require_payload()
 
     def reuse(self, key, session_file):
         if self.child.key == key and self.identity.session_file == session_file and self.current:

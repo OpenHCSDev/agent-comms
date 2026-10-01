@@ -21,6 +21,7 @@ from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import OwnerSummaryOutcome
 from .owner_compaction_runtime import compact_owner_once
+from .compaction_source import CompactionSource
 from .owner_compaction_settings import PiCompactionDecision, PiSettingsEvidenceError
 from .pi_payloads import StateData
 from .registration import Registration
@@ -41,7 +42,7 @@ async def maybe_compact_owner_turn(
     original_input_key: str,
     persistent: PersistentPiSession,
     *,
-    summary_strategy: Callable[[NativePreparation], Awaitable[OwnerSummaryOutcome]] | None = None,
+    summary_strategy: Callable[[NativePreparation, CompactionSource], Awaitable[OwnerSummaryOutcome]] | None = None,
     input_text: str | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
     future_queue: FutureInputQueue | None = None,
@@ -132,13 +133,14 @@ async def maybe_compact_owner_turn(
             session_revision=revision,
         )
 
-        async def selected_summary(prepared: NativePreparation) -> OwnerSummaryOutcome:
+        async def selected_summary(prepared: NativePreparation, captured: CompactionSource) -> OwnerSummaryOutcome:
             slot = SelectedSummarySlot(owner.name, prepared.witness.session_id)
             result = await slot.run_selected_summary(
                 persistent,
                 bridge.journal,
                 prepared.witness,
                 {
+                    "retained": FieldCodec.encode(captured.retained),
                     "source": FieldCodec.encode(identity.source),
                     "selected": {
                         "provider": provider,
@@ -156,13 +158,13 @@ async def maybe_compact_owner_turn(
 
         summary_strategy = selected_summary
 
-    async def summarize(prepared: NativePreparation) -> OwnerSummaryOutcome:
+    async def summarize(prepared: NativePreparation, captured: CompactionSource) -> OwnerSummaryOutcome:
         # Recheck immediately before paid provider work, then after it. The
         # owner source and ingress remain independently fenced by the bridge.
         attestation = owner.compaction_attestation(owner_generation, prepared.witness)
         attestation.require_registry(registry, owner)
         settings.require_current(await decision())
-        outcome = await summary_strategy(prepared)
+        outcome = await summary_strategy(prepared, captured)
         attestation.require_registry(registry, owner)
         settings.require_current(await decision())
         return outcome

@@ -20,6 +20,7 @@ from .tool_results import ToolDiff
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
+    from .native_turn_context import NativeContextManifestData
     from .comms import Comms
     from .goal_presentation import GoalExecution
     from .goals import Goal
@@ -48,6 +49,13 @@ class GoalChanged(AgentEvent):
     @property
     def signature(self) -> tuple[Goal | None, GoalExecution | None]:
         return self.goal, self.execution
+
+
+@dataclass(frozen=True)
+class ContextObserved(AgentEvent):
+    """Text-free SDK input observation; no transcript or status publication."""
+
+    context: NativeContextManifestData
 
 
 @dataclass(frozen=True)

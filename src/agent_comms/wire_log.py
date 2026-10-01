@@ -17,6 +17,7 @@ from agent_comms.coordination_tables.publications import (
 
 from .bus_publication import (
     CommittedDelivery,
+    stable_thread_lookup,
     has_private_wire_fields,
     unique_wire_object,
 )
@@ -40,7 +41,7 @@ from .wire_record import WireRecord, WireScan
 
 if TYPE_CHECKING:
 
-    from .routing import DeliveryScope
+    from .thread_identity import ThreadIncarnation
 
 
 class WireLog:
@@ -52,7 +53,7 @@ class WireLog:
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None):
         """The existing canonical bus lock and durability read barrier."""
         with _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes) as lock:
-            yield lock.descriptor
+            yield lock
 
     @contextmanager
     def certified_read(self, *, blocking: bool = True):
@@ -84,41 +85,42 @@ class WireLog:
         with self.locked():
             return list(self._iter_log_unlocked())
 
-    def delivery_revision_unlocked(self, delivery: DeliveryScope) -> str:
-        """Hash the owner's ingress while retaining only one wire record.
+    def record_context(self, manifest) -> None:
+        """Append one text-free observation through the original sealed writer."""
+        from .wire_record import ContextManifestWireObservation, ObservationWireRecord
 
-        Caller holds the canonical wire lock. The revision deliberately excludes
-        unrelated deliveries; all records still undergo sequence validation.
+        with self.locked():
+            marker = self._private_marker_unlocked()
+            record = ObservationWireRecord(ContextManifestWireObservation(manifest))
+            self._append_private_unlocked(marker, record.to_wire())
+
+    def context_manifests(self, incarnation):
+        """Observe original rows; no context sidecar, receipt or sequence index."""
+        with self.locked():
+            marker = self._private_marker_unlocked()
+            return tuple(
+                manifest
+                for record in self.verified_records_unlocked(marker)
+                for manifest in record.context_manifests()
+                if manifest.thread == incarnation
+            )
+
+    def compaction_messages_unlocked(self, recipient: ThreadIncarnation):
+        """One strict wire traversal supplies both the source cut and exact facts.
+
+        Caller owns the original bus lock. Outgoing declared decisions belong
+        to their author's source too; unrelated messages cannot invalidate it.
         """
         digest = hashlib.sha256()
-        try:
-            info = self.path.lstat()
-        except FileNotFoundError:
-            return digest.hexdigest()
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-            raise RelationViolationError("Compaction ingress must be regular storage")
-        previous = 0
-        selected = False
-        try:
-            with self.path.open("rb") as stream:
-                for raw in stream:
-                    if not raw.endswith(b"\n"):
-                        raise ValueError("Incomplete bus row")
-                    line = raw.removesuffix(b"\n").removesuffix(b"\r")
-                    message = Message.from_wire(
-                        json.loads(line, object_pairs_hook=unique_wire_object)
-                    )
-                    if message.seq <= previous:
-                        raise ValueError("Bus sequence is not increasing")
-                    previous = message.seq
-                    if delivery.delivers(message.sender, message.target):
-                        if selected:
-                            digest.update(b"\n")
-                        digest.update(line)
-                        selected = True
-        except (ValueError, KeyError, TypeError, AttributeError) as error:
-            raise RelationViolationError("Invalid compaction ingress bus") from error
-        return digest.hexdigest()
+        facts = []
+        lookup = stable_thread_lookup(recipient.created_at)
+        marker = self._private_marker_unlocked()
+        for record in self.verified_records_unlocked(marker):
+            for message in record.compaction_messages_for(lookup):
+                digest.update(json.dumps(FieldCodec.encode(message), sort_keys=True).encode())
+                digest.update(b"\n")
+                facts.extend(message.retained_task_facts())
+        return digest.hexdigest(), tuple(facts)
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
@@ -147,10 +149,10 @@ class WireLog:
         projection = ClaimProjection()
         verified_sequence = 0
         for record in self.verified_records_unlocked(metadata):
-            previous = record.message
-            verified_sequence = previous.seq
-            if previous.claim_transition is not None:
-                projection = apply_transition(projection, previous.claim_transition)
+            verified_sequence = record.sequence_after(verified_sequence)
+            for previous in record.messages():
+                if previous.claim_transition is not None:
+                    projection = apply_transition(projection, previous.claim_transition)
         return projection, verified_sequence
 
     def claim_projection(self) -> ClaimProjection:
@@ -215,7 +217,8 @@ class WireLog:
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
             raise RelationViolationError("Private bus row exceeds the byte limit.")
-        metadata.last_seq = row["seq"]  # type: ignore[assignment]
+        record = WireRecord.from_wire(row, metadata.root_id)
+        metadata.last_seq = record.sequence_after(metadata.last_seq)
         self.write_metadata_unlocked(metadata)
         descriptor = os.open(
             self.path, os.O_APPEND | os.O_CREAT | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600
@@ -245,7 +248,6 @@ class WireLog:
         )
 
         if certificate_enabled(self.path):
-            record = WireRecord.from_wire(row, metadata.root_id)
             try:
                 append_private_bus_checkpoint_unlocked(self, metadata, encoded, record)
             except Exception as error:
@@ -303,15 +305,16 @@ class WireLog:
             return matched
 
     @staticmethod
-    def _public_page_record(
+    def _public_page_records(
         record: Mapping, raw_size: int, metadata: WireMetadata
-    ) -> tuple[Message, int]:
-        """Charge public page budgets for public bytes, never private sidebands."""
-        message = Message.from_wire(record)
-        if has_private_wire_fields(record):
-            return message, len(json.dumps(message.to_wire()).encode()) + 1
-        message.require_retained_admission(metadata.admission_after_seq)
-        return message, raw_size
+    ) -> Iterator[tuple[Message, int]]:
+        """Silent facts consume physical bytes, never message/display budgets."""
+        for message in WireRecord.public_from_wire(record).messages():
+            if has_private_wire_fields(record):
+                yield message, len(json.dumps(message.to_wire()).encode()) + 1
+            else:
+                message.require_retained_admission(metadata.admission_after_seq)
+                yield message, raw_size
 
     @contextmanager
     def _record_snapshot(
@@ -344,10 +347,11 @@ class WireLog:
         try:
             records = (
                 (
-                    self._public_page_record(record, size, metadata)
+                    page_row
                     for record, size in _iter_jsonl_stream(
                         stream, boundary=boundary, label="wire snapshot"
                     )
+                    for page_row in self._public_page_records(record, size, metadata)
                 )
                 if stream is not None
                 else iter(())
@@ -386,7 +390,7 @@ class WireLog:
 
     def total_messages(self) -> int:
         with _store_lock(self.path):
-            return sum(1 for _ in _iter_jsonl_records(self.path))
+            return sum(1 for _ in self._iter_log_unlocked())
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
@@ -399,47 +403,13 @@ class WireLog:
         if self.path.exists():
             marker = self._private_marker_unlocked()
             for record in self.verified_records_unlocked(marker):
-                yield record.message
+                yield from record.messages()
 
     def _max_sequence_unlocked(self) -> int:
         return max(
-            (int(record.get("seq", 0)) for record, _ in _iter_jsonl_records(self.path)),
+            (message.seq for message in self._iter_log_unlocked()),
             default=0,
         )
-
-    def _last_row_sequence_unlocked(self) -> int:
-        """Read the final complete row without rescanning the whole bus on send."""
-        try:
-            with self.path.open("rb") as records:
-                records.seek(0, os.SEEK_END)
-                end = records.tell()
-
-                def previous_newline(before: int) -> int:
-                    cursor = before
-                    while cursor:
-                        start = max(0, cursor - 64 * 1024)
-                        records.seek(start)
-                        offset = records.read(cursor - start).rfind(b"\n")
-                        if offset >= 0:
-                            return start + offset
-                        cursor = start
-                    return -1
-
-                last_newline = previous_newline(end)
-                if last_newline < 0:
-                    return 0  # An incomplete first row is repaired before append.
-                prior_newline = previous_newline(last_newline)
-                records.seek(prior_newline + 1)
-                raw = records.read(last_newline - prior_newline - 1)
-        except FileNotFoundError:
-            return 0
-        try:
-            row = json.loads(raw, object_pairs_hook=unique_wire_object)
-            if type(row) is not dict or type(row.get("seq")) is not int or row["seq"] < 1:
-                raise ValueError("Invalid last bus sequence")
-            return int(row["seq"])
-        except (ValueError, UnicodeError) as error:
-            raise RelationViolationError("Malformed last bus row blocks publication.") from error
 
     def claim_gate_enabled(self) -> bool:
         # _store_lock is also used for registry, channels, and marker files.

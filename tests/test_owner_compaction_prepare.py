@@ -122,7 +122,7 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
         owner,
         owner_generation,
         prepared.witness,
-        "Provider-free synthetic summary",
+        source.retained.text + "\n\n" + "Provider-free synthetic summary",
         prepared.tokens_before,
         source=source,
     )
@@ -529,7 +529,7 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
                 owner,
                 generation,
                 prepared.witness,
-                "Capacity accepted",
+                source.retained.text + "\n\n" + "Capacity accepted",
                 prepared.tokens_before,
                 source=source,
                 timeout=30,
@@ -605,7 +605,7 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
             owner,
             owner_generation,
             prepared.witness,
-            "Stale summary",
+            source.retained.text + "\n\n" + "Stale summary",
             prepared.tokens_before,
             source=source,
         )
@@ -637,10 +637,10 @@ async def test_late_correction_after_summary_refuses_write_without_reusing_manag
     comms = Comms(root)
     comms.registry.declare(Thread("peer", frozenset(), str(root)))
 
-    async def corrected_summary(metadata):
+    async def corrected_summary(metadata, captured):
         assert metadata.tokens_before > 0
         comms.messaging.send("peer", "owner", "Correction after preparation")
-        return NativeSummary("Now stale", None, None)
+        return NativeSummary(captured.retained.text + "\n\nNow stale", None, None)
 
     with pytest.raises(RelationViolationError, match="source changed"):
         await compact_owner_once(
@@ -702,8 +702,8 @@ async def test_cancelled_owner_joins_real_native_commit_before_turn_lock_release
 
     monkeypatch.setattr(bridge.native, "exchange", delayed_native)
 
-    async def synthetic_summary(_metadata):
-        return NativeSummary("Synthetic provider-free summary", None, None)
+    async def synthetic_summary(_metadata, captured):
+        return NativeSummary(captured.retained.text + "\n\nSynthetic provider-free summary", None, None)
 
     async def owned_turn():
         async with turn_lock:
@@ -871,7 +871,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
             owner,
             owner_generation,
             prepared.witness,
-            f"Synthetic provider-free round {round_index}; retain goal-unchanged",
+            source.retained.text + "\n\n" + f"Synthetic provider-free round {round_index}; retain goal-unchanged",
             prepared.tokens_before,
             source=source,
         )
@@ -946,10 +946,10 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                     timeout=5,
                 )
 
-            async def synthetic_summary(metadata, round_index=index):
+            async def synthetic_summary(metadata, captured, round_index=index):
                 assert metadata.tokens_before > 0
                 return NativeSummary(
-                    f"Synthetic round {round_index}; goal-e2e; not a semantic retention claim",
+                    captured.retained.text + "\n\n" + f"Synthetic round {round_index}; goal-e2e; not a semantic retention claim",
                     None,
                     None,
                 )

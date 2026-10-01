@@ -15,6 +15,7 @@ from .errors import RelationViolationError
 from .goals import Goal
 from .image_inputs import ImageInput
 from .input_attempt import ACPInputIdText, InputAttempt
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .store_files import _store_lock
 from .turn_goal_permission import AcceptedGoalPermission
 from .turn_input_source import AcceptedFollowingInput
@@ -95,6 +96,7 @@ class QueuedInput:
         images: tuple[ImageInput, ...],
         controller: Any,
         input_id: str | None = None,
+        origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[QueuedInput, Thread]:
         """Called inside the wire boundary; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
@@ -104,6 +106,7 @@ class QueuedInput:
             owner,
             snapshot.admission_identity(canonical),
         )
+        origin.require_ingress(inputs.comms, snapshot, context.admission, controller)
         item = cls(
             text or prompt or "[image prompt]",
             echo,
@@ -120,6 +123,7 @@ class QueuedInput:
             admission=context.admission.admission_generation,
             target=canonical,
             text=item.text,
+            origin=origin,
         ):
             raise RelationViolationError("Input reservation already exists")
         return item, owner

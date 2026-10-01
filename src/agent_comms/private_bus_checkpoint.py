@@ -69,7 +69,7 @@ class PrefixWitness(PrefixSeal):
                        offset: int, sequence: int) -> None:
         if self.source_identity != PrefixSource(marker.root_id, info.st_dev, info.st_ino):
             raise RelationViolationError("Private bus checkpoint append lost its source fence.")
-        if offset != self.offset or sequence <= self.through_seq:
+        if offset != self.offset or sequence < self.through_seq:
             raise RelationViolationError("Private bus checkpoint append lost its prefix fence.")
 
 
@@ -394,7 +394,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
                     def collect(offset, raw, record):
                         nonlocal digest, through_seq
                         digest = _chain(digest, raw)
-                        through_seq = record.message.seq
+                        through_seq = record.sequence_after(through_seq)
                         _index_row(db, offset, raw, record)
 
                     with db:
@@ -457,14 +457,14 @@ def _recover_pending_unlocked(
             if count > 100_000 or size > 128 * 1024 * 1024:
                 raise RelationViolationError("Private bus pending recovery exceeds cold bound.")
             digest = _chain(digest, raw)
+            last_seq = record.sequence_after(last_seq)
             if offset + len(raw) == prior.revision[2]:
                 prior_seen = True
-                prior_seq = record.message.seq
+                prior_seq = last_seq
                 if digest.hex() != prior.digest or prior_seq != prior.through_seq:
                     raise RelationViolationError(
                         "Private bus checkpoint old prefix changed during recovery."
                     )
-            last_seq = record.message.seq
             _index_row(db, offset, raw, record)
 
         for _ in bus.verified_records_unlocked(marker, on_row=collect):
@@ -523,18 +523,20 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     prefix_seq = 0
     additions: list[tuple[int, bytes, WireRecord]] = []
     suffix_bytes = 0
+    last_seq = 0
 
     def collect(
         offset: int,
         raw: bytes,
         record: WireRecord,
     ) -> None:
-        nonlocal digest, observed_prefix, prefix_seq, suffix_bytes
+        nonlocal digest, observed_prefix, prefix_seq, suffix_bytes, last_seq
         digest = _chain(digest, raw)
         end = offset + len(raw)
+        last_seq = record.sequence_after(last_seq)
         if end == saved.offset:
             observed_prefix = True
-            prefix_seq = record.message.seq
+            prefix_seq = last_seq
             if digest.hex() != saved.digest or prefix_seq != saved.through_seq:
                 raise RelationViolationError(
                     "Private bus checkpoint certified prefix changed."
@@ -560,7 +562,6 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     ) != file_revision(info):
         raise RelationViolationError("Private bus changed during checkpoint validation.")
     # Full parser above checked all cross-prefix response key duplicates.
-    last_seq = additions[-1][2].message.seq if additions else saved.through_seq
     expected = PrefixWitness(
         saved.root_id,
         file_revision(info),
@@ -672,7 +673,8 @@ def append_private_bus_checkpoint_unlocked(
             saved = _saved(db)
             info = os.fstat(stream.fileno())
             offset = info.st_size - len(raw)
-            saved.require_append(marker, info, offset, record.message.seq)
+            sequence = record.sequence_after(saved.through_seq)
+            saved.require_append(marker, info, offset, sequence)
             marker.seal.check_final(saved, path)
             stream.seek(offset)
             if stream.read(len(raw)) != raw or _tail(stream, offset) != saved.tail:
@@ -681,7 +683,7 @@ def append_private_bus_checkpoint_unlocked(
             expected = PrefixWitness(
                 saved.root_id,
                 file_revision(info),
-                record.message.seq,
+                sequence,
                 digest.hex(),
                 _tail(stream, info.st_size),
             )
@@ -690,7 +692,7 @@ def append_private_bus_checkpoint_unlocked(
             with db:
                 _index_row(db, offset, raw, record)
                 PrefixCertificate.capture(
-                    saved.root_id, info, record.message.seq, digest, expected.tail
+                    saved.root_id, info, sequence, digest, expected.tail
                 ).upsert(db)
             _directory_sync(path)
             marker.seal_with(FinalSeal.capture(expected, path))

@@ -92,6 +92,14 @@ class OwnerCompactionCommit:
         )
         return prepared, source
 
+    def require_source_current(self, owner: Thread, owner_generation: int,
+                               source: CompactionSource) -> None:
+        with self.boundary.hold(
+            owner, owner_generation, source.native,
+            pending_input_key=source.pending_input_key,
+        ) as held:
+            source.require_current(held)
+
 
     def reconcile_interrupted_summaries(
         self, owner: Thread, owner_generation: int, witness: NativeWitness
@@ -136,6 +144,7 @@ class OwnerCompactionCommit:
             owner, owner_generation, witness, pending_input_key=source.pending_input_key
         ) as held:
             source.require_current(held)
+            source.retained.require_summary(summary)
             intent = dict(
                 FieldCodec.encode(native_intent),
                 owner=FieldCodec.encode(held.receipt),

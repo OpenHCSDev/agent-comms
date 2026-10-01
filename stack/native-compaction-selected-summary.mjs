@@ -43,13 +43,14 @@ function acSelectedCompactionSettings(command, session, conflict) {
             trigger: requiresCompaction || (tokens != null && shouldCompact(tokens, model.contextWindow, settings))}};
 }
 function acValidSummaryRequest(value) {
-    const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings"];
+    const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings", "retainedText"];
     if (value && Object.hasOwn(value, "customInstructions")) {
         if (typeof value.customInstructions !== "string" || !value.customInstructions.isWellFormed()) return false;
         fields.push("customInstructions");
     }
     if (!acExactObject(value, fields) ||
         value.type !== "agent_comms_summarize_compaction" || !acSummaryId(value.operationId)) return false;
+    if (typeof value.retainedText !== "string" || !value.retainedText.isWellFormed()) return false;
     const nonempty = text => typeof text === "string" && text.length > 0 && text.length <= 4096;
     const integer = number => Number.isSafeInteger(number) && number >= 0;
     return nonempty(value.id) && value.version === 1 &&
@@ -134,7 +135,7 @@ function acSummaryValidResult(result, request) {
         typeof path === "string" && path.length > 0 && path.isWellFormed() &&
         Buffer.byteLength(path, "utf8") <= 4096 && !path.includes("\0"));
     return acExactObject(result, ["summary", "firstKeptEntryId", "tokensBefore", "usage", "details"]) &&
-        typeof result.summary === "string" && result.summary.trim().length > 0 &&
+        typeof result.summary === "string" && result.summary.startsWith(request.retainedText + "\n\n") &&
         result.summary.isWellFormed() &&
         result.firstKeptEntryId === request.witness.firstKeptEntryId &&
         Number.isSafeInteger(result.tokensBefore) && result.tokensBefore >= 0 &&
@@ -314,7 +315,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             { onSummaryText: progress,
               onSummaryProgress: source => progress("", source),
               onSummaryStart: source => progress("", source),
-              onSummaryResponse: (_usage, source) => progress("", source) }, undefined);
+              onSummaryResponse: (_usage, source) => progress("", source) }, undefined, request.retainedText);
         await Promise.allSettled([...inFlight]);
         if (slot.controller.signal.aborted ||
             !acSummaryCurrent(session, request, binding) || !acSummaryValidResult(result, request))

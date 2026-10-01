@@ -1,6 +1,7 @@
 """Pi JSON-line transport; tolerant discovery and strict native proof share one decoder."""
 
 from __future__ import annotations
+from .jsonl_stream import JsonlStreamReader
 
 import asyncio
 import json
@@ -22,7 +23,7 @@ def unique_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-class PiRpcChannel(Sealed):
+class PiRpcChannel(JsonlStreamReader, Sealed):
     """Read whole JSONL records regardless of asyncio's transport buffer limit.
 
     Pi's end-of-turn events may contain many messages in one record. Retain
@@ -31,31 +32,8 @@ class PiRpcChannel(Sealed):
     """
 
     def __init__(self, reader: asyncio.StreamReader):
-        self.reader = reader
+        super().__init__(reader)
         self.pending = PendingRequests()
-        self.chunks: list[bytes] = []
-
-    async def readline(self, *, max_bytes: int | None = None) -> bytes:
-        size = sum(map(len, self.chunks))
-        while True:
-            try:
-                line = await self.reader.readuntil(b"\n")
-            except asyncio.LimitOverrunError as error:
-                if max_bytes is not None and size + error.consumed > max_bytes:
-                    self.chunks.clear()
-                    raise ValueError("Native RPC record exceeds transport limit") from error
-                self.chunks.append(await self.reader.readexactly(error.consumed))
-                size += error.consumed
-                continue
-            except asyncio.IncompleteReadError as error:
-                line = error.partial
-            if max_bytes is not None and size + len(line) > max_bytes:
-                self.chunks.clear()
-                raise ValueError("Native RPC record exceeds transport limit")
-            self.chunks.append(line)
-            record = b"".join(self.chunks)
-            self.chunks.clear()
-            return record
 
     @staticmethod
     def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None) -> PiEvent:

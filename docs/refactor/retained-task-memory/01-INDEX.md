@@ -3,17 +3,24 @@
 **Source reviewed:** `4295d680`.
 **Rules:** [00-RULES.md](00-RULES.md). **Evidence:** [04-EVIDENCE.md](04-EVIDENCE.md).
 
+**2026-10-01 checkpoint:** this table is the original reviewed-head baseline.
+#475 delivers the named partial S2 foundation and paired S5 source and removes
+the dormant prototypes; full S2 remains open in #481. See
+`docs/checkpoints/s2-foundation-s5-source-20261001.md` for delivered scope and
+actual acceptance boundaries. S1 is not completed by deleting its prototype.
+
 ## Current versus intended behavior
 
 | Surface | Original intended answer | Source-backed state at this head | Completion target |
 | --- | --- | --- | --- |
 | [S1](S1-TIMING.md) timing | Is now a useful task boundary? | Dormant TriggerRule; live selected decision uses stored-context/usage threshold | Task-boundary decision from source-backed evidence, subordinate to hard limit |
 | [S2](S2-MEMORY.md) exact memory | Which exact current facts must survive? | Dormant RetentionPolicy; narrative summary/recent tail/file annotations plus separately persisted state | Revision-bound derived facts from canonical owners carried through the same checkpoint |
+| [S5](S5-TURN-CONTEXT.md) turn context | What input does this turn receive, and from which owners? | Coordination and other contributors concatenate strings without a shared provenance manifest | Phase 1: one typed assembler, byte-identical input and inspection; phase 2: authored retained operations after S2 |
 | [S3](S3-CACHE.md) prefix reuse | Can this selected route safely reuse prefix/cache? | Separate bounded summary requests; no task-specific cache-preserving route found | Capability-owned prefix strategy with measured provider cache usage |
 | [S4](S4-EVALUATION.md) retention | Does the model answer correctly after repeated compactions? | Existing tests prove lifecycle/continuation; no matched four-control recall study found | Shared histories/questions, repeated rounds, exact-state and model-quality reports |
 
 PR48 deferred activation; PR95/135 activated journaled compaction. Complete the
-four remaining features in the order below.
+remaining features in the order below.
 
 ## Order
 
@@ -23,9 +30,13 @@ four remaining features in the order below.
 2. S2 defines source projections/invalidation and typed Decision emission on the wire. S1
    consumes the same revision evidence for boundaries. Sequence shared source and
    native preparation changes under one accepted implementation owner.
-3. S3 can investigate selected-route capability and external cache behavior
+3. S5 phase 1 runs in parallel with S2: preserve every rendered byte while moving
+   contributor ownership into ContextSegment/TurnContext, record text-free per-turn
+   manifests on the original wire, and expose context inspection. Phase 2 waits
+   for S2 retained classes, then integrates RetainedSegment and authored operations.
+4. S3 can investigate selected-route capability and external cache behavior
    independently, but request native execution changes from its current owner.
-4. S4 runs store/native controls first, then authorized matched-model evaluation
+5. S4 runs store/native controls first, then authorized matched-model evaluation
    of the combined candidate. Do not label fixture tests as recall validation.
 
 ## Crossings and existing PRs

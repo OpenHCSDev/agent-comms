@@ -15,6 +15,7 @@ from acp.schema import (
 
 from .pi_vocabulary import ThinkingLevel
 from .queued_input import InputHandoffRefused
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from . import backend
 from . import pi_events as pi
@@ -198,9 +199,17 @@ class TurnRunner:
         state.model.require_selection(thread.model)
         return state
 
+    async def inspect_context(self, session_id, thread):
+        persistent=self.persistent_backends.setdefault(session_id,backend.PersistentPiSession())
+        async def prepare():
+            return await self.prepare_selected_session(session_id, thread)
+        context = await persistent.custody.inspect_context(persistent, prepare)
+        return context.require_session_file(thread.require_saved_session())
+
     async def prompt_owned(
         self, session_id: str, prompt: list[Any], *, display_text: str | None = None,
         input_id: str | None = None,
+        origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
         turn_task = asyncio.current_task()
         assert turn_task is not None
@@ -237,11 +246,13 @@ class TurnRunner:
                     images=images,
                     display_text=display_text,
                     input_id=input_id,
+                    origin=origin,
                 )
             elif agent_task:
                 await self.inputs.run_owned_input(
                     session_id, thread_name, agent_task, display_text=display_text,
                     input_id=input_id,
+                    origin=origin,
                 )
             else:
                 turn_id = uuid4().hex

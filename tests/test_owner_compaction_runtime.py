@@ -36,6 +36,9 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
     monkeypatch.setattr(owner_compaction_runtime.asyncio, "wrap_future", retained_wrapper)
 
     class Bridge:
+        def require_source_current(self, *_args):
+            pass
+
         def prepare_source(self, *_args, **_kwargs):
             return (
                 NativePreparation(
@@ -56,7 +59,7 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
         async def discard_for_external_write(self, *_args):
             pass
 
-    async def synthetic_summary(_metadata):
+    async def synthetic_summary(_metadata, _source):
         return NativeSummary("synthetic, no provider", None, None)
 
     async def owner():

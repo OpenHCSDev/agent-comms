@@ -357,10 +357,10 @@ class HistoryArchive:
                 declarations = source.provenance.threads
                 previous = 0
                 for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
-                    message, _ = archived._public_page_record(record, size, marker)
-                    if message.seq <= previous:
-                        raise ValueError("Historical source has nonascending sequences")
-                    previous = message.seq
+                    for message, _ in archived._public_page_records(record, size, marker):
+                        if message.seq <= previous:
+                            raise ValueError("Historical source has nonascending sequences")
+                        previous = message.seq
                 if not declarations:
                     raise ValueError("Historical source has no identity declarations")
                 _atomic_write_text(

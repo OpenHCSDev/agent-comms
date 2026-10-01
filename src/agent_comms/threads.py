@@ -12,7 +12,9 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .thread_provenance import ThreadProvenance
 from .pi_vocabulary import ThinkingLevel
-from .goals import Goal, GoalRevision
+from .goals import (
+    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
+)
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
     ThreadIncarnation,
@@ -188,7 +190,7 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("live owner does not hold the requested turn")
 
     def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
-        if self.goal_checkpoint != checkpoint:
+        if self.goal_checkpoint != PresentGoalCheckpoint(checkpoint):
             raise ValueError("The goal changed before this action; the action was not applied.")
         assert self.goal is not None
         return self.goal
@@ -198,6 +200,26 @@ class Thread(ThreadProvenance):
         """Project the original goal's declaration; retain no activity copy."""
         goal = self.goal
         return goal if goal is not None and goal.state.active else None
+
+    @property
+    def decision_scope(self):
+        from .task_decisions import GoalDecisionScope, TurnDecisionScope
+
+        goal = self.active_goal
+        return (GoalDecisionScope(project=self.worktree, goal=goal.checkpoint)
+                if goal is not None else TurnDecisionScope(project=self.worktree))
+
+    def context_goal_segments(self):
+        """Project this declaration's active goal without a second goal state."""
+        from .turn_context import GoalSegment
+
+        goal = self.active_goal
+        return (GoalSegment.capture(self, goal),) if goal is not None else ()
+
+    def retained_task_facts(self):
+        from .retained_task_facts import GoalTaskFact
+
+        return (GoalTaskFact(self.goal),) if self.goal is not None else ()
 
     def continuation_goal(self, original: Thread) -> Goal | None:
         """The current active goal still belongs to this captured project/goal."""
@@ -218,8 +240,9 @@ class Thread(ThreadProvenance):
         return goal
 
     @property
-    def goal_checkpoint(self) -> GoalRevision | None:
-        return self.goal.checkpoint if self.goal is not None else None
+    def goal_checkpoint(self) -> GoalCheckpoint:
+        return (PresentGoalCheckpoint(self.goal.checkpoint)
+                if self.goal is not None else AbsentGoalCheckpoint())
 
     @property
     def has_process(self) -> bool:
@@ -298,6 +321,16 @@ class Thread(ThreadProvenance):
             turn_id=self.active_turn.id,
             admission_generation=self.active_turn.admission_generation,
         )
+
+    def require_turn_lease(self) -> TurnLeaseFence:
+        lease = self.turn_lease
+        if lease is None:
+            raise RelationViolationError("An admitted original turn is required")
+        return lease
+
+    def has_decision_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        lease = self.turn_lease
+        return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 
     def observed_turn(self, admission: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""

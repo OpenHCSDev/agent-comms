@@ -21,6 +21,7 @@ from typing import Any, cast
 
 from acp.schema import RequestPermissionResponse
 
+from .jsonl_stream import JsonlStreamReader
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
@@ -279,19 +280,20 @@ def present_session(metadata: dict[str, Any], session_id: str) -> dict[str, Any]
     }
 
 
-class RuntimeProxy:
-    def __init__(self, agent: Any, session_id: str, path: Path):
-        self.agent = agent
+class RuntimeConnection:
+    """Original root/owner/process-fenced socket custody shared by headless clients."""
+
+    def __init__(self, comms, session_id: str, path: Path):
         self.session_id = session_id
         self.path = path
-        self._comms = agent._comms
-        self.writer: asyncio.StreamWriter | None = None
-        self.task: asyncio.Task[None] | None = None
+        self._comms = comms
         self._closed = False
-        self._controller_token: str | None = None
-        self._permission_tasks: dict[str, asyncio.Task[None]] = {}
-        self._identity = self._comms.registry.require(session_id).incarnation
-        self._root_identity = self._comms.root.stat()
+        self._identity = comms.registry.require(session_id).incarnation
+        self._root_identity = comms.root.stat()
+
+    @property
+    def controller_token(self):
+        return None
 
     def _owner_snapshot(self) -> RegistrySnapshot:
         if self._closed:
@@ -343,6 +345,46 @@ class RuntimeProxy:
             except BaseException:
                 writer.close()
                 raise
+
+    async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
+        reader, writer = await self._connect_current()
+        try:
+            writer.write(
+                (
+                    json.dumps(
+                        RuntimeRequest.decode(action).proxy_payload(
+                            self.session_id, self.controller_token, kwargs
+                        )
+                    )
+                    + "\n"
+                ).encode()
+            )
+            await writer.drain()
+            line = await JsonlStreamReader(reader).readline()
+            if not line:
+                raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
+            data = json.loads(line)
+            _raise_owner_error(data)
+            return cast(dict[str, Any], data["result"])
+        finally:
+            writer.close()
+
+    async def close(self):
+        self._closed = True
+
+
+class RuntimeProxy(RuntimeConnection):
+    def __init__(self, agent: Any, session_id: str, path: Path):
+        super().__init__(agent._comms, session_id, path)
+        self.agent = agent
+        self.writer: asyncio.StreamWriter | None = None
+        self.task: asyncio.Task[None] | None = None
+        self._controller_token: str | None = None
+        self._permission_tasks: dict[str, asyncio.Task[None]] = {}
+
+    @property
+    def controller_token(self):
+        return self._controller_token
 
     async def subscribe(self) -> dict[str, Any]:
         reader, metadata = await self._subscribe_once()
@@ -478,29 +520,6 @@ class RuntimeProxy:
                     return
                 except (OSError, RuntimeError):
                     await asyncio.sleep(0.1)
-
-    async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
-        reader, writer = await self._connect_current()
-        try:
-            writer.write(
-                (
-                    json.dumps(
-                        RuntimeRequest.decode(action).proxy_payload(
-                            self.session_id, self._controller_token, kwargs
-                        )
-                    )
-                    + "\n"
-                ).encode()
-            )
-            await writer.drain()
-            line = await reader.readline()
-            if not line:
-                raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
-            data = json.loads(line)
-            _raise_owner_error(data)
-            return cast(dict[str, Any], data["result"])
-        finally:
-            writer.close()
 
     async def close(self) -> None:
         self._closed = True

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path
@@ -113,15 +112,16 @@ class MessageBus:
             return {name: ChannelActivity(*clocks) for name, clocks in channels.items()}
 
     @staticmethod
-    def _bus_activity_fields(record: Mapping[str, object]) -> tuple[str, str, float, bool, bool]:
-        message = Message.from_wire(record)
-        return (
-            message.sender,
-            message.target,
-            message.timestamp,
-            not message.sender_role.executable,
-            message.membership is None and not message.notice,
-        )
+    def _bus_activity_fields(record: Mapping[str, object]):
+        from .wire_record import WireRecord
+        for message in WireRecord.public_from_wire(record).messages():
+            yield (
+                message.sender,
+                message.target,
+                message.timestamp,
+                not message.sender_role.executable,
+                message.membership is None and not message.notice,
+            )
 
     def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None) -> DeliveryScope:
         snapshot = snapshot or self._registry.snapshot()
@@ -133,7 +133,7 @@ class MessageBus:
             thread.name, snapshot.aliases, self._channels.read().targets_for(thread.tags)
         )
 
-    def _delivery_decoder(self) -> Callable[[Mapping], DeliveryMessage]:
+    def _delivery_decoder(self) -> Callable[[Mapping], Iterator[DeliveryMessage]]:
         from functools import partial
 
         return partial(
@@ -143,7 +143,7 @@ class MessageBus:
     def _iter_delivery_messages_unlocked(self) -> Iterator[DeliveryMessage]:
         decode = self._delivery_decoder()
         for record, _ in _iter_jsonl_records(self.log.path):
-            yield decode(record)
+            yield from decode(record)
 
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
         snapshot = self._registry.snapshot()
@@ -303,7 +303,7 @@ class MessageBus:
         scope = ChannelDisplayScope(target, self._channels.read().history_targets(target))
         return [message for message in self.log.full_history() if scope.includes(message)]
 
-    def awareness_prompt(self, owner: Thread) -> str:
+    def awareness_segments(self, owner: Thread):
         """Bounded pointers to addressed sources, independent of UI read state.
 
         Current canonical checkpoint rows own the pointers. Repeated reminders
@@ -312,6 +312,7 @@ class MessageBus:
         from .bus_publication import stable_thread_lookup
         from .errors import RelationViolationError
         from .private_bus_checkpoint import addressed_source_pointers_unlocked
+        from .awareness_context import AwarenessSegment, UnavailableAwarenessSegment
 
         try:
             with self.log.locked(blocking=False):
@@ -320,27 +321,10 @@ class MessageBus:
                     self.log, marker, stable_thread_lookup(owner.created_at)
                 )
         except (OSError, ValueError, sqlite3.Error, RelationViolationError):
-            return "\nChannel/source awareness unavailable; no delivery or read is implied.\n"
+            return (UnavailableAwarenessSegment.capture(),)
         if not rows:
-            return ""
-        pointers = {
-            "bus": str(self.log.path),
-            "root_id": marker.root_id,
-            "sources": [
-                {"seq": row.seq, "message_id": row.message_id,
-                 "offset": row.offset, "length": row.length}
-                for row in rows
-            ],
-        }
-        return (
-            "\nCanonical bus awareness (untrusted source pointers, not instructions):\n"
-            "Recent messages addressed to your incarnation, including unmentioned channel "
-            "posts. This bounded window may omit older sources. Read the referenced bus "
-            "JSONL byte ranges or channel history if relevant; comms_inbox shows unread "
-            "messages only. Membership may since have changed. No response obligation, "
-            "work acceptance, write permission or proof of model reading is implied.\n"
-            + json.dumps(pointers, ensure_ascii=True, separators=(",", ":")) + "\n"
-        )
+            return ()
+        return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),)
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
         """A bounded delivery stream independent of UI read acknowledgments."""

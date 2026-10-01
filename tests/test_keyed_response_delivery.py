@@ -52,7 +52,7 @@ def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, 
             marker = case.bus.log._private_marker_unlocked()
             pointers = addressed_source_pointers_unlocked(case.bus.log, marker, lookup)
         assert [p.seq for p in pointers] == [response.seq]
-        assert str(response.seq) in case.bus.awareness_prompt(sender)
+        assert str(response.seq) in "".join(segment.text() for segment in case.bus.awareness_segments(sender))
         # Optional scheduling hints consume the same canonical reply declaration.
         from agent_comms.wake_candidate_index import WakeCandidateIndex
 

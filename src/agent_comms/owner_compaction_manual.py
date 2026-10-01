@@ -97,7 +97,7 @@ async def compact_manual_owner(
     settings = await decision()
     summary_text = ""
 
-    async def summarize(prepared: NativePreparation):
+    async def summarize(prepared: NativePreparation, captured):
         nonlocal summary_text
         attestation = owner.compaction_attestation(generation, prepared.witness)
         attestation.require_registry(runner.comms.registry, owner)
@@ -105,6 +105,7 @@ async def compact_manual_owner(
         for refusal in refusals:
             bridge.journal.summaries.retire_refused(refusal)
         source = {
+            "retained": FieldCodec.encode(captured.retained),
             "source": FieldCodec.encode(
                 ManualSource(
                     incarnation=owner.incarnation,

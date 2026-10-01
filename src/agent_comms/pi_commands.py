@@ -5,16 +5,19 @@ from __future__ import annotations
 import asyncio
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import uuid4
 
+from .native_turn_context import NativeContextData
 from .pi_vocabulary import ThinkingLevel
 from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
+from .turn_context import InputContributionCoordinates
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import (
@@ -142,6 +145,9 @@ class Prompt(PiCommand):
     images: tuple[ImageInput, ...] | None = field(
         default=None, metadata={"wire_omit_default": True}
     )
+    context_contributions: tuple[InputContributionCoordinates, ...] = field(
+        default=(), metadata={"wire_omit_default": True, "wire_name": "contextContributions"}
+    )
     streaming_behavior: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
     )
@@ -238,31 +244,39 @@ class GetSessionStats(SessionSnapshot, PiCommand):
                 session.finished = True
 
 
-class CatalogQuery(PiCommand):
+class NativeQuery(PiCommand):
     """One read-only native query owns launch, correlation and child retirement."""
 
     @property
     @abstractmethod
     def response_payload(self) -> type[PiResponseData]: ...
 
-    async def exchange(self, channel: PiRpcChannel, writer: asyncio.StreamWriter) -> Response:
-        from .pi_events import Response
-
+    @asynccontextmanager
+    async def pending_response(self, channel, writer):
         command = replace(self, id=self.id or uuid4().hex)
         future = channel.track(command)
         try:
             writer.write(channel.command_bytes(command))
             await writer.drain()
+            yield future
+        finally:
+            channel.pending.discard(type(command), command.id)
+            future.cancel()
+
+    async def exchange(self, channel: PiRpcChannel, writer: asyncio.StreamWriter) -> Response:
+        from .pi_events import Response
+        async with self.pending_response(channel,writer) as future:
             while not future.done():
                 event = await channel.receive()
                 if event is None:
                     raise EOFError("Pi RPC ended before the requested response")
-                if isinstance(event, Response):
+                if isinstance(event,Response):
                     channel.correlate(event)
             return future.result()
-        finally:
-            channel.pending.discard(type(command), command.id)
-            future.cancel()
+
+
+class CatalogQuery(NativeQuery):
+    """Catalog discovery uses the shared typed query transaction."""
 
     async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:
         from .child_process import BoundedRun
@@ -409,6 +423,7 @@ class AgentCommsSummarizeCompaction(PiCommand):
     witness: NativeWitness
     selected: SelectedModel
     settings: PiCompactionSettings
+    retained_text: str = field(metadata={"wire_name": "retainedText"})
 
     custom_instructions: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}
@@ -423,3 +438,8 @@ class AgentCommsCompactionSettings(PiCommand):
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentCommsInspectContext(NativeQuery):
+    response_payload = NativeContextData

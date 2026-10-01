@@ -10,8 +10,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from .wire_record import WireRecord
+from .wire_record import MessageWireRecord
 from .field_codec import TextRepresentation
+from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
@@ -130,7 +131,7 @@ def decisions_digest(decisions: list[dict[str, str]]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class CommittedDelivery(WireRecord):
+class CommittedDelivery(MessageWireRecord):
     """Bus-reader delivery, for both an original and a keyed response."""
 
     wire_root_id: str
@@ -150,11 +151,16 @@ class CommittedDelivery(WireRecord):
         return (
             policy.starts_turn
             and policy.separate_turn
-            and any(
-                recipient.recipient_lookup == recipient_lookup
-                for recipient in self.audience.recipients
-            )
+            and self.audience.includes_lookup(recipient_lookup)
         )
+
+    def compaction_messages_for(self, recipient_lookup):
+        addressed = self.audience.includes_lookup(recipient_lookup)
+        authored = (
+            self.audience.sender_lookup == recipient_lookup
+            and self.message.retains_authored_choice
+        )
+        return self.messages() if addressed or authored else ()
 
     @classmethod
     def from_wire(cls, record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
@@ -279,3 +285,12 @@ class HumanOrigin:
     sender: str
     created_at: float
     worktree: str
+
+    def require_registered(self, snapshot) -> None:
+        """Check the determining USER declaration, never a transport or prose role."""
+        user = snapshot.threads.get(self.sender)
+        if user is None:
+            raise RelationViolationError("Local USER origin is no longer registered")
+        user.role.require_user()
+        if (user.name, user.created_at, user.worktree) != (self.sender, self.created_at, self.worktree):
+            raise RelationViolationError("Local USER origin differs from registered identity")

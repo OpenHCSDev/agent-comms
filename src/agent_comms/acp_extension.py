@@ -17,6 +17,7 @@ from .agent_events import CompactionEvent
 from .compaction_states import CompactionPublishedMetadata
 from .declared_family import DeclaredFamily
 from .input_attempt import ACPInputIdText, InputAttempt
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .field_codec import FieldCodec
 from .goal_presentation import GoalExecution
 from .goals import Goal
@@ -470,6 +471,8 @@ class PromptRequest(CommsRequest):
     user_text: str | None = None
     defer_display: bool = False
     input_id: Annotated[str, ACPInputIdText] = field(default_factory=ACPInputIdText.new)
+    origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
+                               metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         ACPInputIdText.decode(self.input_id)

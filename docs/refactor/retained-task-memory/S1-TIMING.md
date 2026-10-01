@@ -4,6 +4,12 @@
 **Rules:** [00-RULES.md](00-RULES.md). **Step 2. Origin:** PR48 proposal.
 **Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* none. *Uses:* existing native decision/source/commit owners.
 
+**2026-10-01 foundation checkpoint:** the remaining dormant `TriggerRule`
+prototype and its sole obsolete test were removed after runtime/native-package
+caller census. The source witnesses below describe the original reviewed head;
+the actual native `CompactionPolicy` and this unfinished S1 requirement are
+unchanged. Removing the prototype does not complete task-aware timing.
+
 ## Gap and source witnesses
 
 **The selected live decision answers a context-limit question, not a task-boundary question.**

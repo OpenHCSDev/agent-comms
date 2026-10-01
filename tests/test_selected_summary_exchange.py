@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.retained_task_facts import RetainedTaskFacts
 from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -80,6 +81,7 @@ async def retained_summary(native_backend):
         ),
         selected=SelectedModel(model.provider, model.id, model.context_window).to_wire(),
         settings=FieldCodec.encode(settings),
+        retained=FieldCodec.encode(RetainedTaskFacts(())),
     )
     journal = CompactionJournal(native.root / "compaction-commits.sqlite3")
     slot = SelectedSummarySlot("owner", preparation.witness.session_id)
@@ -350,6 +352,7 @@ def selected_request():
         witness=NativeWitness("session", "/saved.jsonl", "leaf", "kept", "1:2:3:4:5"),
         selected=SelectedModel("fixture", "fixture", 32768),
         settings=PiCompactionSettings(2048, 1024),
+        retained_text=RetainedTaskFacts(()).text,
     )
 
 
@@ -358,10 +361,11 @@ def summarized_frame(request):
     data = request.to_rpc()
     data.pop("id")
     data.pop("type")
+    data.pop("retainedText")
     data.update(
         status="summarized",
         result=dict(
-            summary="native summary",
+            summary=request.retained_text + "\n\nnative summary",
             firstKeptEntryId="kept",
             tokensBefore=1200,
             details=dict(readFiles=["foo.py"], modifiedFiles=[]),
@@ -513,6 +517,7 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
         source=FieldCodec.encode(source),
         selected=selected_model.to_wire(),
         settings=FieldCodec.encode(settings),
+        retained=FieldCodec.encode(RetainedTaskFacts(())),
     )
     events = []
 
@@ -598,6 +603,7 @@ def test_failed_receipt_requires_exact_attestation(mismatch):
     data = request.to_rpc()
     data.pop("id")
     data.pop("type")
+    data.pop("retainedText")
     data.update(status="failed", reason="Provider rejected the summary")
     if mismatch == "operation":
         data["operationId"] = "b" * 32

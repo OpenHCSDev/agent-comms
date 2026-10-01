@@ -212,6 +212,10 @@ class SelectedFreshMarker(PiPayload):
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
     version: int | None = None
+    cwd: str | None = field(default=None, metadata={"wire_omit_default": True})
+    parent_session: str | None = field(default=None, metadata={
+        "wire_name": "parentSession", "wire_omit_default": True,
+    })
     selected_fresh: SelectedFreshMarker | None = field(
         default=None, metadata={"wire_name": "agentCommsSelectedFresh"}
     )

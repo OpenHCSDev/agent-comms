@@ -144,17 +144,17 @@ class BusPageIndex:
                         raise ValueError("JSONL bus row must be an object.")
                     # Full validation on the newly indexed segment. A warm
                     # read validates each selected record again from the bus.
-                    from .messages import Message
+                    from .wire_record import WireRecord
 
-                    message = Message.from_wire(record)
-                    if last_sequence is not None and message.seq <= last_sequence:
-                        # The page collector uses wire order. A cache sorted
-                        # by sequence must not hide malformed source order.
-                        raise StaleBusPageIndexError("Wire sequences are not increasing.")
-                    BusPageRow(message.seq, row_offset, message.sender, message.target).insert(
-                        self.connection
-                    )
-                    last_sequence = message.seq
+                    for message in WireRecord.public_from_wire(record).messages():
+                        if last_sequence is not None and message.seq <= last_sequence:
+                            # The page collector uses wire order. A cache sorted
+                            # by sequence must not hide malformed source order.
+                            raise StaleBusPageIndexError("Wire sequences are not increasing.")
+                        BusPageRow(message.seq, row_offset, message.sender, message.target).insert(
+                            self.connection
+                        )
+                        last_sequence = message.seq
                 BusPageSource(identity, size, self._tail(stream, size)).upsert(self.connection)
             return True
 

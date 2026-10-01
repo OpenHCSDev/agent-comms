@@ -20,6 +20,7 @@ from .messages import Message, MessageType
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
+from .task_decisions import DecisionAttachment, NoDecision
 
 _LOG = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class Messaging:
         notice: bool = False,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
+        decision: DecisionAttachment = NoDecision(),
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
@@ -67,7 +69,10 @@ class Messaging:
                 raise RelationViolationError(
                     "Human messages require the explicit user-message operation."
                 )
-            message = Message(sender=owner.name, target=target, body=body, type=type, notice=notice)
+            message = Message(
+                sender=owner.name, target=target, body=body, type=type,
+                notice=notice, decision=decision,
+            )
             if claims or releases:
                 committed = self.bus.publisher.publish_claim_envelope(
                     message,
@@ -136,7 +141,8 @@ class Messaging:
         with _store_lock(self._wire_lock_path):
             return self._user_identity_under_wire_lock(worktree)
 
-    def send_user_message(self, target: str, body: str, *, worktree: str) -> Message:
+    def send_user_message(self, target: str, body: str, *, worktree: str,
+                          decision: DecisionAttachment = NoDecision()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         from .bus_publication import HumanOrigin
 
@@ -145,7 +151,7 @@ class Messaging:
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
             committed = self.bus.publisher.publish_ordinary(
-                Message(user.name, target, body, MessageType.INFO),
+                Message(user.name, target, body, MessageType.INFO, decision=decision),
                 _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
             )
         # Never turn a committed row into an apparent failed send because a

@@ -11,6 +11,31 @@ from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch, NativeP
 from agent_comms.pi_payloads import TextContent, UnknownContent
 
 
+def test_original_header_preserves_project_and_fork_lineage(tmp_path):
+    sessions = tmp_path / "sessions"
+    sessions.mkdir(mode=0o700)
+    file = sessions / "child.jsonl"
+    raw = {
+        "type": "session", "version": 3, "id": "child-session",
+        "timestamp": "2026-10-01T00:00:00.000Z",
+        "cwd": str(tmp_path / "original-project"),
+        "parentSession": str(sessions / "original-parent.jsonl"),
+    }
+    file.write_text(json.dumps(raw) + "\n")
+    file.chmod(0o600)
+    before = file.read_bytes()
+    with NativeEntry.open_evidence(file) as evidence:
+        header, entries = evidence.observe()
+        assert entries == (header,)
+        assert header.cwd == raw["cwd"]
+        assert header.parent_session == raw["parentSession"]
+        encoded = header.to_wire()
+        assert all(encoded[name] == value for name, value in raw.items())
+    assert file.read_bytes() == before
+    incomplete = NativeEntry.from_evidence({"type": "session", "id": "unrecorded"})
+    assert incomplete.cwd is None and incomplete.parent_session is None
+
+
 @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
 def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
     with pytest.raises(ValueError, match="128-bit input ID"):
