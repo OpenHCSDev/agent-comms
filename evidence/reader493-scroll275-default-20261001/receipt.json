@@ -1,0 +1,98 @@
+{
+  "state": "default installed; actual saved history Ready visually verified",
+  "core": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/runtime-reader493-scroll275-20261001",
+  "toad283_merge": "c4ce7df6f97fc128b45fa55ec9185c40b16b1715",
+  "owners_restarted": 17,
+  "runtime_policy": {
+    "kind": "preserve",
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza"
+  },
+  "original_protected_files": 34,
+  "default_tui": {
+    "completed": true,
+    "duration_seconds": 25.228022681956645,
+    "cleanup": {
+      "remaining_owned_pids": [],
+      "errors": [],
+      "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+      "processes": [
+        {
+          "pid": 2278260,
+          "start_ticks": 36471768,
+          "returncode": 0
+        },
+        {
+          "pid": 2278356,
+          "start_ticks": 36471877,
+          "returncode": 0
+        },
+        {
+          "pid": 2278362,
+          "start_ticks": 36471895,
+          "returncode": 0
+        },
+        {
+          "pid": 2278363,
+          "start_ticks": 36471901,
+          "custody": "verified launch identity transferred to installed ObservedProcess"
+        },
+        {
+          "pid": 2278369,
+          "start_ticks": 36471972,
+          "returncode": 0
+        },
+        {
+          "pid": 2278370,
+          "start_ticks": 36471983,
+          "returncode": 0
+        },
+        {
+          "pid": 2278371,
+          "start_ticks": 36471992,
+          "returncode": 255
+        },
+        {
+          "pid": 2278986,
+          "start_ticks": 36473194,
+          "returncode": 0
+        },
+        {
+          "pid": 2279462,
+          "start_ticks": 36474494,
+          "returncode": 0
+        },
+        {
+          "pid": 2279471,
+          "start_ticks": 36474577,
+          "returncode": 0
+        },
+        {
+          "pid": 2279516,
+          "start_ticks": 36474660,
+          "returncode": 0
+        },
+        {
+          "pid": 2279607,
+          "start_ticks": 36474890,
+          "returncode": 0
+        }
+      ]
+    },
+    "saved_history": "openhcs-helper actual saved messages shown; sidebar and session details Ready; original owner retained"
+  },
+  "artifacts": [
+    {
+      "path": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/reader493-scroll275-20261001/publication.json",
+      "sha256": "431212c9036f7161f98cde87658dcab4e7bb4304636474b0a704827aad525895"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/reader493-scroll275-default-helper-20261001/receipt.json",
+      "sha256": "c9911013af2a64939fa16cbd9535ff7a2f1b2e64623b43275aa44e6e2390e85e"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/reader493-scroll275-default-helper-20261001/after.png",
+      "sha256": "0fccd511ec3d25e03312f18a1e3ffa69f84177742cc0b16a4e19f4d642b73127"
+    }
+  ],
+  "remaining": "Compaction494, lifecycle489, batching490 and performance284/Textual19 are not included; high scrolling CPU remains. User confirms scrolling improved but animation interrupts on lazy loads; assigned Heisenberg284."
+}
