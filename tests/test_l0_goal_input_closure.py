@@ -232,9 +232,14 @@ def test_retired_goal_input_authorities_cannot_return():
             "input_attempt.py",
             "goal_actions.py",
             "goal_management.py",
+            "goal_waits.py",
+            "owned_turn.py",
         )
     )
-    for retired in ("AcpDeliveryCursors", "DeliveryCursor", "DeliveryDocument", "legacy_through"):
+    for retired in (
+        "AcpDeliveryCursors", "DeliveryCursor", "DeliveryDocument", "legacy_through",
+        "GoalReplyScope", "direct_origins",
+    ):
         assert retired not in source
     import ast
 

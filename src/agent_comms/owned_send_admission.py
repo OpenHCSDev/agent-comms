@@ -74,7 +74,6 @@ class OwnedSendAdmission:
         canonical: str,
         source: TurnInputSource,
         text: str,
-        wait: GoalWait | None,
     ) -> None:
         if current is None:
             MissingTurnOwnerCheck().require_valid()
@@ -96,7 +95,6 @@ class OwnedSendAdmission:
             receipt=accepted,
             current=current,
             admission=self.admission,
-            wait=wait,
             input_id=source.accepted_id,
             keys=source.keys,
             accepted_source=self.inputs.following_sources.get(self.session_id, {}).get(
@@ -120,11 +118,10 @@ class OwnedSendAdmission:
         source: TurnInputSource,
         current: Thread,
         wait: GoalWait | None,
-        snapshot: RegistrySnapshot,
         binding: TurnInputBinding,
     ) -> None:
         OrdinaryContextCheck(
-            source=source, goal=current.goal, wait=wait, registry=snapshot
+            source=source, goal=current.goal, wait=wait, comms=self.comms
         ).require_valid()
         OrdinaryJournalCheck(binding=binding, current=current).require_valid()
         if not source.bypasses_goal_permit and self.goal_permit is not None:
@@ -153,14 +150,14 @@ class OwnedSendAdmission:
             source = self.source(public_id)
             binding = self._binding(source)
             try:
-                self._check_owner(current, snapshot, canonical, source, sent_text, wait)
+                self._check_owner(current, snapshot, canonical, source, sent_text)
             except ReservationViolationError as error:
                 binding.invalidate()
                 yield self._refusal(error.rule, False)
                 return
             defer = source.defers_for_goal(self.thread.goal, current.goal)
             try:
-                self._require_context(source, current, wait, snapshot, binding)
+                self._require_context(source, current, wait, binding)
             except ReservationViolationError as error:
                 binding.invalidate()
                 yield self._refusal(error.rule, defer)

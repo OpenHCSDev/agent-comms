@@ -11,7 +11,7 @@ from agent_comms import agent_events as ae
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -20,13 +20,12 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_waits import GoalWaits
-from agent_comms.message_page import MessagePageRequest
+from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 from delivery_owner_fixture import canonical_agent
-from goal_owner_fixture import activate_empty_source
+from goal_owner_fixture import activate_empty_source, canonical_goal_wire
 from test_backend_native_lifecycle import native_backend as native_backend
 
 
@@ -91,7 +90,7 @@ def _finish(comms, name, turn_id):
 
 
 def _waiting(tmp_path, *, second=False):
-    comms = wire(tmp_path / "wire")
+    comms = canonical_goal_wire(tmp_path / "wire")
     comms._test_leases = {}
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
@@ -109,7 +108,7 @@ def _waiting(tmp_path, *, second=False):
 
 
 def test_idle_target_refusal_is_side_effect_free(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = canonical_goal_wire(tmp_path / "wire")
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Work"))
@@ -138,18 +137,18 @@ def test_optional_reply_read_failure_after_terminal_commit_never_releases_or_fai
     comms, goal = _waiting(tmp_path)
     fence = _finish(comms, "child", "child-turn")
     assert fence is not None and comms.registry.require("child").active_turn is None
-    original = MessagePageRequest.read
+    original = GoalWait.has_reply
 
     def unavailable(*_args, **_kwargs):
         raise OSError("injected optional direct-reply read failure")
 
-    monkeypatch.setattr(MessagePageRequest, "read", unavailable)
+    monkeypatch.setattr(GoalWait, "has_reply", unavailable)
     assert comms.goals.release_waits_after_terminal_turn(fence) == ()
     assert comms.registry.require("child").active_turn is None
     assert comms.registry.require("owner").goal.state.active
     assert comms.registry.require("owner").goal.id == goal.id
     assert comms.goals.goal_wait("owner") is not None
-    monkeypatch.setattr(MessagePageRequest, "read", original)
+    monkeypatch.setattr(GoalWait, "has_reply", original)
     assert comms.goals.release_waits_after_terminal_turn(fence) == ("owner",)
 
 
@@ -305,7 +304,7 @@ def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_p
         comms.messaging.send_message("child", "owner", "Late direct reply")
         sent.set()
 
-    real_history = MessagePageRequest.read
+    real_history = GoalWait.has_reply
     sender = threading.Thread(target=late_send)
 
     def interpose(*args, **kwargs):
@@ -313,7 +312,7 @@ def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_p
         assert checked.wait(timeout=2)
         return real_history(*args, **kwargs)
 
-    monkeypatch.setattr(MessagePageRequest, "read", interpose)
+    monkeypatch.setattr(GoalWait, "has_reply", interpose)
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
     sender.join(timeout=2)
     assert sent.is_set()
@@ -339,7 +338,7 @@ def test_terminal_hook_rechecks_goal_and_owner_identity(tmp_path):
 
 
 def test_stopped_dependency_cannot_be_declared_live(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = canonical_goal_wire(tmp_path / "wire")
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
     comms.agents.begin_turn("child", "work")
@@ -456,7 +455,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
             terminal.append("settled")
         await original_emit(session_id, event, client, **kwargs)
 
-    original_history_page = MessagePageRequest.read
+    original_history_page = GoalWait.has_reply
 
     def unavailable(*args, **kwargs):
         if not terminal:
@@ -466,7 +465,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
         raise OSError("injected optional direct-reply read failure")
 
     monkeypatch.setattr(agent, "_emit_event", capture_emit)
-    monkeypatch.setattr(MessagePageRequest, "read", unavailable)
+    monkeypatch.setattr(GoalWait, "has_reply", unavailable)
     async with asyncio.timeout(20):
         await agent.turns.run_agent_turn(child, child, "Finish work")
     assert terminal == ["settled"]
@@ -478,7 +477,7 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
 
 async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
+    comms = canonical_goal_wire(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(
         comms,

@@ -50,6 +50,10 @@ class SelectedParticipant(MroDispatch):
         assert lease is not None
         self.comms.agents.transition_turn(lease, phase)
 
+    def consume_reply_wait(self) -> None:
+        """Completed selected handling consumes only this original dependency reply."""
+        self.comms.goals.consume_reply_wait(self.owner, self.initial.message.reference)
+
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:
         current = self.comms.registry.require(self.owner.thread.name).turn_state.phase

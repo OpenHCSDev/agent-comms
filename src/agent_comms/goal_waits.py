@@ -6,13 +6,15 @@ import math
 from dataclasses import dataclass, replace
 from typing import ClassVar
 
+from .bus_publication import CommittedDelivery, stable_thread_lookup
+
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 from .goals import Goal
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore
-from .messages import Message
-from .read_basis import MessageDisplayScope
 from .registry_document import RegistrySnapshot
+
+from .wire_log import WireLog
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,17 +53,22 @@ class GoalWait:
         ):
             raise ValueError("A reporting turn requires both its ID and generation.")
 
-    def matches(self, message: Message, snapshot: RegistrySnapshot) -> bool:
-        sender = snapshot.threads.get(snapshot.aliases.get(message.sender, message.sender))
+    def matches(self, original: CommittedDelivery) -> bool:
+        """Join original sender and addressed owner through the certified source."""
         return (
-            sender is not None
-            and message.seq > self.after_seq
-            and any(
-                snapshot.aliases.get(target.name, target.name) == sender.name
-                and target.created_at == sender.created_at
-                for target in self.targets
-            )
+            original.message.seq > self.after_seq
+            and original.direct_for(stable_thread_lookup(self.owner_created_at))
+            and any(target.sent(original) for target in self.targets)
         )
+
+    def has_reply(self, bus: WireLog) -> bool:
+        with bus.certified_read() as source:
+            return any(
+                self.matches(original)
+                for original in source.addressed_deliveries(
+                    stable_thread_lookup(self.owner_created_at), self.after_seq, frozenset()
+                )
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +78,6 @@ class GoalInputReview:
     goal_id: str
     targets: tuple[GoalWaitTarget, ...]
     owners: frozenset[str]
-    senders: frozenset[str]
     unknown: tuple[InputAttempt, ...]
     eligible_keys: frozenset[str]
 
@@ -239,29 +245,4 @@ class GoalWaits(LockedStore[dict[str, GoalWait]]):
             GoalExecutionState(goal.state.execution_name),
             goal.id,
             block_reason=goal.state.reason,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class GoalReplyScope(MessageDisplayScope):
-    """The captured wait owns reply eligibility independently of human display."""
-
-    owner: str
-    wait: GoalWait
-    snapshot: RegistrySnapshot
-
-    @property
-    def index_targets(self) -> frozenset[str]:
-        return frozenset(
-            {
-                self.owner,
-                *(alias for alias, target in self.snapshot.aliases.items() if target == self.owner),
-            }
-        )
-
-    def includes(self, message: Message) -> bool:
-        return (
-            message.target in self.index_targets
-            and message.starts_turn_for(self.owner, aliases=self.snapshot.aliases)
-            and self.wait.matches(message, self.snapshot)
         )

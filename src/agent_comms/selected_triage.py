@@ -59,6 +59,7 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
     def continue_turn(self, participant, session, input_id):
         from .selected_result import CoordinatedTurn
 
+        participant.consume_reply_wait()
         return CoordinatedTurn.ignored(participant, session, input_id)
 
 

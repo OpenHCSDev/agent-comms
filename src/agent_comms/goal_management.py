@@ -11,16 +11,18 @@ from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
 from .goal_history import GoalHistoryEntry
-from .goal_waits import GoalInputReview, GoalReplyScope, GoalWait, GoalWaits
+from .bus_publication import stable_thread_lookup
+from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 from .registration import Registration
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
     from .goal_attempts import GoalAttemptStore
+    from .message_reference import MessageReference
+    from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
 from .goals import Goal
 from .message_bus import MessageBus
-from .message_page import MessagePageRequest
 from .store_files import _store_lock
 from .threads import Thread
 from .turn_lease import FinishedTurnFence
@@ -110,27 +112,21 @@ class Goals:
             dict.fromkeys(GoalWaitTarget(target.name, target.created_at) for target in resolved)
         )
         owners = self.registry.aliases_for(thread.name)
-        senders = frozenset(
-            alias for target in resolved for alias in self.registry.aliases_for(target.name)
-        )
         document = InputDispositions(self.root / InputDispositions.filename).read()
         unknown = {row.key: row for row in document.unknown(owners)}
         eligible = set()
         snapshot = self.registry.snapshot()
-        delivery = self.bus._delivery_scope(thread.name, snapshot)
         from .input_attempt import ReservedInput
 
-        # The canonical delivery scope excludes previous incarnations, while
-        # viewer read ACKs deliberately have no bearing on native handling.
-        with self.bus.log.locked():
-            for item in self.bus._iter_delivery_messages_unlocked():
-                message = item.message
+        lookup = stable_thread_lookup(thread.created_at)
+        # Original certification supplies both sides of the reply. Display ACKs
+        # and today's sender aliases cannot admit a different incarnation.
+        with self.bus.log.certified_read() as source:
+            for original in source.addressed_deliveries(lookup, 0, frozenset()):
+                message = original.message
                 if not (
-                    delivery.current(item, snapshot)
-                    and message.target in owners
-                    and message.sender in senders
-                    and not message.notice
-                    and message.membership is None
+                    original.direct_for(lookup)
+                    and any(target.sent(original) for target in targets)
                 ):
                     continue
                 key = InputDispositions.bus_key(message, thread)
@@ -153,7 +149,6 @@ class Goals:
             goal_id,
             targets,
             owners,
-            senders,
             tuple(sorted(unknown.values(), key=lambda row: row.order)),
             frozenset(eligible),
         )
@@ -198,13 +193,11 @@ class Goals:
             if not closed:
                 return ()
             try:
-                reply = MessagePageRequest.capture(
-                    GoalReplyScope(canonical, wait, snapshot), after=wait.after_seq, limit=1
-                ).read(self.bus.log)
+                reply = wait.has_reply(self.bus.log)
             except (OSError, ValueError, sqlite3.DatabaseError):
                 # An unavailable read cannot prove that no reply was delivered.
                 return ()
-            if reply.messages:
+            if reply:
                 return ()
             names = ", ".join(f"@{member}" for member in closed)
             note = (
@@ -273,16 +266,14 @@ class Goals:
                 ):
                     continue
                 try:
-                    reply = MessagePageRequest.capture(
-                        GoalReplyScope(owner.name, wait, snapshot), after=wait.after_seq, limit=1
-                    ).read(self.bus.log)
+                    reply = wait.has_reply(self.bus.log)
                 except (OSError, ValueError, sqlite3.DatabaseError):
                     # The terminal turn has already committed. An unavailable
                     # optional reply read cannot prove silence or release this
                     # owner; do not turn the completed ACP turn into a failure.
                     # Registry/goal writes below remain outside this guard.
                     continue
-                if reply.messages:
+                if reply:
                     continue
                 diagnostic = (
                     f"Declared dependency @{canonical} finished without a qualifying direct "
@@ -339,6 +330,29 @@ class Goals:
         return bool(
             goal is not None and self.waits.clear(goal.id, wait_id=wait_id)
         )
+
+    def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
+        """A completed native input consumes only its original dependency wait.
+
+        Selected handling calls this after corroborated completion, never after
+        fetching, triage preparation or a failed/UNKNOWN native send.
+        """
+        with _store_lock(self._wire_lock_path):
+            owner.require_registry(self.registry)
+            current = self.registry.require(owner.thread.name)
+            goal, captured = current.active_goal, owner.thread.active_goal
+            if goal is None or captured is None or goal.id != captured.id:
+                return False
+            wait = self.waits.for_goal(goal, self.waits.read())
+            if wait is None or wait.owner_created_at != current.created_at:
+                return False
+            with self.bus.log.certified_read() as source:
+                original = source.delivery(reference.seq)
+                if original.message.reference != reference:
+                    raise ValueError("Dependency reply source reference changed.")
+                if not wait.matches(original):
+                    return False
+            return self.waits.clear(goal.id, wait_id=wait.wait_id)
 
     def update_goal(
         self,
