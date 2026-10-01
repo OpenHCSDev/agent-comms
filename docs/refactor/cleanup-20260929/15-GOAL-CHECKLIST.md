@@ -1,4 +1,4 @@
-## 2026-10-01 queue foundation installed; fresh default verification underway
+## 2026-10-01 queue foundation installed; scoped default queue verification passed
 
 The parent executed the frozen483 operator once after all thirteen owners were
 idle and public Toad had exited normally. All five default entrypoints now point
@@ -8,10 +8,14 @@ thirteen owners and verified retained configurations under its acquired custody.
 Changed compaction runtime journals were reset only after protected preimages
 were saved; 609,667,530 bytes of originals remain private and protected. Native
 sessions/proofs, InputDoc, durable wire/goals and uncertain inputs were preserved;
-no input was replayed. Queue receiving native/ACP/Toad verification is now being
-repeated through the discovered default installation, separate from prior61
-candidate acceptance. The default physical saved-history/channel check is also
-underway on a private display. Overall readiness is not claimed.
+no input was replayed. The fresh default receiving journey passed37.269s: two native originals/two
+localhost provider POSTs, actual mounted queue paint before native Started, then
+one chat occurrence and cleared caption for the same original input. Fixture
+workers exited; no paid/public/retried input occurred. Private physical capture
+passed architecture saved-history/channel paint and preservation over33.099s/
+2,013 frames. PR159 was still Loading with remote queue unavailable at two
+seconds, so original-thread cold attachment and queue classification remain
+assigned to Heisenberg/Einstein. Overall readiness is not claimed.
 
 Kepler owns the newly demonstrated shared inner prompt-binding lock contention
 (diagnostic d0c838af6ca8f8f592fcc976cfdd5dd6, original nra-domain-mapping input
