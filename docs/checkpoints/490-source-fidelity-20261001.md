@@ -195,3 +195,33 @@ copied assignment IDs/targets. The existing actual-native coding-provider
 fixture now emits the single canonical Message-array grammar through FieldCodec;
 it was not executed and is not a native acceptance claim. These are 3 test files,
 14 added / 12 deleted; production source/DDL is unchanged from369b10be.
+
+
+## Current-main integration and configured installed journey
+
+Normal main9954cdd73dff20e590aebf15467a170f0a69e799 integration is published
+at3725f23e44212ca313afe3aa14983c6846905c88. No production conflict occurred.
+The single shared_bus_restart_native fixture conflict retains #498 saved-source
+and cursor-contention evidence alongside #490 wave membership. Its final receipt
+now observes the triage cursor only in the triage case that actually binds it.
+No resource/evidence closure was dropped; no unfinished #489 Native6 was merged.
+
+Declaration-derived coordinator9/snapshot3/response3/native5 DDL digests are
+identical to369b10be after this integration. Singer495 has the exact source
+receipt; parent owns stopped-owner activation and preserves originals/UNKNOWN.
+
+The existing shared_bus_restart_native journey now accepts --configured-owner.
+It reads only the configured model/level, copies the existing private provider
+configuration into its owned private profile, and submits fresh private originals
+through the ordinary owner/ACP/native path. No provider substitution: two channel
+questions plus a direct private question must belong to one full native input;
+a late direct question must belong to its separate next input. Assertions require
+original per-route receipts, all original historical proofs, cursor publication,
+private-answer isolation, the actual native read tool and real ACP facts. Native
+publication and cursor emission are awaited rather than assumed atomic.
+
+Source parses and diff checks pass. This journey has NOT run: exact paired
+receiving Toad286 Core pin / normal shadow-prefix builder is the next dependency.
+Resource preflight observed home8.0GiB/RAM14.7GiB/swap10.2GiB critical warning;
+bounded reuse is required, not another native/dependency build. Existing private
+fixture scope does not mutate/restart public owners or replay saved inputs.
