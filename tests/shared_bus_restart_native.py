@@ -248,9 +248,8 @@ async def run(arguments):
         async with asyncio.timeout(45):
             while True:
                 diagnostics = list((service.root/'diagnostics').glob('*.json'))
-                drains = [activity.diagnostic for activity in service.agents.all_activity().values()
-                          if activity.diagnostic is not None]
-                assert not drains, drains
+                for activity in service.agents.all_activity().values():
+                    activity.readiness.require_available()
                 if diagnostics:
                     observed = json.loads(diagnostics[0].read_text())
                     raise AssertionError(observed.get('source_error',observed.get('reason')))

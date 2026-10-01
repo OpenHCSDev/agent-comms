@@ -121,10 +121,15 @@ unrelated registry records remain representative fixture data.
 
 Receiver readiness uses the existing Activity/DrainDiagnostic authority.
 MessageNotification.window captures the same RegistrySnapshot for owner selection
-and AgentActivity.for_owner diagnostic fencing. Pending assignments delegate to
-the diagnostic's presentation; deferred/ignored/completed outcomes retain their
-original assignment meaning. HistoryViews already watches the original activity
-revision. No new status store, copied error reason or invalidation token exists.
+and AgentActivity acquisition. The original nullable diagnostic metadata is
+decoded once into ObservedActivity's required Ready/Unavailable DrainReadiness.
+That acquired view has no nullable diagnostic field or parallel source-event
+copy. Both pending assignment members share inherited notification behavior and
+consume that capability; deferred/ignored/completed outcomes retain their original
+assignment meaning. ThreadView consumes the same readiness for attention rather
+than probing nullable metadata. Writers alone project back to original Activity
+events. HistoryViews already watches the original activity revision. No new status
+store, copied error reason or invalidation token exists.
 
 Read-only projection of the original twelve seq262/266 recipient rows confirms:
 all three stopped drains change seq266 from misleading Pending to Waiting for
@@ -141,12 +146,22 @@ package are unchanged. This checkpoint establishes installed backend/ACP behavio
 and actual original read projections; final paired TUI paint/public activation
 remains the parent's separate acceptance boundary.
 
-Deletion accounting against integrated current main: eight production files,
-**41 deleted / 92 added**. Added lines separate original cancellable acquisition
-from granted writes, retain the original pipe-closure witness, and move readiness
-presentation onto the existing diagnostic owner. Three fixture/control files:
-**35 deleted / 220 added**, extending the existing native journey rather than
-duplicating its worker/provider infrastructure. Replaced early dispatch/clock
+The final source accounting is recorded below after the readiness-family closure.
+Added lines separate original cancellable acquisition from granted writes, retain
+the original pipe-closure witness and distinguish persisted external events from
+the acquired, required readiness capability. Existing native infrastructure is
+extended, not copied. Replaced early dispatch/clock
 sites, whole-inbox cancellation ACK and registry-only pending interpretation are
 closed across their callers. Archive provenance is Mendel's separate PR477;
 historical lock-holder attribution remains unavailable from original evidence.
+
+Readiness closure controls: **34 pass** across actual outbound projections,
+both pending delivery modes, foreign-owner generation refusal, shared thread
+presence and original Activity checkpoint/codec behavior. Three existing roster
+fixture failures were first reproduced on the unchanged original installation:
+the test compared a roster without an opened reader to an individual owning an
+original TranscriptReadIdentity. It now acquires activity through AgentActivity,
+checks that reader's exact original incarnation and compares common presentation.
+Original e05 native acceptance remains intact; the coupled installed TUI paint
+gate is the remaining affected boundary, with no need to repeat its completed
+native cancellation/input proof.

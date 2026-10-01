@@ -13,12 +13,16 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     pass
-from .activity import Activity, ActivityLog, ActivityState, DrainDiagnostic
+from .activity import (
+    Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
+    DrainReadiness, ReadyDrainReadiness,
+)
 from .registry_document import RegistrySnapshot
 from .routing import TurnRouting
 from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
 from .thread_identity import OwnerIdentity
+from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
 from .turn_phase import PreparingPhase, TurnPhase
 
@@ -38,26 +42,37 @@ class AgentActivity:
             canonical = self.registry.require(thread).name
             self._emit_activity(Activity(thread=canonical, state=state, detail=detail))
 
-    def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> Activity:
+    def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> ObservedActivity:
         snapshot = snapshot or self.registry.snapshot()
         owner = snapshot.owner_identity(thread)
         participant = snapshot.threads[owner.incarnation.name]
-        activity = self.activity.current(participant.name, active=participant.executing).for_owner(owner)
+        activity = ObservedActivity.acquire(
+            self.activity.current(participant.name, active=participant.executing), owner)
         if participant.turn_state.busy:
             phase = participant.turn_state.phase
             return replace(activity, state=phase.activity_state, detail=phase.summary)
         return activity
 
-    def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, Activity]:
+    def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, ObservedActivity]:
         snapshot = snapshot or self.registry.snapshot()
         return {
             name: self.activity_of(name, snapshot=snapshot)
             for name in snapshot.threads
         }
 
+    def drain_readiness(self, owner: Thread | None, *, snapshot: RegistrySnapshot) -> DrainReadiness:
+        """Observe a selected registry owner; an absent owner has no drain event.
+
+        This is not an owner/start capability. Assignment presence still derives
+        independently from the original registry lease/process relation.
+        """
+        if owner is None:
+            return ReadyDrainReadiness()
+        return self.activity_of(owner.name, snapshot=snapshot).readiness
+
     def _emit_activity(self, activity: Activity) -> None:
         current = self.activity_of(activity.thread)
-        self.activity.emit(replace(activity, diagnostic=current.diagnostic))
+        self.activity.emit(replace(activity, diagnostic=current.readiness.source_diagnostic()))
 
     def set_drain_diagnostic(
         self, thread: str, owner: OwnerIdentity, diagnostic: DrainDiagnostic | None
@@ -68,10 +83,10 @@ class AgentActivity:
             if snapshot.owner_identity(thread) != owner:
                 return False
             current = self.activity_of(thread)
-            if current.diagnostic == diagnostic:
+            if current.readiness.source_diagnostic() == diagnostic:
                 return False
             self.activity.emit(
-                Activity(current.thread, current.state, current.detail, diagnostic=diagnostic)
+                replace(current.source_event(), diagnostic=diagnostic, timestamp=time.time())
             )
             return True
 

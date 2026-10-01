@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .activity import Activity, ActivityState
+from .activity import ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex, DisplayCheckpoint, DisplayMetricScope
@@ -87,12 +87,12 @@ class MessageNotification:
         owners = NotificationAssignment.active_owners(snapshot)
         from .agent_activity import AgentActivity
 
-        activities = AgentActivity(root, registry).all_activity(snapshot=snapshot)
+        agents = AgentActivity(root, registry)
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
         originals = {message.reference: message for message in messages}
         for receipt in rows:
-            notification = receipt.project(owners, activities)
+            notification = receipt.project(owners, agents, snapshot)
             source = receipt.assignment.source
             key = (source.seq, source.message_id)
             if key in result:
@@ -365,7 +365,7 @@ class ChannelView:
         channels: Mapping[str, Channel],
         pins: Mapping[str, frozenset[str]],
         order: ChannelSort,
-        activity: Mapping[str, Activity],
+        activity: Mapping[str, ObservedActivity],
         sent: Mapping[str, float],
         messages: Mapping[str, ChannelActivity],
         *,
@@ -429,7 +429,7 @@ class ChannelView:
 class ThreadView:
     thread: Thread
     status: ThreadStatus
-    activity: Activity
+    activity: ObservedActivity
     runtime: AgentRuntimeInfo | None
     last_seen: float
     goal_execution: GoalExecution | None = None
@@ -448,7 +448,7 @@ class ThreadView:
         cls,
         thread: Thread,
         snapshot: RegistrySnapshot,
-        activity: Activity,
+        activity: ObservedActivity,
         runtime: AgentRuntimeInfo | None,
         waits: dict[str, GoalWait],
     ) -> ThreadView:
@@ -480,7 +480,7 @@ class ThreadView:
             cls.capture(
                 thread,
                 snapshot,
-                activities.get(name, Activity(name, ActivityState.IDLE, timestamp=0)),
+                activities[name],
                 runtime.get(name),
                 waits,
             )
@@ -491,11 +491,12 @@ class ThreadView:
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
-        return replace(self._display_presentation(), binding=self.binding)
+        ordinary = self._display_presentation()
+        if self.status.active:
+            ordinary = self.activity.readiness.presentation(ordinary, busy=self.activity.state.busy)
+        return replace(ordinary, binding=self.binding)
 
     def _display_presentation(self) -> ThreadPresentation:
-        if self.status.active and self.activity.diagnostic is not None:
-            return self.activity.presentation(self.thread.title or self.thread.name)
         if self.status.active and self.thread.executing and not self.activity.state.busy:
             return ActivityState.WORKING.presentation(
                 self.thread.title or self.thread.name, "In a turn"
