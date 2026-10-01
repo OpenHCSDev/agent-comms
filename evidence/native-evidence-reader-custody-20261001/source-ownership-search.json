@@ -1,0 +1,1738 @@
+{
+  "head": "33f9118c477a921c963a512f8fabb2b3fe7cd5fd",
+  "scope": "All authored src/agent_comms Python plus stack/*.mjs and stack/patch-native-*.py; tests, compiled dependencies and private journals excluded. Lexical consumers are candidates, not resolved call targets.",
+  "files": {
+    "src/agent_comms/__init__.py": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+    "src/agent_comms/acp.py": "75529a50f890b76f7de6925b3574b2aa6226b4c1b4b581adf05bcf004dba184a",
+    "src/agent_comms/acp_extension.py": "cbfdae9b9fa176ddce6fb9f4e4c1ce5c06c98621fec5ea7e916902aedf15e71d",
+    "src/agent_comms/acp_failure.py": "dd3d22768217371f46615d29535e1582e85a3aaf390004c0bc89ed661843bb12",
+    "src/agent_comms/acp_request_consumer.py": "dd9499f0f33e7ba82ebd6d71407f48e470e9b0c253bd754ff9bd886e470e3324",
+    "src/agent_comms/active_route.py": "289c866e0f7a99c8ed8d73be68179e4c2d72271330b58467e093d6cbf0863e63",
+    "src/agent_comms/activity.py": "e1a7ff1f8eebdd2ff5dc58df40b834cdfd2cc3d191c76c8f09b77dc4af1b8d75",
+    "src/agent_comms/activity_checkpoint.py": "99c3c0947714e5b608588e425c01411fd63c32800796f03da4c945ad45e72694",
+    "src/agent_comms/agent_activity.py": "6ad254abe4023a573af64923750d6b71f1947fac38c87aba1c2d4f8e2483c3f2",
+    "src/agent_comms/agent_event_updates.py": "069e198094137ba04a21e735e9fb51c464a1132639c0cca361ab5908cf7a9794",
+    "src/agent_comms/agent_events.py": "5bc97b72b4ba078de3f5d1f570a079cfd119d31524a7f8aaff8401a4b8d274d7",
+    "src/agent_comms/assignment_states.py": "fbf747bc162db52c40dc241495df3b2d225e1a40fdf238003c74c489d5b49fa5",
+    "src/agent_comms/assignment_store.py": "40081db01ac9acf15c9a60a114925ad298c0ebd1a24b3c31e7abcc3753d974ee",
+    "src/agent_comms/attempt_recovery.py": "6e39a5e55952699a0f53716cd15df7538c0eb0a67770250ebe2e75357efb38a3",
+    "src/agent_comms/attempt_start.py": "da9e7ab1c8cce0f9a3ebf6bc9c76d6d1168cde689d6a6b7bfed9b8c77af7ac09",
+    "src/agent_comms/attempt_states.py": "0907313c9e66f8ba253f036e58120a6530162e93775bc9b3b896ced53c154231",
+    "src/agent_comms/attempt_store.py": "79b2e29c7f05f770ed50110e2170318e89307461403bb4dca5a15eeababd27c7",
+    "src/agent_comms/audience_manifest.py": "d1120afe7915be73b6f83f60f6b71265c8d117a5713743dcf72043018379644e",
+    "src/agent_comms/awareness_context.py": "a235ecaa00e9048200bb61faf288e47ba55930d4af9bd943aec13d7f6eae44ec",
+    "src/agent_comms/backend.py": "019211b8f9c9ec500edec6b90987283c48280817a378f3a9bf6cd6c5a1ca598a",
+    "src/agent_comms/bus_activity_index.py": "b7cb50da8d04ec5251284a243bd312bc17b63a91ef642c6ed54b3fb122f2b045",
+    "src/agent_comms/bus_display_index.py": "ee0b2821bf4dcdba1a01681dce8f613274b4a8e857790b6d5fb8deb229f843c2",
+    "src/agent_comms/bus_page_index.py": "cc62be87cba3a052d456ecb9e976c30aaeb2085a77a78d907fdb02804645b54b",
+    "src/agent_comms/bus_projection.py": "9b8266941225416325b931a506b634da374f77aed9f9c49d46254cbddd3e9e51",
+    "src/agent_comms/bus_publication.py": "62ea1ff812d1badd87412b4e59a5c1a533b4b09b6ed1b89e4efe8795832cd18f",
+    "src/agent_comms/bus_route_counts.py": "8b3c02419f6be98be306bdd9dfe0d40b4f54ecac23cc71c279099537e54d3900",
+    "src/agent_comms/bus_source_page.py": "a9bf2d1a37105c4b3046bb33c5accdf31a73a0a67eeb0dc3c6b1f789a8b62fb8",
+    "src/agent_comms/candidate_maintenance.py": "659de5fa0940827f5ba880c9fd43b12cbe5eb6e3f621d99d85a0560784503f01",
+    "src/agent_comms/catalog_document.py": "ff35222d529a8b23d20cbad03228ceb6d1dec9cd5b0aea1f6d27a4ba6604f064",
+    "src/agent_comms/catalog_store.py": "5248f7db6e0023ddda0e3299c9b287f65eec455d5d0b218851c4db209905fd9b",
+    "src/agent_comms/channel_coding_tools.py": "efad4824b8d429ed94975ed9e3311d0470e5fb296ca4bad930aab99cb3eca926",
+    "src/agent_comms/channel_input_batch.py": "25f4027a78deb38ef8156daadc8468d17765c3c800f2b954bb7eb854f5c5781a",
+    "src/agent_comms/channel_management.py": "d1b70dba25dd4b91897be4a9b68bb01802af38b4b82e6345bd922d4770327c9b",
+    "src/agent_comms/channel_targets.py": "09b6ce2fe90f473320ce3a6aa492b5d2a8f689a1b8d45682fceaa56f9bd9cb50",
+    "src/agent_comms/channels.py": "fdf88172441a48b426ca93a67cb38a1fe7d1532c3dd0ae910f3cda8cc25a73de",
+    "src/agent_comms/checkpoint_seals.py": "b16ee218e0359561b690ab4454f6f32b65fffe93ad3e08b29293628b0f237514",
+    "src/agent_comms/child_process.py": "f81779365efdbde262ac99dcda36a7e6fb3b93f2a9135abda05a1416ebe416d3",
+    "src/agent_comms/claim_admission.py": "3d5d21e619eecf778658fd2749838f8a3b35dc9595f01a50e9afd2bde5fd5cee",
+    "src/agent_comms/cli.py": "6e37dff22367cb3deaddc0ceb5f9baa8b70d34953f1b424b19e8b9b571905990",
+    "src/agent_comms/cli_commands.py": "4dbbf2f493d88794d243ff58040b8ef585e614334e7a7984604a6def1d7a56c9",
+    "src/agent_comms/cohort_foreground.py": "650824c4622929fa190ae9a110279ba97809786e17a352d9c0667023bc72c36e",
+    "src/agent_comms/cohort_schema.py": "f71b7c002d6927117108f518c57142c3e9dc0e672d6bf8045ddf4632f629f706",
+    "src/agent_comms/cohort_send.py": "32d5e0672ae30824def8a48fffb8569b28802a0a20fa91079d322c2919700cb8",
+    "src/agent_comms/collaboration_ledger.py": "12967c658b462e3c1ae384d036dfaf1bd52ccbecbd77146989c5bccb820d8d0d",
+    "src/agent_comms/command.py": "536d70eedc9c0553e4f9d58bf2e4309985e36af9827a992ae603028cac46b35f",
+    "src/agent_comms/comms.py": "c4529974c854ac19465db1f255024f53551e02d502fa2247315edf96fa511ac7",
+    "src/agent_comms/compaction_boundary.py": "6986af5e250146a9dc51316356fb119c667b1448053d523dd7e294824b13669c",
+    "src/agent_comms/compaction_errors.py": "ab29dcb8e1122630036a5bb478f2fab4dc17e31e4e4d1ec7b8ef19a13e8ac396",
+    "src/agent_comms/compaction_identity.py": "2954883e7e27977452d4dab464638eecef1bc806fca502d068f2a2ad0fe85ed5",
+    "src/agent_comms/compaction_journal.py": "0462e3b2c46cb29ac0aa03c85b65d7e0667ae59651169d61d08b2dc430070db4",
+    "src/agent_comms/compaction_journal_role.py": "c47e33c10de267cf5da4543f7dba52e0ae80070f3e65674506722bedc26a78ab",
+    "src/agent_comms/compaction_operations.py": "6bd34bd7ea1c4ef4a18930461d8cf8332979854c7f69bb2e9a110592d3e0f0bb",
+    "src/agent_comms/compaction_outcomes.py": "8cff67c86098f5f1760754477d7d14835e6422b6a8dac2358ac67329452b7e1c",
+    "src/agent_comms/compaction_private_inputs.py": "b793dde31b014df7e5b837e81cbe1635c403af68c5fc79df2d7ea95b3803f1f5",
+    "src/agent_comms/compaction_progress.py": "1ed4ba53ac62561de449139feb19222ea54480afd17e24f6c909352bb78f088c",
+    "src/agent_comms/compaction_publication.py": "9756afc886a0dffccaf7628ab012f0d2debcd06153dba1476a4e0f8e6b05fbfb",
+    "src/agent_comms/compaction_publication_lease.py": "48053858c5cac2ce21c2531a9f94551367b9937c598d6f0c33b7779422988484",
+    "src/agent_comms/compaction_publications.py": "9a4fd5fc94653a12dc600d135245011ef848f8706b10fb20ee23d6dcadc94e4e",
+    "src/agent_comms/compaction_records.py": "1a4b0d770b0b7a6d0c975cb80a07f8027a6aba028071c57f9767f9988cd61ce7",
+    "src/agent_comms/compaction_result.py": "133d1be6837bf8e2f9a78774ff2d0b6ba68d123f488732e09ca32f77ddab1d34",
+    "src/agent_comms/compaction_send_admission.py": "baec6730bfacb43e4ffc880020ee78c151b0b7d9e547856a440f27ab443872e8",
+    "src/agent_comms/compaction_source.py": "8dcc5cb659d068e15cf0f71da5ebd8086e56943439e52f670dc6962ab27c01b3",
+    "src/agent_comms/compaction_states.py": "e372bc3cf2ce346d45bebe586ee66c106de84360cdbeda4a5f6dee7310f645bb",
+    "src/agent_comms/compaction_summaries.py": "451cf71204aa35a3c875134bb43b8e37317cff8983bf83948da88127d4c1b7a2",
+    "src/agent_comms/config_options.py": "1c4cf2416dc390290d56be753a5dcd0e5925231ffac65ea8128e85a1c2a70963",
+    "src/agent_comms/context_tokens.py": "44906147b82836f90a78742009f4ce37bd1e10ab7bee8b75c028e787dbdac9fd",
+    "src/agent_comms/continued_private_session.py": "84eaa94b64b359656cf09431a30e34614a1dd4ec25eaf40e5617e43cd97dfb6f",
+    "src/agent_comms/coordinated_runtime.py": "32fce5452a31fce2954ed4f2a8b55d39d1128b053e02264745fc073373fcb594",
+    "src/agent_comms/coordinated_runtime_schema.py": "f617072283dc316a102779a1bd70725f8fcae03803b8abd7927e3c6c8d2c3b1d",
+    "src/agent_comms/coordination_cohort.py": "1541b5e11a615e6843ae820eea7724b077c00cb1fb28bb94feffa7441c473c03",
+    "src/agent_comms/coordination_contracts.py": "d443d8981c59e843b20e22f9058100d0f86eddee823100e5c568618a9ec517e2",
+    "src/agent_comms/coordination_database.py": "5ba333b09f3eacbae690605fde8fcf8a164125ce38d1fe8a56f138ba4b6bbe87",
+    "src/agent_comms/coordination_errors.py": "5675e462e2ffe8c199c53b2066343085a2f4b95b08f160e1f8a4cffa2293cd99",
+    "src/agent_comms/coordination_response.py": "f67ce83fbd4aa8422584b65bcc5ec9b2c6fd960b6906ced6a03e956d3774e448",
+    "src/agent_comms/coordination_results.py": "f073e5b98f1d30ab37039e1ff2f9af78143622808425685f65fb476f7fa8cdb0",
+    "src/agent_comms/coordination_schema.py": "1927c9142b5ec04a7749a3164bee26c8ef6f9c0d271416df0ef4240cc0b8bf45",
+    "src/agent_comms/coordination_session.py": "d08e586f8896220a57265a0fc5c32a1c96428af0a526fe5336c22442823dd453",
+    "src/agent_comms/coordination_snapshot.py": "84a89caa32c05d4d85ceefdc0d2507a97af1de12c6957bd6c58adee6488e2777",
+    "src/agent_comms/coordination_tables/__init__.py": "a25b34a1b87104c5a2f3ae3cf704aa023f778bab0e7c0038444740c44a3db324",
+    "src/agent_comms/coordination_tables/assignments.py": "c2c3c0458e696c0fe301cc2ee3353e1b81c774e144f47ebb5a0b66f1bfd70f8a",
+    "src/agent_comms/coordination_tables/attempts.py": "9cb1a6f11e4e9c6dbb50564527ccd1788bfcfe9b26a33ba127fa0c89d79eb889",
+    "src/agent_comms/coordination_tables/executions.py": "6967b09763c5c1d739d4fb6b3a86d641705aa982d7b7febb175a66647de1809a",
+    "src/agent_comms/coordination_tables/metadata.py": "1a8ae630b7f760b7b413b465ea40b71ab726a964547e17914fa0fb2af6701d6f",
+    "src/agent_comms/coordination_tables/participants.py": "21dfc005952ea3621a4d7f47ef6a1461b61639e1b92fc249835f11259820adcc",
+    "src/agent_comms/coordination_tables/publications.py": "70116eaf230ccfa288cce000fd1cfc6d078f8a62781c3d774123bb0aeee1e1db",
+    "src/agent_comms/coordination_tables/recovery.py": "a617e4a7988e813eed47f4bb857a7512ec54127056c485f7baf5784fcebb0a69",
+    "src/agent_comms/coordination_tables/responses.py": "77f2bf8c466c0569ad25c450d14c1d681e9fac8a3a70d841b8239000746350eb",
+    "src/agent_comms/coordinator.py": "a66e850fe59c536d237b6b662fd59c637ec1e6e775baef0cf9e1097812f0cdd4",
+    "src/agent_comms/cursor_owner.py": "c87542c0c82c2273987c82f7dab79420460b00235637fb51014d0aaabc22a3e6",
+    "src/agent_comms/cursor_publication.py": "7f1ee812c4ab6ca17b4b0f9a128cb70b109c84df242e4be07ff9ee816c5ade22",
+    "src/agent_comms/debt_ratchet.py": "81a6b64d286be3e54db35af3274711739b014f1c045646a481d51f63c82cd016",
+    "src/agent_comms/declared_family.py": "afe6d5461192c309e6be08a4d933f0e89877fd1ddd58d10d97d39d4638a0f6cb",
+    "src/agent_comms/delivery_failure.py": "66333d3bd5445770ff8b30b213bfc7f613f4e56262988cf998c2fe1bdc34c72b",
+    "src/agent_comms/delivery_policy.py": "df6c4dcb5573e3d59e4eb17c43ee93a91a5c7dc774414dfa8813c34b456e02f5",
+    "src/agent_comms/delivery_presentation.py": "c9c77ead0ab68687bce7a1fd0ce2f0df8e6b2b6263a324450762d7c7674e1f53",
+    "src/agent_comms/diagnostics.py": "e5779830c164336f64989c87cd6f44ce41dd96e34f59fe4b27ee488c6f6c844b",
+    "src/agent_comms/display_order.py": "dcc79bb51a144f1779e6045acbd608ba59e9c99d5086a053fd5e04d91b7d293b",
+    "src/agent_comms/durable_turn.py": "8947ee46bfcd475dedb536c56e49880facaceb51697db33f412a78898ea48ca4",
+    "src/agent_comms/envelope_claim_transitions.py": "6074f3063b674bd6742cc4f7a99c49222051e4f7a2909f3769b437fc2d640d03",
+    "src/agent_comms/errors.py": "3ad603c3c00d1d92b64d1e3d473d126d3c0be60a254dda78b19d90f6d91c6a80",
+    "src/agent_comms/execution_states.py": "bc30f4d0f64e8683b4b2b390bc9d55080ef16c3a48efb7c55c97583d242a53d4",
+    "src/agent_comms/execution_store.py": "d1afe406b92697b307b38afffe7adeea88c1889d0effd5d36ea9454cd772752f",
+    "src/agent_comms/exporting.py": "716ed614d1ca5c92c78c052b62fadc5a0ffc092c9f9b70b1b638174b9c4c2e65",
+    "src/agent_comms/extension_ui.py": "2610d0274dc8d4ecd910fa7d15d4da5ed90de8bd190a67e00977565d844067a6",
+    "src/agent_comms/field_codec.py": "8050f19bffa36118bac4e852836c86c76fabe22eb9c0292dbf01f15158eb2eb5",
+    "src/agent_comms/fresh_private_session.py": "b69d17aea6c79b6effcd22b4ae09d5bf132eb329672e0d07a7c089f5a845e878",
+    "src/agent_comms/goal_actions.py": "d22392b7e3f030dc1bfd9ad485d90396577152b2b28dd56fae038f02291613ed",
+    "src/agent_comms/goal_attempt_identity.py": "e034e47e8dc9988070c508456f455fc832339fa48ffaf28e4aaf26443eaa8e81",
+    "src/agent_comms/goal_attempt_phase.py": "658aa298329e523c9938327e5477cf424a4a53ad7650f857e2fd7a1229ef0109",
+    "src/agent_comms/goal_attempts.py": "d54f61c330a1af3353b1da8d1562346372c088db20384ad9855fb35c834998d6",
+    "src/agent_comms/goal_failure_observation.py": "fbe32767921529357cc7ddac2d2072e36ea091e5823079a28ad47871eea5d0c0",
+    "src/agent_comms/goal_generation.py": "54ad7257e31fe25d2a99ef08c2d2974e4d54e7f9d9163c996c112303ea455131",
+    "src/agent_comms/goal_history.py": "cf28da3b49faca6ecb2a539899f52dec9294ddb79d97e0f7ae866fe589952d50",
+    "src/agent_comms/goal_management.py": "d05ac98f1d7e63ad0b6659a44fc88875851b7efa0c28f0fe8074e220f8046898",
+    "src/agent_comms/goal_mentions.py": "41fcf0a9a534d46d2b35132c29b83f84992cd129df9c526b5a80d38e2235f7cc",
+    "src/agent_comms/goal_presentation.py": "d6fa32ecfd8a725deb8a57b1a6e97d4ddd224fc1495389d3be339f3090fa6694",
+    "src/agent_comms/goal_scheduler.py": "e17b6dc223faedbaf869a0b70041d60bfbbe470eb885af369e6d17ed011f1970",
+    "src/agent_comms/goal_states.py": "9c84bfbda03f91f506c39381592c3d8962a28baedb82d1f02cdec697f1bddb19",
+    "src/agent_comms/goal_waits.py": "d0a75e37721cc24ecedbce2db6f10e339b568827b92bead489e038adfba9fd0d",
+    "src/agent_comms/goals.py": "c2b4581829e4675b8124aff0e829f3fabae43510164bed2d65618c051b6c28dc",
+    "src/agent_comms/historical_native_inputs.py": "2be8cda15438007631d7c37b93d8111b5b61afa1301cac95edb5d51f5ca82703",
+    "src/agent_comms/historical_views.py": "9cf46e0395759e69451c055baca042b0e895fae285cc9518978de7ff89ef5559",
+    "src/agent_comms/history_views.py": "df379b416d8249b39f82395481d5d03f06865ff2045e86abe6f1323152ef8cfc",
+    "src/agent_comms/image_inputs.py": "829e5f7822c8cb570873f0b3f6e7b26958ca27b35f0b2847a703407fc5b3c3ed",
+    "src/agent_comms/import_records.py": "75870c4a6e0b4152e6e02aed8a8961bbe18cf91e63e3c6606aad2ec14b60068f",
+    "src/agent_comms/importing.py": "d194d3d23e362ee638c209ba175e906eb1ba9388c6d424779d6016196ee8e400",
+    "src/agent_comms/input_attempt.py": "9e95e2b9ca26bcef8c587a83a4258b5ba9553f6bf52d1d2c919bd1a0522fe909",
+    "src/agent_comms/input_disposition.py": "4e1bb43cca2d932b794d55becea36bb9e38e06a0d98c7f33337f58fde9dd845c",
+    "src/agent_comms/input_drain.py": "f42e09ffd87c97a899ba53063175255bb32b991853969b1274453998dfa69c2f",
+    "src/agent_comms/input_effects.py": "8a9c39f9ba1da5f3c8ceda8d0d46ebdb037d3b9b9ed964ea379b97c8044b35e6",
+    "src/agent_comms/input_origin.py": "7932994c43456faf6a9cc01b6cd744624758daa647917af99c5ccabd9228951f",
+    "src/agent_comms/jsonl_stream.py": "4e321f751779ccd516111053089eb9c418dcd97865164bbdf6d962de595ee66a",
+    "src/agent_comms/lifecycle.py": "c8e7a18d7c8a0eaa1b771f952ce66d3511a12e0a3c42742d35dced70323cc9a1",
+    "src/agent_comms/locked_store.py": "565b488ada15b8b89f4e27c199f51d2392cae62ddaf179d6487e2bdc5c29a827",
+    "src/agent_comms/login.py": "9c27b8c1113dc7609c9e29a990b72e9a56ce44d228e171765a7b68faa7a10b84",
+    "src/agent_comms/maintenance_barrier.py": "10da8f406ed75a20420905fa278788f6143dad01a19efd210b2ba4489f5d26eb",
+    "src/agent_comms/manual_compaction_bridge.py": "8b38c28a34882896d5e6da4e678feacc7d3960bcedaa031648a592f6e6a3e44e",
+    "src/agent_comms/mentions.py": "33fc3b29884426c78be11391abace5080a870ca0d32b95f8dd2ff347b2630bc3",
+    "src/agent_comms/message_bus.py": "3579960cae43c65e3210a4a7fe1970e8bc73a907322b1b11d44399bb6594030f",
+    "src/agent_comms/message_page.py": "b77eab88080ae384f98ef027149313b5ecd21c341ac8d9c0c8e7cc52d7718ca0",
+    "src/agent_comms/message_reference.py": "faa0c0f12dea7aa187e495e7f04766a390b7191116ce68a3165c5ec51567be39",
+    "src/agent_comms/messages.py": "7cc00a0be7f8c1b7d735bed27e32e04c978d3bdba510098b142df6b8993f1d40",
+    "src/agent_comms/messaging.py": "ed3a6e0272c39e99627a30eb24a5dc52ad35b7458a802abfe7e140f9e87d600b",
+    "src/agent_comms/mro_dispatch.py": "4e6bb871529385366e41a40a685e5c5a095fdbb18182d765fae3e5cca8ec5fb2",
+    "src/agent_comms/native_admission_epoch.py": "81d6341ed17e2306fd95fc67eaff0fd794560ada809c8e1b9edce112417380fc",
+    "src/agent_comms/native_admission_rules.py": "8554347a374453f59d4a79e94484d68eb8394ad811f1460a66ef8d45cfa7e77d",
+    "src/agent_comms/native_arguments.py": "ebab34372b0f01eaf834e4a603d7fe046741b2eb8005322453c08b77c7fc848a",
+    "src/agent_comms/native_attestation.py": "4f11c9f618c2b9a5784392af55c1616a8a9fc1b253fc15aad70701c4c2faa4d1",
+    "src/agent_comms/native_compaction_request.py": "6d11e53b8e877ac1eeff705e201ca440136c6db231a62416b4bd0162575c22ba",
+    "src/agent_comms/native_compaction_writer.py": "3250122dd5c8e7a517ee1bb0d86833f79129832bb9ec62decdcd97ab54b847d1",
+    "src/agent_comms/native_custody.py": "d2fc98dbba48832bd180656d4d90c4b70ec3a4abbc19fb48ffd5753a0643c293",
+    "src/agent_comms/native_entries.py": "2c2c329b2e740b08f74a4f5ef91610051102a59098afebcb5db1570e7400ed58",
+    "src/agent_comms/native_fork.py": "3c18a4e2c0c847e02bfcaebca36c3dd8b0ee4593b19037d6a39d7ed08e30d0fc",
+    "src/agent_comms/native_input_owner.py": "14cec550c9622734d424cf6219cc807d6fa05d4300e109aa9b09a68ddf562de9",
+    "src/agent_comms/native_input_record.py": "93ae2c37efe7de8f11285bffe995d890b620b36aec155354aa2ac4e663cbd02a",
+    "src/agent_comms/native_package.py": "5302de65f610df68cdf22195838a60a2741e86bb73dea8cfcc8a2dd5e6e88e5a",
+    "src/agent_comms/native_pi.py": "7ef03ea68a8cf74e117d814496d4dd41253e44895b48fd638bedf5bcf2843189",
+    "src/agent_comms/native_prompt_binding.py": "38c42bf272b4e50c2bda97c3c8d6426894523795dced01b21e00ed30864f99e9",
+    "src/agent_comms/native_prompt_send.py": "82d8b454343ecc3313e8f48c992c9eb46c58fc3ae61faf3483b79f5c1946d263",
+    "src/agent_comms/native_runtime_input.py": "9c4d50241c4c97292873f3804304cbe520f5b5a6f52bd84663e260a4de3e30b2",
+    "src/agent_comms/native_session_prepare.py": "d9df83f7013f7cf3b0bdf9be98ba16a4185a5d78e0d8f0ef2723ea74eb3d31e4",
+    "src/agent_comms/native_session_reopen.py": "8833ac726b211504e40405eb45569482ced525c757ffb4ad4f60f1b5695a9070",
+    "src/agent_comms/native_source_cursor.py": "7ec0864cf9fad712d58d66ac9fcf567d61f1c6658c71a07516deb2497372ebc2",
+    "src/agent_comms/native_startup.py": "3dd413f75755484d7f1998007a9fc5cb1884ab6ee7b8008693a28bbed3c58640",
+    "src/agent_comms/native_tool_call.py": "7edc1dae4c10f8ec857bd31a94765f7f3dae5bb8aa62c3597b223e7600f0f6cb",
+    "src/agent_comms/native_tools.py": "e95016b94309cae06561bf125fb451ed98eeb99471a2a4e4224bbf36599d916e",
+    "src/agent_comms/native_transcript.py": "f3e294806997beba12be1e2637c780d12f1598a3917a5a9d1cff15305e33aee7",
+    "src/agent_comms/native_turn_context.py": "2fcd221c86998d82d3889765a5e60ea6b0ad5597962cbdff8b654eb1b4300072",
+    "src/agent_comms/nk_foreground.py": "bc917c011944b1d93d0a55cdf2b53d7b503a3d5f9e2b7df3119e3e63ce4a22e3",
+    "src/agent_comms/notification_assignment.py": "bbfc33e75c1261ea22149ceae28b359f35b0b70c650ed0e9ddd61eda9a7f1304",
+    "src/agent_comms/obligation_states.py": "61dd5374f3032635903a314217ee8782ec9da799b106721f75b5c5a6285723c1",
+    "src/agent_comms/optional_awareness_projection.py": "b91236fca8f14c06afbc1a97db6b2abd528e9a7ef4347925cc894b672bcd93a3",
+    "src/agent_comms/ordinary_admission_rules.py": "e95b232670bdc3a9cd929822ac5681ffa4bc6dea6f1abe55da9b3967dc1a0f6a",
+    "src/agent_comms/owned_send_admission.py": "ed13b391298898e9beb4a102e57188e21f4540fdc05b25206a2d9a2f3419ae55",
+    "src/agent_comms/owned_turn.py": "5926a9181bf6c27a290326e288dc6991bebfbb5b714af81bb95cfc02412bc771",
+    "src/agent_comms/owner_compaction_adaptive.py": "ee34cbb3d1e53eca5faec4aa0af2563904a9a25b921cae387995f6e824e99924",
+    "src/agent_comms/owner_compaction_commit.py": "0e09501df7eef741e5503ceaad1757f378ebd3b249413c7a016dc3eeb2868476",
+    "src/agent_comms/owner_compaction_gate.py": "ba49a45584090d74956c1593d503ba963d5c7f0df58dd962ce2b14fe9b164c6d",
+    "src/agent_comms/owner_compaction_manual.py": "ce1d00e588b3e7842729c9b0271e6e645f8d198048f8f18b19979c4ea6941e3b",
+    "src/agent_comms/owner_compaction_prepare.py": "8e66f268ff0473b46f95e9a6c2d215cf541db83a70f4c665f52351c65510efc4",
+    "src/agent_comms/owner_compaction_provider.py": "423672c6aa066b58eed6d90e4580c726a00ff4444b69e43c1314f914b1e573a9",
+    "src/agent_comms/owner_compaction_runtime.py": "55cd8f08fe850dce72d99a055e773637bf1c4e0feb9adb86478db97c8c8156d7",
+    "src/agent_comms/owner_compaction_settings.py": "88f0027e61ca8aa99d7acad91e38a38e07649ab18a35ef5b9829b388f4f48dc9",
+    "src/agent_comms/owner_cutover.py": "3dfb526e42e63d0348c9970a3431dbcaec4c3a2d55223c23898bda5a1333144a",
+    "src/agent_comms/owner_fence.py": "63a53b6916768459db5abbcad4cd33a1973d9d5e10dfd201b8aad01cbace1286",
+    "src/agent_comms/owner_launch.py": "8c09839283bd706504e29b91d756e1a51f07e808b5c5803658360e4a196d74db",
+    "src/agent_comms/owner_lifecycle.py": "0f5480eba79f7486f64216c06a421f8d4edee5b05895a8a3c9c6290cada22919",
+    "src/agent_comms/owner_restart.py": "e2ef3319d533a1a0e80d5d910263781c32a45212e2ed42391c457994091a107d",
+    "src/agent_comms/participant_store.py": "af392561a56c17d6119db62ec22e0b76e8d3ed079ead049563c73e2396e4ce38",
+    "src/agent_comms/pending_requests.py": "72eae2360c7fa7449b16313b2f923d6b5513d6f50b062d57149cd0cda23968ab",
+    "src/agent_comms/pi_commands.py": "e89bbdd12c57bc73dee7dd336fbd71528700b43acfa1acb47e84ce2fdf4203ec",
+    "src/agent_comms/pi_events.py": "d5635b213e1b0fd1cfb452672b0d7c3f06b3f88c557e78a42d0a68304bd57507",
+    "src/agent_comms/pi_helper.py": "9fa3f0f9503c1552c2e6e8fa623f94a32f3f7c45d57ac952ea7ece845aec38f0",
+    "src/agent_comms/pi_payloads.py": "83374b28815e40383566429feaa4cdb0bf4efdd64e0097778a71a37c3bb10d4f",
+    "src/agent_comms/pi_rpc.py": "2c68cb57bb0d83076a4caf52724dfbd381d4fe0955ea04e8cd1b359e936d3b42",
+    "src/agent_comms/pi_summary_payloads.py": "9ec0ef636fa69010ac2c2f08ce290f0da4797a06e1b845d3f9f33ab8d4fefb86",
+    "src/agent_comms/pi_vocabulary.py": "d44be18de45768c503e9e0749fe9e1acb80fb2b781044768c6baa68ff84cf510",
+    "src/agent_comms/presentation.py": "622b44129897ed6c658f855d5693b2b7720fa5cdb166e6066734e037568545c9",
+    "src/agent_comms/private_bus_checkpoint.py": "084ba843ac4c782e288d195aa473acdd7ffde08be866ac6f7213a49d05950005",
+    "src/agent_comms/private_nk_entrypoint.py": "ecc05184a80286272f7941e3c5904ed184cffe9f51e0284f2fe3955eb6204756",
+    "src/agent_comms/private_path.py": "0ba979b43b71782c4d199f388eace30d907ddb58791886d993f9a89a3ebcd7ab",
+    "src/agent_comms/private_registry_guard.py": "9385e05174e488bfd73fda4a7082fa49f8f39a936178f8e6c40815f3f64d926f",
+    "src/agent_comms/private_runtime_schema.py": "28e88ffd8f68ec4d4449a0e9e49c8d8e2db778a6a5b97488a677585d325a6b71",
+    "src/agent_comms/private_send_admission.py": "f3e5458c21029a1dfbaf19caf9311cb1cf475c083ad5f87cda1cea2421cde1e3",
+    "src/agent_comms/private_send_stage.py": "cc4558b6b00f33b6933a00801b27e7b34a9390d3ee0c235024659387fd9d844b",
+    "src/agent_comms/private_sidecar.py": "22102dbd89a4ca2652a77dcf735a960c93326e5ebdf7362a4e4e5953b96e0f32",
+    "src/agent_comms/proven_source_coverage.py": "638a734307eccbd77a3c026e2d7a0fae358ddf73fb826c49c81e296f0d17609d",
+    "src/agent_comms/publisher.py": "a62c0b8aaaa581821d88fbb236d9d51eb361bce38850f941d7b18eab8b39b761",
+    "src/agent_comms/queued_input.py": "7acbe06815d29b78e2b0d92bf6dcfd0d999c3cb49bd8face334d4c0d1abad658",
+    "src/agent_comms/read_basis.py": "f266d5024c47cac8e5c632bf8ce847a2c02f3d00323133aa4207d4a0ff113a8a",
+    "src/agent_comms/read_ledger.py": "5e8928aa44fafc517c2e3d55d8aefafa9283c89723ad834638e0da85448beff0",
+    "src/agent_comms/recovery_gateway.py": "418dad43d8f5dabc69b5124cab633b936a5262f06349352f6d15c8832bbb1a3b",
+    "src/agent_comms/recovery_gateway_client.py": "f6533ba08d27f1493fc7463121e62e0dd0186acbbaf3620959e64d2aa8e9cf02",
+    "src/agent_comms/recovery_projection.py": "a764956ccd4f7df0ad629d84f8fc05ba6fb5e01b41817a37b007c9e5feab1141",
+    "src/agent_comms/recovery_reader.py": "7965dce6a80d4d6280d20a125694849dabcc489f2440fcc1bfdb621116f9810b",
+    "src/agent_comms/recovery_states.py": "40abf0b0b3a77b91004e429801247874c1223f606619b822fdb18b3260e142d6",
+    "src/agent_comms/registration.py": "3a5413252e8cad155c10ed292b482d92b358b194e0366a16bfd2610b754841d5",
+    "src/agent_comms/registration_change.py": "4185246c40c34615e3418ff56aff2bbc5ff157b3d68e019c71ef2b16c0fca233",
+    "src/agent_comms/registration_inheritance.py": "883035d04211e873b9c240efcde4b7c35c72c51f216fab7c54c7a5bf7d9e0f6a",
+    "src/agent_comms/registry_document.py": "3b08976205b9bf63722bd996ff16d77ac1eff8cd6d48d1da93a6f5492c51b0a3",
+    "src/agent_comms/registry_provenance.py": "433c4b79793ca8226d07818ba8016f9e3f2715029a45c002386d51c42499b4ec",
+    "src/agent_comms/registry_store.py": "e1472c40995706b7d3b3797b450b92f86f38e323d3ce815bab1a1e795516670a",
+    "src/agent_comms/relationships.py": "c5c4e50697e6bd0e32d575e2e8f670da43ba4a71e888a88fa9858957a9887696",
+    "src/agent_comms/request_progress.py": "7e7deed6dd3c952e4cd54e846b4ed81716ffb3629d9049b869ccbf065692d6e3",
+    "src/agent_comms/reservation_rules.py": "e283c95d605c24475763a21be84dd6698a69657f214f2417b8360e36c063c245",
+    "src/agent_comms/response_conversation.py": "ab44ec5819286c1f77790cb0f19fb656786c34963e0f1c21fa9f562c4ad69891",
+    "src/agent_comms/response_policy.py": "b6006d2e355b952828fb5790c54455e4cb596f42654d10e064c0a37fce954afb",
+    "src/agent_comms/restart_queue.py": "46bf0c87501db9ddcd3ca3cb3a317772f5b036d96a7f0cb1509e71e5009ae89d",
+    "src/agent_comms/restart_refusals.py": "0e9bfd90f0d3b88f7c0a40f999235e0b9204ed2853988d09b46ef972b2bd58c2",
+    "src/agent_comms/retained_task_facts.py": "4d3111685b55fadfb2bef90843455aa28c651af534902f4ba9600acae86b79be",
+    "src/agent_comms/routing.py": "a61e2d3c1b27ab85bb7ec4966399ce1cda7eb35f98823a60d1119fdea543367f",
+    "src/agent_comms/runtime.py": "32a54f3a8a2cc991fcb67632d2902811b955456d7d5a8b549622c9c52a016f7b",
+    "src/agent_comms/runtime_info.py": "a8aec12e32a081885dfaf986c3a72e4e618289814e134c42270adaafc2ab3ffa",
+    "src/agent_comms/runtime_requests.py": "b411623b1aa112705afc93bf52ac7431fe43e84ca68ba3f130db67b1843d095e",
+    "src/agent_comms/schedule_rules.py": "8896162ed1b0497b8b565299184ff34795b2c1b866b740269a36522a4b584d60",
+    "src/agent_comms/sealed.py": "f41d94cd38191b7ac13e7796bce62fcd839905f0e2816698da87cefcfeaa4b8f",
+    "src/agent_comms/selected_actions.py": "7bcb03a7295ca330ae3114556d6413e85ac7257c6566e5456076afc0c810e1ff",
+    "src/agent_comms/selected_participant.py": "9d6fc103699723d9ce3d675d6cfb634de50523562a9d2a2be70217ae03836dfe",
+    "src/agent_comms/selected_pi_route.py": "3045f28aba59f8184af3ea34c464751fb37006d641d33e8f965ed581c3563074",
+    "src/agent_comms/selected_pi_summary_rpc.py": "eb00688937e5ec73340d895a2a042d02caa0f1d3dfb13e3116c7b9113351b4fd",
+    "src/agent_comms/selected_request.py": "b12df58451f688afc456c1a7a5b5221af80e5659852c3a6f0fe7fcf487eebd09",
+    "src/agent_comms/selected_result.py": "3bd8c6540b579c1ca8410fac7f638d70d64bfcdf23f191e89f3f87e6f5ac4e57",
+    "src/agent_comms/selected_session.py": "5347553ffa7132f6f5ffaa07dc05664019ba6ebe085b6c29a6dd23781cdbe130",
+    "src/agent_comms/selected_source.py": "49d38e79c33619ab90f9359a720781e2a33bb8240fe2e59257b07a4a80366166",
+    "src/agent_comms/selected_summary_admission.py": "c6ba8488d79f41b50283889e9b47484e4c521de1588b12726e36b1328004287c",
+    "src/agent_comms/selected_tool_broker.py": "25feb4f1bbcf9286110d9fcf6cab8ef3e33293f2ba938fe613930979848a1d1f",
+    "src/agent_comms/selected_triage.py": "d4ecedb47c06c7783f79e9e6dfe0ffe8a5633599cd25b9b6a05b6f7954a67a82",
+    "src/agent_comms/selected_turn.py": "c528ca4911adfbf15833aea44b9c7ba870cc5a04ff4443afcd4cab8ff393696d",
+    "src/agent_comms/selected_write_authority.py": "9de33d4b5d9916abf7b274c82021ae37451594b79123e785afa26ea3631b87a8",
+    "src/agent_comms/selected_write_plan.py": "e699041610c588b3056ade3a9b457d89fb82132d2973a2048397be90b855f859",
+    "src/agent_comms/session_effects.py": "8e342790865205e3df058db3d4e3a612c270a340ee6f4dc390fb4551f8fa7f03",
+    "src/agent_comms/session_fence.py": "2e78815fd9e7cc4bd2179fae0bd6c778a1d0a3ecb10b20f9dc466b07e3a34b8f",
+    "src/agent_comms/session_lifecycle.py": "3a3178ea27ce2d6f593cebcb75a0a46a40dd2aeeb07ea2bb469d399adcc12249",
+    "src/agent_comms/session_load.py": "56fcc318fb0568e1b0e5d7e1fb47daaa94430eb075f407832bc18bbe12e2c9e1",
+    "src/agent_comms/shared_ledger.py": "ae0a76725bc016088498970654fe48d060fc58730547ee9598428095035ca746",
+    "src/agent_comms/source_proof_requirement.py": "7cecb05e629c5f183c68258163ec8a9689cb5f7d936d7284e6f2a6856885099b",
+    "src/agent_comms/store_files.py": "7f734be1e67616e2146c80fe955ea6036a36cf7a359ace1c5d27d4ba45b3af8a",
+    "src/agent_comms/task_decisions.py": "d6299e08e462a2fc6ab43e17aeb10e463eec4eb9ff7690fb5147ad74138e4e0c",
+    "src/agent_comms/text_digest.py": "a35d72f3f58cd63e70462af7e3722e216e9cbe98802d5fc57ee0d9e56cc29d79",
+    "src/agent_comms/thread_execution.py": "cba9f765cb62800b319389ef7760ce99d93255ca2754d84be8615b061783b10d",
+    "src/agent_comms/thread_identity.py": "37b5ad611b1df449c85c8dd50b54f4fd95f6233106232664ff1f69fa63b00d90",
+    "src/agent_comms/thread_management.py": "607f8137cd0d23de51461090c40380dddcc67189e75f1eb704a3c2068931cf80",
+    "src/agent_comms/thread_presentation.py": "f89eb8fb910fcc6839001b942c2bcb9124c077f581f405845f2129a91072ecf1",
+    "src/agent_comms/thread_provenance.py": "5c9d9fbb9d5c54787b0b2574ceeca7388b4d6de060627f1751f12d7932bd363c",
+    "src/agent_comms/thread_status.py": "65f8a3f4c1bea3ff0126598fa8c8449b19ddc28db35318c7539b54ca5e5d7372",
+    "src/agent_comms/threads.py": "132f810d0f88d9462ca2996ae9b66457dfbabbd32c2c1c3f7d9a4e634e61dce6",
+    "src/agent_comms/todos.py": "c584367046aa431ae28ba14bc890519e834cf36860b9920b82a9a923e039fa6a",
+    "src/agent_comms/tool_output.py": "889b9c34cd40315fb180db090c6384daa1eec74fbcf50ed9050e8fdeafb649e9",
+    "src/agent_comms/tool_results.py": "86c37e9c27f7d58ed19151973408c77758d95f5bf81439e33f5b8d01ac93b6e9",
+    "src/agent_comms/tools.py": "27950c63d1b3834c424ca16ac092de3f407c74d17b9f620ac736bddcecea1195",
+    "src/agent_comms/tracked_turn.py": "70c609e395dff5a1155beaaba4f148fd8ab16e35d015224f016ab16e16a04256",
+    "src/agent_comms/transcript_events.py": "1d1db87ea8945f3946429d3b23077ed1debe5aba7473d9c2b8334d0787f7a623",
+    "src/agent_comms/transcript_merge.py": "f86549f51a5ffeb5c87f849d991db80ca0f5693e17c11e6a4295ffb2f4e066d7",
+    "src/agent_comms/transcript_outcomes.py": "819105cce05addcea1d72df47a7eb7d8537eb2afde54841b28c9cd7b371de245",
+    "src/agent_comms/transcript_receipts.py": "2a736ef849d2761f93e1a55b17a5af22e0544b4fface880bebdad79dffb8690c",
+    "src/agent_comms/transcript_routes.py": "b044305062ed1936384d6c82199f3949bdd293ac173d06b75db17a5fd7d4cc30",
+    "src/agent_comms/transcript_updates.py": "b0a8622eb74ee2ea3f6e5ba3d1db766e0b1f0d55e49f8ef15ad199ac90061dee",
+    "src/agent_comms/transcripts.py": "7ec7fdf9e8bdc11dc58452e48a9bbd2ac767bbaaac62c5808035ce4d3c1d2f28",
+    "src/agent_comms/turn_admission.py": "1fb0890b0287eb02c00393115f32ba78b992d92af177cdebbfbd5acee439600b",
+    "src/agent_comms/turn_context.py": "e187fb928c0f2fb912bc9b23de9716e9380ad6f5faf64f3079eac877e1267b2a",
+    "src/agent_comms/turn_effects.py": "e34073d57e656c3f7dc339517d128bc244970a77bb373dcbd8f84f6121271b1d",
+    "src/agent_comms/turn_failure.py": "02f1196d0ed4c76f197ecbbcaba60f49104aac5f63fa56af989a11148e151674",
+    "src/agent_comms/turn_goal_account.py": "e9916a174a377e416fbf8dd1c7f86fa1bf4f323d13fc1d9e45ea35fb8ec45a24",
+    "src/agent_comms/turn_goal_permission.py": "7a3064afba71ff66d7904ff3d68cc3558a0df82eaf5c4e27e5a9e0e2e6e3a989",
+    "src/agent_comms/turn_input_binding.py": "e90a5853e5edebaf1cbf94704529c884121c6bdfcc95a30475924cead65fdc59",
+    "src/agent_comms/turn_input_source.py": "aae198ce8244543d11527b726086172bf3484fd66257bd7ae1c416aaabf31fa9",
+    "src/agent_comms/turn_inputs.py": "e22e94cc471593b29e0220f5f80a8928038e7ef7c4452a6936ae203de3cfc210",
+    "src/agent_comms/turn_lease.py": "543f724c4ad2f1ab491d4d4931a64da002186cc52d4b8bca993f11395e1d24c9",
+    "src/agent_comms/turn_output.py": "8c43c01ec242996828d502705931c0ab79e02aa7936b995bb4ec157135712cbc",
+    "src/agent_comms/turn_phase.py": "a681aeeb87c9852a6ec4aa47132f41ab217880d64b62140502dc2e62ac86d28c",
+    "src/agent_comms/turn_progress.py": "8f96cad7d3e8802115e03fd6a50b563f6b1196f91b3133a7009ef637ea556439",
+    "src/agent_comms/turn_runner.py": "1beee298e5a4542557bb2df178e36b1de3070929d91501fe56f502978c6958d6",
+    "src/agent_comms/turn_stats.py": "7861c7282bfc41c2e774b98734110d261b793c35b743b32eb8b0747ab76c4248",
+    "src/agent_comms/turn_usage.py": "47d8ea8d0f1d299c5e5b082a21c018c796685c41c47ec6c301446d8968884f70",
+    "src/agent_comms/turn_watchdog.py": "de5204ff7b9063a00cbc67308b204e6f0e391c5682802a7803696642eef7758d",
+    "src/agent_comms/typed_table.py": "3d2c97a5c1a57365d37d101142da749386ce89c068f185cc8fcdad13cae45c12",
+    "src/agent_comms/view_unread.py": "365d0db10a6e1b6ef90b3a168e2e80d7bcc07c0c298bdd1cb22a25c4e5f4fedf",
+    "src/agent_comms/wake.py": "d6f9318f12d90d77a76c5d4455147bd9f3c20a90f06299f4de0d5ba33708d5fa",
+    "src/agent_comms/wake_candidate_index.py": "c6137aa6982c8b8adc11c2100e8c561c60ee6ca9b7b5136509e8552e46d7a116",
+    "src/agent_comms/wake_injection.py": "d9905d00a69aa83725b34e862aaef3a38ab9e1f3175adff910477c69f8cddac9",
+    "src/agent_comms/wake_policy.py": "fad38a464e9c652a0ed7fc76759ec1671ac502a23fad3e32fcc96256d99c2aad",
+    "src/agent_comms/wire_log.py": "15b1a452dda09dfbe7f7639c46fbd4abb3e905b49de289a5ebe0cdcfbe26b232",
+    "src/agent_comms/wire_metadata.py": "246f823675b7eb537df834c530fddc78e8003558d3f743ee0c8580d8a99620d4",
+    "src/agent_comms/wire_record.py": "035c359353dcebec3998a5217bb3448b38fe0f7e2041ff9c24e1fd7fe2ec621a",
+    "src/agent_comms/wire_watch.py": "867f76d60b75b36cc84cd261d7f80d0873d37d76d946bc23d6ba9c90ca12e511",
+    "src/agent_comms/worker.py": "ad15190a1af8f45d40954ffd9a5c262fa0f7238b3cceaf45563ce104886a6ce1",
+    "stack/inspect-native-compaction-plan.mjs": "9bd59ced5062980e284b1b8eea9c6185f7c1aa47ebc24c79bc057f8148c2af10",
+    "stack/native-compaction-commit-child.mjs": "186abb2f107b40327ff6410749727e83c9dd9df1487ade76051565544ec0a2a8",
+    "stack/native-compaction-policy.mjs": "e01c8f7ca5dc1c2b668c64125137559f315ba643fe477380dc6563798e39a2d1",
+    "stack/native-compaction-selected-summary.mjs": "70efd9170ad76a79ef3d53aa55904cd2c87bc6fbfa85b7a2c964447dd9a3abf0",
+    "stack/native-compaction-source.mjs": "9d9b61ad0ec4dce7bd10185928a8f788b89a1ff5482997264407e2c931241589",
+    "stack/native-context-budget.mjs": "f9224adad46d6bc83e7ebe6fe1daeb8b1f79dde278dab11ee705574ff10e8c45",
+    "stack/native-import-fence.mjs": "f005662a026ddac9009c92d3af6a45818fe773b9f70528064e9f658fd1831ddb",
+    "stack/native-proof-journal.mjs": "223b4e3cc99b8f7a46c2243df77bfb02e4127d3101180fe4e2be072a28c98622",
+    "stack/native-proof-schema.mjs": "d2cee72e8e69b5dc8f8d0c84944c1a341e85ed7aa283b94463bafa5b4107ea1c",
+    "stack/native-request-input.mjs": "20c0e1d062855f805bad7193f781123ae79a56cabb682a87a402116f66774178",
+    "stack/native-request-observation.mjs": "9e9c9ea5eb3e33c301c25d86bae866cc41a8ff21266badc458fcdff766d464a9",
+    "stack/native-session-context.mjs": "e9762b81b6dcb400cb761ddcfdb48293ae277bd9ae836359e2a0b1facb84500a",
+    "stack/native-session-entry-store.mjs": "456254c763e05b16378c70ee8fa364e138521690cd30bc421805cb62f01a8479",
+    "stack/native-turn-context.mjs": "247561c7f0dde1dd14734b03f1fc1a864895cbe93970e38f8af215d40fe4768c",
+    "stack/patch-native-adaptive-settings.py": "f3ff0066c58346d68de9a480348131c4da6d4e6050e9f9ccb28092a105f7fda7",
+    "stack/patch-native-auto-compaction.py": "11978eb49407868da3fd45d8c5f9e4726c6762e120ea0a9757eb9eb7f86ec384",
+    "stack/patch-native-context-budget.py": "785eee0f6e6e1f6c309d44a24db65d9967b5fe05a8b5501edd170f5bc08663bc",
+    "stack/patch-native-model-config.py": "f22159da44343e50a509369fb20fa7aa10dce51994968ce5d6122b531161d08d",
+    "stack/patch-native-request-observation.py": "c7f0d870c3feda9bbec8b55f9e32366b770d3ef62c3fba1957466b266c917ab4",
+    "stack/patch-native-selected-compaction-summary.py": "ba56e9fa0040b6f899c38d39a786cb09187b752d0c301bb580fe22c6d3a39581",
+    "stack/patch-native-steering.py": "a3ed2938a5f310ab4187dbacd6a78d958c7353f819bd8d9bf58b10445bf78bff",
+    "stack/patch-native-turn-context.py": "4b3fa2be7794b6175db1cb7520f767161057765759347b762d547d41018dd519",
+    "stack/prepare-native-global-extensions.mjs": "5029c2be0f7525069a8f968bf7bbe35a35183f8587b8f460f921d50f69d2101a",
+    "stack/probe-native-adaptive-writer.mjs": "31ccb6321314b68a9de22b7bfb70cade9c23e4bc5be2d49390a19debfc94ba6a",
+    "stack/test-native-adaptive-settings.mjs": "663ac1f2d46471d16c633625cbc3d007c7885489df2c66aed0cc5178ce48e294",
+    "stack/test-native-adaptive-writer-prototype.mjs": "d979089e8ba747f93fd7d9e34ff271414c96bd34f6c1e78be22c181b0db06dfb",
+    "stack/test-native-auto-compaction.mjs": "46d2d973eaa08418e2a1e67c1047c0eaaa975152bdfcd86324b76ad66dabd75f",
+    "stack/test-native-committed-context.mjs": "85f3a18bd731035925ad3a129a5b6a86cc2a59db878b242b1d89eb235889aa98",
+    "stack/test-native-compaction-journal.mjs": "35a9497d1efe096f7f7ed9f9c872090494ffae0622530b669a78bd16583dbe2c",
+    "stack/test-native-compaction-progress.mjs": "8723fa2558a57443d16eb4bde6958bdbf881d643414e84b9c9f00d63e43ff8c2",
+    "stack/test-native-compaction.mjs": "2fcfb80b0f645c38e088135133f25727fe2efbe7ba20ad6d4f0d3916437e5f8e",
+    "stack/test-native-fork-context.mjs": "fdcf1986de519d715914dbbcaf75427f49be29955b36b4c54f2b3e656f38c228",
+    "stack/test-native-import-fence.mjs": "054742e6206446758fe09b6303ad55724b6926963e5f113118df2d5c0d5b52a0",
+    "stack/test-native-package-processes.mjs": "c4b4f2c0bddd5e9e17d216ae26c66c916a11a72922c493889ddfa6c01bf19f9a",
+    "stack/test-native-parallel-compaction.mjs": "192ab59e81a9b093de9bc5a7f3154c4baf3f2703c064da9447513318b9c3c245",
+    "stack/test-native-selected-owner-host.mjs": "b3f51a0fe61d7d5d6aca32c65d1611498f4957e76fdf045a3144f75314bc7c7c",
+    "stack/test-native-shared-compaction.mjs": "03945fed5d32ea807f4c3d8f378fe509377026275421f95a5bde86d449479c79",
+    "stack/test-native-task-packing.mjs": "4f78664b07040264622f235bdf359ef07247c28513228e9d0e8f6d42b74b145b",
+    "stack/test-native-writer-coverage.mjs": "65c537334c70983359b7dffeb4ebd025ca87fd34fe311733dfc8c3b2fb5ac9f8",
+    "stack/test-native-writer-exclusivity.mjs": "9659dbd843c653de0b4a54e5e5d486e847cc5234df5c559e6059c95b7f626802",
+    "stack/test-native-writer-failure-state.mjs": "76c70013b5bb64c045af04e022ee7d5a1d73bdaa86e97c3903bd1fd74495f342"
+  },
+  "owners": {
+    "NativeEvidenceScope": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 202,
+          "name": "NativeEvidenceScope",
+          "bases": [
+            "ExitStack"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 25,
+          "scope": "<module>",
+          "source": "from .native_entries import NativeEvidenceScope"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 103,
+          "scope": "read_historical_native_inputs",
+          "source": "source_reads: NativeEvidenceScope | None = None,"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 116,
+          "scope": "read_historical_native_inputs",
+          "source": "with NativeEvidenceScope() as acquired:"
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 202,
+          "scope": "NativeEvidenceScope",
+          "source": "class NativeEvidenceScope(ExitStack):"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 20,
+          "scope": "<module>",
+          "source": "from .native_entries import NativeEvidenceScope"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 76,
+          "scope": "NativeSourceCursor._advance_proven",
+          "source": "with NativeEvidenceScope() as source_reads:"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 187,
+          "scope": "NativeSourceCursor.read",
+          "source": "with NativeEvidenceScope() as source_reads:"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 205,
+          "scope": "NativeSourceCursor._require_source",
+          "source": "source_reads: NativeEvidenceScope,"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 29,
+          "scope": "<module>",
+          "source": "from .native_entries import NativeEvidenceScope"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 81,
+          "scope": "SourceCoverage.read",
+          "source": "source_reads: NativeEvidenceScope | None = None,"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 90,
+          "scope": "SourceCoverage.read",
+          "source": "with NativeEvidenceScope() as acquired:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 167,
+          "scope": "SourceCoverage._selected_proven",
+          "source": "source_reads: NativeEvidenceScope,"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 184,
+          "scope": "SourceCoverage.native_inputs",
+          "source": "def native_inputs(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> tuple[HistoricalNativeInput, ...]:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 193,
+          "scope": "SourceCoverage.evidence",
+          "source": "source_reads: NativeEvidenceScope | None = None):"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 196,
+          "scope": "SourceCoverage.evidence",
+          "source": "with NativeEvidenceScope() as acquired:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 205,
+          "scope": "SourceCoverage.last_proof",
+          "source": "def last_proof(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> HistoricalNativeInput | None:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 216,
+          "scope": "SourceCoverage.prefix",
+          "source": "source_reads: NativeEvidenceScope | None = None) -> ProvenSourceCoverage:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 219,
+          "scope": "SourceCoverage.prefix",
+          "source": "with NativeEvidenceScope() as acquired:"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "NativeEvidenceRead": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 160,
+          "name": "NativeEvidenceRead",
+          "bases": []
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 87,
+          "scope": "NativeEntry.open_evidence",
+          "source": "evidence = NativeEvidenceRead(source)"
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 160,
+          "scope": "NativeEvidenceRead",
+          "source": "class NativeEvidenceRead:"
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 212,
+          "scope": "NativeEvidenceScope.__init__",
+          "source": "self.readers: dict[Path, NativeEvidenceRead] = {}"
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 214,
+          "scope": "NativeEvidenceScope.for_source",
+          "source": "def for_source(self, path: Path) -> NativeEvidenceRead:"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 27,
+          "scope": "<module>",
+          "source": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 326,
+          "scope": "NativeContextProof.corroborates_input",
+          "source": "self, input_id: str, session_dir: Path, *, evidence: NativeEvidenceRead | None = None"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 340,
+          "scope": "NativeContextProof.read_evidence",
+          "source": "evidence: NativeEvidenceRead | None = None,"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 898,
+          "scope": "read_tracked_input_digest",
+          "source": "session_file: Path, input_id: str, *, evidence: NativeEvidenceRead | None = None"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 920,
+          "scope": "_verify_context",
+          "source": "*, evidence: NativeEvidenceRead | None = None,"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 32,
+          "scope": "<module>",
+          "source": "from .native_entries import NativeEvidenceRead"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 245,
+          "scope": "expected_prompt_matches_journal",
+          "source": "session_file: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | None = None"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "PrivateEvidenceRead": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 682,
+          "name": "PrivateEvidenceRead",
+          "bases": []
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 83,
+          "scope": "NativeEntry.open_evidence",
+          "source": "from .native_pi import PrivateEvidenceRead, _private_session_dir"
+        },
+        {
+          "path": "src/agent_comms/native_entries.py",
+          "line": 86,
+          "scope": "NativeEntry.open_evidence",
+          "source": "with PrivateEvidenceRead.open(session_file) as source:"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 678,
+          "scope": "_read_private_file",
+          "source": "with PrivateEvidenceRead.open(path) as evidence:"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 682,
+          "scope": "PrivateEvidenceRead",
+          "source": "class PrivateEvidenceRead:"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "NativeContextProof": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 322,
+          "name": "NativeContextProof",
+          "bases": [
+            "NativeContextRecord"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/attempt_recovery.py",
+          "line": 209,
+          "scope": "RecoveryMonitorCapability.recover_native_failure",
+          "source": "from agent_comms.native_pi import NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/attempt_recovery.py",
+          "line": 238,
+          "scope": "RecoveryMonitorCapability.recover_native_failure",
+          "source": "proof = NativeContextProof.read_evidence(session_file, reserved.input_id)"
+        },
+        {
+          "path": "src/agent_comms/continued_private_session.py",
+          "line": 19,
+          "scope": "<module>",
+          "source": "from .native_pi import NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/continued_private_session.py",
+          "line": 67,
+          "scope": "verify_continued_private_session",
+          "source": "NativeContextProof.read_history_evidence(session, header, entries)"
+        },
+        {
+          "path": "src/agent_comms/continued_private_session.py",
+          "line": 89,
+          "scope": "verify_continued_private_session",
+          "source": "if proof.session_entry_id != entry.id or proof != NativeContextProof.read_evidence("
+        },
+        {
+          "path": "src/agent_comms/continued_private_session.py",
+          "line": 103,
+          "scope": "_recorded_private_contexts",
+          "source": ") -> dict[str, NativeContextProof]:"
+        },
+        {
+          "path": "src/agent_comms/continued_private_session.py",
+          "line": 127,
+          "scope": "_recorded_private_contexts",
+          "source": "row.input_id: NativeContextProof("
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 24,
+          "scope": "<module>",
+          "source": "from .native_pi import NativeContextProof, NativePiUnavailable"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 45,
+          "scope": "HistoricalNativeInput",
+          "source": "context: NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 163,
+          "scope": "read_historical_native_inputs",
+          "source": "recorded = NativeContextProof("
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 175,
+          "scope": "read_historical_native_inputs",
+          "source": "observed = NativeContextProof.read_evidence("
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 200,
+          "scope": "NativeContextRecord.at",
+          "source": "def at(self, session_file: Path) -> NativeContextProof:"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 202,
+          "scope": "NativeContextRecord.at",
+          "source": "return NativeContextProof("
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 314,
+          "scope": "NativeContextJournal.corroborate",
+          "source": ") -> NativeContextProof:"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 322,
+          "scope": "NativeContextProof",
+          "source": "class NativeContextProof(NativeContextRecord):"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 341,
+          "scope": "NativeContextProof.read_evidence",
+          "source": ") -> NativeContextProof:"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 369,
+          "scope": "NativeContextProof.read_history_evidence",
+          "source": ") -> dict[str, NativeContextProof]:"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 388,
+          "scope": "NativePiTerminalFailure.__init__",
+          "source": "def __init__(self, detail: str, context: NativeContextProof, provider: str, model: str):"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 417,
+          "scope": "NativeTurnResult",
+          "source": "context: NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 921,
+          "scope": "_verify_context",
+          "source": ") -> NativeContextProof:"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 926,
+          "scope": "_verify_context",
+          "source": "proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)"
+        },
+        {
+          "path": "src/agent_comms/native_runtime_input.py",
+          "line": 26,
+          "scope": "<module>",
+          "source": "from .native_pi import NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_runtime_input.py",
+          "line": 232,
+          "scope": "NativeRuntimeInput.commit_context",
+          "source": "context: NativeContextProof,"
+        },
+        {
+          "path": "src/agent_comms/private_send_admission.py",
+          "line": 28,
+          "scope": "<module>",
+          "source": "from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult"
+        },
+        {
+          "path": "src/agent_comms/private_send_admission.py",
+          "line": 117,
+          "scope": "PrivateSendAdmission.verify",
+          "source": "def verify(self, store: Coordination, context: NativeContextProof) -> None:"
+        },
+        {
+          "path": "src/agent_comms/private_send_admission.py",
+          "line": 170,
+          "scope": "PrivateSendAdmission.commit",
+          "source": "def commit(self, store: Coordination, context: NativeContextProof) -> None:"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 27,
+          "scope": "<module>",
+          "source": "from .native_pi import NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 113,
+          "scope": "NativeSendStage.verify",
+          "source": "context: NativeContextProof,"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 265,
+          "scope": "TriageNativeSend.commit",
+          "source": "context: NativeContextProof,"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 326,
+          "scope": "FullNativeSend.commit",
+          "source": "context: NativeContextProof,"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 25,
+          "scope": "<module>",
+          "source": "NativeContextProof,"
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 422,
+          "scope": "TrackedTurnSession.context_proof",
+          "source": "def context_proof(self) -> NativeContextProof:"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "PromptBinding": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 53,
+          "name": "PromptBinding",
+          "bases": [
+            "NativeInputRecord",
+            "TypedTable",
+            "PrivateRuntimeSchema"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/native_admission_rules.py",
+          "line": 17,
+          "scope": "<module>",
+          "source": "from .native_prompt_binding import PromptBinding"
+        },
+        {
+          "path": "src/agent_comms/native_admission_rules.py",
+          "line": 141,
+          "scope": "NativeBindingCheck",
+          "source": "row: PromptBinding"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 53,
+          "scope": "PromptBinding",
+          "source": "class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 125,
+          "scope": "_ensure_binding_schema",
+          "source": "create_sidecar_file(binding_store_path(store), PromptBinding)"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 181,
+          "scope": "bind_expected_prompt",
+          "source": "with sidecar_connection(path, PromptBinding) as sidecar:"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 182,
+          "scope": "bind_expected_prompt",
+          "source": "if PromptBinding.one(sidecar, input_id=input_id) is not None:"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 184,
+          "scope": "bind_expected_prompt",
+          "source": "expected = PromptBinding("
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 199,
+          "scope": "bind_expected_prompt",
+          "source": "if inserted.rowcount != 1 or PromptBinding.one(sidecar, input_id=input_id) != expected:"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 223,
+          "scope": "read_expected_prompt_binding",
+          "source": ") -> PromptBinding | None:"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 232,
+          "scope": "expected_prompt_binding",
+          "source": ") -> Iterator[PromptBinding | None]:"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 240,
+          "scope": "expected_prompt_binding",
+          "source": "with sidecar_connection(path, PromptBinding, blocking=blocking) as db:"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 241,
+          "scope": "expected_prompt_binding",
+          "source": "yield PromptBinding.one(db, input_id=input_id)"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 245,
+          "scope": "expected_prompt_matches_journal",
+          "source": "session_file: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | None = None"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 30,
+          "scope": "<module>",
+          "source": "PromptBinding,"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 175,
+          "scope": "NativeSendStage.require_binding",
+          "source": ") -> PromptBinding:"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 184,
+          "scope": "NativeSendStage.bound_prompt",
+          "source": ") -> Iterator[PromptBinding]:"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 190,
+          "scope": "NativeSendStage.require_bound_prompt",
+          "source": "self, binding: PromptBinding | None, owner: ParticipantOwner,"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "NativeRuntimeInput": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_runtime_input.py",
+          "line": 65,
+          "name": "NativeRuntimeInput",
+          "bases": [
+            "NativeInputRecord",
+            "NativeInputContext",
+            "NativeRuntimeTable",
+            "TypedTable"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/attempt_recovery.py",
+          "line": 30,
+          "scope": "<module>",
+          "source": "from agent_comms.native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/attempt_recovery.py",
+          "line": 75,
+          "scope": "VerifiedOwnerLoss.observe_native_release",
+          "source": "source = NativeRuntimeInput.one("
+        },
+        {
+          "path": "src/agent_comms/attempt_recovery.py",
+          "line": 221,
+          "scope": "RecoveryMonitorCapability.recover_native_failure",
+          "source": "reserved = NativeRuntimeInput.one("
+        },
+        {
+          "path": "src/agent_comms/continued_private_session.py",
+          "line": 20,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/continued_private_session.py",
+          "line": 121,
+          "scope": "_recorded_private_contexts",
+          "source": "rows = NativeRuntimeInput.select("
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 17,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 60,
+          "scope": "CursorOwner._matches_input",
+          "source": "def _matches_input(self, row: NativeRuntimeInput | None, reference: NativeInputReference) -> bool:"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 70,
+          "scope": "CursorOwner.matches_prefix",
+          "source": "NativeRuntimeInput.one(db, input_id=item.input_id),"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 80,
+          "scope": "CursorOwner.require_recorded_reference",
+          "source": "row = NativeRuntimeInput.one(db, input_id=reference.input_id)"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 109,
+          "scope": "CursorOwner.admits",
+          "source": "reserved = NativeRuntimeInput.one(db, input_id=proof.input_id)"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 27,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 150,
+          "scope": "read_historical_native_inputs",
+          "source": "(source, NativeRuntimeInput.one(db, input_id=source.input_id)) for source in sources"
+        },
+        {
+          "path": "src/agent_comms/native_admission_rules.py",
+          "line": 18,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/native_admission_rules.py",
+          "line": 135,
+          "scope": "NativeReservationCheck",
+          "source": "row: NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 33,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/native_prompt_binding.py",
+          "line": 164,
+          "scope": "bind_expected_prompt",
+          "source": "reserved = NativeRuntimeInput.one(db, input_id=input_id)"
+        },
+        {
+          "path": "src/agent_comms/native_runtime_input.py",
+          "line": 65,
+          "scope": "NativeRuntimeInput",
+          "source": "class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):"
+        },
+        {
+          "path": "src/agent_comms/native_runtime_input.py",
+          "line": 311,
+          "scope": "CurrentNativeCursor",
+          "source": "metadata={\"sql\": Column(references=(NativeRuntimeInput, \"input_id\")), \"native_context\": str}"
+        },
+        {
+          "path": "src/agent_comms/notification_assignment.py",
+          "line": 93,
+          "scope": "NotificationAssignment.select",
+          "source": "from .native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/notification_assignment.py",
+          "line": 120,
+          "scope": "NotificationAssignment.select",
+          "source": "f\"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n \""
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 34,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 69,
+          "scope": "NativeSendStage.reserve",
+          "source": "NativeRuntimeInput("
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 88,
+          "scope": "NativeSendStage.pending_input",
+          "source": ") -> NativeRuntimeInput:"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 93,
+          "scope": "NativeSendStage.pending_input",
+          "source": "row = NativeRuntimeInput.one(db, input_id=input_id)"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 151,
+          "scope": "NativeSendStage.require_reservation",
+          "source": ") -> NativeRuntimeInput:"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 152,
+          "scope": "NativeSendStage.require_reservation",
+          "source": "reserved = NativeRuntimeInput.one(db, input_id=input_id)"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 241,
+          "scope": "TriageNativeSend.reserve_claim",
+          "source": "if NativeRuntimeInput.select("
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 313,
+          "scope": "FullNativeSend.reserve_claim",
+          "source": "if NativeRuntimeInput.select("
+        },
+        {
+          "path": "src/agent_comms/selected_tool_broker.py",
+          "line": 32,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/selected_tool_broker.py",
+          "line": 288,
+          "scope": "verify_sent_full_input",
+          "source": "row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)"
+        },
+        {
+          "path": "src/agent_comms/transcript_receipts.py",
+          "line": 258,
+          "scope": "AssignedTranscriptSource.native_events",
+          "source": "from .native_runtime_input import NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/transcript_receipts.py",
+          "line": 274,
+          "scope": "AssignedTranscriptSource.native_events",
+          "source": "reference = NativeRuntimeInput.published_reply(self.root, reader, user, lookup)"
+        },
+        {
+          "path": "src/agent_comms/transcripts.py",
+          "line": 20,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision"
+        },
+        {
+          "path": "src/agent_comms/transcripts.py",
+          "line": 313,
+          "scope": "Transcripts.capture_page_window",
+          "source": "NativeRuntimeInput.publication_revision("
+        }
+      ],
+      "declaration_count": 1
+    },
+    "NativeInputReference": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_input_record.py",
+          "line": 175,
+          "name": "NativeInputReference",
+          "bases": [
+            "NativeContextReference"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 15,
+          "scope": "<module>",
+          "source": "from .native_input_record import NativeInputReference"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 60,
+          "scope": "CursorOwner._matches_input",
+          "source": "def _matches_input(self, row: NativeRuntimeInput | None, reference: NativeInputReference) -> bool:"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 79,
+          "scope": "CursorOwner.require_recorded_reference",
+          "source": "def require_recorded_reference(self, db: sqlite3.Connection, reference: NativeInputReference) -> None:"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 28,
+          "scope": "<module>",
+          "source": "from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution, TriageNativeExecution, FullNativeExecution"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 56,
+          "scope": "HistoricalNativeInput.reference",
+          "source": "def reference(self) -> NativeInputReference:"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 57,
+          "scope": "HistoricalNativeInput.reference",
+          "source": "return NativeInputReference("
+        },
+        {
+          "path": "src/agent_comms/native_input_record.py",
+          "line": 175,
+          "scope": "NativeInputReference",
+          "source": "class NativeInputReference(NativeContextReference):"
+        },
+        {
+          "path": "src/agent_comms/native_input_record.py",
+          "line": 185,
+          "scope": "NativeInputReference.acquire",
+          "source": "def acquire(cls, row) -> NativeInputReference:"
+        },
+        {
+          "path": "src/agent_comms/native_input_record.py",
+          "line": 277,
+          "scope": "NativeInputContext.reference",
+          "source": "return NativeInputReference.acquire(self)"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "HistoricalNativeInput": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 35,
+          "name": "HistoricalNativeInput",
+          "bases": [
+            "NativeInputRecord",
+            "DeclaredFamily"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 12,
+          "scope": "<module>",
+          "source": "from .historical_native_inputs import HistoricalNativeInput"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 66,
+          "scope": "CursorOwner.matches_prefix",
+          "source": "self, db: sqlite3.Connection, evidence: tuple[HistoricalNativeInput, ...]"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 92,
+          "scope": "CursorOwner.admits",
+          "source": "proof: HistoricalNativeInput | None,"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 35,
+          "scope": "HistoricalNativeInput",
+          "source": "class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix=\"HistoricalNativeInput\"):"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 64,
+          "scope": "TriageHistoricalNativeInput",
+          "source": "class TriageHistoricalNativeInput(HistoricalNativeInput):"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 73,
+          "scope": "FailedTriageHistoricalNativeInput",
+          "source": "class FailedTriageHistoricalNativeInput(HistoricalNativeInput):"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 83,
+          "scope": "FullHistoricalNativeInput",
+          "source": "class FullHistoricalNativeInput(HistoricalNativeInput):"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 104,
+          "scope": "read_historical_native_inputs",
+          "source": ") -> tuple[HistoricalNativeInput, ...]:"
+        },
+        {
+          "path": "src/agent_comms/historical_native_inputs.py",
+          "line": 158,
+          "scope": "read_historical_native_inputs",
+          "source": "evidence: list[HistoricalNativeInput] = []"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 19,
+          "scope": "<module>",
+          "source": "from .historical_native_inputs import HistoricalNativeInput"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 117,
+          "scope": "NativeSourceCursor._publish",
+          "source": "proof: HistoricalNativeInput | None,"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 28,
+          "scope": "<module>",
+          "source": "from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 184,
+          "scope": "SourceCoverage.native_inputs",
+          "source": "def native_inputs(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> tuple[HistoricalNativeInput, ...]:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 205,
+          "scope": "SourceCoverage.last_proof",
+          "source": "def last_proof(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> HistoricalNativeInput | None:"
+        },
+        {
+          "path": "src/agent_comms/source_proof_requirement.py",
+          "line": 14,
+          "scope": "<module>",
+          "source": "from .historical_native_inputs import HistoricalNativeInput"
+        },
+        {
+          "path": "src/agent_comms/source_proof_requirement.py",
+          "line": 19,
+          "scope": "SourceProofRequirement.proves_source",
+          "source": "def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool: ..."
+        },
+        {
+          "path": "src/agent_comms/source_proof_requirement.py",
+          "line": 23,
+          "scope": "NoSourceProof.proves_source",
+          "source": "def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:"
+        },
+        {
+          "path": "src/agent_comms/source_proof_requirement.py",
+          "line": 28,
+          "scope": "FullSourceProof.proves_source",
+          "source": "def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:"
+        },
+        {
+          "path": "src/agent_comms/source_proof_requirement.py",
+          "line": 36,
+          "scope": "TriageSourceProof.proves_source",
+          "source": "def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "SourceCoverage": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 52,
+          "name": "SourceCoverage",
+          "bases": []
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 25,
+          "scope": "<module>",
+          "source": "from .proven_source_coverage import ProvenSourceCoverage, SourceCoverage"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 38,
+          "scope": "NativeSourceCursor._coverage",
+          "source": "def _coverage(self, lookup: str) -> SourceCoverage:"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 39,
+          "scope": "NativeSourceCursor._coverage",
+          "source": "return SourceCoverage("
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 204,
+          "scope": "NativeSourceCursor._require_source",
+          "source": "self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage,"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 52,
+          "scope": "SourceCoverage",
+          "source": "class SourceCoverage:"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "ProvenSourceCoverage": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 41,
+          "name": "ProvenSourceCoverage",
+          "bases": []
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 25,
+          "scope": "<module>",
+          "source": "from .proven_source_coverage import ProvenSourceCoverage, SourceCoverage"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 116,
+          "scope": "NativeSourceCursor._publish",
+          "source": "coverage: ProvenSourceCoverage,"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 41,
+          "scope": "ProvenSourceCoverage",
+          "source": "class ProvenSourceCoverage:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 82,
+          "scope": "SourceCoverage.read",
+          "source": ") -> ProvenSourceCoverage:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 131,
+          "scope": "SourceCoverage.read",
+          "source": "return ProvenSourceCoverage("
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 192,
+          "scope": "SourceCoverage.evidence",
+          "source": "def evidence(self, coverage: ProvenSourceCoverage, *, through_seq: int | None = None,"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 216,
+          "scope": "SourceCoverage.prefix",
+          "source": "source_reads: NativeEvidenceScope | None = None) -> ProvenSourceCoverage:"
+        },
+        {
+          "path": "src/agent_comms/proven_source_coverage.py",
+          "line": 243,
+          "scope": "SourceCoverage.prefix",
+          "source": "return ProvenSourceCoverage("
+        }
+      ],
+      "declaration_count": 1
+    },
+    "CursorOwner": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 22,
+          "name": "CursorOwner",
+          "bases": [
+            "RegistryOwner"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 22,
+          "scope": "CursorOwner",
+          "source": "class CursorOwner(RegistryOwner):"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 18,
+          "scope": "<module>",
+          "source": "from .cursor_owner import CursorOwner"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 52,
+          "scope": "NativeSourceCursor.advance",
+          "source": "identity = CursorOwner("
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 74,
+          "scope": "NativeSourceCursor._advance_proven",
+          "source": "self, identity: CursorOwner, committed_input_id: str | None"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 114,
+          "scope": "NativeSourceCursor._publish",
+          "source": "owner: CursorOwner,"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 174,
+          "scope": "NativeSourceCursor.read",
+          "source": "identity = CursorOwner("
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 204,
+          "scope": "NativeSourceCursor._require_source",
+          "source": "self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage,"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "NativeSourceCursor": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 30,
+          "name": "NativeSourceCursor",
+          "bases": []
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 48,
+          "scope": "<module>",
+          "source": "from agent_comms.native_source_cursor import NativeSourceCursor"
+        },
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 440,
+          "scope": "CommsAgent._drain_private_nk",
+          "source": "cursor = NativeSourceCursor(bus, store, wire_root_id=wire_root_id).advance("
+        },
+        {
+          "path": "src/agent_comms/cursor_publication.py",
+          "line": 4,
+          "scope": "<module>",
+          "source": "the durable cursor. Every observation reads NativeSourceCursor's original proof."
+        },
+        {
+          "path": "src/agent_comms/cursor_publication.py",
+          "line": 28,
+          "scope": "<module>",
+          "source": "from .native_source_cursor import NativeSourceCursor"
+        },
+        {
+          "path": "src/agent_comms/cursor_publication.py",
+          "line": 99,
+          "scope": "CursorPublication.observe",
+          "source": "cursor = NativeSourceCursor(bus, store, wire_root_id=self.root_id).read("
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 30,
+          "scope": "NativeSourceCursor",
+          "source": "class NativeSourceCursor:"
+        },
+        {
+          "path": "src/agent_comms/selected_result.py",
+          "line": 14,
+          "scope": "<module>",
+          "source": "from .native_source_cursor import NativeSourceCursor"
+        },
+        {
+          "path": "src/agent_comms/selected_result.py",
+          "line": 73,
+          "scope": "CoordinatedTurn.cursor_status_for",
+          "source": "cursor = NativeSourceCursor("
+        }
+      ],
+      "declaration_count": 1
+    },
+    "CurrentNativeCursor": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/native_runtime_input.py",
+          "line": 281,
+          "name": "CurrentNativeCursor",
+          "bases": [
+            "NativeInputContext",
+            "NativeRuntimeTable",
+            "TypedTable"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/acp_extension.py",
+          "line": 24,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import CurrentNativeCursor"
+        },
+        {
+          "path": "src/agent_comms/acp_extension.py",
+          "line": 221,
+          "scope": "VerifiedCursorObservation",
+          "source": "cursor: CurrentNativeCursor"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 17,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 51,
+          "scope": "CursorOwner.cursor",
+          "source": "def cursor(self, db: sqlite3.Connection) -> CurrentNativeCursor | None:"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 52,
+          "scope": "CursorOwner.cursor",
+          "source": "return CurrentNativeCursor.one("
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 76,
+          "scope": "CursorOwner.require_recorded_input",
+          "source": "def require_recorded_input(self, db: sqlite3.Connection, cursor: CurrentNativeCursor) -> None:"
+        },
+        {
+          "path": "src/agent_comms/cursor_owner.py",
+          "line": 94,
+          "scope": "CursorOwner.admits",
+          "source": "prior: CurrentNativeCursor | None,"
+        },
+        {
+          "path": "src/agent_comms/native_runtime_input.py",
+          "line": 281,
+          "scope": "CurrentNativeCursor",
+          "source": "class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 24,
+          "scope": "<module>",
+          "source": "from .native_runtime_input import CurrentNativeCursor"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 50,
+          "scope": "NativeSourceCursor.advance",
+          "source": ") -> CurrentNativeCursor | None:"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 75,
+          "scope": "NativeSourceCursor._advance_proven",
+          "source": ") -> CurrentNativeCursor | None:"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 115,
+          "scope": "NativeSourceCursor._publish",
+          "source": "prior: CurrentNativeCursor | None,"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 118,
+          "scope": "NativeSourceCursor._publish",
+          "source": ") -> CurrentNativeCursor:"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 119,
+          "scope": "NativeSourceCursor._publish",
+          "source": "cursor = CurrentNativeCursor("
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 136,
+          "scope": "NativeSourceCursor._publish",
+          "source": "updated = CurrentNativeCursor.update("
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 160,
+          "scope": "NativeSourceCursor.read",
+          "source": "def read(self, *, owner_name: str) -> CurrentNativeCursor | None:"
+        },
+        {
+          "path": "src/agent_comms/native_source_cursor.py",
+          "line": 204,
+          "scope": "NativeSourceCursor._require_source",
+          "source": "self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage,"
+        }
+      ],
+      "declaration_count": 1
+    },
+    "CursorPublication": {
+      "declarations": [
+        {
+          "path": "src/agent_comms/cursor_publication.py",
+          "line": 56,
+          "name": "CursorPublication",
+          "bases": []
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 65,
+          "scope": "<module>",
+          "source": "from .cursor_publication import CursorPublication"
+        },
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 132,
+          "scope": "CommsAgent.__init__",
+          "source": "self.cursors = CursorPublication(comms, self._runtime, private_nk_wire_root_id)"
+        },
+        {
+          "path": "src/agent_comms/cursor_publication.py",
+          "line": 56,
+          "scope": "CursorPublication",
+          "source": "class CursorPublication:"
+        },
+        {
+          "path": "src/agent_comms/input_effects.py",
+          "line": 10,
+          "scope": "<module>",
+          "source": "from .cursor_publication import CursorPublication"
+        },
+        {
+          "path": "src/agent_comms/input_effects.py",
+          "line": 15,
+          "scope": "InputEffects",
+          "source": "cursors: CursorPublication"
+        },
+        {
+          "path": "src/agent_comms/session_effects.py",
+          "line": 12,
+          "scope": "<module>",
+          "source": "from .cursor_publication import CursorPublication"
+        },
+        {
+          "path": "src/agent_comms/session_effects.py",
+          "line": 18,
+          "scope": "SessionEffects",
+          "source": "cursors: CursorPublication"
+        }
+      ],
+      "declaration_count": 1
+    }
+  },
+  "parse_errors": []
+}
