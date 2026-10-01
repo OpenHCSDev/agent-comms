@@ -27,7 +27,8 @@ from agent_comms.private_path import PrivateDirectoryRole
 from agent_comms.store_files import _atomic_write_text
 from agent_comms.threads import Thread
 from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file
-from retained_summary_reset import RuntimeCompactionReset
+from retained_summary_reset import RuntimeCompactionFiles
+from runtime_installation import RuntimeInstallation
 
 
 @dataclass(frozen=True)
@@ -200,6 +201,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
     audience: tuple[OwnerRestartSelection, ...]
     originals: tuple[Thread, ...]
     task_carry: StoppedOwnerInstallation
+    runtime_installation: RuntimeInstallation
     route_directory: int
     receipt: Path
 
@@ -257,22 +259,19 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         paths = self.protected_files()
         protected = {str(path): digest(path) for path in sorted(paths)}
         # No decoding of old input records from a target-compaction journal.
-        original_files = []
-        for index, path in enumerate(sorted(paths)):
-            original_files.append(retain_file(path, directory / f'protected-{index}'))
-        retain_file(ROOT / 'registry.json', directory / 'registry.json')
-        fsync_directory(directory)
-        fsync_directory(directory.parent)
-        self.note('all-original-owners-stopped-private-preimages-retained',
-                  protected_original_sha256=protected, protected_preimages=original_files)
-        # This is Sch's semantic owner, under the SAME original wire custody.
-        # It may read the runtime journal BEFORE its declared reset, but it
-        # cannot turn runtime rows into durable admission or rewrite native.
-        self.task_carry.after_stopped(lifecycle)
-        reset = RuntimeCompactionReset(ROOT).retain_and_remove(directory / 'runtime-compaction')
-        if self.protected_files() != paths or {str(path): digest(path) for path in sorted(paths)} != protected:
-            raise RuntimeError('Original input/native/proof/goal bytes changed; remain stopped')
-        self.note('runtime-compaction-retired-protected-originals-unchanged', runtime_reset=reset)
+        with RuntimeCompactionFiles(ROOT).acquire() as runtime:
+            original_files = self.runtime_installation.retain_protected(paths, directory)
+            retain_file(ROOT / 'registry.json', directory / 'registry.json')
+            fsync_directory(directory)
+            fsync_directory(directory.parent)
+            self.note('all-original-owners-stopped-originals-audited',
+                      protected_original_sha256=protected, protected_preimages=original_files)
+            # The carry and runtime member share the ORIGINAL stopped wire custody.
+            self.task_carry.after_stopped(lifecycle)
+            installed = self.runtime_installation.install(runtime, directory / 'runtime-compaction')
+            if self.protected_files() != paths or {str(path): digest(path) for path in sorted(paths)} != protected:
+                raise RuntimeError('Original input/native/proof/goal bytes changed; remain stopped')
+            self.note('runtime-installed-protected-originals-unchanged', runtime_installation=installed)
         self.cohort.publish(self.route_directory)
         self.note('target-route-and-defaults-published-before-retained-launch')
 
@@ -291,7 +290,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
 
 
 def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInstallation,
-            receipt: Path):
+            runtime_installation: RuntimeInstallation, receipt: Path):
     """Parent-only EXECUTION entry, once both reviewed gates/carry are supplied.
 
     A retry never happens here. Any existing receipt/preimage refuses before
@@ -313,14 +312,17 @@ def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInsta
     directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        operation = PublishRetainedSummary(cohort, audience, owners, task_carry, directory, receipt)
+        operation = PublishRetainedSummary(cohort, audience, owners, task_carry,
+                                          runtime_installation, directory, receipt)
         operation.require_selection(snapshot, owners)
         receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         PrivateDirectoryRole.require(receipt.parent.lstat())
         descriptor = os.open(receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor, 'w') as opened:
             json.dump({'phase':'preflight-complete', 'started':time.time(),
-                       'cohort':FieldCodec.encode(cohort), 'owners_before':FieldCodec.encode(audience)}, opened, indent=2)
+                       'cohort':FieldCodec.encode(cohort),
+                       'runtime_installation':FieldCodec.encode(runtime_installation),
+                       'owners_before':FieldCodec.encode(audience)}, opened, indent=2)
             opened.flush()
             os.fsync(opened.fileno())
         fsync_directory(receipt.parent)
