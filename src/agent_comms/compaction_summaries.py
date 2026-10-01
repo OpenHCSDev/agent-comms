@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 import stat
@@ -29,7 +28,6 @@ from .compaction_states import (
     ReservedSummary,
     UnknownSummary,
 )
-from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue, InputDispositions
 from .store_files import _store_lock
 
@@ -61,7 +59,7 @@ class SelectedSummaries(JournalRole):
     def reserve(
         self,
         session_file: str,
-        source: dict,
+        source: SelectedSummarySource,
         *,
         operation_id: str | None = None,
         fresh_session: FreshPrivateSession | None = None,
@@ -103,12 +101,8 @@ class SelectedSummaries(JournalRole):
                 admission_generation is not None and type(admission_generation) is not int
             ):
                 raise CompactionJournalError("Fresh private selected identity changed")
-        envelope = FieldCodec.decode(SelectedSummarySource, source)
-        payload = json.dumps(
-            FieldCodec.encode(envelope), sort_keys=True, separators=(",", ":"), allow_nan=False
-        )
-        if len(payload.encode()) > 65536:
-            raise ValueError("Selected summary source exceeds bound")
+        envelope = source
+        payload = envelope.journal_json()
         from .selected_source import SessionRevision
 
         try:

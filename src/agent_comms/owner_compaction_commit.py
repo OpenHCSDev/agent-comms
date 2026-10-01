@@ -16,7 +16,6 @@ from .compaction_identity import SelectedCommitReference
 from .compaction_journal import CompactionJournal
 from .compaction_records import CompactionOperation, SelectedSummaryAttempt
 from .compaction_source import CompactionSource
-from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue, InputDispositions
 from .native_compaction_request import NativeIntent, NativeSummaryPayload
 from .native_compaction_writer import NativeCompactionWriter
@@ -145,11 +144,7 @@ class OwnerCompactionCommit:
         ) as held:
             source.require_current(held)
             source.retained.require_summary(summary)
-            intent = dict(
-                FieldCodec.encode(native_intent),
-                owner=FieldCodec.encode(held.receipt),
-                source=FieldCodec.project(source, "journal"),
-            )
+            selected = None
             if selected_attempt is not None:
                 selected_attempt.state.require_commit_reservation()
                 self.journal.summaries.require_current(selected_attempt, witness.session_file)
@@ -161,11 +156,12 @@ class OwnerCompactionCommit:
                     turn=TurnId(source.turn_id),
                     pending_input_key=source.pending_input_key,
                 ).require_valid()
-                intent.update(FieldCodec.encode(SelectedCommitReference(
+                selected = SelectedCommitReference(
                     selected_attempt.operation_id, TextDigest.of(selected_attempt.source_json).value,
-                )))
+                )
             commit_id = self.journal.operations.begin(
-                witness.session_file, intent, inputs=self.inputs._read_unlocked()
+                witness.session_file, native_intent, owner=held.receipt, source=source,
+                selected=selected, inputs=self.inputs._read_unlocked(),
             )
             return self.native.settle(
                 held, payload.request(witness, native_intent.identity(commit_id)), self.journal, timeout,

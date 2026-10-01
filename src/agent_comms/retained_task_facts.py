@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -129,6 +129,39 @@ class RetainedTaskFacts:
     """One frozen source projection; no inferred prose facts or replay authority."""
 
     facts: tuple[ExactTaskFact, ...]
+
+    journal_control_bytes: ClassVar[int] = 65536
+
+    @classmethod
+    def frame_journal(
+        cls, record: dict[str, Any], *, payload_path: tuple[str, ...] = ()
+    ) -> str:
+        """Bound journal controls independently of the exact retained payload.
+
+        The containing record declares its retained-content coordinate. Native
+        CompactionPolicy admits that content against the actual selected model;
+        a journal control limit is not another model/context budget. The frozen
+        payload remains in the same record, byte-for-byte under the existing
+        canonical serialization. No content is shortened or stored elsewhere.
+
+        An outcome has no retained payload coordinate: its entire observation,
+        including an UNKNOWN reason, is control metadata. Read-only source
+        projections are measured here without promoting them to fact authority.
+        """
+        control = record
+        for key in payload_path:
+            control = control[key]
+            if not isinstance(control, dict):
+                raise ValueError("Declared retained journal payload must be an object")
+        payload = json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        content_bytes = (
+            len(json.dumps(control, sort_keys=True, separators=(",", ":"),
+                           allow_nan=False).encode()) - len("null")
+            if payload_path else 0
+        )
+        if len(payload.encode()) - content_bytes > cls.journal_control_bytes:
+            raise ValueError("Compaction journal control metadata exceeds bound")
+        return payload
 
     def current_decisions(self, owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
         """Resolve explicit original-reference lineage, never equal text or time.

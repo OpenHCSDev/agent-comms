@@ -39,7 +39,10 @@ class SelectedCommitReference:
 
     @classmethod
     def from_intent(cls, intent: dict[str, Any]) -> SelectedCommitReference:
+        from .native_compaction_request import NativeIntent
+
         intent = FieldCodec.decode(dict[str, Any], intent)
+        NativeIntent.frame_record(intent)
         return FieldCodec.decode(cls, {
             wire: intent[wire] for _, wire in FieldCodec._fields(cls) if wire in intent
         })
