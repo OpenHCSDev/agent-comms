@@ -1,0 +1,28 @@
+{
+  "state": "INSTALLED_USER_PUBLISHER_SOURCE_JOURNEYS_PASS",
+  "installed_package": "/home/ts/.cache/agent-scratch/s2-user-carry-installed-20261001/runtime/lib/python3.14/site-packages/agent_comms",
+  "module_sha256": {
+    "task_sources.py": "dfa0995a534dc815de4e3f32da8f7fbdfdf71a0766c25ef61e744eec6e61f9bc",
+    "messaging.py": "b15a272af5d772e64388d2a78b45d629ddfd3d96da66bd2a32a635f14dd321cf",
+    "messages.py": "6f52b7360e1f04683e04132dde316d3899d31a2e6c1942142b1e18118ab4b2cf",
+    "retained_task_facts.py": "99046510648f4c66c205a27c0dd2ad51258ed0846de0a3085209595918009d0c"
+  },
+  "journeys": [
+    {
+      "journey": "test_user_pin_original_source_without_model_lease_and_complete_lineage",
+      "state": "PASS",
+      "wire_rows": 7
+    },
+    {
+      "journey": "test_user_pin_goal_scope_replacement_and_original_subject_fences",
+      "state": "PASS",
+      "wire_rows": 3
+    }
+  ],
+  "provider_calls": 0,
+  "input_replays": 0,
+  "native_launches": 0,
+  "conftest_scheduler_mock": false,
+  "public_changes": [],
+  "full_native_ACP_UI_acceptance": false
+}
