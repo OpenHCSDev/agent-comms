@@ -180,7 +180,7 @@ Read the original CommittedDelivery through the existing CertifiedSourceRead
 resource. NotificationSource classifies original handling-row absence once at
 the read boundary. Unrecorded delivery consumes its original WakeDecision's
 initial AssignmentState; it does not mint a handling receipt or assignment.
-Both recorded and unrecorded sources consume AgentActivity.observe_recipient:
+Both recorded and unrecorded sources consume AgentActivity.observe_recipients:
 LiveRecipientActivity owns the original required Thread and acquired activity;
 UnavailableRecipientActivity owns the stopped presentation. Delete the separate
 active_owners map, optional-owner readiness helper and consumer recombination of
@@ -231,11 +231,26 @@ Private original root: /home/ts/wt/ac476-u07. Screenshots/ACP/proof material rem
 under the owned ui07 scratch directory; hashes are recorded in the committed
 receipt. Parent alone owns merge, installation and public activation.
 
-Production accounting against integrated main500e873c^2: **153 lines deleted,
-361 added** across the complete closure, excluding fixtures/docs. Deleted early
+Production accounting against integrated main500e873c^2: **154 lines deleted,
+370 added** across the complete closure, excluding fixtures/docs. Deleted early
 input dispatch/watchdog clock, whole-inbox cancellation ACK, registry-only pending
 interpretation, active-owner map and optional-owner consumer reconstructions.
 Remaining gaps: the original live lock-holder was not retained and cannot be
 attributed; original UNKNOWN dispositions remain uncertain; archive enrollment/
 carry is Mendel477's independent scope. No latency claim or global activation is
 made from this bounded acceptance.
+
+
+Parent's final acquisition review removes repeated work across the visible window:
+observe_recipients acquires one ephemeral read-only observation map from the single
+original RegistrySnapshot, validates uniqueness and scans Threads once, and reads
+activity once per selected recipient. Every recorded/unrecorded outcome in that
+window reuses the same original acquired object. This map is a bounded resource,
+not a persistent cache, registry, identity or semantic authority. Delete the
+single-recipient acquisition API and all consumers; no alias remains.
+
+Final batch acquisition controls: **31 pass in 5.00 seconds**. This two-file source
+adjustment follows the completed u07 installed gate and changes acquisition reuse,
+not member semantics or the protocol/native/store format. Keep u07's exact tested
+heads in its receipt; no repeated paid/native UI workflow is claimed for this
+post-gate adjustment. Parent's matched publication remains the next boundary.

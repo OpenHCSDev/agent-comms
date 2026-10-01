@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -102,23 +102,27 @@ class AgentActivity:
             for name in snapshot.threads
         }
 
-    def observe_recipient(self, recipient: FrozenRecipient, *, snapshot: RegistrySnapshot) -> RecipientActivity:
-        """Join the frozen birth to the original registry/process and activity sources."""
+    def observe_recipients(self, recipients: Iterable[FrozenRecipient], *, snapshot: RegistrySnapshot) -> Mapping[str, RecipientActivity]:
+        """Acquire one bounded window's recipients from the original source snapshot."""
         from .bus_publication import stable_thread_lookup
 
         snapshot.require_unambiguous_ownership()
+        observations: dict[str, RecipientActivity] = {
+            recipient.recipient_lookup: UnavailableRecipientActivity() for recipient in recipients
+        }
         for thread in snapshot.threads.values():
-            if stable_thread_lookup(thread.created_at) != recipient.recipient_lookup:
+            lookup = stable_thread_lookup(thread.created_at)
+            if lookup not in observations:
                 continue
             try:
                 snapshot.require_active(thread.name)
                 process = thread.require_process()
             except RelationViolationError:
-                return UnavailableRecipientActivity()
+                continue
             if not process.alive():
-                return UnavailableRecipientActivity()
-            return LiveRecipientActivity(thread, self.activity_of(thread.name, snapshot=snapshot))
-        return UnavailableRecipientActivity()
+                continue
+            observations[lookup] = LiveRecipientActivity(thread, self.activity_of(thread.name, snapshot=snapshot))
+        return observations
 
     def _emit_activity(self, activity: Activity) -> None:
         current = self.activity_of(activity.thread)

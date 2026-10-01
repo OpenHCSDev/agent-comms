@@ -100,12 +100,16 @@ class MessageNotification:
         from .agent_activity import AgentActivity
 
         agents = AgentActivity(root, registry)
+        observations = agents.observe_recipients(
+            (recipient for source in sources for recipient in source.audience.recipients),
+            snapshot=snapshot,
+        )
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
         for source in sources:
             key = (source.message.seq, source.message.message_id)
             for outcome in NotificationAssignment.for_delivery(source, rows):
-                notification = outcome.project(agents.observe_recipient(outcome.recipient, snapshot=snapshot))
+                notification = outcome.project(observations[outcome.recipient.recipient_lookup])
                 result[key].append(
                     replace(
                         notification,
