@@ -1,4 +1,4 @@
-## 2026-10-01 recovery checkpoint installed; scoped live verification underway
+## 2026-10-01 recovery checkpoint installed and scoped live verification passed
 
 The parent executed the frozen479 recovery operator once after normal draft-saving
 Toad shutdown. All five default entrypoints now use runtime-openhcs-recovery-cohort-20261001:
@@ -17,14 +17,18 @@ but was still blank two seconds after opening, despite eight mounted history
 blocks; sixteen blocks existed at the next capture. This is a concrete remaining
 cold preparation/paint latency finding assigned to Heisenberg275, not a passed
 receiver-paint or overall-usability claim. All protected original hashes were
-unchanged and owned process cleanup was empty. Kepler owns one bounded fresh
-functional installed receiver check; no original UNKNOWN will be resent.
+unchanged and owned process cleanup was empty. Kepler’s fresh default-installed native/ACP channel journey passed18.528s:
+two new native originals/two localhost POSTs, pregrant cancellation with zero
+POSTs, preserved original reservation and complete worker cleanup. No public
+input, paid call or UNKNOWN replay occurred. This is controlled-provider
+functional acceptance, not configured-provider quality or broad stability.
 
 The separate queue/receiving checkpoint is packaged as Core4345 / Toad0dd9
 (complete src tree equal to reviewed25d) / Textual4e / Diff8fa / native0064.
 Normal69 installation, full source assets, direct URLs and native trust passed.
-Einstein is authorized for its existing two-POST receiving-only journey, including
-actual queue paint before Started and one original input's handoff to chat.
+Einstein’s existing two-POST receiving-only journey passed37.235s: actual
+mounted compositor queue paint before Started, followed by the same original
+input’s single native claim/chat occurrence and cleared queue caption.
 This candidate is not the public default. Mendel next prepares the accepted
 Textual18/Toad275 performance pair; full velocity, End/PageDown, workspace and
 focus scope remains active. Sch's new artifact-native776 package passes actual
