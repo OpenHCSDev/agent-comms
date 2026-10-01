@@ -25,7 +25,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
@@ -38,8 +37,6 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.attempts import AttemptRecord
-from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionRecord
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     PublicationReceipts,
@@ -47,7 +44,6 @@ from agent_comms.coordination_tables.publications import (
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
-from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, MessageType
 from agent_comms.native_admission_rules import RegistryAdmissionCheck
@@ -63,6 +59,7 @@ from agent_comms.typed_table import (
     SQLiteSchemaObject,
     TypedRow,
     TypedTable,
+    ForeignKey,
 )
 from agent_comms.wake import WakeDecision, derive_exact_reply_target
 
@@ -88,15 +85,16 @@ class ResponseSchemaMeta(ResponseTable, TypedTable, PrivateRuntimeSchema):
         install_private_response_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
-    version: Literal[2]
+    version: Literal[3]
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
 
 
 @dataclass(frozen=True)
 class PublicationAppendDispatches(ResponseTable, TypedTable):
     execution_id: str = field(
-        metadata={"sql": Column(primary_key=True, references=(PublicationIntents, "execution_id"))}
+        metadata={"sql": Column(primary_key=True)}
     )
+    exact_target: str = field(metadata={"sql": Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")})
     wire_root_id: str = field(
         metadata={
             "sql": Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
@@ -107,9 +105,15 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
     dispatched_at_ms: int = field(metadata={"sql": Column(check="dispatched_at_ms>=0")})
     without_rowid = True
 
-    def matches(self, wire_root_id: str, fence: OwnerFence) -> bool:
+    @classmethod
+    def references(cls):
+        return (ForeignKey(("execution_id", "exact_target"), PublicationIntents,
+                          ("execution_id", "exact_target")),)
+
+    def matches(self, wire_root_id: str, fence: OwnerFence, exact_target: str) -> bool:
         return self == PublicationAppendDispatches(
             execution_id=fence.execution_id,
+            exact_target=exact_target,
             wire_root_id=wire_root_id,
             owner_generation=fence.owner_generation,
             attempt_ordinal=fence.attempt_ordinal,
@@ -172,7 +176,7 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
         )
     except (sqlite3.Error, ValueError, TypeError) as error:
         raise PublicationActivationBlocked("private response schema is not installed") from error
-    if meta != ResponseSchemaMeta(1, 2, _response_digest(schema)):
+    if meta != ResponseSchemaMeta(1, 3, _response_digest(schema)):
         raise PublicationActivationBlocked("private response schema version is unsupported")
     if {row.name: row.sql for row in actual} != schema or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
@@ -195,7 +199,7 @@ def install_private_response_schema(store: Coordination) -> None:
             schema = _response_schema()
             for statement in schema.values():
                 db.execute(statement)
-            ResponseSchemaMeta(1, 2, _response_digest(schema)).insert(db)
+            ResponseSchemaMeta(1, 3, _response_digest(schema)).insert(db)
         _assert_response_schema(db)
 
 
@@ -262,7 +266,7 @@ def _require_cohort_assignments(
     db = store.session._connection
     _assert_response_schema(db)
     assert_cohort_schema(db)
-    snapshot.require_wire_response()
+    snapshot.require_wire_responses()
     metadata = bus.log._private_marker_unlocked()
     if metadata.root_id != wire_root_id:
         raise IdentityConflict("cohort bus root changed")
@@ -312,9 +316,10 @@ def _require_final_owner(
     fence: OwnerFence,
     wire_root_id: str,
     owner_witness: LiveResponseOwner,
+    exact_target: str,
 ) -> RecoverySnapshot:
     snapshot, attempt = store.attempts.require_fence(fence)
-    snapshot.require_final_response(owner_witness.recipient_lookup)
+    snapshot.require_final_response(owner_witness.recipient_lookup, exact_target)
     _require_cohort_assignments(store, bus, snapshot, wire_root_id)
     return snapshot
 
@@ -325,6 +330,7 @@ def prepare_fenced_response(
     fence: OwnerFence,
     payload: str,
     *,
+    exact_target: str,
     message_type: MessageType = MessageType.INFO,
     notice: bool = False,
     timestamp: float | None = None,
@@ -351,11 +357,11 @@ def prepare_fenced_response(
         # The acquired canonical bus barrier verifies its sealed prefix, with
         # complete recovery/refusal on source or sidecar revision changes.
         with store.session.transaction() as db:
-            snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness)
+            snapshot = _require_final_owner(store, bus, fence, metadata.root_id, owner_witness, exact_target)
             execution = snapshot.execution
-            obligation = snapshot.require_wire_response()
+            obligation = snapshot.require_wire_response(exact_target)
             target = obligation.exact_target
-            existing = snapshot.publication_intent
+            existing = ResponseObligation.response_record(snapshot.publication_intents, target)
             if existing is not None:
                 snapshot.require_existing_preparation(
                     Message(
@@ -368,7 +374,7 @@ def prepare_fenced_response(
                     )
                 )
                 return AlreadyApplied(existing)
-            obligation = snapshot.require_preparation()
+            obligation = snapshot.require_preparation(target)
             when = time.time() if timestamp is None else timestamp
             candidate = Message(
                 execution.owner_thread,
@@ -395,8 +401,8 @@ def prepare_fenced_response(
             intent.insert(db)
             ResponseObligation.update(
                 db,
-                where="execution_id=? AND state='pending' AND revision=?",
-                parameters=(execution.execution_id, obligation.revision),
+                where="execution_id=? AND exact_target=? AND state='pending' AND revision=?",
+                parameters=(execution.execution_id, target, obligation.revision),
                 lifecycle=PublishingResponse(),
                 revision=obligation.revision + 1,
                 updated_at_ms=store.session.now(obligation.updated_at_ms),
@@ -410,18 +416,19 @@ def _terminal_replay(
     bus: MessageBus,
     wire_root_id: str,
     owner_witness: LiveResponseOwner,
+    exact_target: str,
 ) -> AlreadyApplied[RecoverySnapshot] | None:
     """A finished immutable receipt may be re-read, never re-published."""
     snapshot = store.snapshots.get(fence.execution_id)
-    if not snapshot.completed_response():
+    if ResponseObligation.response_record(snapshot.publication_receipts, exact_target) is None:
         return None
     if snapshot.execution.owner_lookup != owner_witness.recipient_lookup:
         raise StaleFence("finished response belongs to a different SQL recipient")
     attempt = snapshot.require_attempt()
     if attempt.authority != fence.authority:
         raise StaleFence("finished response is not this owner's original attempt")
-    intent, receipt = snapshot.require_published_evidence()
-    _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=True)
+    intent, receipt = snapshot.require_published_evidence(exact_target)
+    _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=snapshot.completed_response())
     matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
     if matched is None or matched.reference != receipt.reference:
         raise PublicationUncertain("published SQL receipt has no exact durable bus row")
@@ -434,6 +441,7 @@ def _settle_fenced_response(
     fence: OwnerFence,
     *,
     allow_append: bool,
+    exact_target: str,
     owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     _require_bound_stores(bus, store)
@@ -452,33 +460,34 @@ def _settle_fenced_response(
             # process dies before appending, no automatic retry is authorized.
             with store.session.transaction() as db:
                 _assert_response_schema(db)
-                terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness)
+                terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness, exact_target)
                 if terminal is not None:
                     return terminal
-                snapshot = _require_final_owner(store, bus, fence, wire_root_id, owner_witness)
-                snapshot.require_publishing_intent()
-                prior = PublicationAppendDispatches.one(db, execution_id=fence.execution_id)
+                snapshot = _require_final_owner(store, bus, fence, wire_root_id, owner_witness, exact_target)
+                snapshot.require_publishing_intent(exact_target)
+                prior = PublicationAppendDispatches.one(db, execution_id=fence.execution_id, exact_target=exact_target)
                 if prior is None:
                     PublicationAppendDispatches(
                         fence.execution_id,
+                        exact_target,
                         wire_root_id,
                         fence.owner_generation,
                         fence.attempt_ordinal,
                         store.session.now(snapshot.execution.updated_at_ms),
                     ).insert(db)
                     first_dispatch = True
-                elif not prior.matches(wire_root_id, fence):
+                elif not prior.matches(wire_root_id, fence, exact_target):
                     raise IdentityConflict("response dispatch belongs to another root or owner")
         with store.session.transaction() as db:
             _assert_response_schema(db)
-            terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness)
+            terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness, exact_target)
             if terminal is not None:
                 return terminal
-            snapshot = _require_final_owner(store, bus, fence, wire_root_id, owner_witness)
+            snapshot = _require_final_owner(store, bus, fence, wire_root_id, owner_witness, exact_target)
             attempt = snapshot.require_attempt()
-            intent, obligation = snapshot.require_publishing_intent()
-            dispatch = PublicationAppendDispatches.one(db, execution_id=fence.execution_id)
-            if dispatch is None or not dispatch.matches(wire_root_id, fence):
+            intent, obligation = snapshot.require_publishing_intent(exact_target)
+            dispatch = PublicationAppendDispatches.one(db, execution_id=fence.execution_id, exact_target=exact_target)
+            if dispatch is None or not dispatch.matches(wire_root_id, fence, exact_target):
                 raise PublicationUncertain("no matching durable append dispatch")
             matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
             if matched is None:
@@ -495,59 +504,20 @@ def _settle_fenced_response(
             now = store.session.now(max(snapshot.execution.updated_at_ms, attempt.updated_at_ms))
             PublicationReceipts(
                 execution_id=intent.execution_id,
+                exact_target=intent.exact_target,
                 seq=matched.seq,
                 message_id=matched.message_id,
                 received_at_ms=now,
             ).insert(db)
             ResponseObligation.update(
                 db,
-                where="execution_id=? AND revision=?",
-                parameters=(intent.execution_id, obligation.revision),
+                where="execution_id=? AND exact_target=? AND revision=?",
+                parameters=(intent.execution_id, exact_target, obligation.revision),
                 lifecycle=PublishedResponse(matched.message_id, matched.seq),
                 revision=obligation.revision + 1,
                 updated_at_ms=store.session.now(obligation.updated_at_ms),
             )
-            AttemptRecord.update(
-                db,
-                where="execution_id=? AND attempt_ordinal=? AND revision=?",
-                parameters=(intent.execution_id, attempt.attempt_ordinal, attempt.revision),
-                lifecycle=SucceededAttempt(),
-                revision=attempt.revision + 1,
-                updated_at_ms=store.session.now(attempt.updated_at_ms),
-            )
-            ExecutionRecord.update(
-                db,
-                where="execution_id=? AND revision=?",
-                parameters=(intent.execution_id, snapshot.execution.revision),
-                lifecycle=CompletedExecution(attempt.attempt_ordinal),
-                revision=snapshot.execution.revision + 1,
-                updated_at_ms=store.session.now(snapshot.execution.updated_at_ms),
-            )
-            for assignment in snapshot.assignments:
-                WakeAssignment.update(
-                    db,
-                    where="assignment_id=? AND revision=?",
-                    parameters=(assignment.assignment_id, assignment.revision),
-                    lifecycle=CompletedExecution.assignment_state().build(
-                        assignment.lifecycle.mode,
-                        assignment.lifecycle.execution_id,
-                        assignment.lifecycle.exact_target,
-                    ),
-                    revision=assignment.revision + 1,
-                    updated_at_ms=store.session.now(assignment.updated_at_ms),
-                )
-            CurrentExecutions.update(
-                db,
-                where="owner_lookup=? AND pointer_revision=? AND execution_id=?",
-                parameters=(
-                    snapshot.execution.owner_lookup,
-                    snapshot.pointer_revision,
-                    intent.execution_id,
-                ),
-                execution_id=None,
-                attempt_ordinal=None,
-                pointer_revision=snapshot.pointer_revision + 1,
-            )
+            store.snapshots.get(intent.execution_id).finish_publications(store.session)
             return Applied(store.snapshots.get(intent.execution_id))
 
 
@@ -556,11 +526,12 @@ def publish_fenced_response(
     bus: MessageBus,
     fence: OwnerFence,
     *,
+    exact_target: str,
     owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     """Explicit one-time owner append + Tx2. Never call after an uncertain crash."""
     return _settle_fenced_response(
-        store, bus, fence, allow_append=True, owner_witness=owner_witness
+        store, bus, fence, allow_append=True, exact_target=exact_target, owner_witness=owner_witness
     )
 
 
@@ -569,9 +540,10 @@ def resolve_existing_response(
     bus: MessageBus,
     fence: OwnerFence,
     *,
+    exact_target: str,
     owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     """Read-only bus resolution of Tx1; absence never appends or retries."""
     return _settle_fenced_response(
-        store, bus, fence, allow_append=False, owner_witness=owner_witness
+        store, bus, fence, allow_append=False, exact_target=exact_target, owner_witness=owner_witness
     )

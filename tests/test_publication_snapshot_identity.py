@@ -57,15 +57,15 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
     case = _ready(tmp_path, direct=True)
     try:
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "answer @sender", owner_witness=case.witness
+            case.store, case.bus, case.fence, "answer @sender", exact_target=case.reply_target, owner_witness=case.witness
         ).value
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         response = case.bus.log.read_keyed_response(intent)
         assert intent.matches_publication(response)
         with case.bus.log.locked():
             snapshot = case.store.snapshots.get("exec")
             conversation = ResponseConversation.capture(
-                case.bus, snapshot, snapshot.require_wire_response()
+                case.bus, snapshot, snapshot.require_wire_response(case.reply_target)
             )
             changed = (
                 replace(response, notice=True)

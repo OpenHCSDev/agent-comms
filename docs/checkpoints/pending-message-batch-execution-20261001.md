@@ -363,3 +363,96 @@ from490. The sole carry remains495's existing installer extension, which retains
 ordered multiple FULL execution links and attests all unrelated schema/rows.
 The earlier unexecuted prototype tool and its assumptions remain historical
 source evidence, not an alternate installer or release requirement.
+
+## Mandatory prompt versus optional awareness resource
+
+Normal main integration: `590c406c` into this branch at `0ac0727e`.
+Code checkpoint `8ea90edc` removes the competing mandatory 32 KiB model bound.
+This closure deletes 26 production lines across the existing SelectedPrompt and
+OptionalAwarenessProjection owners, including the former constant, remaining()
+calculation, triage/full rejection calls and caller-supplied remaining capacity.
+No new budget class, model catalog, truncation, lifecycle algorithm or codec.
+
+Declaration and consumer search:
+
+- One SelectedPrompt declaration, in selected_turn.py. Its triage() and full()
+  preserve every captured original; neither estimates model capacity.
+- One OptionalAwarenessProjection declaration, with its existing max_text_bytes
+  resource bound of 16 KiB, max_rows and reader deadline. Its only production
+  render caller is SelectedPrompt.full(); two direct timeout fixture calls were
+  migrated. The projection supplies its own bound to OptionalAwarenessResult
+  family render hooks. Read and rendered forms use the same resource limit.
+  Oversized optional context is omitted whole; original content is untouched.
+- One ContextBudget declaration in stack/native-context-budget.mjs. Existing
+  ContextBudgetRequest applies the selected model's contextWindow/maxTokens and
+  serialized provider input; native provider adapters are the consumers. These
+  owners and native SessionContext/CompactionPolicy are unchanged.
+- Existing PrivateSendAdmission and PromptBinding retain and digest the complete
+  original prompt/request. No byte budget or narrowed subset is added there.
+  Searches for _MAX_PROMPT_BYTES, remaining_prompt_bytes and the removed
+  require_context_budget name return no source consumers. Image attachment
+  size limits describe a separate existing attachment resource, not model admission.
+
+Validation at the end of this source closure: three existing optional resource
+controls passed. The 101-original SQL-page-boundary batch is now over 100 KiB of
+original UTF-8 content and verifies every JSON-escaped original, one exact native
+reservation/binding, late-arrival exclusion and nonreplay. It passed in 3.19s.
+The initial combined run had 3 passes and a fixture assertion failure because
+the test searched raw Unicode inside the declared ASCII-escaped JSON frame; that
+raw failure is retained, and only the original-text representation assertion was
+corrected. No production frame change or oracle weakening.
+
+Logs: .artifacts/prompt-resource-bound/{batch01.log,source-batch02.log}.
+These are bounded provider-free source checks, not an installed mixed-route gate.
+Arendt retains the sources= tuple/plural-target lifecycle API and urgent498
+priority; full490 installed validation follows that coherent owner integration.
+
+## Original publication and reply proposal closure
+
+Production checkpoints `2319c2c8` and `ddae45d7` change five production files:
+59 lines added, 17 deleted. Total production diff against current main at this
+checkpoint: 34 files, 730 added, 495 deleted (includes original source-membership
+and route closure above, not a new readiness claim).
+
+CoordinatedTurn retains the original tuple of PublicationReceipt values, removing
+its copied nullable response_message_id and exact_target fields. Failed/ignored
+results contain no publications. The current publisher's existing
+require_published_evidence() supplies its one receipt; the consumer accepts the
+original tuple directly when lifecycle publication becomes plural. Neither an
+alias nor a fallback reader remains. Both foreground CLI outputs serialize the
+original tuple through FieldCodec. Nine existing result fixture/driver files
+migrate their consumers, not their native/UI execution mechanisms. The remaining
+test_audience_manifest result.exact_target belongs to its separate existing
+audience owner, not CoordinatedTurn.
+
+SelectedSourceBatch extends its existing original-route relation with answer
+instructions and response_messages(). No new reply family, store, codec or
+registry: mixed-route proposals decode once through FieldCodec as tuple[Message].
+Message's whole value comparison rejects ungranted sender/type/role/task/notice
+or other metadata; the batch requires each original route once and returns them
+in original route order. A temporary lookup indexes these decoded resource
+values only. The native model may propose text; the canonical fenced publisher
+still owns timing, audience, actual row and receipt. The one-route contract
+remains a direct combined answer. Distinct route answers are never produced by
+broadcasting a shared answer across unrelated original audiences. Malformed
+proposals use the existing NativePiUnavailable/SelectedRequest failure path,
+without retrying the native input.
+
+One production declaration each: CoordinatedTurn, SelectedSourceBatch and Message.
+Search finds no response_message_id consumers in production/tests/tools. The
+selected_result.cursor_status_for method is unchanged; Arendt's urgent498 and
+central NativeCustody/SessionIdentity closure own its failure/coverage semantics.
+The original six terminal IGNORE proofs and public wire are untouched.
+
+Actual imports and AST parsing of changed source passed, with no native/provider
+initialization. Behaviour and installed acceptance remain at the end of coherent
+integration, not a collection of local passing tests.
+
+Arendt directly acknowledged the consumer contracts. Remaining existing-owner
+API: create(sources=participant.batch.sources); plural obligations/intents/receipts;
+exact_target-keyed prepare/publish and complete-terminal recovery. The selected
+runner currently has its legitimate one-route source subset and publisher. Once
+those APIs and Singer's preserved carry are integrated, it will snapshot all
+pending routes, prepare all decoded bodies before any append, then publish each
+original keyed route and consume the authoritative receipt tuple. No selector
+widening, competing carry, factory fallback or public activation in this patch.

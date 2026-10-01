@@ -36,6 +36,7 @@ from .coordinated_runtime import SelectedExecution
 from .coordination_cohort import accept_delivery_cohort, sealed_cohort_sequences
 from .envelope_claim_transitions import ExistingFileClaim
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .native_pi import _private_session_dir, _trusted_package
 from .private_registry_guard import _require_no_private_owner_rename
@@ -317,7 +318,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 {
                     "disposition": result.disposition.declared_name,
                     "claim_ids": result.assignment_ids,
-                    "response_message_id": result.response_message_id,
+                    "publications": FieldCodec.encode(result.publications),
                 }
                 if result is not None
                 else {"disposition": "NO_SELECTED_CLAIM"}

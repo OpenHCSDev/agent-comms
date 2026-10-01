@@ -81,7 +81,7 @@ class AttemptStart:
             raise StaleFence("owner has a current attempt")
         if not execution.lifecycle.starts_attempt:
             raise IdentityConflict("execution cannot start an attempt")
-        if snapshot.publication_intent is not None:
+        if bool(snapshot.publication_intents):
             raise PublicationUncertain("no authorized bus-keyed publication resolution")
         if execution.lifecycle.retry and snapshot.attempt is None:
             raise RecoveryBlocked("frozen v2 cannot resume an unstarted deferral")

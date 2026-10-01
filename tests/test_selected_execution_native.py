@@ -211,9 +211,9 @@ async def test_native_full_four_tools_publish_and_release(
         outcome = await asyncio.wait_for(execution.run(), 40)
         assert not failures
         assert len(requests) == 2 + triage
-        assert outcome.response_message_id
+        assert outcome.publications
         responses = [
-            m for m in comms.views.full_history() if m.message_id == outcome.response_message_id
+            m for m in comms.views.full_history() if m.reference in tuple(receipt.reference for receipt in outcome.publications)
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
         assert comms.registry.require("beta").active_turn is None

@@ -350,8 +350,7 @@ class FullNativeSend(NativeSendStage):
             snapshot, _ = store.attempts.require_fence(self.fence)
             for assignment in self.assignments:
                 engagement = assignment.lifecycle.require_engagement()
-                if snapshot.execution.exact_target != engagement.exact_target:
-                    raise StaleFence("full-turn proof lost an original exact reply target")
+                snapshot.require_wire_response(engagement.exact_target)
             row.commit_context(db, context)
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
