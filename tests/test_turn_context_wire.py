@@ -7,7 +7,9 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import TurnId, TurnIdentity
-from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance
+from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext
+from agent_comms.pi_commands import Prompt
+from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord, ObservationWireRecord, ContextManifestWireObservation
 from agent_comms.cli_commands import ContextCliCommand
 from agent_comms.comms import Comms
@@ -64,3 +66,23 @@ def test_observation_family_rejects_message_fields_and_preview(tmp_path):
     assert row.sequence_after(39)==39
     with pytest.raises(ValueError):
         WireRecord.from_wire({**row.to_wire(),'seq':40},root_id)
+
+
+def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp_path):
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    images = (ImageInput('YQ==', 'image/png'),)
+    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', ())
+    rendered = context.render(images=images)
+    expected = ''.join(segment.text() for segment in context.segments)
+    assert rendered.text == expected
+    raw = expected.encode()
+    for source in rendered.contributions:
+        assert hashlib.sha256(raw[source.offset:source.offset+source.length]).hexdigest() == source.sha256
+    assert sum(source.length for source in rendered.contributions) == len(raw)
+    assert next(source for source in rendered.contributions if source.kind == 'user_input').images == (0,)
+    command = Prompt(input_id='a'*32, message=rendered.text, images=images,
+                     context_contributions=rendered.contributions)
+    decoded = Prompt.from_wire(command.to_rpc())
+    assert decoded == command
+    assert decoded.message.encode() == raw and decoded.images == images

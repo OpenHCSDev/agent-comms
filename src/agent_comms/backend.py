@@ -34,6 +34,7 @@ from .child_process import TimedOutOutcome
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
 from .image_inputs import ImageInput
+from .turn_context import InputContribution
 from .maintenance_barrier import MaintenanceBarrier
 from .native_attestation import AttestationError, SavedSessionReopenError
 from .native_custody import (
@@ -207,6 +208,7 @@ async def stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
+    context_contributions: tuple[InputContribution, ...] = (),
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend; native completion ends with a ``done`` event.
 
@@ -247,6 +249,7 @@ async def stream_agent_events(
                         finish_event=finish_event,
                         fork_session=fork_session,
                         images=images,
+                        context_contributions=context_contributions,
                         model_wait_timeout=model_wait_timeout,
                         rpc_abort_grace=rpc_abort_grace,
                         require_input_id=require_input_id,
@@ -297,6 +300,7 @@ class TurnSession:
         persistent_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         startup: NativeStartupAdmission | None = None,
+        context_contributions: tuple[InputContribution, ...] = (),
     ):
         self.launch = launch
         self.task = task
@@ -304,6 +308,7 @@ class TurnSession:
         self.finish_event = finish_event
         self.fork_session = fork_session
         self.images = images
+        self.context_contributions = context_contributions
         self.watchdog = ProgressWatchdog(
             model_wait_timeout, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
         )
@@ -672,15 +677,14 @@ class TurnSession:
             else "agent-comms-prompt"
         )
         self.original_input_id = secrets.token_hex(16)
-        self.prompt_payload = b""
-        self.prompt_payload = PiRpcChannel.command_bytes(
-            commands.Prompt(
-                id=self.prompt_id,
-                input_id=self.original_input_id,
-                message=self.task,
-                images=self.images or None,
-            )
+        self.prompt_request = commands.Prompt(
+            id=self.prompt_id,
+            input_id=self.original_input_id,
+            message=self.task,
+            images=self.images or None,
+            context_contributions=self.context_contributions,
         )
+        self.prompt_payload = PiRpcChannel.command_bytes(self.prompt_request)
         self.stdin_payload = PiRpcChannel.command_bytes(self.native.attestation.request)
         if not self.require_input_id:
             self.stdin_payload += self.prompt_payload
@@ -705,9 +709,7 @@ class TurnSession:
         self.native.reader.pending.add(
             commands.Prompt,
             self.prompt_id,
-            request=commands.Prompt(
-                id=self.prompt_id, input_id=self.original_input_id, message=self.task
-            ),
+            request=self.prompt_request,
         )
         self.watchdog.reading()
         self.active_tools: set[str] = set()

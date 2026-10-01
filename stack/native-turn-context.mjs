@@ -8,16 +8,59 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const kind = declaration => declaration.name.replace(/Segment$/, '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
 const file = (path, content) => ({kind:'file', path, sha256:hash(content)});
 
+/** The existing one-use input claim also owns its read-only source coordinates. */
+export class NativeInputClaim {
+    constructor(digest, contributions) { this.digest=digest; this.contributions=contributions; }
+    static capture(digest, request, contributions=[]) {
+        const bytes=Buffer.from(request.text);
+        for (const source of contributions) {
+            if (!source.provenance.length || !Number.isSafeInteger(source.offset) ||
+                !Number.isSafeInteger(source.length) || source.offset<0 || source.length<0 ||
+                source.offset+source.length>bytes.length ||
+                hash(bytes.subarray(source.offset,source.offset+source.length))!==source.sha256 ||
+                source.images.some(index=>!Number.isSafeInteger(index) || index<0 || index>=(request.images?.length ?? 0)))
+                throw new TypeError('Context contribution does not describe its original input');
+        }
+        return new this(digest,contributions);
+    }
+    observe(message, native, journal) {
+        const blocks=typeof message.content==='string'
+            ? [{type:'text',text:message.content}] : message.content;
+        const bytes=Buffer.from(blocks.filter(block=>block.type==='text').map(block=>block.text).join(''));
+        const images=blocks.filter(block=>block.type==='image');
+        if (this.contributions.some(source=>
+            hash(bytes.subarray(source.offset,source.offset+source.length))!==source.sha256 ||
+            source.images.some(index=>images[index]===undefined))) {
+            // Extension transformations own their resulting value. A changed
+            // range cannot claim byte-identical logical attribution or reject
+            // an otherwise valid original native input.
+            return [new TransformedInputSegment(
+                [...this.contributions.flatMap(source=>source.provenance),native,journal],
+                [message]).manifest()];
+        }
+        return this.contributions.map(source=>{
+            const raw=bytes.subarray(source.offset,source.offset+source.length);
+            const content=[{type:'text',text:raw.toString()},...source.images.map(index=>images[index])];
+            const encoded=JSON.stringify(content);
+            return {kind:source.kind,provenance:[...source.provenance,native,journal],
+                sha256:hash(encoded),utf8_bytes:Buffer.byteLength(encoded),
+                tokens:estimateTokens({role:'user',content,timestamp:0})};
+        });
+    }
+}
+
 class ContextSegment {
     constructor(provenance, value) {
         if (!provenance.length) throw new TypeError('Context requires its original source');
         this.provenance = provenance;
         this.value = value;
+        this.contributors = [];
     }
     manifest() {
         const raw = JSON.stringify(this.value);
         return {kind:kind(this.constructor), provenance:this.provenance,
-            sha256:hash(raw), utf8_bytes:Buffer.byteLength(raw), tokens:this.tokens()};
+            sha256:hash(raw), utf8_bytes:Buffer.byteLength(raw), tokens:this.tokens(),
+            contributors:this.contributors};
     }
     full() { return {...this.manifest(), ...this.payload()}; }
 }
@@ -34,6 +77,7 @@ class NativeMessages extends ContextSegment {
 class TranscriptSegment extends NativeMessages {}
 class CompactionSummarySegment extends NativeMessages {}
 class InjectionMessageSegment extends NativeMessages {}
+class TransformedInputSegment extends NativeMessages {}
 class ToolCatalogSegment extends ContextSegment {
     tokens() { return estimateTokens({role:'user',content:[{type:'text',text:JSON.stringify(this.value)}],timestamp:0}); }
     payload() { return {tools:this.value}; }
@@ -42,10 +86,12 @@ class ToolCatalogSegment extends ContextSegment {
 
 export class TurnContext {
     constructor(identity, segments) { this.identity=identity; this.segments = segments; }
-    static async capture(session, context, source = {request_generation:0, context_digest:hash(`pi-assembled-context-v1\n${JSON.stringify(context)}`)}) {
+    static async capture(session, context, source) {
         const loader = session.resourceLoader;
         const identity = {sessionId:session.sessionId,sessionFile:session.sessionFile};
-        const provenance = [{kind:'native', identity, ...source}];
+        const provenance = [source ? {kind:'native',identity,
+            request_generation:source.request_generation,context_digest:source.context_digest}
+            : {kind:'preview',identity,context_digest:hash(`pi-assembled-context-v1\n${JSON.stringify(context)}`)}];
         const systemSources = [...provenance,
             file(new URL('./system-prompt.js',import.meta.url).pathname,readFileSync(new URL('./system-prompt.js',import.meta.url)))];
         const custom = loader.getSystemPromptSource();
@@ -75,14 +121,16 @@ export class TurnContext {
         for (const message of context.messages) {
             const original=identified.get(JSON.stringify(message))?.shift();
             const declaration=original?.declaration ?? TranscriptSegment;
-            const source=original ? {kind:'journal',path:journal.path,entries:[original.id]} : journal;
+            const entrySource=original ? {kind:'journal',path:journal.path,entries:[original.id]} : journal;
             if (!group || group.constructor !== declaration) {
                 group=new declaration([...provenance],[]); segments.push(group);
             }
             group.value.push(message);
+            group.contributors.push(...(source?.contributors ?? [])
+                .filter(item=>item.input_id===message.inputId).flatMap(item=>item.contributors));
             // Provenance is an observation, never an alternate entry/message owner.
-            if (!group.provenance.some(value=>JSON.stringify(value)===JSON.stringify(source)))
-                group.provenance.push(source);
+            if (!group.provenance.some(value=>JSON.stringify(value)===JSON.stringify(entrySource)))
+                group.provenance.push(entrySource);
         }
         segments.push(new ToolCatalogSegment(provenance,context.tools));
         return new TurnContext(identity,segments);

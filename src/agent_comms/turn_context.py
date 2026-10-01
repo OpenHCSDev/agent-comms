@@ -57,6 +57,12 @@ class NativeProvenance(Provenance):
 
 
 @dataclass(frozen=True)
+class PreviewProvenance(Provenance):
+    identity: NativeSessionIdentity
+    context_digest: str
+
+
+@dataclass(frozen=True)
 class ResourceProvenance(Provenance):
     path: str
     sha256: str
@@ -87,6 +93,7 @@ class SegmentManifest:
     sha256: str
     utf8_bytes: int
     tokens: int
+    contributors: tuple[SegmentManifest, ...] = ()
 
     def __post_init__(self):
         if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
@@ -115,6 +122,23 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
             self.declared_name, self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
         )
 
+    def contribution(self, offset: int, text: str, images=()) -> InputContribution:
+        raw = text.encode()
+        return InputContribution(self.declared_name, self.provenance, offset,
+                                 len(raw), hashlib.sha256(raw).hexdigest())
+
+
+@dataclass(frozen=True)
+class InputContribution:
+    """Coordinates in the original rendered input, never another input copy."""
+
+    kind: str
+    provenance: tuple[Provenance, ...]
+    offset: int
+    length: int
+    sha256: str
+    images: tuple[int, ...] = ()
+
 
 @dataclass(frozen=True, kw_only=True)
 class SuppliedSegment:
@@ -128,7 +152,8 @@ class SuppliedSegment:
 
 @dataclass(frozen=True, kw_only=True)
 class UserInputSegment(SuppliedSegment, ContextSegment):
-    pass
+    def contribution(self, offset: int, text: str, images=()) -> InputContribution:
+        return replace(super().contribution(offset, text), images=tuple(range(len(images))))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -136,6 +161,7 @@ class MeasuredNativeSegment(ContextSegment):
     """An SDK-owned input observation, not a second native message vocabulary."""
 
     tokens: int
+    contributors: tuple[SegmentManifest, ...] = ()
 
     @abstractmethod
     def provider_value(self): ...
@@ -149,7 +175,7 @@ class MeasuredNativeSegment(ContextSegment):
     def measured_manifest(self):
         # The SDK measures/hashes its exact original JSON representation.
         return SegmentManifest(self.declared_name, self.provenance,
-                               self.sha256, self.utf8_bytes, self.tokens)
+                               self.sha256, self.utf8_bytes, self.tokens, self.contributors)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -310,6 +336,7 @@ class ReplyRouteSegment(InstructionSegment):
 class RenderedInput:
     text: str
     provider: dict[str, Any]
+    contributions: tuple[InputContribution, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -398,11 +425,17 @@ class TurnContext:
     def append(self, segment: ContextSegment) -> TurnContext:
         return replace(self, segments=(*self.segments, segment))
 
-    def render(self) -> RenderedInput:
-        prompt_parts, provider = [], {}
+    def render(self, *, images=()) -> RenderedInput:
+        prompt_parts, provider, contributions = [], {}, []
+        offset = 0
         for segment in self.segments:
+            start = len(prompt_parts)
             segment.render_into(prompt_parts, provider)
-        return RenderedInput("".join(prompt_parts), provider)
+            if len(prompt_parts) > start:
+                contribution = segment.contribution(offset, "".join(prompt_parts[start:]), images)
+                contributions.append(contribution)
+                offset += contribution.length
+        return RenderedInput("".join(prompt_parts), provider, tuple(contributions))
 
     def manifest(self, tokens: tuple[int, ...], *, counter: str) -> ContextManifest:
         return ContextManifest(

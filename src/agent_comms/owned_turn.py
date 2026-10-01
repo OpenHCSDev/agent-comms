@@ -383,6 +383,7 @@ class OwnedTurn:
 
     async def stream(self):
         await self.runner.transition_turn(self.session_id, self.turn_lease, PromptAcceptancePhase())
+        rendered = self.context.render(images=self.images)
         admission = OwnedSendAdmission(
             comms=self.runner.comms,
             inputs=self.runner.inputs,
@@ -392,15 +393,16 @@ class OwnedTurn:
             turn=TurnId(self.turn_id),
             admission=self.turn_lease.admission_generation,
             goal_permit=self.goal_permit,
-            original=replace(self.original, prompt=self.context.render().text),
+            original=replace(self.original, prompt=rendered.text),
         )
         async for event in backend.stream_agent_events(
             self.runner.agent_bin,
             self.runner.native_arguments(self.thread),
-            self.context.render().text,
+            rendered.text,
             self.worktree,
             self.env_extra,
             **self.image_options,
+            context_contributions=rendered.contributions,
             session_file=self.session_file,
             steering_queue=self.backend_inbox,
             finish_event=self.finish_event,

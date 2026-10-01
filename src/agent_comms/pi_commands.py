@@ -17,6 +17,7 @@ from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
+from .turn_context import InputContribution
 from .owner_compaction_prepare import NativeWitness
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_payloads import (
@@ -143,6 +144,9 @@ class Prompt(PiCommand):
     message: str = field(default=None, metadata={"wire_omit_default": True, "wire_name": "message"})
     images: tuple[ImageInput, ...] | None = field(
         default=None, metadata={"wire_omit_default": True}
+    )
+    context_contributions: tuple[InputContribution, ...] = field(
+        default=(), metadata={"wire_omit_default": True, "wire_name": "contextContributions"}
     )
     streaming_behavior: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
