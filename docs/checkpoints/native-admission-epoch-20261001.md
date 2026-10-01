@@ -105,3 +105,28 @@ Python3.14.7/system dependencies and ACP SDK0.12.1 are scoped to the small17MiB
 owned environment. This establishes the affected native/backend path, not Toad UI,
 the full immutable paired runtime, public installation or whole-suite health.
 Evidence: evidence/native-admission-epoch/installed-native-checkpoint.json.
+
+
+## Ready checkpoint after normal main integration
+
+Normally merged main46877fc0838 into d8003244. Because that changes continued
+saved-session acquisition, the same affected installed native journey was run on
+the refreshed noneditable wheel in a fresh private root: PASS10.43s,3localhost
+requests, all previous custody/noReplay/byte-preservation obligations intact.
+No unchanged broad source matrix, Toad/native rebuild, original input or paid
+provider call was repeated. Final production differs from that installed source
+only by deleting the now-unused StaleFence import from PrivateSendAdmission;
+its exception behavior now belongs to the original NativeAdmissionEpoch owner.
+
+Production native closure deletes28lines/adds98 across8paths. The parent-built
+Column(nullable) capability deletes1/adds2 in its ninth production path; this is
+physical SQLNULL metadata, not optional admission state or a second codec.
+Remaining raw epoch syntax is confined to original SQL schema/triggers/CAS.
+All semantic readers use original epoch behavior. New-case maintenance belongs
+to that declared family and requires no reader switch or parallel epoch state.
+No physical store format, public wire ABI or runtime-reset requirement changed.
+This coherent checkpoint is Ready at installed native/recovery strength; parent
+owns merge/pair installation/public activation. Whole S14 and full Toad workflow
+remain distinct acceptance scopes. UNKNOWN/private proof roots01/02/03 and their
+failed/pass logs remain protected; source controls/17MiB wheel environment are
+owned disposable scratch after review and verified process absence.

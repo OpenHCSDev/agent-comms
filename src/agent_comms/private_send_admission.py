@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_errors import IdentityConflict, StaleFence
+from .coordination_errors import IdentityConflict
 from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .fresh_private_session import FreshPrivateSession

@@ -8,24 +8,31 @@
   "input_rows_wire_native_proof_unchanged_by_recovery": true,
   "old_input_automatic_replay_posts": 0,
   "new_independent_input_completed": true,
-  "native_prefix_sha256": "f057236f85c4dd9dad29ba476809b8a79006d239e582e1ee5b377d928b787d82",
-  "proof_preimage_sha256": "cc4bb319627b889ff22e3fc76f524ab1441660ab42fea97c29090514c5103456",
+  "native_prefix_sha256": "6adb6e230292cdd314e6f4b073dd8882ef75ba12aef21c2ed13ef3b9fbf84a07",
+  "proof_preimage_sha256": "440e1b71e77421d55efc62b28870246e6c2d6215b633c0d738a765617b6bf871",
   "native_children_closed": true,
   "public_effects": 0,
   "state": "INSTALLED-NATIVE-CUSTODY-PASS",
-  "production_head": "94059cafb6e802a798bba4434ce2e78bd9f72d91",
-  "elapsed_seconds": 10.66,
+  "production_head": "d8003244c5d28c3ce11a411a45a5a8a4677171c0",
+  "elapsed_seconds": 10.43,
   "python": "3.14.7",
   "sdk": "0.12.1",
   "native": "593b978a717ae8f6",
   "source_byte_equal": true,
   "source_fallback": false,
-  "scope": "installed Core/actual selected Pi native/registry/release/recovery; not Toad UI or public activation",
+  "scope": "current-main merged installed Core/actual selected Pi native/registry/release/recovery; not Toad UI or public activation",
   "failed_run": {
     "path": ".observations/native-epoch01",
     "reason": "fixture used absent UNKNOWN terminal session field instead of original acquired saved session",
     "same_input_replayed": false
   },
-  "evidence_retained": ".observations/native-epoch02/private-originals",
-  "log_sha256": "0248ca239a5024c77f3a7fb1773f36e380e1694f5d4945360639b74362dbd823"
+  "evidence_retained": ".observations/native-epoch03/private-originals",
+  "log_sha256": "57a912472dcea5629aa0fd533b43174bd47fa33250a696b6ee35d1d0b86b1ec0",
+  "integrated_main": "77fc0838",
+  "prior_pass": {
+    "production": "94059caf",
+    "elapsed_seconds": 10.66,
+    "evidence": ".observations/native-epoch02"
+  },
+  "final_source_delta": "Delete unused StaleFence import; send/state/release/native implementation unchanged from installed d800"
 }
