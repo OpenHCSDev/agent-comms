@@ -232,7 +232,6 @@ class RecoveryMonitorCapability:
             if (
                 binding is None
                 or binding.identity != reserved.identity
-                or binding.stage != "full"
                 or not expected_prompt_matches_journal(session_file, binding)
             ):
                 raise RecoveryBlocked("native failure lacks its bound original input")
