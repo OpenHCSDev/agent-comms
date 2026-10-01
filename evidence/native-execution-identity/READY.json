@@ -1,0 +1,105 @@
+{
+  "status": "READY-SCOPED-INSTALLED-NATIVE-ACP",
+  "owner": "Mendel",
+  "base": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+  "source_checkpoint": "ea86b0b9fba30f1eb799fb5621bb98b72dfae7c3",
+  "fixture_checkpoint": "54caa801",
+  "normal_main_merge": "fee4f4ec472bb409a4207b60128a45633fdd9d81",
+  "production_deleted": 101,
+  "production_added": 200,
+  "production_files": [
+    "src/agent_comms/attempt_recovery.py",
+    "src/agent_comms/coordinated_runtime_schema.py",
+    "src/agent_comms/historical_native_inputs.py",
+    "src/agent_comms/native_input_record.py",
+    "src/agent_comms/native_prompt_binding.py",
+    "src/agent_comms/native_runtime_input.py",
+    "src/agent_comms/native_source_cursor.py",
+    "src/agent_comms/private_send_stage.py",
+    "src/agent_comms/selected_tool_broker.py",
+    "src/agent_comms/selected_triage.py",
+    "src/agent_comms/selected_turn.py",
+    "src/agent_comms/source_proof_requirement.py"
+  ],
+  "native_gate": {
+    "tests": 2,
+    "seconds": 43.35,
+    "installed_source": true,
+    "paid_provider_calls": 0,
+    "controlled_localhost_posts": 8,
+    "saved_history_restart_native_channel_reply": {
+      "original_root": "/var/tmp/ac-sealed-test-1znq0hjw",
+      "wire_root_id": "af1c2904427f44888633711856ed5f37",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+      "saved_restart": true,
+      "contended_cursor": false,
+      "localhost_posts": 5,
+      "provider_failures": [],
+      "owners_stopped": true,
+      "server_thread_alive": false,
+      "wire_sha256": "b6e863294fa9672530053375ab40db2d9bbec0a928c37dddfb27f243a5931cdd"
+    },
+    "unknown_owner_release_new_input": {
+      "provider": "localhost-only",
+      "provider_posts": 3,
+      "recorded_epoch": true,
+      "exact_live_owner_refused": true,
+      "exact_dead_owner_recovered": true,
+      "unknown_retained": true,
+      "input_rows_wire_native_proof_unchanged_by_recovery": true,
+      "old_input_automatic_replay_posts": 0,
+      "new_independent_input_completed": true,
+      "native_prefix_sha256": "af687cba28552a9d4ff6a6f091e86c893e8ddc8fc1bde8d765ad5285358b41ff",
+      "proof_preimage_sha256": "d34bf25361275dc1aa0cced23993fe3fe724edfb2c7951a528e3344e8ce62d5e",
+      "native_children_closed": true,
+      "public_effects": 0
+    },
+    "raw_log": "/home/ts/.cache/agent-scratch/mendel-native-execution-472-20261001/native01.log"
+  },
+  "source_controls": [
+    {
+      "passed": 43,
+      "seconds": 3.0,
+      "log": "/home/ts/.cache/agent-scratch/mendel-native-execution-472-20261001/source03.log"
+    },
+    {
+      "passed": 26,
+      "seconds": 12.92,
+      "log": "/home/ts/.cache/agent-scratch/mendel-native-execution-472-20261001/source04.log"
+    }
+  ],
+  "final_guard": {
+    "passed": 5,
+    "seconds": 0.84,
+    "log": "/home/ts/.cache/agent-scratch/mendel-native-execution-472-20261001/guard01.log",
+    "known_bad_original_leads": 3
+  },
+  "durable_binding": {
+    "schema_unchanged": true,
+    "original_470_rows_readable": 3,
+    "original_sha_unchanged": true,
+    "reset_authorized": false,
+    "new_reader_or_converter": false
+  },
+  "runtime": {
+    "native_schema_from": 4,
+    "native_schema_to": 5,
+    "parent_quiet_cutover_only": true,
+    "preserve_existing_execution_decisions_unknown_wire_goals_native_proofs": true
+  },
+  "cleanup": {
+    "actual_owned_process_exit_asserted_by_existing_fixtures": true,
+    "localhost_server_thread_closed": true,
+    "copied_raw_private_proofs_preserved": [
+      "/home/ts/.cache/agent-scratch/mendel-native-execution-472-20261001/roundtrip-native01/private-originals",
+      "/home/ts/.cache/agent-scratch/mendel-native-execution-472-20261001/unknown-native01/private-originals"
+    ],
+    "paid_or_public_actions": 0
+  },
+  "limits": [
+    "No physical Toad UI/public activation gate claimed",
+    "Only native runtime projection schema changes; original coordinator decisions and durable prelaunch bindings must remain protected",
+    "Parent integration/cutover owns staging and runtime reset",
+    "Actual channel acceptance uses existing CommsClient ACP adapter and real detached owners/native; native extension implementation unchanged"
+  ]
+}

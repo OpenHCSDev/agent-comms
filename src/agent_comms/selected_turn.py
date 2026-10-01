@@ -177,12 +177,12 @@ class SelectedAttempt:
             wake_assignment_id=assignment.assignment_id,
             wake_revision=assignment.revision,
             recipient_lookup=participant.lookup,
-            execution_id=self.stage.execution_id,
+            execution_id=self.stage.execution.require_attempt().execution_id,
             operation_id=action.operation_id(),
             owner_admission_generation=participant.owner.admission_generation,
             turn_id=turn.id,
             participant_generation=participant.identity.generation,
-            attempt_ordinal=self.stage.attempt_ordinal,
+            attempt_ordinal=self.stage.execution.require_attempt().attempt_ordinal,
         )
         return CodingToolOwner(
             participant.comms,
