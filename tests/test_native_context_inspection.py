@@ -66,7 +66,9 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
         assert fixture.saved_inputs() == []
 
 
-async def test_context_manifest_native_acp_and_cli_continuous(native_backend, receiving_only=False):
+async def test_context_manifest_native_acp_and_cli_continuous(
+    native_backend, receiving_only=False, authored_operations_only=False
+):
     """Actual Toad originals/followup, native Core tool and CLI on one source.
 
     The existing SDK source contract seeds real history/summary/image/resource
@@ -93,6 +95,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
     out, err = await seed.communicate()
     assert seed.returncode == 0, err.decode()
     source = json.loads(out)
+    fresh_session, fresh_project = fixture.session, fixture.project
     fixture.session = Path(source["session_file"])
     # The SDK session's declared worktree is the source contract's project.
     project = fixture.root.parent / "sdk-source" / "project"
@@ -122,6 +125,18 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
         process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=str(fixture.session), model="response-local/fixture", thinking_level="off")
     owner._comms.registry.declare(thread)
+    if authored_operations_only:
+        from retained_context_native_journey import authored_context_operations
+
+        try:
+            await owner._runtime.start()
+            await owner.load_session(str(project), thread.name)
+            await owner.turns.prepare_selected_session(thread.name, thread)
+            await authored_context_operations(fixture, owner, thread, fresh_session, fresh_project)
+            assert failures == [], failures
+        finally:
+            await owner.shutdown()
+        return
     peer = Thread("context-peer", frozenset({'team'}), str(project),
                   process_identity=ProcessIdentity.capture(os.getpid()))
     owner._comms.registry.declare(peer)
