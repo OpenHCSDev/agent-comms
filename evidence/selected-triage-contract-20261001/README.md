@@ -76,4 +76,11 @@ external absence once), BOUND-1 (strict boundary decoding), TIME-9 (reuse sealed
 FieldCodec). The malformed-result failure is distinct from unknown native send;
 this checkpoint does not grant recovery or replay of uncertain original inputs.
 
-State: code and scoped installed journey ready; not merged or default live yet.
+Final integrated checkpoint bdac1c24 normally incorporates merged Core487.
+Installed journey03 passed24.31s with the same continuous workflow and four
+localhost requests; all306 installed Python files match this integrated source.
+The final focused batch passed17 /64 deselected in10.38s, including canonical
+Failed notification and sealed-codec ownership. Changed-source ratchet has zero
+positive deltas. Production:27 lines deleted,155 added across8 modules.
+
+State: scoped installed integration ready; not default live yet.
