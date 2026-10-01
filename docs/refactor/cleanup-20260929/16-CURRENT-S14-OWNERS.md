@@ -54,7 +54,7 @@ Full live channel acceptance follows quiet history carry, not before it.
 | Receiver admission and DM/IRC readiness | Arendt476/267; parent installation | Both merged. Native cancel-before-grant and independent reply pass; actual DM readiness passes. Quiet installation and post-carry channel acceptance remain. |
 | Original archived history | Mendel477/268 | Both merged. Physical Saved→native41MB history→End→IRC passes36.43s. Final combined private ArchiveJourney PASSES36.23s under SAME45s deadline: actual Saved/native41MB history/focus/End/IRC personally reviewed. Failed05 observer export preserved; optional unused selector DTO skipped in merged273, retaining its PNG/time. Original source/index carry prepared, not published. |
 | Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271; Kepler profiles |269 merged: body constructions275→119; actual41MB journey16 checks pass91.07s. CPU remains high. Native library PR1 merged f6d3cdd0: Resize owns sizing;5 production lines deleted. Actual installed four-consumer check removes4 mount-triggered full layouts and preserves ordinary/prepared/fixed/padded resize behavior. Full original41MB comparison and TC1/T9/buffer/velocity/End/focus/resource scope remain. Not yet the public default. |
-| Original TC1 terminal execution lifecycle | Arendt274 implementation; Kepler actual PTY/ACP journey | Independent continuation of the original TC1 plan, tracked in new draft274. One execution owner, all terminal ACP/controller/widget consumers; no changes to Heisenberg's session/transcript/viewport files without direct agreement. Installed journey pending; no product readiness claim. |
+| Original TC1 terminal execution lifecycle | Arendt274 implementation; Kepler actual PTY/ACP journey | Core480 merged dac8ffcf and Toad274 merged083245d0. One original child/execution owner and migrated ACP/controller/widget consumers. Installed continuous native ACP/PTY journey passes22.609s; actual tab return, cancellation, failure, descendant retirement and final group cleanup reviewed.265 Toad production lines deleted/10 Core lines deleted. Not default-installed; other TC1 files remain with Heisenberg. |
 | S5 phase1 context ownership | Einstein473 | Latest installed continuous journey39 passes48.995s on private270/0064: actual Toad originals/image, queued controller followup, native nested Core tool, three text-free manifests and context --turn/--diff. Parent read its original inputs/provider requests and CLI artifacts. Configured-provider saved-session acceptance and full phase1 closure remain; no public installation claim. |
 | S2 retained facts and provenance | Schrodinger475; Toad pair272 | Selected installed native retention passes9.59s. Authenticated ingress origin extends original PromptRequest/reservation/StoredInput; unproven historical inputs stay neutral. General constraints/artifact proofs/three checkpoints unfinished. Explicit controller producer methods granted; Einstein coordinates context API. |
 | S5 phase2 authored retained operations | Einstein474 | Dependency: S2 retained classes. Pin/supersede/drop/export and real compaction/fresh-thread journeys remain. |
@@ -219,11 +219,36 @@ crossing in pushed4552528d: typed StreamingChildStdio through admitted_spawn and
 AgentProcess's existing10MiB stream limit. Parent reviewed the source and remote
 head. No compatibility kwargs or alternate spawn path. Current Toad production
 versus8116949e deletes265 lines/adds463 across9 files; Core480 deletes10/adds42.
-Mendel is authorized for the sole normal paired stage; Kepler's continuous native
-ACP/PTY journey must cross that launcher before acceptance. Not yet installed.
+Mendel's sole normal69-package paired stage is verified. Kepler's installed
+LinuxDriver/native ACP/PTY journey passes22.609s, including the corrected normal
+launcher, original ANSI resource reuse on actual tab return, SIGKILL, cancelled
+wait, two release cancellations, UTF8 bounds, missing cwd and exited-leader
+surviving-child retirement. Parent personally viewed the reattached frame and
+checked exact original beta/project identities after shutdown: both dead and
+both groups empty. Startup cancellation proves pre-acquisition refusal only.
+Core480 is merged dac8ffcf at8c328f33; Toad274 is merged083245d0 at7d5aed65.
+Ready heads change only evidence from testedf8ae/455. No new provider calls,
+public input, replay, native build or default change. Receipt: Toad274
+evidence/terminal-execution/installed-custody-20261001.json (a326895c).
 
 S2/S5 journey39's original negative32–35 attempts remain preserved. The fresh
 0064 run at /home/ts/wt/s5i08 used3 localhost POSTs and0 paid calls; original
 inputs were not retried. Both original logical turns are distinct, while the
 first turn contains its original queued followup. Configured-provider saved
 acceptance remains Einstein's next action, independent of public quiet carry.
+
+Configured saved acceptance41 subsequently passed51.415s: one actual original
+Toad/ACP/native input and reply on an SDK fork of Tristan's41,270,257-byte NRA
+source, selected openai-codex/gpt-6.1-sol with thinking off. The original source
+and exact owner proof remain unchanged; one silent manifest and CLI query are
+recorded; private owner shutdown and Toad executor joined. No original replay.
+Parent read the raw receipt and contributor/guidance map. This does not claim
+intercepted TLS bytes, equal stochastic outputs or public installation.
+
+Before473 integration, parent found its main diff also contains475's new
+CommsDecisionTool and retained-fact/origin declarations. That new tool changes
+the provider catalog; comparing only the already-combined43df artifact cannot
+prove unchanged Phase1 input against old main. Einstein and Schrodinger own
+separating and accepting the S2 foundation checkpoint/stack, with the comparison
+base explicitly named. Full475 constraints/artifact proofs/three checkpoints
+and474 authored operations remain open. No extra paid rerun is requested.
