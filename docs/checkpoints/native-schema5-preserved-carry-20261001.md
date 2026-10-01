@@ -1,21 +1,37 @@
 # Native schema4 to5: installer-owned preserved carry
 
-Integration owner: dedicated carry agent. Kepler490 owns Core batch declarations; Arendt489 owns runtime lifecycle integration. This branch extends the existing486 installer, not Core product owners. Parent owns public execution. No public effects, owner stop, input replay or provider call are authorized here.
+Status: **Ready for operator review; unactivated.** PR495 owns the installation carry. Kepler490 owns batch declarations/producers; Arendt489 owns lifecycle/coverage/cursor integration; Schrodinger494 owns compaction. Parent owns public execution. Accepted default474ee/53b8 remains untouched and correct; same-format474 release is independent of this carry.
 
-## Existing owner/caller analysis
+## Existing owners and coherent extension
 
-Read before implementation: OriginalTypedCapture/CurrentTypedCapture and CapturedOriginalOwner; OwnerCutover/StoppedOwnerInstallation; RuntimeInstallation Reset/Preserve; AcquiredRuntimeFiles/RetainedRuntimeFile; PublishRetainedSummary; original routing carry/preimage writer; declaration-derived runtime schema and private sidecar snapshot owner. The original process owns old-format decoding. Target declarations own new schema; no production old-reader, compatibility family or alternate lifecycle is added.
+Read before implementation: OriginalTypedCapture/CurrentTypedCapture/CapturedOriginalOwner, OwnerCutover/StoppedOwnerInstallation, RuntimeInstallation Reset/Preserve, AcquiredRuntimeFiles/RetainedRuntimeFile, PublishRetainedSummary, original routing preimage writer, declaration-derived native schema and private_sidecar snapshot publication. [Actual declaration and consumer search](../../evidence/native-schema5-carry-20261001/existing-owner-search.txt) records the existing owners. No product schema, old production reader or alternate lifecycle owner is added.
 
-490 declaration checkpoint f3c05c178843c8bb2c19c3ad29d08277ef4101e6 removes assignment_id from NativeRuntimeInput and CurrentNativeCursor, and assignment_id/source_seq/message_id from PromptBinding; runtime version4 becomes5. FULL membership derives from immutable execution_claims. TRIAGE gets a native runtime source relation, carrying each original recorded singleton without inventing accepted native evidence. Original native context/proof/outcome/session/input IDs and owner epochs must survive exactly.
+CarryNativeRuntimeInstallation inherits PreserveRuntimeInstallation. Changed-format installation is genuinely different behavior from byte-preservation or removal, so it belongs as a member of that existing installation family. NativeSchemaDeclaration/CarryPlan/CarriedNativeStore are reviewed operator artifacts, not schema or membership authorities. RuntimeNativeFiles extends the existing file acquisition capability. Original target DDL and NativeInputExecution.record_sources own schema and membership; original private_sidecar owns snapshot durability.
 
-## Owned extension and preservation
+The publisher's unconditional old SQLite byte-equality check is replaced by the installation member's exact byte-invariant set. The carried stores must match reviewed target hashes and have durable original preimages. All other protected files and compaction bytes remain unchanged. Existing stopped custody, restart and launch implementations are reused.
 
-Extend RuntimeInstallation with the genuine changed-format carry behavior. Reuse Preserve for compaction files; only coordination and prompt-binding schema preimages are authorized transformations. The stopped publisher must derive which files are byte-invariant versus reviewed carried stores from the installation member, rather than unconditionally requiring migrated SQLite bytes to equal old bytes.
+## Exact490 transformation and preservation
 
-Require exact source/target declaration attestations and reviewed matched candidate clone before publication. Retain original database bytes and all companions before any schema write; source root never serves as a repair/retry source. Verify original table/row preservation, removed anchor identity retention in private preimages, exact remaining columns, original membership/source corroboration and target schema/digest. Any uncertain partial publication remains stopped with preimages and receipt; never reset or automatically repeat. Native files, UNKNOWN/outcomes and compaction journals are preserved, not reconstructed.
+Target declaration checkpoint: f3c05c178843c8bb2c19c3ad29d08277ef4101e6. NativeRuntimeInput and CurrentNativeCursor remove assignment_id; PromptBinding removes assignment_id/source_seq/message_id; native version4 becomes5. Every remaining cell is an exact original projection, including input IDs, owner epochs, native context/digest/session/outcome/proof references and cursor identity. Unrelated coordination schema and rows must match exactly.
 
-## Scope and order
+FULL membership remains the ordered immutable original execution_claims, including multiple links; its original anchor must be a member and all claims must name the original owner. TRIAGE carries the exact original singleton into the existing target relation. Prompt source and physical input identity are corroborated before dropping anchor columns. No message-body/time inference, expanded cohort or reconstructed native proof occurs. Unproven original input remains unproven.
 
-Source ownership/caller inventory -> coherent existing installation extension and deletion of replaced assumptions -> bounded final validation of the operator using matched private candidate clones and installed interpreters. No heavy build/full suite, new peer agent or competing Core/native patch.474 same-format release does not depend on this carry. No APPEND/AGENTS edits.
+The candidate is separate persistent owned storage. Capture source declarations using the authentic original interpreter; derive target declarations using the exact receiving interpreter. Retain exact original database bytes before replacement. Reject changed source/candidate/declarations, prior attempt/preimages, any SQLite companion, UNKNOWN snapshot marker or intermediate selected_native_sources store. Partial publication remains stopped with its original preimages and attempt; there is no automatic rollback/retry/recovery/reset.
 
-Status: draft opened at semantic checkpoint; implementation and final validation in progress. No readiness or public execution claim.
+## Parent operator handoff
+
+Preparation CLI only captures declarations or transforms a matched private candidate; it has no public installation command. Use the actual original interpreter for `tools/cutover/native_schema_carry.py --declaration`. Use the exact receiving interpreter for `--root ORIGINAL_ROOT --candidate FRESH_PERSISTENT_CANDIDATE --original-declaration ORIGINAL_DECLARATION_JSON --plan FRESH_PLAN_JSON`.
+
+Decode that reviewed plan with FieldCodec.decode(NativeSchemaCarryPlan, ...), wrap it in CarryNativeRuntimeInstallation(plan), and encode through the existing RuntimeInstallation family. The existing parent executor accepts this member through --runtime-installation. Publication uses the existing PublishRetainedSummary.after_stopped owner; no new stop/launch flow is introduced.
+
+The plan must match the exact originals under stopped custody. Live preparation does not authorize changes made between preparation and stop; changed source hashes refuse. Parent must review the actual matched preimages/candidate and preserve the stopped attempt on any refusal. This checkpoint does not supply an automatic recapture algorithm or attest the current public source merely from an earlier installed fixture.
+
+## Completed final validation
+
+Order followed: source ownership/caller analysis -> coherent existing installation extension and replacement of the old guard -> final installed operator controls. No controls were rerun after recovering lost CLI handles.
+
+[Final installed receipt](../../evidence/native-schema5-carry-20261001/installed-operator07.json): authentic installed schema4 producer fixture -> matched candidate -> existing RuntimeInstallation FieldCodec/member -> installed schema5 coordination, binding and cursor readers. It preserves two physical native inputs, two original FULL execution links, one original TRIAGE singleton, two prompt bindings, one cursor and all24 protected files. Exact original DB bytes are retained. Five refusal controls passed: candidate change, source change, existing attempt, companion and UNKNOWN snapshot marker. The final process exited0; no owned control process remained at the recovered checkpoint.
+
+The schema4 producer was the installed native491 fixture prefix; the receiving5 fixture wheel was built from the490 checkpoint above. This proves the installed operator path on owned representative originals. It does not claim whole stopped-cohort publication, actual accepted-default migration, native/provider execution or UI activation. Counts: public mutations0, owner stops0, provider calls0, native inputs0, retired originals0, reconstructed proofs0, replays0.
+
+[Semantic closure and hashes](../../evidence/native-schema5-carry-20261001/semantic-closure.json) and [historical owned fixture attempts](../../evidence/native-schema5-carry-20261001/historical-control-attempts.json) remain persistent. Heavy artifacts and original databases remain owned under .artifacts/native-schema5-carry and are excluded from Git. No APPEND/AGENTS edits.

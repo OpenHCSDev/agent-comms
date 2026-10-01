@@ -258,6 +258,8 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         PrivateDirectoryRole.require(directory.lstat())
         paths = self.protected_files()
         protected = {str(path): digest(path) for path in sorted(paths)}
+        unchanged = self.runtime_installation.unchanged_protected(paths)
+        invariant = {str(path): protected[str(path)] for path in unchanged}
         # No decoding of old input records from a target-compaction journal.
         with RuntimeCompactionFiles(ROOT).acquire() as runtime:
             original_files = self.runtime_installation.retain_protected(paths, directory)
@@ -269,9 +271,10 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
             # The carry and runtime member share the ORIGINAL stopped wire custody.
             self.task_carry.after_stopped(lifecycle)
             installed = self.runtime_installation.install(runtime, directory / 'runtime-compaction')
-            if self.protected_files() != paths or {str(path): digest(path) for path in sorted(paths)} != protected:
+            if self.protected_files() != paths or {str(path): digest(path) for path in unchanged} != invariant:
                 raise RuntimeError('Original input/native/proof/goal bytes changed; remain stopped')
-            self.note('runtime-installed-protected-originals-unchanged', runtime_installation=installed)
+            self.note('runtime-installed-protected-originals-unchanged', runtime_installation=installed,
+                      byte_invariant_originals=invariant)
         self.cohort.publish(self.route_directory)
         self.note('target-route-and-defaults-published-before-retained-launch')
 

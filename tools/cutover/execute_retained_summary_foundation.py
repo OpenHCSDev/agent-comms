@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--review-plan', type=Path, required=True)
     parser.add_argument('--receipt', type=Path, required=True)
     parser.add_argument('--runtime-installation', type=Path, required=True,
-                        help='Reviewed declared Reset or Preserve member JSON')
+                        help='Reviewed RuntimeInstallation member JSON')
     parser.add_argument('--execute', action='store_true')
     args = parser.parse_args()
     if not args.execute:

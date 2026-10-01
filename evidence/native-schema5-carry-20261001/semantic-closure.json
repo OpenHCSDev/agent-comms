@@ -1,0 +1,52 @@
+{
+  "state": "ready-installer-checkpoint-unactivated",
+  "target_checkpoint": "f3c05c178843c8bb2c19c3ad29d08277ef4101e6",
+  "existing_owner_search": "existing-owner-search.txt",
+  "sequence": [
+    "existing owners and callers",
+    "coherent installation member and replaced guard",
+    "final installed operator validation"
+  ],
+  "authority": {
+    "native_schema": "existing Core declarations, Kepler490",
+    "execution_membership": "existing NativeInputExecution family; original execution_claims for FULL, exact original singleton for TRIAGE",
+    "custody": "existing StoppedOwnerInstallation/owner_restart, Arendt489 lifecycle",
+    "installation": "existing RuntimeInstallation family, PR495 carry member",
+    "snapshot_publication": "existing private_sidecar durability owner",
+    "compaction": "existing PreserveRuntimeInstallation; no changes, Schrodinger494 owner"
+  },
+  "new_behavior_rationale": "Changed-format installation cannot use byte-preserve or destructive-reset operations. CarryNativeRuntimeInstallation extends existing PreserveRuntimeInstallation for this genuine operation. SchemaDeclaration/CarryPlan/CarriedNativeStore are operator attestation/artifact records; they declare no product schema, membership or lifecycle authority. RuntimeNativeFiles reuses existing file acquisition capability for the two native stores.",
+  "deleted_assumption": "Publisher no longer requires reviewed migrated SQLite bytes to equal old SQLite bytes. Existing installation member owns exact byte-invariant files; carried stores require reviewed target hashes and retained original bytes.",
+  "preservation": "Exact original table/row projections, all unrelated schemas/rows, multiple immutable FULL links, original TRIAGE singleton, native proof/session/outcome/input files, unresolved native input, cursor and prompt identity. Original database files retained before replacement; retired=[], reconstructed_proofs=0, input_replays=0.",
+  "refusal_scope": [
+    "changed candidate",
+    "changed source preimage",
+    "existing attempt/preimages",
+    "any native SQLite companion",
+    "UNKNOWN snapshot marker",
+    "unreviewed intermediate selected_native_sources schema",
+    "different source/target declarations"
+  ],
+  "completed_final_validation": "installed-operator07.json; no rerun after lost CLI handles; process completed with exit 0, no owned control process active at recovered checkpoint",
+  "limits": [
+    "Controlled original roots only; no public stopped-cohort publication or live UI/native readiness claim.",
+    "Source4 installed491 prefix is a fixture producer, not attestation of the accepted parent default474ee/53b8.",
+    "Actual installation requires exact source declaration and stopped source preimage hashes matching reviewed candidate; changed source refuses without implicit recapture/retry.",
+    "Only empty-companion snapshot files are accepted; unresolved originals require their original operation owner."
+  ],
+  "public_mutations": 0,
+  "owner_stops": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "files_sha256": {
+    "tools/cutover/native_schema_carry.py": "7ec7b8afb4bec00ad3e39eb078e33bbd1e23d8946fcbc02451784a72589fba48",
+    "tools/cutover/native_schema_carry_controls.py": "93de8c5eb5cd471534b50248312c0bbc15581fc497e16e35db82be539eebf7dd",
+    "tools/cutover/runtime_installation.py": "cc591684001e781d8bfc64a1270337df7e8c944b02cb237fd45ca705b26191be",
+    "tools/cutover/publish_retained_summary.py": "1bcd6c768cfb0fda261ffcf4defc4232275b933c7c46006b70ca416c69daa9ae",
+    ".artifacts/native-schema5-carry/wheels/agent_comms-0.1.0-py3-none-any.whl": "8c23633a3c68817f00688e45791f0b5100594f80abab3e4937f5da3e9a88e1a1",
+    ".artifacts/native-schema5-carry/original-declaration.json": "dd89e0f88c57ebcadcdb215d7e1427f9c3e3215482e6b18294499b14a99c53ff",
+    ".artifacts/native-schema5-carry/target-declaration.json": "c437613f4508512d54336f6d08a0381405403b999248e8547dcf183053c88c9f",
+    "tools/cutover/execute_retained_summary_foundation.py": "49c9a05298b68ccfd91dc75c9de8980e2a0a72e6b670e45d581ccac3ae6e3a19"
+  },
+  "caller_closure": "Existing executor decodes the root RuntimeInstallation family; final control07 covers that root decode. CLI help now names the family rather than an obsolete two-member list."
+}
