@@ -9,6 +9,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.retained_task_facts import RetainedTaskFacts
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
@@ -63,6 +64,7 @@ def test_late_original_outcome_invalidates_source_and_pages_once(tmp_path):
                      incarnation=comms.registry.require("worker").incarnation,
                      turn=TurnId("original-manual-turn"), reserved_revision=SessionRevision.observe(str(native)).require_available()),
         SelectedModel("controlled", "fixture", 272000), PiCompactionSettings(16384, 20000),
+        RetainedTaskFacts(()),
     )
     original = SelectedSummaryAttempt("a" * 32, str(native),
                                      json.dumps(FieldCodec.encode(source)), ReservedSummary())

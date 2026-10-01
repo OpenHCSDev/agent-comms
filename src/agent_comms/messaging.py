@@ -20,7 +20,7 @@ from .messages import Message, MessageType
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
-from .task_decisions import Decision
+from .task_decisions import DecisionAttachment, NoDecision
 
 _LOG = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class Messaging:
         notice: bool = False,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
-        decision: Decision | None = None,
+        decision: DecisionAttachment = NoDecision(),
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):

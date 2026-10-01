@@ -27,8 +27,10 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal
 from .messages import MessageType
-from .message_reference import MessageReference
-from .task_decisions import Decision, DecisionScope
+from .task_decisions import (
+    CurrentDecisionScopeSelection, Decision, DecisionChange,
+    DecisionScopeSelection, OriginalDecisionChange,
+)
 from .thread_identity import TurnId
 from .relationships import RelationshipEdit
 from .restart_queue import cancel as cancel_restart
@@ -659,17 +661,20 @@ class CommsDecisionTool(ToolRequest):
     chosen: str = tool_field("Chosen alternative, preserving exact wording")
     rejected: tuple[str, ...] = tool_field("Nonempty unique valid rejected alternatives")
     target: str = tool_field("Thread or channel receiving the original declaration", wire_name="to")
-    scope: DecisionScope | None = tool_field("Current project/goal or turn scope", default=None)
-    supersedes: MessageReference | None = tool_field("Original decision reference being corrected", default=None)
+    scope: DecisionScopeSelection = tool_field(
+        "Current project/goal or explicit scope", default=CurrentDecisionScopeSelection())
+    change: DecisionChange = tool_field(
+        "Original declaration or correction naming its original reference",
+        default=OriginalDecisionChange())
 
     def apply(self, comms: Comms) -> JsonObject:
         owner = comms.registry.require(_executing_thread())
         lease = owner.require_turn_lease()
         declaration = Decision(
             chosen=self.chosen, rejected=self.rejected,
-            scope=self.scope or DecisionScope.for_owner(owner),
+            scope=self.scope.select(owner),
             source_turn=lease.identity, source_turn_id=TurnId(lease.turn_id),
-            supersedes=self.supersedes,
+            change=self.change,
         )
         message = comms.messaging.send_message(
             owner.name, self.target, declaration.text, notice=True, decision=declaration

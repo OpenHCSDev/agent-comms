@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -31,11 +31,6 @@ class DecisionScope(DeclaredFamily, affix="DecisionScope"):
     @abstractmethod
     def require_context(self, owner: Thread) -> None: ...
 
-    @classmethod
-    def for_owner(cls, owner: Thread) -> DecisionScope:
-        return owner.decision_scope
-
-
 @dataclass(frozen=True, kw_only=True)
 class GoalDecisionScope(DecisionScope):
     goal: GoalRevision
@@ -54,14 +49,94 @@ class TurnDecisionScope(DecisionScope):
             raise RelationViolationError("An active goal requires its revision scope")
 
 
+class DecisionScopeSelection(DeclaredFamily, affix="ScopeSelection"):
+    @abstractmethod
+    def select(self, owner: Thread) -> DecisionScope: ...
+
+
+@dataclass(frozen=True)
+class CurrentDecisionScopeSelection(DecisionScopeSelection, declared_name="current"):
+    def select(self, owner: Thread) -> DecisionScope:
+        return owner.decision_scope
+
+
+@dataclass(frozen=True)
+class ExplicitDecisionScopeSelection(DecisionScopeSelection, declared_name="explicit"):
+    scope: DecisionScope
+
+    def select(self, owner: Thread) -> DecisionScope:
+        self.scope.require_current(owner)
+        return self.scope
+
+
+class DecisionChange(DeclaredFamily, affix="DecisionChange"):
+    @abstractmethod
+    def require_publication(self, decision: Decision, registry: RegistrySnapshot,
+                            original_source: CertifiedSourceRead | None) -> None: ...
+
+
+@dataclass(frozen=True)
+class OriginalDecisionChange(DecisionChange, declared_name="original"):
+    def require_publication(self, decision, registry, original_source) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class CorrectionDecisionChange(DecisionChange, declared_name="correction"):
+    original: MessageReference
+
+    def require_publication(self, decision, registry, original_source) -> None:
+        if original_source is None:
+            raise RelationViolationError("Decision correction requires the original publication read")
+        from .private_bus_checkpoint import source_references_unlocked
+
+        original, = source_references_unlocked(original_source, (self.original,))
+        if original.reference != self.original:
+            raise RelationViolationError("Decision correction requires its original wire reference")
+        decision.require_correction(original, registry)
+
+
+class DecisionAttachment(DeclaredFamily, affix="DecisionAttachment"):
+    """Absent attachments have no publication, fact or author effects."""
+
+    retains_authored_choice = False
+
+    def require_decision(self) -> Decision:
+        raise RelationViolationError("Original wire message has no declared decision")
+
+    def require_sender(self, sender: str) -> None:
+        pass
+
+    def require_publication(self, sender, registry, original_source) -> None:
+        pass
+
+    def retained_task_facts(self, message: Message):
+        return ()
+
+
+@dataclass(frozen=True)
+class NoDecision(DecisionAttachment, declared_name="absent"):
+    pass
+
+
 @dataclass(frozen=True, kw_only=True)
-class Decision:
+class Decision(DecisionAttachment, declared_name="choice"):
     chosen: str
     rejected: tuple[str, ...]
     scope: DecisionScope
     source_turn: TurnIdentity
     source_turn_id: TurnId
-    supersedes: MessageReference | None = None
+    change: DecisionChange = field(default_factory=OriginalDecisionChange,
+                                   metadata={"wire_omit_default": True})
+    retains_authored_choice = True
+
+    def require_decision(self) -> Decision:
+        return self
+
+    def retained_task_facts(self, message: Message):
+        from .retained_task_facts import DecisionTaskFact
+
+        return (DecisionTaskFact(message),)
 
     def __post_init__(self) -> None:
         if not self.chosen.strip():
@@ -98,8 +173,6 @@ class Decision:
         self.scope.require_current(owner)
 
     def require_correction(self, original: Message, registry: RegistrySnapshot) -> None:
-        if original.reference != self.supersedes:
-            raise RelationViolationError("Decision correction requires its original wire reference")
         previous = original.require_decision()
         if previous.author.resolved(registry) != self.author.resolved(registry):
             raise RelationViolationError("An agent cannot correct another author's decision")
@@ -113,11 +186,4 @@ class Decision:
         author = registry.require(sender)
         author.require_turn(self.source_turn_id, registry.admission_generations[sender])
         self.require_emission(author)
-        if self.supersedes is None:
-            return
-        if original_source is None:
-            raise RelationViolationError("Decision correction requires the original publication read")
-        from .private_bus_checkpoint import source_references_unlocked
-
-        original, = source_references_unlocked(original_source, (self.supersedes,))
-        self.require_correction(original, registry)
+        self.change.require_publication(self, registry, original_source)

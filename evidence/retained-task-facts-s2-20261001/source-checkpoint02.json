@@ -1,0 +1,38 @@
+{
+  "status": "SOURCE_CHECKPOINT_NOT_READY",
+  "source_base": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+  "ownership_patterns": [
+    "IDEN-1",
+    "IDEN-5",
+    "BOUND-2",
+    "BOUND-4",
+    "MEMB-1",
+    "TIME-9"
+  ],
+  "semantic_states": "DecisionAttachment absent/choice; DecisionChange original/correction; scope selection current/explicit; no nullable Decision state",
+  "canonical_input_selection": "Uses InputDocument.compaction_rows once. Future accepted-but-unadmitted inputs remain in original durable queue and cannot become an earlier native checkpoint source. Historical unresolved originals stay exact.",
+  "packing": "SelectedSummarySource retained projection -> derived retainedText on original selected request -> native policy prefix plus shrinkable narrative -> same commit with source equality and exact prefix proof. No second commit/store.",
+  "deletions": {
+    "dormant_retention_implementation": 149,
+    "obsolete_retention_tests": 132
+  },
+  "evidence": {
+    "packing_source01": "41 passed, 15 actual/native cases deselected; no native acceptance claim",
+    "nominal_source01": "69 passed, one tool_catalog failure: generic family JSON schema missing",
+    "source_fence01": "1 passed actual canonical registry/wire/input/native-file locks; goal replacement rejects source, original file/input bytes unchanged",
+    "source_custody01": "4 passed; obsolete unrelated input-drain fixture references deleted TurnRunner.active_turns; no production state mirror restored",
+    "native_policy_packing01": "3 policy rounds using original Pi summary envelope; exact source unchanged, tool pair unchanged, mandatory overflow rejected. This is not 3 native checkpoints."
+  },
+  "shared_dependency": {
+    "field_schema": "Parent owns narrow shared FieldCodec schema contribution; no local schema interpreter",
+    "silent_wire": "Einstein owns473 whole WireRecord/readers;475 does not edit crossingwire files after publishedf6"
+  },
+  "remaining": [
+    "Shared generated family schema and full declared toolcatalog acceptance",
+    "Explicit user supersession authority; current same-author original/correction only",
+    "Effective decision scope/supersession selection and canonical completed tool/artifact provenance",
+    "Matched native bundle production manifest and installed checkpoint journeys; parent-controlled fixture slot",
+    "Retention-aware non-selected native path and optional recent-window shrinking with pair ownership",
+    "Separate S4 recall budget and original UNKNOWN protection"
+  ]
+}

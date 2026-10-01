@@ -409,6 +409,7 @@ class AgentCommsSummarizeCompaction(PiCommand):
     witness: NativeWitness
     selected: SelectedModel
     settings: PiCompactionSettings
+    retained_text: str = field(metadata={"wire_name": "retainedText"})
 
     custom_instructions: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "customInstructions"}

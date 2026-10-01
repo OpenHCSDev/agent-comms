@@ -10,7 +10,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.messages import Message, MessageType
-from agent_comms.task_decisions import Decision, DecisionScope
+from agent_comms.task_decisions import Decision
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool, tool_catalog
@@ -41,11 +41,11 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert original.notice and not original.starts_turn
     assert Message.from_committed_wire(original.to_wire()) == original
     correction = invoke_tool(comms, "comms_decision", {
-        **request, "chosen": "Keep /artifacts/certified-root", "supersedes": first["reference"],
+        **request, "chosen": "Keep /artifacts/certified-root", "change": {"kind": "correction", "original": first["reference"]},
     })
     rows = comms.bus.log.full_history()
     assert len(rows) == 2 and rows[0] == original
-    assert rows[1].decision.supersedes == original.reference
+    assert rows[1].decision.change.original == original.reference
     assert correction["reference"] == FieldCodec.encode(rows[1].reference)
     from agent_comms.retained_task_facts import RetainedTaskFacts
     from agent_comms.routing import DeliveryScope
@@ -61,7 +61,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     assert original.decision.chosen in retained.text
     assert original.decision.rejected[0] in retained.text
-    assert rows[1].decision.supersedes.message_id in retained.text
+    assert rows[1].decision.change.original.message_id in retained.text
     with pytest.raises(RelationViolationError, match="omitted"):
         retained.require_summary("Assistant prose cannot replace original choices")
     retained.require_summary(retained.text + "\n\nNarrative")
@@ -69,7 +69,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     before = bus.read_bytes()
     monkeypatch.setenv("PI_AGENT_ID", "beta")
     with pytest.raises(RelationViolationError, match="another author's"):
-        invoke_tool(comms, "comms_decision", {**request, "supersedes": first["reference"]})
+        invoke_tool(comms, "comms_decision", {**request, "change": {"kind": "correction", "original": first["reference"]}})
     assert bus.read_bytes() == before
     assert comms.registry.require("beta").turn_lease == beta.turn_lease
     monkeypatch.setenv("PI_AGENT_ID", "alpha")
@@ -92,7 +92,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     owner = replace(owner, goal=Goal("Keep exact scope", "goal", revision=1))
     comms.registry.register(owner)
     declaration = Decision(
-        chosen="A", rejected=("B",), scope=DecisionScope.for_owner(owner),
+        chosen="A", rejected=("B",), scope=owner.decision_scope,
         source_turn=owner.turn_identity,
         source_turn_id=TurnId(owner.active_turn.id),
     )
@@ -110,3 +110,47 @@ def test_invalid_alternatives_do_not_publish(comms, monkeypatch, chosen, rejecte
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_decision", {"chosen": chosen, "rejected": list(rejected), "to": "#team"})
     assert not comms.bus.log.full_history()
+
+
+def test_original_goal_input_and_user_sources_share_compaction_fence(comms):
+    from agent_comms.compaction_boundary import CompactionBoundary
+    from agent_comms.input_attempt import NotSentInput
+    from agent_comms.input_disposition import FutureInputQueue, InputDispositions
+    from agent_comms.owner_compaction_prepare import NativeWitness
+    from agent_comms.retained_task_facts import GoalTaskFact, InputTaskFact, UserSourceTaskFact
+
+    owner = admit(comms, "alpha")
+    saved = comms.root / "source-only.jsonl"
+    saved.write_text('{"type":"session","id":"source-only"}\n')
+    owner = replace(owner, session_file=str(saved), goal=Goal("Keep exact /artifacts/root", "original-goal"))
+    comms.registry.register(owner)
+    user = comms.messaging.send_user_message("alpha", "Never replay UNKNOWN", worktree=str(comms.root))
+    inputs = InputDispositions(comms.root / InputDispositions.filename)
+    historical = NotSentInput("acp:failed", None, "alpha", 1, "alpha", "original failed input")
+    inputs.update(lambda document: replace(document, rows={historical.key: historical}))
+    assert inputs.record("acp:future", seq=None, owner="alpha", admission=owner.active_turn.admission_generation,
+                         target="alpha", text="queued later, not compacted earlier")
+    document = inputs.read()
+
+    class FutureQueue(FutureInputQueue):
+        # A declared source-control receipt; no native/UI/queue acceptance claim.
+        def future_inputs(self, owner, pending_input_key):
+            return {"acp:future": document.rows["acp:future"]}
+
+    witness = NativeWitness("source-only", str(saved), "leaf", "kept", "1:2:3:4:5")
+    boundary = CompactionBoundary(comms.registry, inputs, FutureQueue())
+    _, generation = comms.registry.live_owner_with_generation("alpha")
+    before = (saved.read_bytes(), inputs.path.read_bytes())
+    with boundary.hold(owner, generation, witness) as held:
+        source = held.capture(None, None)
+        source.require_current(held)
+    assert next(fact.source for fact in source.retained.facts if isinstance(fact, UserSourceTaskFact)) == user
+    assert next(fact.source for fact in source.retained.facts if isinstance(fact, GoalTaskFact)) == owner.goal
+    assert tuple(fact.source for fact in source.retained.facts if isinstance(fact, InputTaskFact)) == (historical,)
+    assert (saved.read_bytes(), inputs.path.read_bytes()) == before
+    updated = replace(owner, goal=Goal("Replacement goal", "new-goal"))
+    comms.registry.register(updated)
+    with boundary.hold(updated, generation, witness) as held:
+        with pytest.raises(RelationViolationError, match="source changed"):
+            source.require_current(held)
+    assert (saved.read_bytes(), inputs.path.read_bytes()) == before

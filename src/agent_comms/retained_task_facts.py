@@ -23,12 +23,12 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
 
 
 @dataclass(frozen=True)
-class UserConstraintTaskFact(ExactTaskFact):
+class UserSourceTaskFact(ExactTaskFact):
     source: Message
 
     def __post_init__(self) -> None:
         if self.source.sender_role is not ThreadRole.USER:
-            raise RelationViolationError("A peer message is not a user constraint")
+            raise RelationViolationError("A peer message is not an original user source")
 
 
 @dataclass(frozen=True)

@@ -128,14 +128,14 @@ class HeldCompaction:
             ChannelCatalog(self.boundary.root / ChannelCatalog.filename).read().targets_for(owner.tags),
         )
         inputs = self.boundary.inputs._read_unlocked()
-        rows = inputs.compaction_rows(
+        rows, input_facts = inputs.compaction_material(
             owner, pending_input_key, self.boundary.future_queue
         )
         bus_revision, facts = WireLog(
             self.boundary.root / "bus.jsonl"
         ).compaction_messages_unlocked(delivery)
         facts += owner.retained_task_facts()
-        facts += inputs.retained_task_facts(owner)
+        facts += input_facts
         return CompactionSource(
             self.witness,
             f"{self.boundary.root}:{root.st_dev}:{root.st_ino}",
