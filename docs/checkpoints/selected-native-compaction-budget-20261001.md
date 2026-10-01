@@ -25,12 +25,15 @@ read-only request evidence during analysis. No tests-first, original input repla
 or public writes.
 
 Required final acceptance is ONE real installed continuous journey using the
-failing architecture-memory saved state COPIED to an owned isolated session.
-Preserve the exact configured provider, model, authentication, settings,
-extensions and hook route. Automatic compaction must complete and a DISTINCT
-fresh message must receive its native answer through the ordinary installed
-ACP/Native/Toad path. Record the operation, original/copy provenance, provider
-effects and original input disposition. This configured real-provider journey is
-explicitly authorized by the owner and standing instructions; no additional
-approval is needed. Do not substitute Loopback, fabricated protocol, startup-only
-or kernel-denied evidence for this acceptance, or choose another model/route.
+APPLICATION CANONICAL FORK of the actual failing `openhcs-architecture-memory`
+thread. The application must inherit the configured provider, model,
+authentication, settings, extensions, worktree and saved-state lineage. Do not
+reconstruct equivalent configuration or use a custom fixture/copy as acceptance.
+Automatic compaction must complete and a DISTINCT fresh ordinary message must
+receive its native answer through the installed ACP/Native/Toad path. Observe
+the real fork in isolated Xvfb/st. Record the canonical fork, original/fork
+provenance, provider effects and original input disposition. This actual fork and
+configured real-provider journey is explicitly authorized; no additional
+approval is needed. Do not substitute Loopback, explicit SelectedExecution,
+fabricated protocol, startup-only or kernel-denied evidence for this acceptance,
+or choose another model/route. Never replay the original failed input.
