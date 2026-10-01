@@ -96,9 +96,16 @@ The approved shared ThreadProvenance/RegistryProvenance declarations own the
 historical facts, with live declarations extending them. One-shot carry changes
 only history_sources.json for111 original declarations; preserve separate source
 incarnations, aliases and sessions and every frozen snapshot hash. Isolated
-carry proof may proceed now. Working47708359522 has26+20 source controls and isolated carry proof for111
-incarnations/9aliases; installed actual reader/catalog/aliases/history opening
-acceptance is active. Parent performs public carry only after the new
+carry proof may proceed now. Working47708359522 plus normal275a merge f65e53e4 has26+20 source controls
+and isolated carry proof for111 incarnations/9aliases. Fresh installed reader
+also exposed an older430 derived delivery_sources index mismatch in both
+archives: missing sender_lookup/index. This predates S5;275a adds no SQL schema.
+Mendel is rebuilding only the isolated runtime index with the existing installer
+for actual catalog/aliases/history/Saved sessions opening acceptance. Parent
+quiet release must preserve old index+bus_meta preimages and original wire,
+registry, native sessions, proofs and all source facts; reset/reseal only the
+existing derived index fields after the new reader is installed. No legacy SQL
+reader or public archive write during investigation. Parent performs public carry only after the new
 reader is installed. Runtime owner/turn/goal flags are not historical authority.
 
 ## Completed structural contributions
