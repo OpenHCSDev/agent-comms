@@ -181,6 +181,21 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
     candidate: tuple[HistorySource, ...]
     carry_proof: dict
 
+    def complete(self, stopped):
+        # FencedOwnerBatch retains the ORIGINAL wire custody through this
+        # method. Readback belongs here, before resumed owners may progress.
+        self.after_stopped(stopped.lifecycle)
+        results = stopped.launch()
+        after = stopped.lifecycle.registry.snapshot()
+        for previous, result in zip(self.originals, results, strict=True):
+            current = after.threads[result.thread]
+            if result.thread != previous.name or replace(current, process_identity=previous.process_identity) != previous:
+                raise RuntimeError('Original configuration readback differs under retained custody')
+            RetainedOwnerLaunch.capture(current, after, interpreter=str(TARGET / 'bin/python'))
+        self.note('retained-batch-launched-configurations-verified-public-ui-pending',
+                  finished=time.time(), results=FieldCodec.encode(results))
+        return results
+
     @property
     def manifest(self):
         return ROOT / HistoryArchive.filename
@@ -301,7 +316,8 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
         if read_active_route() != target_route:
             raise RuntimeError('Target route readback differs')
         self.note('target-route-and-defaults-published-before-retained-launch')
-        # Inherited complete() is the sole original credential/settings handoff.
+        # complete() invokes the sole original credential/settings handoff and
+        # verifies it before FencedOwnerBatch releases original wire custody.
 
 
 def main():
@@ -375,14 +391,6 @@ def main():
         runtime = RestartEnvironment(path=str(TARGET / 'bin')+':'+os.environ['PATH'], virtual_env=str(TARGET))
         results = service.owners.restart_owners(runtime=runtime,
             source_interpreter=str(args.source_interpreter), cutover=operation)
-        after = service.registry.snapshot()
-        for previous, result in zip(owners, results, strict=True):
-            current = after.threads[result.thread]
-            if result.thread != previous.name or replace(current,process_identity=previous.process_identity) != previous:
-                raise RuntimeError('Original configuration readback differs; no further automatic action')
-            RetainedOwnerLaunch.capture(current,after,interpreter=str(TARGET / 'bin/python'))
-        operation.note('retained-batch-launched-configurations-verified-public-ui-pending',
-                       finished=time.time(), results=FieldCodec.encode(results))
         print(json.dumps({'state':'published-and-launched','owners':len(results)}),flush=True)
     finally:
         os.close(directory)

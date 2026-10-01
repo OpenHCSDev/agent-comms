@@ -124,3 +124,30 @@ final-private-archive-review.json. Parent alone accepts scope-correct actual gat
 artifacts for the operator. Command defaults still contain no gate hashes and
 there is no execution by Arendt. Public channel acceptance follows the reviewed
 provenance/index publication; its preserved pre-carry refusal is not a pass.
+
+
+## Original custody owns configuration readback
+
+Parent's final source review identified a material operator race: comparing the
+whole original Thread after restart_owners returns loses original wire custody.
+A legitimate resumed saved266 input or goal can change active_turn, turn_generation
+or last_finished_turn_id, so that comparison can incorrectly report a settings
+failure after completed effects.
+
+The existing member now overrides complete(stopped), runs its after_stopped hook,
+then stopped.launch(), then verifies the full original Thread with only the
+canonical replacement ProcessIdentity and captures the exact target interpreter,
+WHILE FencedOwnerBatch retains its original wire descriptor. Receipt readback is
+written before that capability returns. The duplicate outside-lock comparison is
+deleted. No configuration field roster, state mirror, store or lifecycle kernel is
+introduced; the full original process/settings proof remains in its acquired
+custody. This is outside-src only and does not alter the frozen installed pair.
+
+Parent's accepted final positive DM readiness artifact:
+/home/ts/wt/comms-cleanup-live-integration-20260929/evidence/openhcs-recovery-cohort-20261001/final-dm-readiness.json,
+SHA2567fbea482b2c4a0dab2a48c8eaba1c8eca1129499fa4d4c2520c368a6c99b0ba2.
+This supplies the scoped --ui-gate artifact; the final archive gate remains
+c6daa9ed34f36a9efd02d6445e2c27432c6e3bc25dbfa3863a7d3fc005296abd.
+Public pre-carry channel refusal is still negative evidence. Parent's fresh
+quiet/client check and user client disposition precede any actual execution.
+No public preflight or execution was performed by Arendt.
