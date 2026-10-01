@@ -48,13 +48,18 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     assert comms.views.thread_detail("owner")["status"] == status.declared_name
     assert comms.views.list_threads()[0]["status"] == status.declared_name
     activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
-    view = ThreadView(thread, reopened.status("owner"), activity, None, 0)
+    comms.agents.activity.emit(activity)
+    view = ThreadView(thread, reopened.status("owner"), comms.agents.activity_of('owner'), None, 0)
     assert view.to_wire()["status"] == status.declared_name
     assert view.presentation.busy == status.active
     visible = comms.views.thread_views()
     individual = comms.views.thread_presentation("owner")
     if visible:
-        assert individual == visible[0].presentation
+        # Opening the individual acquires a transcript reader; the roster owns
+        # none. Its original identity must bind this owner, while presentation
+        # of the common lifecycle/readiness is identical.
+        assert individual.read_identity.thread.incarnation == thread.incarnation
+        assert replace(individual, read_identity=None) == visible[0].presentation
     else:
         assert individual is None
     assert comms.views.thread_presentation("missing") is None

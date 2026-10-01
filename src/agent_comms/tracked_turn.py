@@ -8,7 +8,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager, AsyncExitStack
+from contextlib import AbstractContextManager, AsyncExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,7 +31,7 @@ from .native_pi import (
     _session_location,
     _verify_context,
 )
-from .native_prompt_send import PromptSendUnknown, send_fenced_prompt
+from .native_prompt_send import PromptSendFailure, send_fenced_prompt
 from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission
 from .native_tool_call import SelectedToolDenied
@@ -242,7 +242,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             custody.callback(self.native.reader.pending.cancel_all)
             if self.tool_socket is not None:
                 self.tool_socket.expected_pid = self.native.proc.pid
-            self.watchdog.reading(True)
+            self.watchdog.reading()
             try:
                 try:
                     await self.attest()
@@ -255,7 +255,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                         if not self.finished and self.observe_event is not None:
                             await self.observe_event(event)
                     return self.result()
-                except (SelectedToolDenied, PromptSendUnknown, TimeoutError, OSError) as error:
+                except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
                     raise NativePiUnavailable(
                         f"Native Pi operation failed: {type(error).__name__}: {error}"
                     ) from error
@@ -310,13 +310,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     MaintenanceBarrier(
                         self.maintenance_root / "registry.json"
                     ).assert_open_unlocked()
-                    self.native.proc.stdin.write(payload)
+                    self.write(command, payload)
             except RelationViolationError as error:
                 raise NativePiUnavailable(
                     "Maintenance closed before Pi capability preflight"
                 ) from error
         else:
-            self.native.proc.stdin.write(payload)
+            self.write(command, payload)
         await asyncio.wait_for(
             self.native.proc.stdin.drain(), timeout=self.watchdog.read_timeout(self)
         )
@@ -341,12 +341,20 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.startup.release()
         self.startup.attest(state)
 
+    def write(self, command: commands.PiCommand, payload: bytes) -> None:
+        if command is self.command:
+            self.grant_prompt()
+        self.native.proc.stdin.write(payload)
+
+    @contextmanager
     def prompt_boundary(self):
-        return self.startup.prompt_boundary(self.prompt_send_boundary, self.active_session_file)
+        with self.startup.prompt_boundary(self.prompt_send_boundary, self.active_session_file):
+            # The isolated writer alone reaches this original granted boundary.
+            # The awaiting owner cannot consume native events until it is joined.
+            self.grant_prompt()
+            yield
 
     async def admit_prompt(self) -> None:
-        self.watchdog.await_input()
-        self.admission = self.admission.dispatch()
         if self.prompt_send_boundary is None:
             await self.send(self.command)
         else:
@@ -354,7 +362,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 self.native.proc.stdin,
                 self.native.reader.encode(self.command),
                 self.prompt_boundary,
-                timeout=self.watchdog.read_timeout(self),
             )
 
     @handles(pi.Response)

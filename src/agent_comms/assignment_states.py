@@ -12,6 +12,10 @@ from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .agent_activity import RecipientActivity
 
 
 @dataclass(frozen=True)
@@ -62,32 +66,13 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         self,
         recipient,
         *,
-        owner_active: bool,
-        current_turn: bool = False,
+        observation: RecipientActivity,
+        updated_at_ms: int = 0,
         triage_inflight: bool = False,
         blocked_by_prior: bool = False,
-        prior_turn_active: bool = False,
     ):
         from .presentation import MessageNotification
 
-        if not owner_active and (self.triage_pending or self.full_pending):
-            return MessageNotification(
-                recipient,
-                "Waiting for agent",
-                "Agent is stopped; this message has not been checked.",
-                priority=4,
-            )
-        if blocked_by_prior and (self.triage_pending or self.full_pending):
-            return MessageNotification(
-                recipient,
-                "Queued behind current turn" if prior_turn_active else "Blocked by earlier turn",
-                (
-                    "The agent is finishing an earlier turn; this message has not started."
-                    if prior_turn_active
-                    else "An earlier turn has an unresolved outcome. This message is saved "
-                    "and has not started; the earlier turn needs recovery, not a resend."
-                ),
-            )
         return MessageNotification(
             recipient,
             self.notification_state,
@@ -187,7 +172,16 @@ class PassiveAssignment(AssignmentState):
         return ()
 
 
-class TriagePendingAssignment(AssignmentState):
+class PendingNotification:
+    """Only pending assignments consume an owner's current drain readiness."""
+
+    def notification(self, recipient, *, observation, updated_at_ms=0,
+                     triage_inflight=False, blocked_by_prior=False):
+        ordinary = super().notification(recipient, observation=observation)
+        return observation.pending_notification(ordinary, blocked_by_prior=blocked_by_prior)
+
+
+class TriagePendingAssignment(PendingNotification, AssignmentState):
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         if obligation is not None:
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
@@ -209,7 +203,7 @@ class TriagePendingAssignment(AssignmentState):
         return IgnoredAssignment, EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
-class FullPendingAssignment(AssignmentState):
+class FullPendingAssignment(PendingNotification, AssignmentState):
     notification_state = "Pending"
     notification_detail = "Queued for an agent response; not yet started."
 
@@ -334,22 +328,21 @@ class EngagedAssignment(BoundAssignment):
         self,
         recipient,
         *,
-        owner_active,
-        current_turn=False,
+        observation,
+        updated_at_ms=0,
         triage_inflight=False,
         blocked_by_prior=False,
-        prior_turn_active=False,
     ):
         from .presentation import MessageNotification
 
-        if not current_turn:
+        if not observation.turn_started_by(updated_at_ms):
             return MessageNotification(
                 recipient,
                 "Paused",
                 "A response was selected, but no matching active turn is running. "
                 "Outcome is unconfirmed; do not automatically retry.",
             )
-        return super().notification(recipient, owner_active=owner_active)
+        return super().notification(recipient, observation=observation)
 
     notification_state = "Responding…"
     notification_detail = "The agent chose to respond; work is in progress."
@@ -396,15 +389,14 @@ class DeferredAssignment(InterruptedAssignment):
         self,
         recipient,
         *,
-        owner_active,
-        current_turn=False,
+        observation,
+        updated_at_ms=0,
         triage_inflight=False,
         blocked_by_prior=False,
-        prior_turn_active=False,
     ):
         from .presentation import MessageNotification
 
-        if current_turn and triage_inflight:
+        if observation.turn_started_by(updated_at_ms) and triage_inflight:
             return MessageNotification(
                 recipient,
                 "Checking relevance…",
@@ -419,7 +411,7 @@ class DeferredAssignment(InterruptedAssignment):
                 "The check was attempted but no decision was confirmed. "
                 "Do not automatically retry.",
             )
-        return super().notification(recipient, owner_active=owner_active)
+        return super().notification(recipient, observation=observation)
 
     notification_state = "Paused"
     notification_detail = "Processing was deferred; this is not a successful receipt."

@@ -96,6 +96,10 @@ class Message:
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
+    def notification_references(self) -> tuple[MessageReference, ...]:
+        """This live original may read current handling through its exact source."""
+        return (self.reference,)
+
     def __post_init__(self) -> None:
         if not self.sender:
             raise RelationViolationError("Message sender cannot be empty.")

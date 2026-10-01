@@ -93,8 +93,9 @@ _CHILD = r"""
 import json, signal, sys
 from pathlib import Path
 session, received, stalled = sys.argv[1:]
-assert json.loads(sys.stdin.readline())['type'] == 'get_state'
-print(json.dumps({'type':'response','id':'native-capability','command':'get_state',
+request = json.loads(sys.stdin.readline())
+assert request['type'] == 'get_state'
+print(json.dumps({'type':'response','id':request['id'],'command':'get_state',
     'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only',
                          'sessionId':'session','sessionFile':session}}), flush=True)
 if stalled == 'yes':
@@ -178,9 +179,10 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         native_turn = TrackedTurnSession.execute
 
         async def bounded_turn(*args, **kwargs):
-            return await native_turn(*args, **kwargs, timeout=0.35)
+            return await native_turn(*args, **kwargs, model_wait_timeout=0.35)
 
         patch.setattr(TrackedTurnSession, "execute", bounded_turn)
+        patch.setattr("agent_comms.backend.CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS",0.35)
         loop = asyncio.get_running_loop()
         create = AttachedChild.start
         children = []
@@ -404,34 +406,37 @@ async def test_short_admission_contention_sends_once_after_release(
 
 
 @pytest.mark.parametrize("cancel", [False, True])
-def test_busy_admission_obeys_writer_deadline_and_cancellation_without_bytes(cancel):
+def test_busy_admission_does_not_spend_write_budget_and_cancel_proves_no_bytes(cancel):
     import threading
     import time
 
     calls = []
     cancelled = threading.Event()
+    release = threading.Event()
 
     @contextmanager
     def busy():
         calls.append(1)
-        raise native_prompt_send.PromptAdmissionBusy("held by another owner")
-        yield  # pragma: no cover - a refused context never admits its body
+        if not release.is_set():
+            raise native_prompt_send.PromptAdmissionBusy("held by another owner")
+        yield
 
     read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
-    timer = threading.Timer(0.04, cancelled.set) if cancel else None
+    timer = threading.Timer(0.08, cancelled.set if cancel else release.set)
     try:
-        if timer:
-            timer.start()
+        timer.start()
         start = time.monotonic()
-        deadline = start + (2 if cancel else 0.04)
-        with pytest.raises(native_prompt_send.PromptSendUnknown, match="before writing") as caught:
-            native_prompt_send._write_fenced(write_fd, b"prompt\n", busy, cancelled, deadline)
-        assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
-        assert str(caught.value.__cause__) == "held by another owner"
+        if cancel:
+            with pytest.raises(native_prompt_send.PromptSendNotWritten,match="before writing") as caught:
+                native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02)
+            assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
+            with pytest.raises(BlockingIOError):
+                os.read(read_fd,10)
+        else:
+            native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02)
+            assert os.read(read_fd,100)==b"prompt\n"
         assert time.monotonic() - start < 1
         assert len(calls) > 1
-        with pytest.raises(BlockingIOError):
-            os.read(read_fd, 10)
     finally:
         if timer:
             timer.cancel()
@@ -459,7 +464,7 @@ def test_admitted_write_never_reenters_after_busy_post_write_failure():
             match="PromptAdmissionBusy: post-write failure is not retryable",
         ) as caught:
             native_prompt_send._write_fenced(
-                write_fd, b"one prompt\n", boundary, threading.Event(), time.monotonic() + 1
+                write_fd, b"one prompt\n", boundary, threading.Event(), 1
             )
         assert entered == [1]
         assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
@@ -501,7 +506,7 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
                     b"one prompt\n",
                     historical_admission,
                     threading.Event(),
-                    time.monotonic() + 1,
+                    1,
                 )
             assert caught.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
             assert entered == [1]

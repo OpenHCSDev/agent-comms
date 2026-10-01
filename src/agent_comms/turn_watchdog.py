@@ -46,15 +46,13 @@ class ProgressWatchdog:
     def spawned(self, reused: bool) -> None:
         self.spawn_ms = 0 if reused else round((self.clock() - self.launch_started_at) * 1000)
 
-    def reading(self, require_input_id: bool) -> None:
+    def reading(self) -> None:
         self.preflight_wait_started_at = self.clock()
         self.preflight_budget = NATIVE_STARTUP_POLICY.readiness_timeout(
             self.session_bytes, base_seconds=self.preflight_timeout
         )
         self.preflight_deadline = self.preflight_wait_started_at + self.preflight_budget
         self.now = self.last_model_progress = self.clock()
-        if not require_input_id:
-            self.await_input()
 
     def await_input(self) -> None:
         self.prompt_start_deadline = self.clock() + self.input_timeout

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
-    from .activity import Activity
+    from .activity import ObservedActivity
     from .thread_presentation import ThreadPresentation
 
 
@@ -65,7 +65,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def allows_owner_start(self, *, owner_pid: int) -> bool:
         return self.allows_owner_control()
 
-    def presentation(self, title: str, activity: Activity) -> ThreadPresentation:
+    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
         from .thread_presentation import ThreadPresentation
 
         return ThreadPresentation(title, "○", self.declared_name.title())
@@ -91,7 +91,7 @@ class ActiveThreadPresence:
     def allows_owner_start(self, *, owner_pid: int) -> bool:
         return owner_pid <= 0
 
-    def presentation(self, title: str, activity: Activity) -> ThreadPresentation:
+    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
         return activity.presentation(title)
 
 
