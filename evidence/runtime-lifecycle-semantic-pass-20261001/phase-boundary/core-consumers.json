@@ -1,8 +1,8 @@
 {
-  "source_base": "46a73ec03cba445dcf720e3de4a54884d794fdda",
-  "working_diff_sha256": "8c8499b48b1919654809e396b61deab6aacb5052249bc80341746f9f1a82ebf3",
+  "source_base": "f44d8f554f4d33fc69cf1a3ecdcff7ec41170ce9",
+  "working_diff_sha256": "817aecbe36ca47ef4e29695acf0ccf24b22fbdbf0a10ad61c557158e0ffd39e1",
   "search_scope": "All authored src/agent_comms Python. Raw matches are source candidates, not resolved dynamic calls. No product imports or tests.",
-  "file_count": 306,
+  "file_count": 309,
   "file_sha256": {
     "src/agent_comms/__init__.py": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
     "src/agent_comms/acp.py": "75529a50f890b76f7de6925b3574b2aa6226b4c1b4b581adf05bcf004dba184a",
@@ -28,7 +28,7 @@
     "src/agent_comms/bus_display_index.py": "ee0b2821bf4dcdba1a01681dce8f613274b4a8e857790b6d5fb8deb229f843c2",
     "src/agent_comms/bus_page_index.py": "cc62be87cba3a052d456ecb9e976c30aaeb2085a77a78d907fdb02804645b54b",
     "src/agent_comms/bus_projection.py": "9b8266941225416325b931a506b634da374f77aed9f9c49d46254cbddd3e9e51",
-    "src/agent_comms/bus_publication.py": "62ea1ff812d1badd87412b4e59a5c1a533b4b09b6ed1b89e4efe8795832cd18f",
+    "src/agent_comms/bus_publication.py": "c9ac06736651a0ede9cd9dede23c7a65839be53e8ad6b80fce2ace41efaefae1",
     "src/agent_comms/bus_route_counts.py": "8b3c02419f6be98be306bdd9dfe0d40b4f54ecac23cc71c279099537e54d3900",
     "src/agent_comms/bus_source_page.py": "a9bf2d1a37105c4b3046bb33c5accdf31a73a0a67eeb0dc3c6b1f789a8b62fb8",
     "src/agent_comms/candidate_maintenance.py": "659de5fa0940827f5ba880c9fd43b12cbe5eb6e3f621d99d85a0560784503f01",
@@ -43,31 +43,31 @@
     "src/agent_comms/child_process.py": "f81779365efdbde262ac99dcda36a7e6fb3b93f2a9135abda05a1416ebe416d3",
     "src/agent_comms/claim_admission.py": "3d5d21e619eecf778658fd2749838f8a3b35dc9595f01a50e9afd2bde5fd5cee",
     "src/agent_comms/cli.py": "6e37dff22367cb3deaddc0ceb5f9baa8b70d34953f1b424b19e8b9b571905990",
-    "src/agent_comms/cli_commands.py": "4dbbf2f493d88794d243ff58040b8ef585e614334e7a7984604a6def1d7a56c9",
+    "src/agent_comms/cli_commands.py": "403ca3f4a7cb03d6f89d99d512f2e942f63a07c6d47749b02092081ecb046653",
     "src/agent_comms/cohort_foreground.py": "650824c4622929fa190ae9a110279ba97809786e17a352d9c0667023bc72c36e",
     "src/agent_comms/cohort_schema.py": "f71b7c002d6927117108f518c57142c3e9dc0e672d6bf8045ddf4632f629f706",
     "src/agent_comms/cohort_send.py": "32d5e0672ae30824def8a48fffb8569b28802a0a20fa91079d322c2919700cb8",
     "src/agent_comms/collaboration_ledger.py": "12967c658b462e3c1ae384d036dfaf1bd52ccbecbd77146989c5bccb820d8d0d",
     "src/agent_comms/command.py": "536d70eedc9c0553e4f9d58bf2e4309985e36af9827a992ae603028cac46b35f",
     "src/agent_comms/comms.py": "c4529974c854ac19465db1f255024f53551e02d502fa2247315edf96fa511ac7",
-    "src/agent_comms/compaction_boundary.py": "6986af5e250146a9dc51316356fb119c667b1448053d523dd7e294824b13669c",
+    "src/agent_comms/compaction_boundary.py": "2e9b8ce11ba617308bfb7a0b7d595df9bbfc350745fd50a42448e5bfb84187bf",
     "src/agent_comms/compaction_errors.py": "ab29dcb8e1122630036a5bb478f2fab4dc17e31e4e4d1ec7b8ef19a13e8ac396",
-    "src/agent_comms/compaction_identity.py": "2954883e7e27977452d4dab464638eecef1bc806fca502d068f2a2ad0fe85ed5",
+    "src/agent_comms/compaction_identity.py": "d09df4712ffb952749ce90d8962c5df5abb625de562f6ec8c0d38f7b2fe14f81",
     "src/agent_comms/compaction_journal.py": "0462e3b2c46cb29ac0aa03c85b65d7e0667ae59651169d61d08b2dc430070db4",
     "src/agent_comms/compaction_journal_role.py": "c47e33c10de267cf5da4543f7dba52e0ae80070f3e65674506722bedc26a78ab",
-    "src/agent_comms/compaction_operations.py": "6bd34bd7ea1c4ef4a18930461d8cf8332979854c7f69bb2e9a110592d3e0f0bb",
+    "src/agent_comms/compaction_operations.py": "19f3547238ad9b9516ee5d4de40e6108f3fa6b0efd607ec86f4a60e4894ae81b",
     "src/agent_comms/compaction_outcomes.py": "8cff67c86098f5f1760754477d7d14835e6422b6a8dac2358ac67329452b7e1c",
     "src/agent_comms/compaction_private_inputs.py": "b793dde31b014df7e5b837e81cbe1635c403af68c5fc79df2d7ea95b3803f1f5",
     "src/agent_comms/compaction_progress.py": "1ed4ba53ac62561de449139feb19222ea54480afd17e24f6c909352bb78f088c",
     "src/agent_comms/compaction_publication.py": "9756afc886a0dffccaf7628ab012f0d2debcd06153dba1476a4e0f8e6b05fbfb",
     "src/agent_comms/compaction_publication_lease.py": "48053858c5cac2ce21c2531a9f94551367b9937c598d6f0c33b7779422988484",
     "src/agent_comms/compaction_publications.py": "9a4fd5fc94653a12dc600d135245011ef848f8706b10fb20ee23d6dcadc94e4e",
-    "src/agent_comms/compaction_records.py": "1a4b0d770b0b7a6d0c975cb80a07f8027a6aba028071c57f9767f9988cd61ce7",
+    "src/agent_comms/compaction_records.py": "09104b2848e1cfcd3a07096e9cb0e26a8f8ebc75d178bd489ae3e8b17b5b9033",
     "src/agent_comms/compaction_result.py": "133d1be6837bf8e2f9a78774ff2d0b6ba68d123f488732e09ca32f77ddab1d34",
     "src/agent_comms/compaction_send_admission.py": "baec6730bfacb43e4ffc880020ee78c151b0b7d9e547856a440f27ab443872e8",
     "src/agent_comms/compaction_source.py": "8dcc5cb659d068e15cf0f71da5ebd8086e56943439e52f670dc6962ab27c01b3",
-    "src/agent_comms/compaction_states.py": "e372bc3cf2ce346d45bebe586ee66c106de84360cdbeda4a5f6dee7310f645bb",
-    "src/agent_comms/compaction_summaries.py": "451cf71204aa35a3c875134bb43b8e37317cff8983bf83948da88127d4c1b7a2",
+    "src/agent_comms/compaction_states.py": "de3a1ee02311d796374137bb5745f669bbfa5fa19bee4e98e2bbf8ca6d61e57f",
+    "src/agent_comms/compaction_summaries.py": "ee6504d44e228715576ea087a27b3b3384a83e2c87c0804bb98c1b6bbe3d35ea",
     "src/agent_comms/config_options.py": "1c4cf2416dc390290d56be753a5dcd0e5925231ffac65ea8128e85a1c2a70963",
     "src/agent_comms/context_tokens.py": "44906147b82836f90a78742009f4ce37bd1e10ab7bee8b75c028e787dbdac9fd",
     "src/agent_comms/continued_private_session.py": "c084ccca14c0e723caf400933f8887cc60dbcf8470d5c148fce07d05c9d8b427",
@@ -106,7 +106,7 @@
     "src/agent_comms/errors.py": "3ad603c3c00d1d92b64d1e3d473d126d3c0be60a254dda78b19d90f6d91c6a80",
     "src/agent_comms/execution_states.py": "bc30f4d0f64e8683b4b2b390bc9d55080ef16c3a48efb7c55c97583d242a53d4",
     "src/agent_comms/execution_store.py": "d1afe406b92697b307b38afffe7adeea88c1889d0effd5d36ea9454cd772752f",
-    "src/agent_comms/exporting.py": "716ed614d1ca5c92c78c052b62fadc5a0ffc092c9f9b70b1b638174b9c4c2e65",
+    "src/agent_comms/exporting.py": "19ef1fd310845e72291c0083ae407125db01e7fde60202846f79f9c4a65040bd",
     "src/agent_comms/extension_ui.py": "2610d0274dc8d4ecd910fa7d15d4da5ed90de8bd190a67e00977565d844067a6",
     "src/agent_comms/field_codec.py": "8050f19bffa36118bac4e852836c86c76fabe22eb9c0292dbf01f15158eb2eb5",
     "src/agent_comms/fresh_private_session.py": "b69d17aea6c79b6effcd22b4ae09d5bf132eb329672e0d07a7c089f5a845e878",
@@ -145,17 +145,18 @@
     "src/agent_comms/message_bus.py": "3579960cae43c65e3210a4a7fe1970e8bc73a907322b1b11d44399bb6594030f",
     "src/agent_comms/message_page.py": "b77eab88080ae384f98ef027149313b5ecd21c341ac8d9c0c8e7cc52d7718ca0",
     "src/agent_comms/message_reference.py": "faa0c0f12dea7aa187e495e7f04766a390b7191116ce68a3165c5ec51567be39",
-    "src/agent_comms/messages.py": "7cc00a0be7f8c1b7d735bed27e32e04c978d3bdba510098b142df6b8993f1d40",
-    "src/agent_comms/messaging.py": "ed3a6e0272c39e99627a30eb24a5dc52ad35b7458a802abfe7e140f9e87d600b",
+    "src/agent_comms/messages.py": "6f52b7360e1f04683e04132dde316d3899d31a2e6c1942142b1e18118ab4b2cf",
+    "src/agent_comms/messaging.py": "b15a272af5d772e64388d2a78b45d629ddfd3d96da66bd2a32a635f14dd321cf",
     "src/agent_comms/mro_dispatch.py": "4e6bb871529385366e41a40a685e5c5a095fdbb18182d765fae3e5cca8ec5fb2",
     "src/agent_comms/native_admission_epoch.py": "81d6341ed17e2306fd95fc67eaff0fd794560ada809c8e1b9edce112417380fc",
     "src/agent_comms/native_admission_rules.py": "8554347a374453f59d4a79e94484d68eb8394ad811f1460a66ef8d45cfa7e77d",
     "src/agent_comms/native_arguments.py": "ebab34372b0f01eaf834e4a603d7fe046741b2eb8005322453c08b77c7fc848a",
     "src/agent_comms/native_attestation.py": "4f11c9f618c2b9a5784392af55c1616a8a9fc1b253fc15aad70701c4c2faa4d1",
-    "src/agent_comms/native_compaction_request.py": "6d11e53b8e877ac1eeff705e201ca440136c6db231a62416b4bd0162575c22ba",
-    "src/agent_comms/native_compaction_writer.py": "3250122dd5c8e7a517ee1bb0d86833f79129832bb9ec62decdcd97ab54b847d1",
-    "src/agent_comms/native_custody.py": "d2fc98dbba48832bd180656d4d90c4b70ec3a4abbc19fb48ffd5753a0643c293",
-    "src/agent_comms/native_entries.py": "6b8c048138276fc7010565bd5ecd15585a19c8a0731bb52d89163bab34985387",
+    "src/agent_comms/native_compaction_request.py": "377ac1b99302e23e24e62dfe56295a824ac3ca9b890c598becab3db575fe9cc1",
+    "src/agent_comms/native_compaction_writer.py": "aee4b7f94c7214183d188f2b6d09053e7449665614a2fde8937bc66718d3f149",
+    "src/agent_comms/native_custody.py": "e8d1cd0dae661a45a99dceca08efcfa61bab482a53dc3aac45869819092b7300",
+    "src/agent_comms/native_entries.py": "7490e81bdedf2ac17caf62d72f3d943726119990765c2e0d01583b82c8208bac",
+    "src/agent_comms/native_file_artifact.py": "eba385f741888040dba90b5e455a69193c72b04ee8a1f6d4345334fa78986c32",
     "src/agent_comms/native_fork.py": "3c18a4e2c0c847e02bfcaebca36c3dd8b0ee4593b19037d6a39d7ed08e30d0fc",
     "src/agent_comms/native_input_owner.py": "14cec550c9622734d424cf6219cc807d6fa05d4300e109aa9b09a68ddf562de9",
     "src/agent_comms/native_input_record.py": "93ae2c37efe7de8f11285bffe995d890b620b36aec155354aa2ac4e663cbd02a",
@@ -163,13 +164,14 @@
     "src/agent_comms/native_pi.py": "653258329a819e68976513e0cd017714bf57234e8fe021ef9b488e149f935c9d",
     "src/agent_comms/native_prompt_binding.py": "38c42bf272b4e50c2bda97c3c8d6426894523795dced01b21e00ed30864f99e9",
     "src/agent_comms/native_prompt_send.py": "82d8b454343ecc3313e8f48c992c9eb46c58fc3ae61faf3483b79f5c1946d263",
+    "src/agent_comms/native_revision_text.py": "682b3b56a5b37819946162fc38eb9c129040cd111f894c3af94496beec6e7f3f",
     "src/agent_comms/native_runtime_input.py": "9c4d50241c4c97292873f3804304cbe520f5b5a6f52bd84663e260a4de3e30b2",
     "src/agent_comms/native_session_prepare.py": "d9df83f7013f7cf3b0bdf9be98ba16a4185a5d78e0d8f0ef2723ea74eb3d31e4",
-    "src/agent_comms/native_session_reopen.py": "8833ac726b211504e40405eb45569482ced525c757ffb4ad4f60f1b5695a9070",
+    "src/agent_comms/native_session_reopen.py": "a060e300efee9cf5e59201efa1c5cab647601f88459f711094dfa510346fd41b",
     "src/agent_comms/native_source_cursor.py": "7ec0864cf9fad712d58d66ac9fcf567d61f1c6658c71a07516deb2497372ebc2",
     "src/agent_comms/native_startup.py": "3dd413f75755484d7f1998007a9fc5cb1884ab6ee7b8008693a28bbed3c58640",
     "src/agent_comms/native_tool_call.py": "7edc1dae4c10f8ec857bd31a94765f7f3dae5bb8aa62c3597b223e7600f0f6cb",
-    "src/agent_comms/native_tools.py": "e95016b94309cae06561bf125fb451ed98eeb99471a2a4e4224bbf36599d916e",
+    "src/agent_comms/native_tools.py": "cd90b8025336f294f761dd0b29ffae24086be8ef0fbb7ccd718434a5adf32ba3",
     "src/agent_comms/native_transcript.py": "f3e294806997beba12be1e2637c780d12f1598a3917a5a9d1cff15305e33aee7",
     "src/agent_comms/native_turn_context.py": "2fcd221c86998d82d3889765a5e60ea6b0ad5597962cbdff8b654eb1b4300072",
     "src/agent_comms/nk_foreground.py": "bc917c011944b1d93d0a55cdf2b53d7b503a3d5f9e2b7df3119e3e63ce4a22e3",
@@ -179,14 +181,14 @@
     "src/agent_comms/ordinary_admission_rules.py": "e95b232670bdc3a9cd929822ac5681ffa4bc6dea6f1abe55da9b3967dc1a0f6a",
     "src/agent_comms/owned_send_admission.py": "ed13b391298898e9beb4a102e57188e21f4540fdc05b25206a2d9a2f3419ae55",
     "src/agent_comms/owned_turn.py": "5926a9181bf6c27a290326e288dc6991bebfbb5b714af81bb95cfc02412bc771",
-    "src/agent_comms/owner_compaction_adaptive.py": "ee34cbb3d1e53eca5faec4aa0af2563904a9a25b921cae387995f6e824e99924",
-    "src/agent_comms/owner_compaction_commit.py": "0e09501df7eef741e5503ceaad1757f378ebd3b249413c7a016dc3eeb2868476",
-    "src/agent_comms/owner_compaction_gate.py": "ba49a45584090d74956c1593d503ba963d5c7f0df58dd962ce2b14fe9b164c6d",
-    "src/agent_comms/owner_compaction_manual.py": "ce1d00e588b3e7842729c9b0271e6e645f8d198048f8f18b19979c4ea6941e3b",
-    "src/agent_comms/owner_compaction_prepare.py": "8e66f268ff0473b46f95e9a6c2d215cf541db83a70f4c665f52351c65510efc4",
+    "src/agent_comms/owner_compaction_adaptive.py": "3c82c569c62352ca42d1e5cd465938ba1d53923ac0d37116cd1f7fc1ca38350d",
+    "src/agent_comms/owner_compaction_commit.py": "bf557955c4fb19909f3b709cca7c85b9527f719639b97811426f9e788b77db5f",
+    "src/agent_comms/owner_compaction_gate.py": "2757317edc6e697a4498d4572c6133d1d654c1053b69e9ae0984792d8b4f45dd",
+    "src/agent_comms/owner_compaction_manual.py": "e0521b899029f1be86acb37c8bdca70c595cd931c2956e71febf961537b15ec5",
+    "src/agent_comms/owner_compaction_prepare.py": "c35ef831f836ba515bed5d430323d74a63e7d58b14be83221f5549d64875e7a3",
     "src/agent_comms/owner_compaction_provider.py": "423672c6aa066b58eed6d90e4580c726a00ff4444b69e43c1314f914b1e573a9",
     "src/agent_comms/owner_compaction_runtime.py": "55cd8f08fe850dce72d99a055e773637bf1c4e0feb9adb86478db97c8c8156d7",
-    "src/agent_comms/owner_compaction_settings.py": "88f0027e61ca8aa99d7acad91e38a38e07649ab18a35ef5b9829b388f4f48dc9",
+    "src/agent_comms/owner_compaction_settings.py": "0aa7338781892b6407e8c9b76e6ebb27118f06de3561591119ef1d8684549201",
     "src/agent_comms/owner_cutover.py": "3dfb526e42e63d0348c9970a3431dbcaec4c3a2d55223c23898bda5a1333144a",
     "src/agent_comms/owner_fence.py": "63a53b6916768459db5abbcad4cd33a1973d9d5e10dfd201b8aad01cbace1286",
     "src/agent_comms/owner_launch.py": "8c09839283bd706504e29b91d756e1a51f07e808b5c5803658360e4a196d74db",
@@ -197,7 +199,7 @@
     "src/agent_comms/pi_commands.py": "33f8398a400e706108a900d57fadf279ab254d66dc8fe1a50b9fd8f6a7ebae96",
     "src/agent_comms/pi_events.py": "6c50b199bf62c2a193b3ce5e2085f69d1615d04fde1c8c84f116041930309c64",
     "src/agent_comms/pi_helper.py": "9fa3f0f9503c1552c2e6e8fa623f94a32f3f7c45d57ac952ea7ece845aec38f0",
-    "src/agent_comms/pi_payloads.py": "95b5f89d1e206e37f87fcfd13946c093ffe83d122cf2fd77c45c255ba1df7ed4",
+    "src/agent_comms/pi_payloads.py": "4d4b87f6c2572198b3dc60c282ef8d25f02c84ad0b4504bd2be862b2ed5625d3",
     "src/agent_comms/pi_rpc.py": "2c68cb57bb0d83076a4caf52724dfbd381d4fe0955ea04e8cd1b359e936d3b42",
     "src/agent_comms/pi_summary_payloads.py": "9ec0ef636fa69010ac2c2f08ce290f0da4797a06e1b845d3f9f33ab8d4fefb86",
     "src/agent_comms/pi_vocabulary.py": "d44be18de45768c503e9e0749fe9e1acb80fb2b781044768c6baa68ff84cf510",
@@ -233,7 +235,8 @@
     "src/agent_comms/response_policy.py": "b6006d2e355b952828fb5790c54455e4cb596f42654d10e064c0a37fce954afb",
     "src/agent_comms/restart_queue.py": "46bf0c87501db9ddcd3ca3cb3a317772f5b036d96a7f0cb1509e71e5009ae89d",
     "src/agent_comms/restart_refusals.py": "0e9bfd90f0d3b88f7c0a40f999235e0b9204ed2853988d09b46ef972b2bd58c2",
-    "src/agent_comms/retained_task_facts.py": "4d3111685b55fadfb2bef90843455aa28c651af534902f4ba9600acae86b79be",
+    "src/agent_comms/retained_context.py": "d821bcc4fa89f956f1d07c79f01d25436df902b7ee95986e27e2c603c6f539d5",
+    "src/agent_comms/retained_task_facts.py": "7d806c5a64b8977ea980eef00e7bb7ba2f96cf540d2d40faca65f637df415294",
     "src/agent_comms/routing.py": "a61e2d3c1b27ab85bb7ec4966399ce1cda7eb35f98823a60d1119fdea543367f",
     "src/agent_comms/runtime.py": "32a54f3a8a2cc991fcb67632d2902811b955456d7d5a8b549622c9c52a016f7b",
     "src/agent_comms/runtime_info.py": "a8aec12e32a081885dfaf986c3a72e4e618289814e134c42270adaafc2ab3ffa",
@@ -243,12 +246,12 @@
     "src/agent_comms/selected_actions.py": "7bcb03a7295ca330ae3114556d6413e85ac7257c6566e5456076afc0c810e1ff",
     "src/agent_comms/selected_participant.py": "9d6fc103699723d9ce3d675d6cfb634de50523562a9d2a2be70217ae03836dfe",
     "src/agent_comms/selected_pi_route.py": "3045f28aba59f8184af3ea34c464751fb37006d641d33e8f965ed581c3563074",
-    "src/agent_comms/selected_pi_summary_rpc.py": "eb00688937e5ec73340d895a2a042d02caa0f1d3dfb13e3116c7b9113351b4fd",
+    "src/agent_comms/selected_pi_summary_rpc.py": "9770c5fbe2e33a94c7ff72f7daee54b974dd57905222d25995ba19c9acfb4a04",
     "src/agent_comms/selected_request.py": "b12df58451f688afc456c1a7a5b5221af80e5659852c3a6f0fe7fcf487eebd09",
     "src/agent_comms/selected_result.py": "3bd8c6540b579c1ca8410fac7f638d70d64bfcdf23f191e89f3f87e6f5ac4e57",
     "src/agent_comms/selected_session.py": "5347553ffa7132f6f5ffaa07dc05664019ba6ebe085b6c29a6dd23781cdbe130",
-    "src/agent_comms/selected_source.py": "49d38e79c33619ab90f9359a720781e2a33bb8240fe2e59257b07a4a80366166",
-    "src/agent_comms/selected_summary_admission.py": "c6ba8488d79f41b50283889e9b47484e4c521de1588b12726e36b1328004287c",
+    "src/agent_comms/selected_source.py": "73e03077a5b745f341a446a99a9b00578e1c6d2cebe483c93ac57699329b9fd5",
+    "src/agent_comms/selected_summary_admission.py": "d080f6f0cf9fb9c525d2450d74f974d16b72f4ea448fd429c073ee58907b141c",
     "src/agent_comms/selected_tool_broker.py": "25feb4f1bbcf9286110d9fcf6cab8ef3e33293f2ba938fe613930979848a1d1f",
     "src/agent_comms/selected_triage.py": "d4ecedb47c06c7783f79e9e6dfe0ffe8a5633599cd25b9b6a05b6f7954a67a82",
     "src/agent_comms/selected_turn.py": "c528ca4911adfbf15833aea44b9c7ba870cc5a04ff4443afcd4cab8ff393696d",
@@ -261,7 +264,7 @@
     "src/agent_comms/shared_ledger.py": "ae0a76725bc016088498970654fe48d060fc58730547ee9598428095035ca746",
     "src/agent_comms/source_proof_requirement.py": "7cecb05e629c5f183c68258163ec8a9689cb5f7d936d7284e6f2a6856885099b",
     "src/agent_comms/store_files.py": "7f734be1e67616e2146c80fe955ea6036a36cf7a359ace1c5d27d4ba45b3af8a",
-    "src/agent_comms/task_decisions.py": "d6299e08e462a2fc6ab43e17aeb10e463eec4eb9ff7690fb5147ad74138e4e0c",
+    "src/agent_comms/task_sources.py": "dfa0995a534dc815de4e3f32da8f7fbdfdf71a0766c25ef61e744eec6e61f9bc",
     "src/agent_comms/text_digest.py": "a35d72f3f58cd63e70462af7e3722e216e9cbe98802d5fc57ee0d9e56cc29d79",
     "src/agent_comms/thread_execution.py": "cba9f765cb62800b319389ef7760ce99d93255ca2754d84be8615b061783b10d",
     "src/agent_comms/thread_identity.py": "37b5ad611b1df449c85c8dd50b54f4fd95f6233106232664ff1f69fa63b00d90",
@@ -269,11 +272,11 @@
     "src/agent_comms/thread_presentation.py": "f89eb8fb910fcc6839001b942c2bcb9124c077f581f405845f2129a91072ecf1",
     "src/agent_comms/thread_provenance.py": "5c9d9fbb9d5c54787b0b2574ceeca7388b4d6de060627f1751f12d7932bd363c",
     "src/agent_comms/thread_status.py": "65f8a3f4c1bea3ff0126598fa8c8449b19ddc28db35318c7539b54ca5e5d7372",
-    "src/agent_comms/threads.py": "132f810d0f88d9462ca2996ae9b66457dfbabbd32c2c1c3f7d9a4e634e61dce6",
+    "src/agent_comms/threads.py": "9cb16b9befb5292bf5cb1f56fcee49c58595e368c78a7cc8f6f5b04829b9c973",
     "src/agent_comms/todos.py": "c584367046aa431ae28ba14bc890519e834cf36860b9920b82a9a923e039fa6a",
     "src/agent_comms/tool_output.py": "889b9c34cd40315fb180db090c6384daa1eec74fbcf50ed9050e8fdeafb649e9",
     "src/agent_comms/tool_results.py": "86c37e9c27f7d58ed19151973408c77758d95f5bf81439e33f5b8d01ac93b6e9",
-    "src/agent_comms/tools.py": "27950c63d1b3834c424ca16ac092de3f407c74d17b9f620ac736bddcecea1195",
+    "src/agent_comms/tools.py": "63dfcbf3fd40e0cd2ebca374de8c1929b52a31d098b5f78827e155c5ddfebf80",
     "src/agent_comms/tracked_turn.py": "70c609e395dff5a1155beaaba4f148fd8ab16e35d015224f016ab16e16a04256",
     "src/agent_comms/transcript_events.py": "1d1db87ea8945f3946429d3b23077ed1debe5aba7473d9c2b8334d0787f7a623",
     "src/agent_comms/transcript_merge.py": "f86549f51a5ffeb5c87f849d991db80ca0f5693e17c11e6a4295ffb2f4e066d7",
@@ -305,19 +308,20 @@
     "src/agent_comms/wake_candidate_index.py": "c6137aa6982c8b8adc11c2100e8c561c60ee6ca9b7b5136509e8552e46d7a116",
     "src/agent_comms/wake_injection.py": "d9905d00a69aa83725b34e862aaef3a38ab9e1f3175adff910477c69f8cddac9",
     "src/agent_comms/wake_policy.py": "fad38a464e9c652a0ed7fc76759ec1671ac502a23fad3e32fcc96256d99c2aad",
-    "src/agent_comms/wire_log.py": "15b1a452dda09dfbe7f7639c46fbd4abb3e905b49de289a5ebe0cdcfbe26b232",
+    "src/agent_comms/wire_log.py": "393039a6d3b1a1b592172897bab21f1a67a2f7e16d1ddd60d7832e7eb0227bc8",
     "src/agent_comms/wire_metadata.py": "246f823675b7eb537df834c530fddc78e8003558d3f743ee0c8580d8a99620d4",
     "src/agent_comms/wire_record.py": "035c359353dcebec3998a5217bb3448b38fe0f7e2041ff9c24e1fd7fe2ec621a",
     "src/agent_comms/wire_watch.py": "867f76d60b75b36cc84cd261d7f80d0873d37d76d946bc23d6ba9c90ca12e511",
     "src/agent_comms/worker.py": "ad15190a1af8f45d40954ffd9a5c262fa0f7238b3cceaf45563ce104886a6ce1"
   },
   "changed_source": {
-    "src/agent_comms/attempt_recovery.py": "1395b476ed6f1842c328ab419b57cd96db587b5885d998481322843f883e33fb",
-    "src/agent_comms/continued_private_session.py": "c084ccca14c0e723caf400933f8887cc60dbcf8470d5c148fce07d05c9d8b427",
-    "src/agent_comms/historical_native_inputs.py": "1122c0e6f7fd734c27301a3e0ed3f982f1768784a091b07fe55d8dff03f6d26d",
-    "src/agent_comms/native_entries.py": "6b8c048138276fc7010565bd5ecd15585a19c8a0731bb52d89163bab34985387",
-    "src/agent_comms/native_pi.py": "653258329a819e68976513e0cd017714bf57234e8fe021ef9b488e149f935c9d",
-    "src/agent_comms/proven_source_coverage.py": "d20e2388307c6e061926779457d1299c713109cde683842a01445dc0d52e0869"
+    "src/agent_comms/compaction_states.py": "de3a1ee02311d796374137bb5745f669bbfa5fa19bee4e98e2bbf8ca6d61e57f",
+    "src/agent_comms/native_custody.py": "e8d1cd0dae661a45a99dceca08efcfa61bab482a53dc3aac45869819092b7300",
+    "src/agent_comms/native_session_reopen.py": "a060e300efee9cf5e59201efa1c5cab647601f88459f711094dfa510346fd41b",
+    "src/agent_comms/owner_compaction_gate.py": "2757317edc6e697a4498d4572c6133d1d654c1053b69e9ae0984792d8b4f45dd",
+    "src/agent_comms/owner_compaction_prepare.py": "c35ef831f836ba515bed5d430323d74a63e7d58b14be83221f5549d64875e7a3",
+    "src/agent_comms/selected_pi_summary_rpc.py": "9770c5fbe2e33a94c7ff72f7daee54b974dd57905222d25995ba19c9acfb4a04",
+    "src/agent_comms/selected_source.py": "73e03077a5b745f341a446a99a9b00578e1c6d2cebe483c93ac57699329b9fd5"
   },
   "searches": {
     "event_and_lease_names": [
@@ -755,7 +759,7 @@
       },
       {
         "path": "src/agent_comms/owner_compaction_manual.py",
-        "line": 137,
+        "line": 125,
         "source": "            on_event=lambda event: runner.effects._emit_event(session_id, event),"
       },
       {
@@ -1357,67 +1361,92 @@
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 218,
+        "line": 227,
         "source": "        return receipt.to_wire()"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 258,
+        "line": 273,
+        "source": "        return {\"pin\": FieldCodec.encode(pin.reference), \"source\": FieldCodec.encode(self.source)}"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 290,
+        "source": "        return {\"supersession\": FieldCodec.encode(message.reference)}"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 307,
+        "source": "        return {\"drop\": FieldCodec.encode(message.reference)}"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 319,
+        "source": "            self.output, overwrite=self.overwrite).to_wire()"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 332,
+        "source": "                \"provenance\": FieldCodec.encode(segment.provenance), \"input_supplied\": False}"
+      },
+      {
+        "path": "src/agent_comms/cli_commands.py",
+        "line": 341,
         "source": "        return {\"messages\": [m.to_wire() for m in ctx.bus.inbox(self.thread)]}"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 313,
+        "line": 396,
         "source": "                    {**m.to_wire(), **m.display_metadata}"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 321,
+        "line": 404,
         "source": "                    {**m.to_wire(), **m.display_metadata}"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 328,
+        "line": 411,
         "source": "                    {**m.to_wire(), **m.display_metadata} for m in ctx.views.full_history()"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 390,
+        "line": 473,
         "source": "        return export_receipt.to_wire()"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 524,
+        "line": 607,
         "source": "        return {\"restarted\": [asdict(result) for result in results]}"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 628,
+        "line": 711,
         "source": "                {\"operation_id\": row.operation_id, \"state\": FieldCodec.encode(row.state)}"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 668,
+        "line": 751,
         "source": "            return {\"manifests\": FieldCodec.encode(selected), \"text_recorded\": False}"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 686,
+        "line": 769,
         "source": "                return FieldCodec.decode(NativeContextData, payload).require_session_file("
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 697,
+        "line": 780,
         "source": "            \"native_manifest\": FieldCodec.encode(native_context.segments),"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 698,
+        "line": 781,
         "source": "            \"manifest\": FieldCodec.encode(context.manifest(counts.counts, counter=counts.counter)),"
       },
       {
         "path": "src/agent_comms/cli_commands.py",
-        "line": 703,
+        "line": 786,
         "source": "                    provenance=FieldCodec.encode(segment.provenance),"
       },
       {
@@ -1427,23 +1456,18 @@
       },
       {
         "path": "src/agent_comms/compaction_boundary.py",
-        "line": 141,
+        "line": 145,
         "source": "            TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,"
       },
       {
         "path": "src/agent_comms/compaction_identity.py",
-        "line": 42,
+        "line": 44,
         "source": "        intent = FieldCodec.decode(dict[str, Any], intent)"
       },
       {
         "path": "src/agent_comms/compaction_identity.py",
-        "line": 43,
+        "line": 46,
         "source": "        return FieldCodec.decode(cls, {"
-      },
-      {
-        "path": "src/agent_comms/compaction_operations.py",
-        "line": 105,
-        "source": "                metadata = FieldCodec.decode(CommittedNativeOutcome, evidence).publication_json("
       },
       {
         "path": "src/agent_comms/compaction_outcomes.py",
@@ -1467,18 +1491,13 @@
       },
       {
         "path": "src/agent_comms/compaction_records.py",
-        "line": 122,
-        "source": "        return FieldCodec.decode(CommittedNativeOutcome, json.loads(self.evidence_json))"
+        "line": 56,
+        "source": "        record = FieldCodec.encode(self)"
       },
       {
         "path": "src/agent_comms/compaction_records.py",
-        "line": 169,
-        "source": "        return FieldCodec.decode(SelectedSummarySource, json.loads(self.source_json)).source"
-      },
-      {
-        "path": "src/agent_comms/compaction_records.py",
-        "line": 223,
-        "source": "            envelope = FieldCodec.decode(SelectedSummarySource, json.loads(self.source_json))"
+        "line": 63,
+        "source": "        source = FieldCodec.decode(cls, json.loads(payload))"
       },
       {
         "path": "src/agent_comms/compaction_result.py",
@@ -1492,18 +1511,18 @@
       },
       {
         "path": "src/agent_comms/compaction_states.py",
-        "line": 388,
+        "line": 371,
+        "source": "        return RetainedTaskFacts.frame_journal(FieldCodec.encode(self))"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 377,
+        "source": "        outcome = FieldCodec.decode(cls, json.loads(payload))"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 413,
         "source": "        return json.dumps(FieldCodec.encode(self.publication(commit_id)), sort_keys=True,"
-      },
-      {
-        "path": "src/agent_comms/compaction_summaries.py",
-        "line": 106,
-        "source": "        envelope = FieldCodec.decode(SelectedSummarySource, source)"
-      },
-      {
-        "path": "src/agent_comms/compaction_summaries.py",
-        "line": 108,
-        "source": "            FieldCodec.encode(envelope), sort_keys=True, separators=(\",\", \":\"), allow_nan=False"
       },
       {
         "path": "src/agent_comms/config_options.py",
@@ -1567,82 +1586,82 @@
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 104,
+        "line": 109,
         "source": "    def to_wire(self) -> dict[str, object]:"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 105,
+        "line": 110,
         "source": "        return FieldCodec.encode(self)"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 185,
+        "line": 200,
         "source": "    def to_wire(self) -> dict[str, object]:"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 186,
+        "line": 201,
         "source": "        return FieldCodec.encode(self)"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 308,
+        "line": 323,
         "source": "    def to_wire(self) -> dict[str, object]:"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 309,
+        "line": 324,
         "source": "        return asdict(self)"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 336,
+        "line": 351,
         "source": "    def to_wire(self) -> dict[str, object]:"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 338,
+        "line": 353,
         "source": "            **asdict(self),"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 340,
+        "line": 355,
         "source": "            \"scope\": self.scope.to_wire(),"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 341,
+        "line": 356,
         "source": "            \"limit\": self.limit.to_wire(),"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 342,
+        "line": 357,
         "source": "            \"boundary\": self.boundary.to_wire(),"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 462,
+        "line": 477,
         "source": "            \"scope\": self.scope.to_wire(),"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 463,
+        "line": 478,
         "source": "            \"limit\": self.limit.to_wire(),"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 464,
+        "line": 479,
         "source": "            \"boundary\": self.boundary.to_wire(),"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 486,
+        "line": 501,
         "source": "            stored: Mapping[str, object] = envelope.to_wire()"
       },
       {
         "path": "src/agent_comms/exporting.py",
-        "line": 491,
+        "line": 506,
         "source": "            messages = WireRecord.public_from_wire(stored).messages()"
       },
       {
@@ -1907,42 +1926,52 @@
       },
       {
         "path": "src/agent_comms/messages.py",
-        "line": 199,
+        "line": 200,
         "source": "    def to_wire(self) -> dict:"
       },
       {
         "path": "src/agent_comms/messages.py",
-        "line": 200,
+        "line": 201,
         "source": "        return {\"seq\": self.seq, \"id\": self.message_id, **FieldCodec.encode(self)}"
       },
       {
         "path": "src/agent_comms/messages.py",
-        "line": 203,
+        "line": 204,
         "source": "    def from_wire(cls, data: Mapping) -> Message:"
       },
       {
         "path": "src/agent_comms/messages.py",
-        "line": 210,
+        "line": 211,
         "source": "        return FieldCodec.decode(cls, {\"ts\": 0.0, **public})"
       },
       {
         "path": "src/agent_comms/messages.py",
-        "line": 221,
+        "line": 222,
         "source": "        message = cls.from_wire(public)"
       },
       {
         "path": "src/agent_comms/messages.py",
-        "line": 222,
+        "line": 223,
         "source": "        if _canonical(public) != _canonical(message.to_wire()):"
       },
       {
         "path": "src/agent_comms/native_compaction_request.py",
-        "line": 105,
+        "line": 114,
+        "source": "            FieldCodec.encode(self), owner=FieldCodec.encode(owner),"
+      },
+      {
+        "path": "src/agent_comms/native_compaction_request.py",
+        "line": 118,
+        "source": "            record.update(FieldCodec.encode(selected))"
+      },
+      {
+        "path": "src/agent_comms/native_compaction_request.py",
+        "line": 133,
         "source": "        raw = FieldCodec.decode(dict[str, Any], json.loads(operation.intent_json))"
       },
       {
         "path": "src/agent_comms/native_compaction_request.py",
-        "line": 106,
+        "line": 135,
         "source": "        return FieldCodec.decode(cls, {wire: raw[wire] for _, wire in FieldCodec._fields(cls)})"
       },
       {
@@ -1961,23 +1990,23 @@
         "source": "            return FieldCodec.decode(NativeOutcome, evidence).checked_child(result.outcome)"
       },
       {
-        "path": "src/agent_comms/native_compaction_writer.py",
-        "line": 114,
-        "source": "            request.commit.commit_id, outcome.state, FieldCodec.encode(outcome),"
-      },
-      {
         "path": "src/agent_comms/native_entries.py",
-        "line": 50,
+        "line": 70,
         "source": "        return cls.from_wire(json.loads(raw))"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 55,
+        "line": 75,
         "source": "        entry = cls.from_wire(raw)"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 369,
+        "line": 436,
+        "source": "        return NativeEntryCoordinates.from_wire(self.payload)"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 446,
         "source": "        entry = cls.from_wire(value)"
       },
       {
@@ -2052,48 +2081,8 @@
       },
       {
         "path": "src/agent_comms/native_tools.py",
-        "line": 79,
+        "line": 83,
         "source": "        FieldCodec.encode(arguments)"
-      },
-      {
-        "path": "src/agent_comms/owner_compaction_adaptive.py",
-        "line": 142,
-        "source": "                    \"retained\": FieldCodec.encode(captured.retained),"
-      },
-      {
-        "path": "src/agent_comms/owner_compaction_adaptive.py",
-        "line": 143,
-        "source": "                    \"source\": FieldCodec.encode(identity.source),"
-      },
-      {
-        "path": "src/agent_comms/owner_compaction_commit.py",
-        "line": 149,
-        "source": "                FieldCodec.encode(native_intent),"
-      },
-      {
-        "path": "src/agent_comms/owner_compaction_commit.py",
-        "line": 150,
-        "source": "                owner=FieldCodec.encode(held.receipt),"
-      },
-      {
-        "path": "src/agent_comms/owner_compaction_commit.py",
-        "line": 164,
-        "source": "                intent.update(FieldCodec.encode(SelectedCommitReference("
-      },
-      {
-        "path": "src/agent_comms/owner_compaction_manual.py",
-        "line": 75,
-        "source": "        prior = FieldCodec.decode(SelectedSource, json.loads(refusal.source_json)[\"source\"])"
-      },
-      {
-        "path": "src/agent_comms/owner_compaction_manual.py",
-        "line": 108,
-        "source": "            \"retained\": FieldCodec.encode(captured.retained),"
-      },
-      {
-        "path": "src/agent_comms/owner_compaction_manual.py",
-        "line": 109,
-        "source": "            \"source\": FieldCodec.encode("
       },
       {
         "path": "src/agent_comms/owner_launch.py",
@@ -2137,42 +2126,42 @@
       },
       {
         "path": "src/agent_comms/pi_payloads.py",
-        "line": 92,
+        "line": 93,
         "source": "    def from_wire(cls, value):"
       },
       {
         "path": "src/agent_comms/pi_payloads.py",
-        "line": 93,
+        "line": 94,
         "source": "        return FieldCodec.decode(cls, cls.normalize_wire(value))"
       },
       {
         "path": "src/agent_comms/pi_payloads.py",
-        "line": 95,
+        "line": 96,
         "source": "    def to_wire(self):"
       },
       {
         "path": "src/agent_comms/pi_payloads.py",
-        "line": 96,
+        "line": 97,
         "source": "        data = FieldCodec.encode(self)"
       },
       {
         "path": "src/agent_comms/pi_payloads.py",
-        "line": 141,
+        "line": 145,
         "source": "        return self if self.to_wire() == raw else UnknownContent(raw)"
       },
       {
         "path": "src/agent_comms/pi_payloads.py",
-        "line": 236,
+        "line": 243,
         "source": "    def to_wire(self):"
       },
       {
         "path": "src/agent_comms/pi_payloads.py",
-        "line": 948,
+        "line": 1011,
         "source": "            details = cls.from_wire(raw)"
       },
       {
         "path": "src/agent_comms/pi_payloads.py",
-        "line": 1078,
+        "line": 1197,
         "source": "            receipt = FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))"
       },
       {
@@ -2401,8 +2390,23 @@
         "source": "            record = FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding=\"utf-8\")))"
       },
       {
+        "path": "src/agent_comms/retained_context.py",
+        "line": 59,
+        "source": "        provenance = dict(declaration=FieldCodec.encode(message.reference),"
+      },
+      {
+        "path": "src/agent_comms/retained_context.py",
+        "line": 60,
+        "source": "                          wording=FieldCodec.encode(original.reference),"
+      },
+      {
+        "path": "src/agent_comms/retained_context.py",
+        "line": 62,
+        "source": "                          task=FieldCodec.encode(message.task))"
+      },
+      {
         "path": "src/agent_comms/retained_task_facts.py",
-        "line": 161,
+        "line": 277,
         "source": "            + json.dumps(FieldCodec.encode(self), ensure_ascii=False, sort_keys=True)"
       },
       {
@@ -2581,16 +2585,6 @@
         "source": "            record_request_progress(self.comms.root, lease, observation,"
       },
       {
-        "path": "src/agent_comms/selected_pi_summary_rpc.py",
-        "line": 92,
-        "source": "        envelope = FieldCodec.decode(SelectedSummarySource, source)"
-      },
-      {
-        "path": "src/agent_comms/selected_pi_summary_rpc.py",
-        "line": 93,
-        "source": "        source = FieldCodec.encode(envelope)"
-      },
-      {
         "path": "src/agent_comms/selected_result.py",
         "line": 10,
         "source": "from .diagnostics import record_terminal_failure"
@@ -2599,11 +2593,6 @@
         "path": "src/agent_comms/selected_result.py",
         "line": 101,
         "source": "    diagnostic = record_terminal_failure("
-      },
-      {
-        "path": "src/agent_comms/selected_summary_admission.py",
-        "line": 109,
-        "source": "            source = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))"
       },
       {
         "path": "src/agent_comms/selected_tool_broker.py",
@@ -2847,32 +2836,37 @@
       },
       {
         "path": "src/agent_comms/tools.py",
-        "line": 691,
-        "source": "        return {\"reference\": FieldCodec.encode(message.reference), \"decision\": FieldCodec.encode(message.decision)}"
+        "line": 683,
+        "source": "        return {\"reference\": FieldCodec.encode(message.reference),"
       },
       {
         "path": "src/agent_comms/tools.py",
-        "line": 724,
+        "line": 684,
+        "source": "                \"task\": FieldCodec.encode(message.task)}"
+      },
+      {
+        "path": "src/agent_comms/tools.py",
+        "line": 756,
         "source": "        messages = [message.to_wire() for message in comms.bus.inbox(thread)]"
       },
       {
         "path": "src/agent_comms/tools.py",
-        "line": 812,
+        "line": 844,
         "source": "        return asdict(comms.owners.start(self.name))"
       },
       {
         "path": "src/agent_comms/tools.py",
-        "line": 829,
+        "line": 861,
         "source": "        return {\"restart\": FieldCodec.encode(enqueue_restart(comms, self.name))}"
       },
       {
         "path": "src/agent_comms/tools.py",
-        "line": 840,
+        "line": 872,
         "source": "            \"restarts\": [FieldCodec.encode(record) for record in restart_status(comms, self.name)]"
       },
       {
         "path": "src/agent_comms/tools.py",
-        "line": 852,
+        "line": 884,
         "source": "            \"cancelled\": [FieldCodec.encode(record) for record in cancel_restart(comms, self.name)]"
       },
       {
@@ -3062,42 +3056,42 @@
       },
       {
         "path": "src/agent_comms/wire_log.py",
-        "line": 95,
+        "line": 96,
         "source": "            self._append_private_unlocked(marker, record.to_wire())"
       },
       {
         "path": "src/agent_comms/wire_log.py",
-        "line": 120,
+        "line": 121,
         "source": "                digest.update(json.dumps(FieldCodec.encode(message), sort_keys=True).encode())"
       },
       {
         "path": "src/agent_comms/wire_log.py",
-        "line": 220,
+        "line": 236,
         "source": "        record = WireRecord.from_wire(row, metadata.root_id)"
       },
       {
         "path": "src/agent_comms/wire_log.py",
-        "line": 312,
+        "line": 328,
         "source": "        for message in WireRecord.public_from_wire(record).messages():"
       },
       {
         "path": "src/agent_comms/wire_log.py",
-        "line": 314,
+        "line": 330,
         "source": "                yield message, len(json.dumps(message.to_wire()).encode()) + 1"
       },
       {
         "path": "src/agent_comms/wire_log.py",
-        "line": 490,
+        "line": 506,
         "source": "                metadata = FieldCodec.decode(WireMetadata, data)"
       },
       {
         "path": "src/agent_comms/wire_log.py",
-        "line": 493,
+        "line": 509,
         "source": "                if FieldCodec.encode(metadata) != data:"
       },
       {
         "path": "src/agent_comms/wire_log.py",
-        "line": 512,
+        "line": 528,
         "source": "                json.dumps(FieldCodec.encode(metadata), indent=2),"
       },
       {
@@ -3736,47 +3730,47 @@
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 87,
+        "line": 107,
         "source": "            evidence = NativeEvidenceRead(source)"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 160,
+        "line": 182,
         "source": "class NativeEvidenceRead:"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 179,
+        "line": 201,
         "source": "    def borrow(cls, session_file: Path, reader: NativeEvidenceRead | None = None):"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 188,
+        "line": 210,
         "source": "            with NativeEntry.open_evidence(session_file) as acquired:"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 223,
+        "line": 285,
         "source": "class NativeEvidenceScope(ExitStack):"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 233,
+        "line": 295,
         "source": "        self.readers: dict[Path, NativeEvidenceRead] = {}"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 237,
+        "line": 299,
         "source": "    def borrow(cls, scope: NativeEvidenceScope | None = None):"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 249,
+        "line": 311,
         "source": "    def for_source(self, path: Path) -> NativeEvidenceRead:"
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 253,
+        "line": 315,
         "source": "            self.readers[path] = self.enter_context(NativeEntry.open_evidence(path))"
       },
       {
@@ -3870,6 +3864,11 @@
         "source": "        source_reads: NativeEvidenceScope,"
       },
       {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 53,
+        "source": "        with NativeEntry.open_evidence(Path(self.session_file)) as evidence:"
+      },
+      {
         "path": "src/agent_comms/private_send_stage.py",
         "line": 121,
         "source": "        with NativeEntry.open_evidence(context.session_file) as evidence:"
@@ -3930,17 +3929,665 @@
         "source": "                NativeEntry.open_evidence(self.active_session_file)"
       }
     ],
-    "displaced_resource_absence": []
+    "displaced_resource_absence": [],
+    "session_revision_owner_consumers": [
+      {
+        "path": "src/agent_comms/backend.py",
+        "line": 49,
+        "source": "from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/backend.py",
+        "line": 115,
+        "source": "    def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:"
+      },
+      {
+        "path": "src/agent_comms/bus_activity_index.py",
+        "line": 11,
+        "source": "from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision"
+      },
+      {
+        "path": "src/agent_comms/bus_activity_index.py",
+        "line": 32,
+        "source": "    def current_for(self, revision: BusFileRevision) -> bool:"
+      },
+      {
+        "path": "src/agent_comms/bus_activity_index.py",
+        "line": 47,
+        "source": "        source = BusFileRevision(*revision)"
+      },
+      {
+        "path": "src/agent_comms/bus_display_index.py",
+        "line": 12,
+        "source": "from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision"
+      },
+      {
+        "path": "src/agent_comms/bus_display_index.py",
+        "line": 72,
+        "source": "    def current_for(self, revision: BusFileRevision, semantics: DisplayMetricScope) -> bool:"
+      },
+      {
+        "path": "src/agent_comms/bus_display_index.py",
+        "line": 88,
+        "source": "        source = BusFileRevision(*revision)"
+      },
+      {
+        "path": "src/agent_comms/bus_projection.py",
+        "line": 17,
+        "source": "class BusFileRevision:"
+      },
+      {
+        "path": "src/agent_comms/bus_projection.py",
+        "line": 39,
+        "source": "    source: BusFileRevision"
+      },
+      {
+        "path": "src/agent_comms/bus_projection.py",
+        "line": 63,
+        "source": "    def accepts(self, revision: BusFileRevision, stream: BinaryIO) -> bool:"
+      },
+      {
+        "path": "src/agent_comms/bus_projection.py",
+        "line": 81,
+        "source": "    def checkpoint(self, stream: BinaryIO, revision: BusFileRevision):"
+      },
+      {
+        "path": "src/agent_comms/compaction_boundary.py",
+        "line": 17,
+        "source": "from .owner_compaction_prepare import NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/compaction_boundary.py",
+        "line": 42,
+        "source": "        witness: NativeWitness,"
+      },
+      {
+        "path": "src/agent_comms/compaction_boundary.py",
+        "line": 111,
+        "source": "    witness: NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/compaction_source.py",
+        "line": 10,
+        "source": "from .owner_compaction_prepare import NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/compaction_source.py",
+        "line": 20,
+        "source": "    native: NativeWitness = field(metadata={\"journal_exclude\": True})"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 18,
+        "source": "from .native_revision_text import NativeRevisionText"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 19,
+        "source": "from .private_path import FileRevision"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 332,
+        "source": "class NativeCommitPosition:"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 336,
+        "source": "    revision: Annotated[FileRevision, NativeRevisionText]"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 344,
+        "source": "class CompactionPublishedMetadata(NativeCommitPosition):"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 393,
+        "source": "class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):"
+      },
+      {
+        "path": "src/agent_comms/compaction_states.py",
+        "line": 422,
+        "source": "    revision: Annotated[FileRevision, NativeRevisionText]"
+      },
+      {
+        "path": "src/agent_comms/fresh_private_session.py",
+        "line": 25,
+        "source": "from .private_path import FileIdentity, FileRevision, PrivateFileRole"
+      },
+      {
+        "path": "src/agent_comms/fresh_private_session.py",
+        "line": 60,
+        "source": "    def observed_revision(self) -> FileRevision:"
+      },
+      {
+        "path": "src/agent_comms/fresh_private_session.py",
+        "line": 61,
+        "source": "        return FileRevision.from_stat(self.observed)"
+      },
+      {
+        "path": "src/agent_comms/fresh_private_session.py",
+        "line": 85,
+        "source": "    revision: FileRevision"
+      },
+      {
+        "path": "src/agent_comms/fresh_private_session.py",
+        "line": 385,
+        "source": "    def verify_selected_startup(self) -> FileRevision:"
+      },
+      {
+        "path": "src/agent_comms/fresh_private_session.py",
+        "line": 418,
+        "source": "                    self, synced, self.bootstrap_size, FileRevision.from_stat(opened),"
+      },
+      {
+        "path": "src/agent_comms/fresh_private_session.py",
+        "line": 434,
+        "source": "            revision = FileRevision.from_stat(info)"
+      },
+      {
+        "path": "src/agent_comms/native_attestation.py",
+        "line": 13,
+        "source": "from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/native_attestation.py",
+        "line": 71,
+        "source": "    expected: NativeSessionIdentity | None = None"
+      },
+      {
+        "path": "src/agent_comms/native_compaction_request.py",
+        "line": 17,
+        "source": "from .owner_compaction_prepare import NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/native_compaction_request.py",
+        "line": 49,
+        "source": "    witness: NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/native_compaction_request.py",
+        "line": 64,
+        "source": "    def payload_digest(self, witness: NativeWitness) -> str:"
+      },
+      {
+        "path": "src/agent_comms/native_compaction_request.py",
+        "line": 80,
+        "source": "    def request(self, witness: NativeWitness, identity: NativeCommitIdentity) -> CommitNativeRequest:"
+      },
+      {
+        "path": "src/agent_comms/native_compaction_request.py",
+        "line": 104,
+        "source": "    witness: NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/native_custody.py",
+        "line": 15,
+        "source": "from .native_session_reopen import NativeSessionIdentity, validate_native_reopen"
+      },
+      {
+        "path": "src/agent_comms/native_custody.py",
+        "line": 93,
+        "source": "    ) -> NativeSessionIdentity | None:"
+      },
+      {
+        "path": "src/agent_comms/native_custody.py",
+        "line": 142,
+        "source": "        return NativeSessionIdentity(identity, session_file)"
+      },
+      {
+        "path": "src/agent_comms/native_custody.py",
+        "line": 210,
+        "source": "    identity: NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/native_custody.py",
+        "line": 223,
+        "source": "    def selected(self, identity: NativeSessionIdentity, package: Path) -> RetainedNative:"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 250,
+        "source": "        from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 274,
+        "source": "        session = NativeSessionIdentity(header.id, str(self.source.path))"
+      },
+      {
+        "path": "src/agent_comms/native_fork.py",
+        "line": 9,
+        "source": "from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/native_fork.py",
+        "line": 21,
+        "source": "    result = NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/native_fork.py",
+        "line": 24,
+        "source": "def fork_native_session(file: str, worktree: str, launcher: str) -> NativeSessionIdentity:"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 29,
+        "source": "from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 702,
+        "source": "            revision = FileRevision.from_stat(info)"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 715,
+        "source": "                if revision != FileRevision.from_stat(observed):"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 746,
+        "source": "        revision = FileRevision.from_stat(before)"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 762,
+        "source": "            if revision != FileRevision.from_stat(observed):"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 929,
+        "source": ") -> FileRevision:"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 935,
+        "source": "    return FileRevision.from_stat(info)"
+      },
+      {
+        "path": "src/agent_comms/native_revision_text.py",
+        "line": 1,
+        "source": "\"\"\"The SDK EntryStore's external revision scalar, represented by FileRevision.\"\"\""
+      },
+      {
+        "path": "src/agent_comms/native_revision_text.py",
+        "line": 5,
+        "source": "from .private_path import FileIdentity, FileRevision"
+      },
+      {
+        "path": "src/agent_comms/native_revision_text.py",
+        "line": 8,
+        "source": "class NativeRevisionText(TextRepresentation):"
+      },
+      {
+        "path": "src/agent_comms/native_revision_text.py",
+        "line": 11,
+        "source": "        if not isinstance(value, FileRevision):"
+      },
+      {
+        "path": "src/agent_comms/native_revision_text.py",
+        "line": 12,
+        "source": "            raise TypeError(\"Native revision requires the original FileRevision\")"
+      },
+      {
+        "path": "src/agent_comms/native_revision_text.py",
+        "line": 21,
+        "source": "        revision = FileRevision(FileIdentity(device, inode), size, mtime, ctime)"
+      },
+      {
+        "path": "src/agent_comms/native_session_reopen.py",
+        "line": 17,
+        "source": "from .private_path import FileRevision"
+      },
+      {
+        "path": "src/agent_comms/native_session_reopen.py",
+        "line": 25,
+        "source": "class NativeSessionIdentity:"
+      },
+      {
+        "path": "src/agent_comms/native_session_reopen.py",
+        "line": 35,
+        "source": "    def same_session(self, other: NativeSessionIdentity) -> bool:"
+      },
+      {
+        "path": "src/agent_comms/native_session_reopen.py",
+        "line": 47,
+        "source": "    result = NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/native_session_reopen.py",
+        "line": 72,
+        "source": "        if FileRevision.from_stat(before) != FileRevision.from_stat(after):"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 5,
+        "source": "from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/native_turn_context.py",
+        "line": 23,
+        "source": "    identity: NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_adaptive.py",
+        "line": 131,
+        "source": "            session_revision=revision,"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_commit.py",
+        "line": 22,
+        "source": "from .owner_compaction_prepare import NativePreparation, NativeWitness, prepare_native_source"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_commit.py",
+        "line": 46,
+        "source": "        witness: NativeWitness,"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_commit.py",
+        "line": 104,
+        "source": "        self, owner: Thread, owner_generation: int, witness: NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_commit.py",
+        "line": 129,
+        "source": "        witness: NativeWitness,"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_gate.py",
+        "line": 17,
+        "source": "from .native_revision_text import NativeRevisionText"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_gate.py",
+        "line": 18,
+        "source": "from .private_path import FileRevision"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_gate.py",
+        "line": 45,
+        "source": "    session_revision: Annotated[FileRevision, NativeRevisionText]"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 21,
+        "source": "from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 24,
+        "source": "from .native_revision_text import NativeRevisionText"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 25,
+        "source": "from .private_path import FileRevision"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 33,
+        "source": "class NativeWitness(NativeSessionIdentity):"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 38,
+        "source": "    revision: Annotated[FileRevision, NativeRevisionText]"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 47,
+        "source": "        if self.revision != FileRevision.from_stat(file.stat()):"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 61,
+        "source": "    def checked(self, file: Path, revision: FileRevision) -> NativePreparation | None:"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 69,
+        "source": "    def checked(self, file: Path, revision: FileRevision) -> None:"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 77,
+        "source": "    witness: NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 85,
+        "source": "    def checked(self, file: Path, revision: FileRevision) -> NativePreparation:"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 143,
+        "source": "        revision = FileRevision.from_stat(before)"
+      },
+      {
+        "path": "src/agent_comms/owner_compaction_prepare.py",
+        "line": 144,
+        "source": "        if revision != FileRevision.from_stat(after):"
+      },
+      {
+        "path": "src/agent_comms/pi_commands.py",
+        "line": 23,
+        "source": "from .owner_compaction_prepare import NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/pi_commands.py",
+        "line": 425,
+        "source": "    witness: NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/pi_payloads.py",
+        "line": 18,
+        "source": "from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/pi_payloads.py",
+        "line": 865,
+        "source": "            for component in fields(NativeSessionIdentity)"
+      },
+      {
+        "path": "src/agent_comms/pi_payloads.py",
+        "line": 870,
+        "source": "    def identity(self) -> NativeSessionIdentity | None:"
+      },
+      {
+        "path": "src/agent_comms/pi_payloads.py",
+        "line": 872,
+        "source": "        if len(known) != len(fields(NativeSessionIdentity)):"
+      },
+      {
+        "path": "src/agent_comms/pi_payloads.py",
+        "line": 874,
+        "source": "        return NativeSessionIdentity(**known)"
+      },
+      {
+        "path": "src/agent_comms/pi_summary_payloads.py",
+        "line": 11,
+        "source": "from .owner_compaction_prepare import NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/pi_summary_payloads.py",
+        "line": 232,
+        "source": "    witness: NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/pi_summary_payloads.py",
+        "line": 273,
+        "source": "    witness: NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/pi_summary_payloads.py",
+        "line": 309,
+        "source": "        from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/pi_summary_payloads.py",
+        "line": 311,
+        "source": "        original = NativeSessionIdentity(request.session_id, request.session_file)"
+      },
+      {
+        "path": "src/agent_comms/pi_summary_payloads.py",
+        "line": 312,
+        "source": "        observed = NativeSessionIdentity(self.session_id, self.session_file)"
+      },
+      {
+        "path": "src/agent_comms/presentation.py",
+        "line": 15,
+        "source": "from .bus_projection import BusFileRevision"
+      },
+      {
+        "path": "src/agent_comms/presentation.py",
+        "line": 348,
+        "source": "            if cached.current_for(BusFileRevision(*bus_revision), semantics):"
+      },
+      {
+        "path": "src/agent_comms/private_path.py",
+        "line": 29,
+        "source": "class FileRevision:"
+      },
+      {
+        "path": "src/agent_comms/private_path.py",
+        "line": 36,
+        "source": "    def from_stat(cls, observed: os.stat_result) -> FileRevision:"
+      },
+      {
+        "path": "src/agent_comms/private_send_admission.py",
+        "line": 32,
+        "source": "from .private_path import FileRevision"
+      },
+      {
+        "path": "src/agent_comms/private_send_admission.py",
+        "line": 175,
+        "source": "        self, actual_session_file: Path, selected_runtime_revision: FileRevision | None"
+      },
+      {
+        "path": "src/agent_comms/private_send_admission.py",
+        "line": 199,
+        "source": "        self, actual: Path, runtime_revision: FileRevision | None"
+      },
+      {
+        "path": "src/agent_comms/private_send_admission.py",
+        "line": 238,
+        "source": "        selected_runtime_revision: FileRevision | None = None,"
+      },
+      {
+        "path": "src/agent_comms/selected_pi_route.py",
+        "line": 14,
+        "source": "from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/selected_pi_route.py",
+        "line": 46,
+        "source": "                NativeSessionIdentity(session_id, session_file), expected_package"
+      },
+      {
+        "path": "src/agent_comms/selected_pi_route.py",
+        "line": 99,
+        "source": "    source = NativeSessionIdentity(session_id, session_file)"
+      },
+      {
+        "path": "src/agent_comms/selected_pi_summary_rpc.py",
+        "line": 23,
+        "source": "from .owner_compaction_prepare import NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/selected_pi_summary_rpc.py",
+        "line": 68,
+        "source": "        witness: NativeWitness,"
+      },
+      {
+        "path": "src/agent_comms/selected_source.py",
+        "line": 13,
+        "source": "from .private_path import FileRevision"
+      },
+      {
+        "path": "src/agent_comms/selected_source.py",
+        "line": 36,
+        "source": "    revision: FileRevision"
+      },
+      {
+        "path": "src/agent_comms/selected_source.py",
+        "line": 64,
+        "source": "    native: FileRevision"
+      },
+      {
+        "path": "src/agent_comms/selected_source.py",
+        "line": 72,
+        "source": "            native = FileRevision.from_stat(Path(session_file).stat())"
+      },
+      {
+        "path": "src/agent_comms/selected_source.py",
+        "line": 75,
+        "source": "                    FileRevision.from_stat(Path(session_file + \".input-proof\").stat())"
+      },
+      {
+        "path": "src/agent_comms/selected_summary_admission.py",
+        "line": 38,
+        "source": "    session_revision: SessionRevision"
+      },
+      {
+        "path": "src/agent_comms/selected_summary_admission.py",
+        "line": 52,
+        "source": "        if not self.session_revision.current(session):"
+      },
+      {
+        "path": "src/agent_comms/selected_summary_admission.py",
+        "line": 62,
+        "source": "        if self.session_revision != self.source.reserved_revision:"
+      },
+      {
+        "path": "src/agent_comms/selected_summary_admission.py",
+        "line": 73,
+        "source": "        return replace(self, session_revision=revision)"
+      },
+      {
+        "path": "src/agent_comms/threads.py",
+        "line": 31,
+        "source": "    from .owner_compaction_prepare import NativeWitness"
+      },
+      {
+        "path": "src/agent_comms/threads.py",
+        "line": 158,
+        "source": "    def compaction_attestation(self, owner_generation: int, witness: NativeWitness) -> OwnerCompactionAttestation:"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 16,
+        "source": "from .native_session_reopen import NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 55,
+        "source": "    identity: NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/turn_context.py",
+        "line": 62,
+        "source": "    identity: NativeSessionIdentity"
+      },
+      {
+        "path": "src/agent_comms/turn_input_binding.py",
+        "line": 134,
+        "source": "            session_revision=revision,"
+      }
+    ]
   },
   "counts": {
     "event_and_lease_names": 25,
     "event_producers_dispatch": 122,
-    "encoding_persistence": 416,
+    "encoding_persistence": 414,
     "replay_owner_consumers": 43,
     "removed_policy_proxies": 0,
     "retry_original": 33,
     "phase_original": 35,
-    "resource_owner_consumers": 45,
-    "displaced_resource_absence": 0
+    "resource_owner_consumers": 46,
+    "displaced_resource_absence": 0,
+    "session_revision_owner_consumers": 129
   }
 }

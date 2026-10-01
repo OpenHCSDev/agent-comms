@@ -31,6 +31,19 @@ from the persisted lease projection. No persisted watchdog-event reader was foun
 in that scope. Production: 172 lines deleted, 120 added across ten files. This is
 implementation progress, not final validation or completion of the whole lifecycle.
 
+[Acquired resource closure](native-evidence-resource-lifecycle-20261001.md) at
+`dac8c161` places borrowing/acquisition/refusal cleanup on NativeEvidenceRead/Scope,
+removes recursive consumer acquisition, and shares one acquired reader through
+continued-session and recovery corroboration. Semantic coverage/proof/cursor
+authorities remain their original owners.
+
+[Session/revision source closure](native-session-revision-source-closure-20261001.md)
+normally receives main union `1f8bf0ef` and Sch's framing `cc534692`. The existing
+NativeWitness extends NativeSessionIdentity; FileRevision crosses native witness,
+attestation, result and publication fields via the existing NativeRevisionText
+capability. All native_stamp/repeated revision-decoding consumers are deleted.
+Paused writer/budget and canonical terminal/readiness work remains in this draft.
+
 ## Actual existing-owner search
 
 [source-owner-search.json](../../evidence/runtime-lifecycle-semantic-pass-20261001/source-owner-search.json)

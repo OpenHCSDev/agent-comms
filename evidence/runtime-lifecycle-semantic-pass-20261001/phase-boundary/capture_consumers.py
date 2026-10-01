@@ -18,6 +18,7 @@ PATTERNS = {
     "phase_original": r"ShutdownPhase|def stalled|phase=|phase:.*TurnPhase",
     "resource_owner_consumers": r"NativeEvidence(Read|Scope)|NativeEntry\.(open_evidence|read_evidence)|read_history_evidence|read_tracked_input_digest",
     "displaced_resource_absence": r"if (source_reads|evidence) is None",
+    "session_revision_owner_consumers": r"NativeSessionIdentity|NativeWitness|NativeRevisionText|FileRevision|NativeCommitPosition|session_revision|native_stamp",
 }
 
 

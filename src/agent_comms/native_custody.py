@@ -221,7 +221,7 @@ class RetainedNative(NativeCustody):
         return self
 
     def selected(self, identity: NativeSessionIdentity, package: Path) -> RetainedNative:
-        if self.identity != identity or self.child.key[0].package != package:
+        if not self.identity.same_session(identity) or self.child.key[0].package != package:
             raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
         return self.idle()
 

@@ -20,7 +20,6 @@ from .compaction_records import SelectedSummarySource
 from .fresh_private_session import FreshPrivateSession
 from .input_disposition import FutureInputQueue
 from .native_pi import NativePiUnavailable
-from .native_session_reopen import NativeSessionIdentity
 from .owner_compaction_prepare import NativeWitness
 from .pi_commands import AgentCommsSummarizeCompaction
 from .pi_events import AgentCommsCompactionProgress, Response
@@ -110,11 +109,11 @@ class SelectedSummarySlot:
             session_file = witness.session_file
             try:
                 retained = persistent.custody.idle().selected(
-                    NativeSessionIdentity(self.session, session_file), expected_package
+                    witness, expected_package
                 )
             except NativePiUnavailable as error:
                 raise SelectedChildUnknown(str(error)) from error
-            if witness.revision != retained.revision.native_stamp:
+            if witness.revision != retained.revision.native:
                 raise SelectedChildUnknown("Selected source witness is stale")
             proc, reader = retained.child.proc, retained.child.reader
             operation = journal.summaries.reserve(
