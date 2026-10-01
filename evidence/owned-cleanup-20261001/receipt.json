@@ -1,0 +1,372 @@
+{
+  "scope": "Einstein newly completed cleanup only; excludes Singer prior 5.391GiB",
+  "completed_epoch": 1790895052.6874037,
+  "removed": [
+    {
+      "path": "/home/ts/wt/comms-retained-batch-index-cutover-20260929",
+      "kind": "merged_clean_worktree",
+      "head": "97b1a03943b6d7b29bc856fc0cdab087b3b98a56",
+      "branch": "fix/retained-batch-index-cutover-20260929",
+      "pr": 438,
+      "common": "/home/ts/.agent-comms/.git",
+      "ignored": "!! .pytest_cache/\n!! .runtime438/.gitignore\n!! .runtime438/.lock\n!! .runtime438/CACHEDIR.TAG\n!! .runtime438/bin/\n!! .runtime438/lib/\n!! .runtime438/lib64\n!! .runtime438/pyvenv.cfg\n!! src/agent_comms/__pycache__/\n!! src/agent_comms/coordination_tables/__pycache__/",
+      "allocated_bytes": 60342272,
+      "exclusive_allocated_bytes": 60342272
+    },
+    {
+      "path": "/home/ts/wt/comms-native-compaction-latency-20260929",
+      "kind": "merged_clean_worktree",
+      "head": "5c60069b128ffb59b3f645049a4515379c365082",
+      "branch": "perf/native-compaction-latency-20260929",
+      "pr": 429,
+      "common": "/home/ts/.agent-comms/.git",
+      "ignored": "!! .pytest_cache/\n!! tests/__pycache__/\n!! tests/guards/__pycache__/",
+      "allocated_bytes": 53977088,
+      "exclusive_allocated_bytes": 53977088
+    },
+    {
+      "path": "/home/ts/wt/comms-pi-mcp-client",
+      "kind": "merged_clean_worktree",
+      "head": "3fc252fd516ecf6660cc83247c00c36d013e10a9",
+      "branch": "feat/pi-mcp-client-stdio",
+      "pr": 77,
+      "common": "/home/ts/.agent-comms/.git",
+      "ignored": "!! .mypy_cache/\n!! .pytest_cache/\n!! .ruff_cache/\n!! extensions/pi-mcp-client/node_modules/\n!! src/agent_comms/__pycache__/\n!! tests/__pycache__/",
+      "allocated_bytes": 211922944,
+      "exclusive_allocated_bytes": 211922944
+    },
+    {
+      "path": "/home/ts/wt/comms-tr0-ratchet-20260928",
+      "kind": "merged_clean_worktree",
+      "head": "e542fe82bcb5543f80ad7c595dd0b36bafc935ec",
+      "branch": "refactor/tr0-packaged-ratchet-20260928",
+      "pr": 254,
+      "common": "/home/ts/.agent-comms/.git",
+      "ignored": "!! .artifacts/dist/\n!! .artifacts/venv/.gitignore\n!! .artifacts/venv/.lock\n!! .artifacts/venv/CACHEDIR.TAG\n!! .artifacts/venv/bin/\n!! .artifacts/venv/lib/\n!! .artifacts/venv/lib64\n!! .artifacts/venv/pyvenv.cfg\n!! .pytest_cache/\n!! tests/__pycache__/\n!! tests/guards/__pycache__/",
+      "allocated_bytes": 54718464,
+      "exclusive_allocated_bytes": 46751744
+    },
+    {
+      "path": "/home/ts/wt/comms-s10-pi-boundary-20260928",
+      "kind": "merged_clean_worktree",
+      "head": "7b03b7eee0b5a1d7bb8f8c7155daca0b97ea83b9",
+      "branch": "refactor/s10-pi-boundary-20260928",
+      "pr": 234,
+      "common": "/home/ts/.agent-comms/.git",
+      "ignored": "!! .artifacts/wheels/.gitignore\n!! .artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl\n!! .pytest_cache/\n!! .ruff_cache/\n!! src/agent_comms/__pycache__/\n!! tests/__pycache__/\n!! tests/guards/__pycache__/\n!! tests/round2/__pycache__/\n!! tools/__pycache__/",
+      "allocated_bytes": 24993792,
+      "exclusive_allocated_bytes": 24993792
+    },
+    {
+      "path": "/home/ts/wt/comms-private-runtime-bootstrap-20260928",
+      "kind": "merged_clean_worktree",
+      "head": "0e162f10eaa876c21a9b33f8a1cd7d20c8748983",
+      "branch": "fix/private-runtime-bootstrap-20260928",
+      "pr": 278,
+      "common": "/home/ts/.agent-comms/.git",
+      "ignored": "!! .artifacts/wheels/.gitignore\n!! .artifacts/wheels/agent_comms-0.1.0-py3-none-any.whl\n!! .pytest_cache/\n!! .ruff_cache/\n!! src/agent_comms/__pycache__/\n!! tests/__pycache__/",
+      "allocated_bytes": 27893760,
+      "exclusive_allocated_bytes": 27893760
+    },
+    {
+      "path": "/home/ts/wt/toad-default-route-20260927",
+      "kind": "merged_clean_worktree",
+      "head": "f30be48987850c7780fc0d852db87797a8436eb5",
+      "branch": "feat/toad-default-route-20260927",
+      "pr": 69,
+      "common": "/home/ts/.agent-comms/.test-tmp/toad-worktree/.git",
+      "ignored": "!! .ruff_cache/.gitignore\n!! .ruff_cache/0.16.0/\n!! .ruff_cache/CACHEDIR.TAG\n!! src/toad/__pycache__/\n!! src/toad/acp/__pycache__/\n!! src/toad/ansi/__pycache__/\n!! src/toad/prompt/__pycache__/\n!! src/toad/screens/__pycache__/\n!! src/toad/visuals/__pycache__/\n!! src/toad/widgets/__pycache__/\n!! tests/__pycache__/",
+      "allocated_bytes": 10321920,
+      "exclusive_allocated_bytes": 10321920
+    },
+    {
+      "path": "/home/ts/wt/toad-t8-small-boundaries-20260928",
+      "kind": "merged_clean_worktree",
+      "head": "142feb1804bc71fec7ee31f4d05ff1dd417bc227",
+      "branch": "refactor/t8-small-boundaries-20260928",
+      "pr": 115,
+      "common": "/home/ts/.agent-comms/.test-tmp/toad-worktree/.git",
+      "ignored": "!! .artifacts/dist/\n!! .ruff_cache/.gitignore\n!! .ruff_cache/0.16.0/\n!! .ruff_cache/CACHEDIR.TAG\n!! src/toad/__pycache__/\n!! src/toad/acp/__pycache__/\n!! src/toad/ansi/__pycache__/\n!! src/toad/screens/__pycache__/\n!! src/toad/visuals/__pycache__/\n!! src/toad/widgets/__pycache__/",
+      "allocated_bytes": 11603968,
+      "exclusive_allocated_bytes": 11603968
+    },
+    {
+      "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.artifacts/s4/cache-semantic_descent",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 7409664,
+      "exclusive_allocated_bytes": 7409664
+    },
+    {
+      "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.artifacts/s4/cache-analysis",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 8409088,
+      "exclusive_allocated_bytes": 8409088
+    },
+    {
+      "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.artifacts/s4/baseline-cache",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 41951232,
+      "exclusive_allocated_bytes": 41951232
+    },
+    {
+      "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.artifacts/s4/cache",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 71188480,
+      "exclusive_allocated_bytes": 71188480
+    },
+    {
+      "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.artifacts/s4/mypy-cache",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 10375168,
+      "exclusive_allocated_bytes": 10375168
+    },
+    {
+      "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.artifacts/s4/baseline-cache-analysis",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 3899392,
+      "exclusive_allocated_bytes": 3899392
+    },
+    {
+      "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.artifacts/s4/baseline-cache-semantic_descent",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 1921024,
+      "exclusive_allocated_bytes": 1921024
+    },
+    {
+      "path": "/home/ts/wt/toad-s4-read-routing-20260927/.artifacts/s4/nra-cache-semantic_descent",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 9129984,
+      "exclusive_allocated_bytes": 9129984
+    },
+    {
+      "path": "/home/ts/wt/toad-s4-read-routing-20260927/.artifacts/s4/nra-cache",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 115331072,
+      "exclusive_allocated_bytes": 115331072
+    },
+    {
+      "path": "/home/ts/wt/toad-s4-read-routing-20260927/.artifacts/s4/nra-cache-analysis",
+      "kind": "computed_NRA_or_mypy_cache",
+      "allocated_bytes": 2359296,
+      "exclusive_allocated_bytes": 2359296
+    },
+    {
+      "path": "/home/ts/wt/ac498-04/wire/native-sessions/7affaff1bbe82c1ff0d5d091f95dedf9/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 3,
+      "proof_preserved": "/home/ts/wt/ac498-04/wire/native-sessions/7affaff1bbe82c1ff0d5d091f95dedf9/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-04/wire/native-sessions/9ebabc4a3edb3d2e3f0c0c8905346b77/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 3,
+      "proof_preserved": "/home/ts/wt/ac498-04/wire/native-sessions/9ebabc4a3edb3d2e3f0c0c8905346b77/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-04/wire/native-sessions/ee4bd975a20975e558c56ee4d7f0c0d4/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 3,
+      "proof_preserved": "/home/ts/wt/ac498-04/wire/native-sessions/ee4bd975a20975e558c56ee4d7f0c0d4/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-05/wire/native-sessions/9d96de16b20a82f57eaaa0d760c1e72e/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-05/wire/native-sessions/9d96de16b20a82f57eaaa0d760c1e72e/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-05/wire/native-sessions/b622713f3c87c46bc6118df1bbce5adb/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-05/wire/native-sessions/b622713f3c87c46bc6118df1bbce5adb/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-05/wire/native-sessions/7b13f31e7c8702f08f243cb991384a02/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-05/wire/native-sessions/7b13f31e7c8702f08f243cb991384a02/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-06/wire/native-sessions/b756b0dae735e2356a06ff628949316e/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-06/wire/native-sessions/b756b0dae735e2356a06ff628949316e/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-06/wire/native-sessions/2a075364919373f63cabb71d9fcec07f/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-06/wire/native-sessions/2a075364919373f63cabb71d9fcec07f/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-06/wire/native-sessions/1b05ecad57afddf97aca088d300c2599/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-06/wire/native-sessions/1b05ecad57afddf97aca088d300c2599/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-07/wire/native-sessions/41eed980248fd5bad14bae2ec4570613/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-07/wire/native-sessions/41eed980248fd5bad14bae2ec4570613/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-07/wire/native-sessions/d87994d23b31cff54cc0478ff44da0c9/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-07/wire/native-sessions/d87994d23b31cff54cc0478ff44da0c9/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/ac498-07/wire/native-sessions/65f1c6b6513d2d5755608dc53ebdcd88/retained.jsonl",
+      "kind": "unused_byte_identical_fixture_copy",
+      "original": "/home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl",
+      "sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+      "input_rows": 0,
+      "proof_preserved": "/home/ts/wt/ac498-07/wire/native-sessions/65f1c6b6513d2d5755608dc53ebdcd88/retained.jsonl.input-proof",
+      "proof_sha256": "79f51e8e56456b41ff455c5a5098eace093d7245efafa053d20778ad7ae48d8e",
+      "allocated_bytes": 42930176,
+      "exclusive_allocated_bytes": 42930176
+    },
+    {
+      "path": "/home/ts/wt/toad-canonical-wire-transcript-20260929/.artifacts/installed-source-admission09",
+      "allocated_bytes": 82427904,
+      "exclusive_allocated_bytes": 22798336,
+      "refs": [],
+      "top": [
+        "lib",
+        "lib64",
+        "CACHEDIR.TAG",
+        "bin",
+        ".lock",
+        "pyvenv.cfg",
+        ".gitignore"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-canonical-wire-transcript-20260929/.artifacts/installed-original-routing07",
+      "allocated_bytes": 82354176,
+      "exclusive_allocated_bytes": 27459584,
+      "refs": [],
+      "top": [
+        "lib",
+        "lib64",
+        "CACHEDIR.TAG",
+        "bin",
+        ".lock",
+        "pyvenv.cfg",
+        ".gitignore"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-canonical-wire-transcript-20260929/.artifacts/installed-real04",
+      "allocated_bytes": 16437248,
+      "exclusive_allocated_bytes": 16437248,
+      "refs": [],
+      "top": [
+        "lib",
+        "lib64",
+        "CACHEDIR.TAG",
+        "bin",
+        ".lock",
+        "pyvenv.cfg",
+        ".gitignore"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/toad-canonical-wire-transcript-20260929/.artifacts/installed-composition02",
+      "allocated_bytes": 85069824,
+      "exclusive_allocated_bytes": 36868096,
+      "refs": [],
+      "top": [
+        "lib",
+        "lib64",
+        "CACHEDIR.TAG",
+        "bin",
+        ".lock",
+        "pyvenv.cfg",
+        ".gitignore"
+      ]
+    }
+  ],
+  "removed_allocated_bytes": 1509199872,
+  "measured_df_increase_bytes": 1340989440,
+  "current_available_bytes": 9409531904,
+  "protected_original_and_sidecar_hashes_unchanged": true,
+  "preserved": [
+    "all branches",
+    "ac49804..07 proof sidecars/coordination/registry/native actual-input journals",
+    "ac49810/11/12",
+    "native53b8 and active donors",
+    "parent-evidence498-stopped-saved-startup",
+    "original saved journal and input-proof",
+    "s4 raw characterization/proofs",
+    "installed-native06: exact external paired-dependencies.pth borrower; parent WT/source retained",
+    "native761 source build: no verified standalone counterpart; not removed",
+    "ac49808/09 retained journals contain genuine appended input, not byte-identical source copies",
+    "all current parent/494/498 publication and active489/490/499/284/19/495 sources"
+  ],
+  "gates": [
+    "GitHub PR merged, exact HEAD ancestry, clean tracked/untracked source",
+    "zero initialized submodules and nested Git metadata",
+    "reverse Git metadata: only own registration, no foreign common-dir dependencies",
+    "current readable process/FD/environ/maps, registry claims and default entrypoints",
+    "installed and idle .pth/direct_url/activation/staging dependencies",
+    "copies original hash/size equal; no native_runtime_input session_file points at removed copies; unique sidecars retained"
+  ],
+  "measurement_limits": "Removed allocated bytes includes hardlinks; df increase is authoritative observed net free-space change during bounded removal windows. Other agents may allocate concurrently. Readable same-user processes examined; no provider/native actions run."
+}
