@@ -115,7 +115,9 @@ class CompactionJournal:
                 os.close(parent_fd)
 
     @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
+    def transaction(
+        self, *, blocking: bool = True, retain_exclusion: bool = False
+    ) -> Iterator[sqlite3.Connection]:
         """Durable generic transaction; never mints a selected admission ACK.
 
         Only the verified terminal methods below issue their one-use receipt,
@@ -123,33 +125,38 @@ class CompactionJournal:
         A caller's status-only SQL transition cannot use this generic API to
         construct input authority.
         """
-        db = sqlite3.connect(self.path, timeout=5)
+        db = sqlite3.connect(self.path, timeout=5 if blocking else 0)
         try:
+            if retain_exclusion:
+                # SQLite retains its original EXCLUSIVE file lock across COMMIT
+                # until this connection closes. No advisory lock or new store.
+                db.execute("PRAGMA locking_mode=EXCLUSIVE")
             mode = JournalMode.read(db.execute("PRAGMA journal_mode=DELETE"))
             db.execute("PRAGMA synchronous=EXTRA")
             if mode != [JournalMode("delete")] or SyncMode.read(
                 db.execute("PRAGMA synchronous")
             ) != [SyncMode(3)]:
                 raise CompactionJournalError("Required durable SQLite mode unavailable")
-            db.execute("BEGIN IMMEDIATE")
+            db.execute("BEGIN EXCLUSIVE" if retain_exclusion else "BEGIN IMMEDIATE")
             try:
                 yield db
             except BaseException:
                 db.rollback()
                 raise
-            try:
-                db.commit()
-                # EXTRA syncs the rollback-journal unlink. Explicitly sync the
-                # parent too, before returning ANY committed intent/outcome.
-                # Constructor-only directory sync cannot cover this unlink.
-                directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
-                try:
-                    os.fsync(directory_fd)
-                finally:
-                    os.close(directory_fd)
-            except Exception as error:
-                raise CompactionJournalUnknownError(
-                    "Compaction journal durability UNKNOWN; never dispatch or replay"
-                ) from error
+            self.commit(db)
         finally:
             db.close()
+
+    def commit(self, db: sqlite3.Connection) -> None:
+        """The same durable checkpoint for a transaction or retained raw fence."""
+        try:
+            db.commit()
+            directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except Exception as error:
+            raise CompactionJournalUnknownError(
+                "Compaction journal durability UNKNOWN; never dispatch or replay"
+            ) from error

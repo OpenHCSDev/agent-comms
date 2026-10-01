@@ -26,6 +26,46 @@ from selected_summary_cases import manual_source
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
 
+def test_raw_marker_durable_checkpoint_retains_original_sqlite_custody(tmp_path):
+    from agent_comms.compaction_records import PrivateRawInput
+
+    session = tmp_path / 'original.jsonl'
+    session.write_text('{"type":"session","version":3}\n')
+    journal = CompactionJournal(tmp_path / 'compaction-commits.sqlite3')
+    with journal.private_inputs.admission(session, blocking=False) as admitted:
+        assert PrivateRawInput.one(admitted.db, input_id='a' * 32) is None
+        admitted.mark_unknown('a' * 32)
+        with sqlite3.connect(journal.path, timeout=0) as concurrent:
+            with pytest.raises(sqlite3.OperationalError) as refused:
+                concurrent.execute(f'SELECT * FROM {PrivateRawInput.declared_name}').fetchall()
+            assert refused.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+        admitted.require_marker('a' * 32)
+    with journal.transaction() as db:
+        assert PrivateRawInput.one(db, input_id='a' * 32).input_id == 'a' * 32
+
+
+@pytest.mark.parametrize('resource', ['inputs', 'journal'])
+def test_raw_admission_busy_resources_leave_no_unknown_marker(tmp_path, resource):
+    from contextlib import ExitStack
+    from agent_comms.compaction_records import PrivateRawInput
+
+    session = tmp_path / 'original.jsonl'
+    session.write_text('{"type":"session","version":3}\n')
+    journal = CompactionJournal(tmp_path / 'compaction-commits.sqlite3')
+    with ExitStack() as held:
+        if resource == 'inputs':
+            held.enter_context(InputDispositions(tmp_path / InputDispositions.filename).locked())
+            expected = BlockingIOError
+        else:
+            held.enter_context(journal.transaction())
+            expected = sqlite3.OperationalError
+        with pytest.raises(expected):
+            with journal.private_inputs.admission(session, blocking=False):
+                raise AssertionError('Busy original resource cannot grant raw custody')
+    with journal.transaction() as db:
+        assert PrivateRawInput.select(db) == []
+
+
 @pytest.fixture
 def reserved(tmp_path):
     session = tmp_path / "session.jsonl"

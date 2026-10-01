@@ -28,8 +28,45 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
-from contextlib import closing
+from contextlib import closing, contextmanager
+from abc import abstractmethod
 import sqlite3
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
+from agent_comms.private_sidecar import sidecar_connection
+from agent_comms.coordinator import Coordination
+
+
+class AdmissionContention(DeclaredFamily, affix='Contention'):
+    """Real held resource in the existing continuous native journey."""
+
+    @classmethod
+    @abstractmethod
+    def custody(cls, service, owners): ...
+
+
+class WireReadContention(AdmissionContention, declared_name='wire'):
+    @classmethod
+    @contextmanager
+    def custody(cls, service, owners):
+        with service.bus.log.certified_read():
+            yield True
+
+
+class PromptBindingContention(AdmissionContention, declared_name='binding'):
+    @classmethod
+    @contextmanager
+    def custody(cls, service, owners):
+        with Coordination(str(service.root/'coordination.sqlite3')) as store:
+            path = binding_store_path(store)
+            if not path.exists():
+                yield False
+                return
+            with sidecar_connection(path, PromptBinding) as db:
+                # All burst reservations must have their genuine immutable
+                # binding before holding its snapshot; no writer is blocked in
+                # an earlier bind transaction instead of the affected send seam.
+                yield len(PromptBinding.select(db)) >= owners
 
 
 async def attach(service, name):
@@ -187,13 +224,19 @@ async def run(arguments):
                                         '?mode=ro',uri=True)) as db:
                 reserved = NativeRuntimeInput.select(db)
             if reserved:
-                # Observe the original reservation, then acquire a real reader.
-                with service.bus.log.certified_read():
+                # The family holds the actual resource, not a replaced runtime
+                # or invented Busy response. Each gate keeps its original IDs.
+                with AdmissionContention.decode(arguments.contention_resource).custody(
+                    service, len(names)
+                ) as ready:
+                    if not ready:
+                        continue
                     begun = time.monotonic()
                     contention_held.set()
                     contention_release.wait(arguments.contention_seconds)
                     contention_observations.append({'held_seconds':time.monotonic()-begun,
-                        'original_reserved_input':reserved[0].input_id})
+                        'original_reserved_input':reserved[0].input_id,
+                        'resource':arguments.contention_resource})
                 return
             contention_release.wait(.01)
 
@@ -365,5 +408,7 @@ if __name__=='__main__':
     parser.add_argument('--registry-size',type=int,default=0)
     parser.add_argument('--contention',action='store_true')
     parser.add_argument('--contention-seconds',type=float,default=12)
+    parser.add_argument('--contention-resource',default='wire',
+                        choices=[kind.declared_name for kind in AdmissionContention.members_with(AdmissionContention)])
     parser.add_argument('--cancel-before-grant',action='store_true')
     asyncio.run(run(parser.parse_args()))

@@ -11,6 +11,8 @@ session journal's durable user-message digest matches the binding.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from contextlib import contextmanager
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -219,13 +221,23 @@ def read_expected_prompt_binding(
     store: Coordination, input_id: str, *, blocking: bool = True
 ) -> PromptBinding | None:
     """Return the immutable binding, or None when none was durably written."""
+    with expected_prompt_binding(store, input_id, blocking=blocking) as binding:
+        return binding
+
+
+@contextmanager
+def expected_prompt_binding(
+    store: Coordination, input_id: str, *, blocking: bool = True
+) -> Iterator[PromptBinding | None]:
+    """Keep the original sidecar snapshot in custody through dependent admission."""
     if type(store) is not Coordination or type(input_id) is not str:
         raise ValueError("prompt binding lookup requires the coordinator store and input ID")
     path = binding_store_path(store)
     if not path.exists() and not path.is_symlink():
-        return None
+        yield None
+        return
     with sidecar_connection(path, PromptBinding, blocking=blocking) as db:
-        return PromptBinding.one(db, input_id=input_id)
+        yield PromptBinding.one(db, input_id=input_id)
 
 
 def expected_prompt_matches_journal(session_file: Path, binding: PromptBinding) -> bool:

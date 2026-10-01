@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .compaction_journal import CompactionJournal
+from .compaction_private_inputs import PrivateInputSend
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict
 from .coordination_response import _response_boundary
@@ -170,19 +171,29 @@ class PrivateSendAdmission:
         self.stage.commit(store, self.participant, self.input_id, self.token_digest, context)
 
     @contextmanager
-    def _exclusion(self) -> Iterator[tuple[Coordination, RegistrySnapshot, sqlite3.Connection]]:
+    def _exclusion(
+        self, actual_session_file: Path, selected_runtime_revision: FileRevision | None
+    ) -> Iterator[tuple[Coordination, RegistrySnapshot, sqlite3.Connection, PrivateInputSend]]:
         with ExitStack() as authority:
             try:
                 store = authority.enter_context(Coordination(str(self.store_path), lock_timeout=0))
                 registry = authority.enter_context(_response_boundary(self.bus, blocking=False))
                 db = authority.enter_context(store.session.irreversible_admission())
+                authority.enter_context(self.stage.bound_prompt(
+                    store, self.input_id, self.participant, self.wire_root_id,
+                    self.prompt, blocking=False,
+                ))
+                saved = self._saved_session(actual_session_file, selected_runtime_revision)
+                raw = authority.enter_context(
+                    self._journal.private_inputs.admission(saved, blocking=False)
+                )
             except BlockingIOError as error:
                 raise PromptAdmissionBusy("Native admission exclusion is busy") from error
             except sqlite3.OperationalError as error:
                 if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
                     raise PromptAdmissionBusy("Native admission database is busy") from error
                 raise
-            yield store, registry, db
+            yield store, registry, db, raw
 
     def _saved_session(
         self, actual: Path, runtime_revision: FileRevision | None
@@ -232,7 +243,7 @@ class PrivateSendAdmission:
             pass
         else:
             raise IdentityConflict("native send admission requires the isolated raw writer")
-        with self._exclusion() as (store, registry, db):
+        with self._exclusion(actual_session_file, selected_runtime_revision) as (store, registry, db, raw):
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send admission cannot be reused")
             _require_no_private_owner_rename(self.bus.log.path.parent)
@@ -246,15 +257,10 @@ class PrivateSendAdmission:
                 db, self.input_id, self.participant, self.token_digest
             )
             self.stage.require_claim(store)
-            self.stage.require_binding(
-                store, self.input_id, self.participant, self.wire_root_id, self.prompt
-            )
-            saved = self._saved_session(actual_session_file, selected_runtime_revision)
             # Persist UNKNOWN before any byte. Then retain the SAME journal's
             # exclusion through the raw writer; neither ACK nor fake result clears it.
-            self._journal.private_inputs.reserve(saved, self.input_id)
-            with self._journal.private_inputs.send_fence(saved, private_input_id=self.input_id):
-                reserved.sent_owner_admission_generation.record(
-                    reserved, db, self.owner.admission_generation
-                )
-                yield
+            raw.mark_unknown(self.input_id)
+            reserved.sent_owner_admission_generation.record(
+                reserved, db, self.owner.admission_generation
+            )
+            yield
