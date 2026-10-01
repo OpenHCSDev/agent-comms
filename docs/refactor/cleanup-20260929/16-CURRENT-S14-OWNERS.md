@@ -262,3 +262,12 @@ Actual original physical receiver gate remains necessary before activation.
 Heisenberg269 sourcef39a38b4 is pushed, byte-identical receipt43687234; historical
 retention reuses original viewport admission,16 added/2 deleted. Kepler's single
 actual original41MB physical/profile gate is running; no CPU/live claim yet.
+
+267 original physical readiness gate is now accepted:33.3136s through the exact
+ordinary wrapper/st candidate05. Newly opened PR159 details shows Needs attention
+and Inbox unavailable matching sidebar/IRC, rather than inferred Ready. History
+is still loading at that phase; this is not complete history or recovered-input
+acceptance. All original three process/native/proof/input/wire hashes unchanged,
+owned cleanup empty, full video decodes. No original input replay/provider/restart
+or public activation. Parent requires normal combined pins/carry and quiet public
+installation next; Arendt prepares the existing maintenance capability.
