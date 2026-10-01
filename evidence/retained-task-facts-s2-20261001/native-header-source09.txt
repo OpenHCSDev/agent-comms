@@ -1,0 +1,123 @@
+.FFFFFFF...F...........................                                  [100%]
+=================================== FAILURES ===================================
+_____ test_context_owner_rejects_invalid_lookup_before_reading_files[None] _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-header09/test_context_owner_rejects_inv0')
+input_id = None
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received NoneType"
+
+tests/test_native_evidence_boundary.py:42: AssertionError
+______ test_context_owner_rejects_invalid_lookup_before_reading_files[1] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-header09/test_context_owner_rejects_inv1')
+input_id = 1
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received int"
+
+tests/test_native_evidence_boundary.py:42: AssertionError
+_____ test_context_owner_rejects_invalid_lookup_before_reading_files[True] _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-header09/test_context_owner_rejects_inv2')
+input_id = True
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received bool"
+
+tests/test_native_evidence_boundary.py:42: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-header09/test_context_owner_rejects_inv3')
+input_id = b'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received bytes"
+
+tests/test_native_evidence_boundary.py:42: AssertionError
+_______ test_context_owner_rejects_invalid_lookup_before_reading_files[] _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-header09/test_context_owner_rejects_inv4')
+input_id = ''
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:42: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-header09/test_context_owner_rejects_inv5')
+input_id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:42: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[gggggggggggggggggggggggggggggggg] _
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-header09/test_context_owner_rejects_inv6')
+input_id = 'gggggggggggggggggggggggggggggggg'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:42: AssertionError
+_ test_non_user_tracked_identity_cannot_disappear_into_display_fallback[assistant] _
+
+role = 'assistant'
+
+    @pytest.mark.parametrize("role", ["assistant", "toolResult", "extension"])
+    def test_non_user_tracked_identity_cannot_disappear_into_display_fallback(role):
+>       with pytest.raises(ValueError, match="must belong to a user"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'must belong to a user'
+E         Actual message: 'Missing required fields for AssistantMessage'
+
+tests/test_native_evidence_boundary.py:75: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[None]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[1]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[True]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[gggggggggggggggggggggggggggggggg]
+FAILED tests/test_native_evidence_boundary.py::test_non_user_tracked_identity_cannot_disappear_into_display_fallback[assistant]
+8 failed, 31 passed in 0.86s
