@@ -354,3 +354,12 @@ the Codex thread messaging capability became available. Sch494 receives a
 separate bounded tests-only contribution in
 /home/ts/wt/comms-494-typed-journal-fixtures-20261001; no production compaction
 edits or functional-release hold. Singer retains all schema carry integration.
+
+## Sole schema carry owner
+
+Singer495 published Ready checkpoint33c4d6ee with its installed carry proof.
+On his explicit request, unused tools/cutover/native_source_carry.py is removed
+from490. The sole carry remains495's existing installer extension, which retains
+ordered multiple FULL execution links and attests all unrelated schema/rows.
+The earlier unexecuted prototype tool and its assumptions remain historical
+source evidence, not an alternate installer or release requirement.
