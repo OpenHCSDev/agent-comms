@@ -1,6 +1,6 @@
 # S2 original input consumer closure
 
-Status: draft source checkpoint. Final bounded validation remains outstanding.
+Status: coherent source and installed CLI closure validated; draft for owner review.
 Canonical 499 qualification is independent; no public activation is requested.
 
 ## Existing owners and caller closure
@@ -34,9 +34,26 @@ meaning is changed. Original sources remain in their existing stores.
 
 ## Delivery boundary
 
-Reasoning and coherent source closure precede validation. Final validation will
-reuse the existing continuous pin/query/export/correction/drop journey and
-exercise the installed CLI in an owned private fixture without provider/native
-inputs. This is not a claim of full native/UI acceptance. No tests have been run
-for this checkpoint. No provider calls, native builds, public writes or restarts
-have occurred.
+Reasoning and coherent source closure preceded validation. Final focused
+validation passed three checks in 2.21 seconds using the installed wheel. The
+installed CLI pilot passed 15 subprocess calls: three original-input pins,
+query/export, four expected refusals, rename, correction, drop and reopen.
+The two distinct originals had identical wording; repeated pinning shared only
+the same original provenance. Original input file bytes remained unchanged after
+every command and both originals remained unresolved. Eight installed producer
+and consumer module hashes match the reviewed checkout. No source overlay or
+conftest scheduler replacement was used by the installed pilot. This verifies
+the affected installed CLI path; full native/ACP/UI acceptance is not claimed.
+No provider calls, native inputs, native builds, public writes or restarts occurred.
+
+## Persistent evidence
+
+`evidence/original-input-consumer-closure-20261001/installed-journey.json` records
+the installed entrypoint, module hashes, all command outcomes and original-byte
+preservation. `existing-owner-caller-search.txt` includes the actual declaration
+and consumer searches. It shows a single TaskAttachment declaration, one
+NativeInputConstraintPin specialization, and one inherited PinInputConstraintCliCommand
+member; the two retrieval/wording implementations are ancestor and native override,
+not competing authorities. `merge-main-preimages.json` records unchanged494 framing
+and original481 source lookup. The fixture and small installed wheel environment
+are owned under `.artifacts/direct-input-consumer`; no native environment was built.

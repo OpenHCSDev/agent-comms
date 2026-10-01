@@ -15,6 +15,8 @@ from .thread_identity import ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
+    from .input_attempt import StoredInput
+    from .input_disposition import InputDocument
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -190,16 +192,16 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return message
 
-    def original_wording(self, original) -> str:
+    def original_wording(self, original: Message) -> str:
         return original.body
 
-    def original_wording_context_source(self, original) -> Provenance:
+    def original_wording_context_source(self, original: Message) -> Provenance:
         return WireProvenance(original.reference)
 
-    def original_input_sources(self, inputs):
+    def original_input_sources(self, inputs: InputDocument) -> tuple[StoredInput, ...]:
         return ()
 
-    def original_wording_provenance(self, original) -> dict[str, object]:
+    def original_wording_provenance(self, original: Message) -> dict[str, object]:
         return dict(wording=FieldCodec.encode(original.reference),
                     author=original.sender, author_role=original.sender_role.value)
 
@@ -489,16 +491,16 @@ class NativeInputConstraintPin(HumanConstraintPin):
         super().__post_init__()
         self.subject.require_human_input()
 
-    def original_wording(self, original) -> str:
+    def original_wording(self, original: StoredInput) -> str:
         return original.source_text
 
-    def original_wording_context_source(self, original) -> Provenance:
+    def original_wording_context_source(self, original: StoredInput) -> Provenance:
         return original.context_provenance()
 
-    def original_input_sources(self, inputs):
+    def original_input_sources(self, inputs: InputDocument) -> tuple[StoredInput, ...]:
         return (self.subject.require_human_input().require_original(inputs),)
 
-    def original_wording_provenance(self, original) -> dict[str, object]:
+    def original_wording_provenance(self, original: StoredInput) -> dict[str, object]:
         origin = original.origin.require_human()
         return dict(wording=FieldCodec.encode(original.context_provenance()),
                     author=origin.author.sender, author_role=ThreadRole.USER.value)
