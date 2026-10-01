@@ -878,7 +878,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
         )
         assert [type(row.execution) for row in rows] == [TriageNativeExecution, FullNativeExecution]
         assert len({row.input_id for row in rows}) == 2
-        assert rows[0].assignment_id == rows[1].assignment_id == result.assignment_id
+        assert rows[0].assignment_id == rows[1].assignment_id == result.assignment_ids[0]
         assert rows[0].execution == TriageNativeExecution()
         assert rows[0].decision is FullSelectedTriage
         assert rows[1].execution.require_attempt().execution_id and rows[1].execution.require_attempt().attempt_ordinal == 1

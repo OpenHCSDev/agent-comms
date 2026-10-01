@@ -48,6 +48,25 @@ class NoSelectedTools(SelectedAction):
     instruction = "Answer the original message directly and concisely, using no tools. "
 
 
+@dataclass(frozen=True)
+class BatchSelectedAction(SelectedAction):
+    """Original operator plans stay bound to their own source in one native work turn."""
+
+    originals: tuple[tuple[WakeAssignment, SelectedAction], ...]
+
+    @property
+    def instruction(self) -> str:
+        return " ".join(dict.fromkeys(action.instruction for _, action in self.originals))
+
+    def mode(self, owner):
+        return next((mode for _, action in self.originals
+                     if (mode := action.mode(owner)) is not None), None)
+
+    def apply(self, owner):
+        for assignment, action in self.originals:
+            action.apply(owner.for_original(assignment, action.operation_id()))
+
+
 class CodingSelectedAction(SelectedAction):
     instruction = (
         "Answer the committed request and do the requested work using the normal "

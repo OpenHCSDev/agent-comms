@@ -146,7 +146,7 @@ def bind_expected_prompt(
     envelope exactly as ``AgentSession._claimNativeInput`` computes it — NOT
     the bare prompt bytes.
     """
-    assignment = stage.assignment
+    assignment = stage.anchor
     NativeInputIdText.decode(input_id)
     if not FieldCodec.decode(str, prompt):
         raise ValueError("prompt binding requires nonempty original text")

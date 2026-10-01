@@ -196,7 +196,7 @@ class NativeBindingSourceRule(ReservationRule):
     explanation = "The prelaunch binding names a different committed source message."
 
     def violated(self, check: NativeBindingCheck) -> bool:
-        return check.row.source != check.stage.assignment.source
+        return check.row.source != check.stage.anchor.source
 
 
 class NativeBindingContentRule(ReservationRule):

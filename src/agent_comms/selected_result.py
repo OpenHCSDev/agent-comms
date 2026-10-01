@@ -18,7 +18,7 @@ from .wake import derive_exact_reply_target
 
 @dataclass(frozen=True, slots=True)
 class CoordinatedTurn:
-    assignment_id: str = field(metadata={"wire_name": "claim_id"})
+    assignment_ids: tuple[str, ...] = field(metadata={"wire_name": "claim_ids"})
     disposition: type[AssignmentState]
     input_id: str
     response_message_id: str | None
@@ -29,7 +29,7 @@ class CoordinatedTurn:
     @classmethod
     def failed(cls, participant, session, input_id):
         return cls(
-            participant.assignment.assignment_id,
+            participant.batch.assignment_ids,
             FailedAssignment,
             input_id,
             None,
@@ -41,7 +41,7 @@ class CoordinatedTurn:
     @classmethod
     def ignored(cls, participant, session, input_id):
         return cls(
-            participant.assignment.assignment_id,
+            participant.batch.assignment_ids,
             IgnoredAssignment,
             input_id,
             None,
@@ -56,7 +56,7 @@ class CoordinatedTurn:
         if receipt is None:
             raise IdentityConflict("fenced response has no durable receipt")
         return cls(
-            participant.assignment.assignment_id,
+            participant.batch.assignment_ids,
             CompletedAssignment,
             input_id,
             receipt.message_id,
@@ -103,12 +103,11 @@ def publish_native_failure(
         turn_id=input_id,
         thread=participant.owner.thread.name,
         event={},
-        sequences=(participant.initial.message.seq,),
+        sequences=tuple(source.delivery.message.seq for source in participant.batch.sources),
         native_response=native_response,
         source_error=source_error,
     )
-    target = derive_exact_reply_target(participant.initial.message)
-    assert target is not None
+    target = participant.batch.target
     participant.comms.messaging.send(
         participant.owner.thread.name,
         target,

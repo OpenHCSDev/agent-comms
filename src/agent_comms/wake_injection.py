@@ -29,17 +29,26 @@ def render_selected_wake_frame(
     live owner. These exact-data checks are defense in depth, not admission.
     A bounded triage has no response obligation until it engages FULL work.
     """
-    assignment.require_selected_source(initial, owner)
-    expectation, obligation_line = assignment.lifecycle.wake_frame(initial.message, obligation)
-    selected_line = json.dumps(
-        {
+    return render_selected_batch_frame(((initial, assignment),), owner, obligation=obligation)
+
+
+def render_selected_batch_frame(sources, owner: Thread, *, obligation=None) -> str:
+    """Validate every original and render common owner context exactly once."""
+    selected = []
+    for initial, assignment in sources:
+        assignment.require_selected_source(initial, owner)
+        expectation, obligation_line = assignment.lifecycle.wake_frame(initial.message, obligation)
+        selected.append({
             "source_seq": assignment.wire_seq,
             "claim_id": assignment.assignment_id,
             "sender": initial.message.sender,
             "target": initial.message.target,
             "audience": assignment.audience.value,
             "wake_mode": assignment.lifecycle.mode.declared_name,
-        },
+            "body": initial.message.body,
+        })
+    selected_line = json.dumps(
+        selected,
         ensure_ascii=True,
         separators=(",", ":"),
     )
@@ -63,9 +72,8 @@ def render_selected_wake_frame(
         separators=(",", ":"),
     )
     return (
-        "── comms: 1 selected ──\n"
+        f"── comms: {len(selected)} selected ──\n"
         f"selected: {selected_line}\n"
-        f"expected: {expectation}\n"
         "── your state ──\n"
         f"{obligation_line}\n"
         f"work_context: {work_context}\n"

@@ -286,11 +286,18 @@ def verify_sent_full_input(
     with Coordination(str(store.session.path), lock_timeout=0) as scoped, scoped.session.read():
         assert_native_runtime_schema(scoped.session._connection)
         row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
+        if row is None:
+            raise SelectedToolDenied("Selected tool has no reserved FULL input")
+        from .selected_native_sources import SelectedNativeSources
+
+        membership = SelectedNativeSources.one(scoped.session._connection, input_id=input_id)
+        if membership is None or admission.wake_assignment_id not in membership.assignment_ids:
+            raise SelectedToolDenied("Selected tool source was not included in this native input")
         expected = NativeInputIdentity(
-            input_id, admission.wake_assignment_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
+            input_id, row.assignment_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
             OwnerGenerations(owner_lookup=admission.recipient_lookup, owner_thread=owner_name, generation=admission.participant_generation),
         )
-        if row is None or row.identity != expected:
+        if row.identity != expected:
             raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
         if not row.sent_owner_admission_generation.matches(admission.owner_admission_generation):
             raise SelectedToolDenied("Selected tool names another sending admission")

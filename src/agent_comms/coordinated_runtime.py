@@ -1,4 +1,4 @@
-"""One sealed assignment, one exact lease, no automatic native input replay.
+"""One captured batch, one exact lease, no automatic native input replay.
 
 Preparation owns registry/participant/source identity; session enrollment owns
 first-start authority; each reserved stage owns its settlement. The runner only

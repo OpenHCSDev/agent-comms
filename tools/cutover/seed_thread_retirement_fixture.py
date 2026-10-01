@@ -71,7 +71,7 @@ def seed_historical_failure(service, root_id):
             assert participant is not None
             prompt = SelectedPrompt(participant).triage()
             request = SelectedRequest.reserve(participant, SelectedSession(service.root/'native-sessions'),
-                TriageNativeSend(participant.assignment), 'historical-original-token', prompt)
+                TriageNativeSend(participant.batch.assignments), 'historical-original-token', prompt)
             inputs = InputDispositions(service.root / InputDispositions.filename)
             key = inputs.bus_key(message, participant.owner.thread)
             admission = participant.owner.admission_generation

@@ -231,7 +231,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         claimed = Comms(root).bus.log.claim_projection()[str(resource)]
         assert (
             claimed.admission is not None
-            and claimed.admission.wake_assignment_id == result.assignment_id
+            and claimed.admission.wake_assignment_id == result.assignment_ids[0]
         )
         assert comms.views.dm_history("sender", "beta")[-1].body == "42"
 

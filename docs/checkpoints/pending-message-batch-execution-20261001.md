@@ -51,3 +51,34 @@ correct receipts/notifications/audiences, late arrivals next batch, cancel and
 UNKNOWN nonreplay. Existing private roots/localhost provider boundary only;
 real Core/native/ACP/application path, no UI/protocol substitutes. Keep resource
 budget bounded and publish working checkpoints before optional broad tests.
+
+## First source-bearing checkpoint
+
+Canonical pending collection crosses the existing 100-row page boundary in one
+read snapshot. The selected participant captures original receipts together;
+one triage/native full reservation carries all same-route original assignments.
+The existing execution membership owns handling/publication; immutable
+`SelectedNativeSources` owns which original claims were in that native input.
+It contains no disposition/queue/turn copies. Reservation defers all triage
+members atomically; Started/UNKNOWN sources cannot become pending again.
+Common owner context and message bodies render once, not per-message duplicated
+context. One relevance decision considers the batch, and full work produces
+one useful combined answer with original frozen response audiences.
+Historical source proof projects the one original native context/reference onto
+each included source, without inventing per-source inputs/cursor identities.
+Native tools and operator plans retain their original source grant.
+
+Actual source sanity: real Core bus/coordinator, 101 originals crossing the SQL
+page boundary, one original reservation/binding, late arrival outside the
+snapshot, all unproven reserved originals excluded, second reservation refused.
+PASS. This does not establish installed native/ACP response readiness.
+
+Critical remaining closure: actual native busy-wave gate and mixed-route answer
+publication. Existing executions/obligations/publication keys permit one exact
+target; the current useful channel checkpoint groups all captured originals
+matching the first route and leaves other routes pending. It is not yet the
+user's whole all-pending mixed-target acceptance. Do not publish the same body
+across channel/DM audiences or loop singleton native calls to hide this gap.
+Existing native inputs require explicit operator source-membership attestation
+before activating this new relation. No old-record fallback reader or automatic
+rewrite is provided; original native rows/journals remain unchanged.
