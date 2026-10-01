@@ -64,7 +64,7 @@ Their source digest includes the new nested record, and outcome snapshot digest
 now uses FieldCodec for that value. A quiet cutover resets only the declared
 runtime compaction journal, not native sessions/input-proof/UNKNOWN/wire/goals.
 
-Production replacement: **75 deleted / 154 added** across 14 modules.
+Production replacement: **75 deleted / 155 added** across 14 modules.
 Source checks: 36 passed/3.31s, one inherited transcript root-body assertion
 failed identically at untouched ca9/base970 in 1.00s. Parent identified its invalid native string-content fixture; the canonical
 TextContent-array correction passed in 0.19s with all original assertions unchanged. Installed
@@ -76,3 +76,8 @@ fixture StateData/context_size and double fresh-root initialization. The RPC
 consumer is corrected, prepared model owns the fixture selection/capacity, and
 already-certified private roots are read through the existing certificate.
 Failed native01 roots/logs remain protected; no original input is replayed.
+
+Current Ready receipt: `evidence/session-revision-value/READY.md` and READY.json.
+This working-checkpoint narrative is historical; completed installed acceptance
+is recorded there, including the real44.7MB manualACP journey and source-only
+final docstring clarification. No completed gate was repeated.

@@ -46,7 +46,7 @@ remain in production or those fixtures. Old tuple JSON is rejected.
 
 ## Deletions, storage and checks
 
-**75 production lines deleted / 154 added** across 14 owned modules.
+**75 production lines deleted / 155 added** across 14 owned modules.
 Backend's tuple reader and duplicated encodings are removed in place.
 Runtime `compaction-commits.sqlite3` nested source format resets at the owner's
 quiet cutover. No legacy reader/alias/SelectedSourceCodec or converter.
@@ -76,3 +76,8 @@ fixture StateData/context_size and double fresh-root initialization. The RPC
 consumer is corrected, prepared model owns the fixture selection/capacity, and
 already-certified private roots are read through the existing certificate.
 Failed native01 roots/logs remain protected; no original input is replayed.
+
+Current Ready receipt: `evidence/session-revision-value/READY.md` and READY.json.
+This working-checkpoint narrative is historical; completed installed acceptance
+is recorded there, including the real44.7MB manualACP journey and source-only
+final docstring clarification. No completed gate was repeated.
