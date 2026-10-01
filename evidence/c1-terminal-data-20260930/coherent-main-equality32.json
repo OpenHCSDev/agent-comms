@@ -35,5 +35,12 @@
   ],
   "frontend_open_failure": "original emitted duplicate child input/reply frame983; Heisenberg 252 publication/custody closure",
   "accepted_functional_actual_controls": "installed31 actual original native/ACP/LinuxDriver 5POST workflow and five physical pending-beforeStarted captures",
-  "proof_tool_correction": "initial tool incorrectly queried root uv.lock; Core has no such tracked path, full stack tree equality covers stack metadata. No source change or gate affected."
+  "proof_tool_correction": "initial tool incorrectly queried root uv.lock; Core has no such tracked path, full stack tree equality covers stack metadata. No source change or gate affected.",
+  "final_merged_main_verification": {
+    "sha": "9370a6010c80fba75feaad9e2076f1844d2b44ea",
+    "pr458_merge_commit": "9370a6010c80fba75feaad9e2076f1844d2b44ea",
+    "src_stack_pyproject_exact_tested970": true,
+    "new_native_gate": false,
+    "public_activation": false
+  }
 }
