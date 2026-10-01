@@ -1,9 +1,9 @@
-"""One-use same-format publication. Parent is the sole public executor.
+"""One-use native-source/queue publication. Parent is the sole public executor.
 
 Credentials/arguments belong to the canonical RAM-only retained batch.
 Only declared runtime projections reset after all original owners stop.
 No settings restoration, durable conversion, input replay, or owner start loop.
-Preflight is read-only. --execute requires the reviewed actual-gate artifact.
+Preflight is read-only. --execute requires both reviewed actual-gate artifacts.
 """
 from __future__ import annotations
 
@@ -22,6 +22,8 @@ from agent_comms.active_route import (
 )
 from agent_comms.child_process import ProcessIdentity, Platform
 from agent_comms.comms import Comms
+from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_package import verify_native_package
 from agent_comms.bus_activity_index import BusActivityIndex
@@ -34,8 +36,8 @@ from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.store_files import _atomic_write_text
 
 SOURCE = Path('/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930')
-CURRENT = Path('/home/ts/.local/share/agent-comms/runtime-sidebar-native-custody-20260930')
-TARGET = Path('/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930')
+CURRENT = Path('/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930')
+TARGET = Path('/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930')
 NATIVE = Path('/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent')
 OLD_NATIVE = Path('/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent')
 ROOT = Path('/var/tmp/agent-comms-live-20260927-wzjtqhza')
@@ -43,11 +45,14 @@ ROOT_ID = 'e206f3766e60451a989ca34df0e2a94b'
 LINKS = Path('/home/ts/.local/bin')
 COMMANDS = ('agent-comms', 'agent-comms-acp', 'agent-comms-agent', 'agent-comms-nk-foreground', 'toad')
 PINS = {
-    'agent-comms': 'ea8aa4eaee1ce3eed9aef19cd44010b592f83b26',
-    'batrachian-toad': 'c0750340f069c90be2c65bb8f8d7f8affd32d02a',
-    'textual': '2e49cb838af44d69aa5a6d76b2a1d74cfbe67347',
+    'agent-comms': '970bc527f4ddd9b3bde5522dc671aea11fd27ece',
+    'batrachian-toad': '85d45b512cac88bdf5dd8870f41e53768ab3c009',
+    'textual': '6b5895fa0a72aeec2aeaef7206d5debfa0c1803c',
 }
-ACTIVATION_SHA = '6184aebd2c7bb63f9aec305ac7ce6791736caa40cbafeae652bc988868e76457'
+ACTIVATION_SHA = '48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83'
+STAGING_SHA = 'b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf'
+PAIR_READY = Path('/home/ts/.cache/agent-scratch/source-publication-custody-stage-20260930/paired-ready-receipt.json')
+PAIR_READY_SHA = '9798c46404cb0be8bd7d8bc91c3770ae8e5db5e83b0fad8a7bf07528d7d54388'
 
 
 def digest(path):
@@ -64,8 +69,10 @@ def require_stage():
         raise RuntimeError('Wrong target runtime/native')
     if activation['pins'] != PINS or activation['sdk'] != '0.12.1':
         raise RuntimeError('Wrong reviewed source cohort')
-    if digest(TARGET / 'staging-receipt.json') != activation['staging_receipt_sha256']:
+    if not digest(TARGET / 'staging-receipt.json') == activation['staging_receipt_sha256'] == STAGING_SHA:
         raise RuntimeError('Stage proof changed')
+    if digest(PAIR_READY) != PAIR_READY_SHA:
+        raise RuntimeError('Reviewed package-ready receipt changed; actual gates remain separate')
     if sys.executable != str(TARGET / 'bin/python'):
         raise RuntimeError('Run this operator with the exact target interpreter')
     verify_native_package(NATIVE)
@@ -134,15 +141,24 @@ class PublishNativeCustody(StoppedOwnerInstallation):
     receipt: Path
     viewers: frozenset[str]
 
+    @property
+    def journal_path(self):
+        # Original OwnerCompactionCommit uses this exact registry sibling.
+        return ROOT / "compaction-commits.sqlite3"
+
     def reset_paths(self):
         bus = ROOT / "bus.jsonl"
         return (ROOT / RuntimeInfoStore.filename, BusActivityIndex(bus).path,
-                *(BusDisplayIndex(bus, viewer).path for viewer in sorted(self.viewers)))
+                *(BusDisplayIndex(bus, viewer).path for viewer in sorted(self.viewers)),
+                self.journal_path,
+                *(self.journal_path.with_name(self.journal_path.name + suffix)
+                  for suffix in ("-journal", "-wal", "-shm")))
 
     def require_reset_paths(self, snapshot):
         if frozenset((*snapshot.threads, *snapshot.aliases)) != self.viewers:
             raise RuntimeError("Original viewer namespace changed; recapture required")
-        for path in self.reset_paths():
+        InputDispositions(ROOT / InputDispositions.filename).read()
+        for path in (*self.reset_paths(), ROOT / InputDispositions.filename):
             try:
                 info = path.lstat()
             except FileNotFoundError:
@@ -153,7 +169,12 @@ class PublishNativeCustody(StoppedOwnerInstallation):
         preimages = self.receipt.with_suffix(".runtime-originals")
         preimages.mkdir(mode=0o700)
         originals = []
-        for path in self.reset_paths():
+        input_path = ROOT / InputDispositions.filename
+        with InputDispositions(input_path).reading() as inputs:
+            input_rows = len(inputs.rows)
+            unresolved_inputs = sum(row.unresolved for row in inputs.rows.values())
+            input_sha = digest(input_path) if input_path.exists() else "absent"
+        for path in (*self.reset_paths(), input_path):
             try:
                 with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as opened:
                     before = os.fstat(opened.fileno())
@@ -175,10 +196,18 @@ class PublishNativeCustody(StoppedOwnerInstallation):
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        self.note("runtime-preimages-retained", runtime_originals=originals)
+        self.note("runtime-and-protected-input-preimages-retained", original_files=originals,
+                  protected_input_rows=input_rows, protected_unresolved_inputs=unresolved_inputs,
+                  protected_input_sha256=input_sha)
         RuntimeInfoStore(ROOT / RuntimeInfoStore.filename).replace({})
         for path in self.reset_paths()[1:]:
             path.unlink(missing_ok=True)
+        # 00-RULES18: this journal is runtime state, not durable native proof.
+        # No old source_json/schema decoding or carry. The original owner creates
+        # the empty current schema only after the original file has been retained.
+        CompactionJournal(self.journal_path)
+        if (digest(input_path) if input_path.exists() else "absent") != input_sha:
+            raise RuntimeError("Protected original input dispositions changed during reset")
         descriptor = os.open(ROOT, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(descriptor)
@@ -240,8 +269,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--receipt', type=Path, required=True)
-    parser.add_argument('--gate-artifact', type=Path)
-    parser.add_argument('--gate-sha256')
+    parser.add_argument('--joint-gate-artifact', type=Path)
+    parser.add_argument('--joint-gate-sha256')
+    parser.add_argument('--bus-gate-artifact', type=Path)
+    parser.add_argument('--bus-gate-sha256')
     args = parser.parse_args()
     if args.receipt.exists() or args.receipt.is_symlink():
         raise RuntimeError('Existing attempt requires review, never automatic rerun')
@@ -269,10 +300,18 @@ def main():
                           'clients': 0, 'source_interpreter': str(SOURCE / 'bin/python')}), flush=True)
         if not args.execute:
             return
-        if args.gate_artifact is None or args.gate_sha256 is None:
-            raise RuntimeError('Execution requires parent-reviewed actual paired-gate artifact and SHA256')
-        if digest(args.gate_artifact) != args.gate_sha256:
-            raise RuntimeError('Actual gate artifact differs')
+        gates = {}
+        for label, artifact, expected in (
+            ('joint-native-ui', args.joint_gate_artifact, args.joint_gate_sha256),
+            ('bus-hot-views', args.bus_gate_artifact, args.bus_gate_sha256),
+        ):
+            if artifact is None or expected is None:
+                raise RuntimeError('Execution requires BOTH parent-reviewed actual gate artifacts and hashes')
+            if artifact == PAIR_READY or artifact == TARGET / 'activation.json' or artifact == TARGET / 'staging-receipt.json':
+                raise RuntimeError('Package/activation evidence is not an actual journey gate')
+            if digest(artifact) != expected:
+                raise RuntimeError(f'Actual {label} gate artifact differs')
+            gates[label] = {'artifact': str(artifact), 'sha256': expected}
         args.receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         if args.receipt.parent.stat().st_mode & 0o077:
             raise RuntimeError('Receipt directory must be private (0700)')
@@ -280,7 +319,7 @@ def main():
         with os.fdopen(fd, 'w') as opened:
             json.dump({'phase': 'preflight-complete', 'started': time.time(),
                        'target': str(TARGET), 'native': str(NATIVE),
-                       'gate_artifact': str(args.gate_artifact), 'gate_sha256': args.gate_sha256,
+                       'actual_gate_artifacts': gates,
                        'owners_before': FieldCodec.encode(audience)}, opened, indent=2)
             opened.flush()
             os.fsync(opened.fileno())
