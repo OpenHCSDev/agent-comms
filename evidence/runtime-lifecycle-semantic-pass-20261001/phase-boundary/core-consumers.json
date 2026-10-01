@@ -1,6 +1,6 @@
 {
-  "source_base": "55e6c36ad92a730f4b9ddddade934de238f8595c",
-  "working_diff_sha256": "c8f94d54bf8af1373b3841549b92cedcfae0f32b73c5f3019bbd68a31892a7cd",
+  "source_base": "46a73ec03cba445dcf720e3de4a54884d794fdda",
+  "working_diff_sha256": "8c8499b48b1919654809e396b61deab6aacb5052249bc80341746f9f1a82ebf3",
   "search_scope": "All authored src/agent_comms Python. Raw matches are source candidates, not resolved dynamic calls. No product imports or tests.",
   "file_count": 306,
   "file_sha256": {
@@ -17,7 +17,7 @@
     "src/agent_comms/agent_events.py": "3df59f3720d278ef7aaa106768a2a6fc8cc448b4497d9b8b972bdfe3ce0ddc57",
     "src/agent_comms/assignment_states.py": "fbf747bc162db52c40dc241495df3b2d225e1a40fdf238003c74c489d5b49fa5",
     "src/agent_comms/assignment_store.py": "40081db01ac9acf15c9a60a114925ad298c0ebd1a24b3c31e7abcc3753d974ee",
-    "src/agent_comms/attempt_recovery.py": "d6dcc93c934ebbb308293e17dd9e5d4001640519e083702f7a7e99ae02e9eeaa",
+    "src/agent_comms/attempt_recovery.py": "1395b476ed6f1842c328ab419b57cd96db587b5885d998481322843f883e33fb",
     "src/agent_comms/attempt_start.py": "da9e7ab1c8cce0f9a3ebf6bc9c76d6d1168cde689d6a6b7bfed9b8c77af7ac09",
     "src/agent_comms/attempt_states.py": "0907313c9e66f8ba253f036e58120a6530162e93775bc9b3b896ced53c154231",
     "src/agent_comms/attempt_store.py": "05eed4865ff39580c0815fd803f567883f64c676c7401b5fcc244e237817a4a6",
@@ -70,7 +70,7 @@
     "src/agent_comms/compaction_summaries.py": "451cf71204aa35a3c875134bb43b8e37317cff8983bf83948da88127d4c1b7a2",
     "src/agent_comms/config_options.py": "1c4cf2416dc390290d56be753a5dcd0e5925231ffac65ea8128e85a1c2a70963",
     "src/agent_comms/context_tokens.py": "44906147b82836f90a78742009f4ce37bd1e10ab7bee8b75c028e787dbdac9fd",
-    "src/agent_comms/continued_private_session.py": "84eaa94b64b359656cf09431a30e34614a1dd4ec25eaf40e5617e43cd97dfb6f",
+    "src/agent_comms/continued_private_session.py": "c084ccca14c0e723caf400933f8887cc60dbcf8470d5c148fce07d05c9d8b427",
     "src/agent_comms/coordinated_runtime.py": "32fce5452a31fce2954ed4f2a8b55d39d1128b053e02264745fc073373fcb594",
     "src/agent_comms/coordinated_runtime_schema.py": "f617072283dc316a102779a1bd70725f8fcae03803b8abd7927e3c6c8d2c3b1d",
     "src/agent_comms/coordination_cohort.py": "1541b5e11a615e6843ae820eea7724b077c00cb1fb28bb94feffa7441c473c03",
@@ -124,7 +124,7 @@
     "src/agent_comms/goal_states.py": "9c84bfbda03f91f506c39381592c3d8962a28baedb82d1f02cdec697f1bddb19",
     "src/agent_comms/goal_waits.py": "d0a75e37721cc24ecedbce2db6f10e339b568827b92bead489e038adfba9fd0d",
     "src/agent_comms/goals.py": "c2b4581829e4675b8124aff0e829f3fabae43510164bed2d65618c051b6c28dc",
-    "src/agent_comms/historical_native_inputs.py": "2be8cda15438007631d7c37b93d8111b5b61afa1301cac95edb5d51f5ca82703",
+    "src/agent_comms/historical_native_inputs.py": "1122c0e6f7fd734c27301a3e0ed3f982f1768784a091b07fe55d8dff03f6d26d",
     "src/agent_comms/historical_views.py": "9cf46e0395759e69451c055baca042b0e895fae285cc9518978de7ff89ef5559",
     "src/agent_comms/history_views.py": "df379b416d8249b39f82395481d5d03f06865ff2045e86abe6f1323152ef8cfc",
     "src/agent_comms/image_inputs.py": "829e5f7822c8cb570873f0b3f6e7b26958ca27b35f0b2847a703407fc5b3c3ed",
@@ -155,12 +155,12 @@
     "src/agent_comms/native_compaction_request.py": "6d11e53b8e877ac1eeff705e201ca440136c6db231a62416b4bd0162575c22ba",
     "src/agent_comms/native_compaction_writer.py": "3250122dd5c8e7a517ee1bb0d86833f79129832bb9ec62decdcd97ab54b847d1",
     "src/agent_comms/native_custody.py": "d2fc98dbba48832bd180656d4d90c4b70ec3a4abbc19fb48ffd5753a0643c293",
-    "src/agent_comms/native_entries.py": "2c2c329b2e740b08f74a4f5ef91610051102a59098afebcb5db1570e7400ed58",
+    "src/agent_comms/native_entries.py": "6b8c048138276fc7010565bd5ecd15585a19c8a0731bb52d89163bab34985387",
     "src/agent_comms/native_fork.py": "3c18a4e2c0c847e02bfcaebca36c3dd8b0ee4593b19037d6a39d7ed08e30d0fc",
     "src/agent_comms/native_input_owner.py": "14cec550c9622734d424cf6219cc807d6fa05d4300e109aa9b09a68ddf562de9",
     "src/agent_comms/native_input_record.py": "93ae2c37efe7de8f11285bffe995d890b620b36aec155354aa2ac4e663cbd02a",
     "src/agent_comms/native_package.py": "5302de65f610df68cdf22195838a60a2741e86bb73dea8cfcc8a2dd5e6e88e5a",
-    "src/agent_comms/native_pi.py": "7ef03ea68a8cf74e117d814496d4dd41253e44895b48fd638bedf5bcf2843189",
+    "src/agent_comms/native_pi.py": "653258329a819e68976513e0cd017714bf57234e8fe021ef9b488e149f935c9d",
     "src/agent_comms/native_prompt_binding.py": "38c42bf272b4e50c2bda97c3c8d6426894523795dced01b21e00ed30864f99e9",
     "src/agent_comms/native_prompt_send.py": "82d8b454343ecc3313e8f48c992c9eb46c58fc3ae61faf3483b79f5c1946d263",
     "src/agent_comms/native_runtime_input.py": "9c4d50241c4c97292873f3804304cbe520f5b5a6f52bd84663e260a4de3e30b2",
@@ -210,7 +210,7 @@
     "src/agent_comms/private_send_admission.py": "f3e5458c21029a1dfbaf19caf9311cb1cf475c083ad5f87cda1cea2421cde1e3",
     "src/agent_comms/private_send_stage.py": "cc4558b6b00f33b6933a00801b27e7b34a9390d3ee0c235024659387fd9d844b",
     "src/agent_comms/private_sidecar.py": "22102dbd89a4ca2652a77dcf735a960c93326e5ebdf7362a4e4e5953b96e0f32",
-    "src/agent_comms/proven_source_coverage.py": "638a734307eccbd77a3c026e2d7a0fae358ddf73fb826c49c81e296f0d17609d",
+    "src/agent_comms/proven_source_coverage.py": "d20e2388307c6e061926779457d1299c713109cde683842a01445dc0d52e0869",
     "src/agent_comms/publisher.py": "a62c0b8aaaa581821d88fbb236d9d51eb361bce38850f941d7b18eab8b39b761",
     "src/agent_comms/queued_input.py": "7acbe06815d29b78e2b0d92bf6dcfd0d999c3cb49bd8face334d4c0d1abad658",
     "src/agent_comms/read_basis.py": "f266d5024c47cac8e5c632bf8ce847a2c02f3d00323133aa4207d4a0ff113a8a",
@@ -312,16 +312,12 @@
     "src/agent_comms/worker.py": "ad15190a1af8f45d40954ffd9a5c262fa0f7238b3cceaf45563ce104886a6ce1"
   },
   "changed_source": {
-    "src/agent_comms/agent_events.py": "3df59f3720d278ef7aaa106768a2a6fc8cc448b4497d9b8b972bdfe3ce0ddc57",
-    "src/agent_comms/attempt_recovery.py": "d6dcc93c934ebbb308293e17dd9e5d4001640519e083702f7a7e99ae02e9eeaa",
-    "src/agent_comms/attempt_store.py": "05eed4865ff39580c0815fd803f567883f64c676c7401b5fcc244e237817a4a6",
-    "src/agent_comms/backend.py": "426534307476caab5c9be1b7f950e4d5aa325a37535b4e61fc6516f74fcac6bd",
-    "src/agent_comms/coordination_tables/attempts.py": "0c5bb4fdc83bdb971650ad897b41ef25b94177042d701d330ba5e2e5d45d2362",
-    "src/agent_comms/pi_commands.py": "33f8398a400e706108a900d57fadf279ab254d66dc8fe1a50b9fd8f6a7ebae96",
-    "src/agent_comms/pi_events.py": "6c50b199bf62c2a193b3ce5e2085f69d1615d04fde1c8c84f116041930309c64",
-    "src/agent_comms/pi_payloads.py": "95b5f89d1e206e37f87fcfd13946c093ffe83d122cf2fd77c45c255ba1df7ed4",
-    "src/agent_comms/turn_phase.py": "e0ea60a3e70cc12fa1093cf8880bf326f9209bbc252f4c6d933cfc66b040f6b4",
-    "src/agent_comms/turn_watchdog.py": "500a5a384b862556ea826a3857427c6a3747b6d4dbff1a1739032fbb15b4e893"
+    "src/agent_comms/attempt_recovery.py": "1395b476ed6f1842c328ab419b57cd96db587b5885d998481322843f883e33fb",
+    "src/agent_comms/continued_private_session.py": "c084ccca14c0e723caf400933f8887cc60dbcf8470d5c148fce07d05c9d8b427",
+    "src/agent_comms/historical_native_inputs.py": "1122c0e6f7fd734c27301a3e0ed3f982f1768784a091b07fe55d8dff03f6d26d",
+    "src/agent_comms/native_entries.py": "6b8c048138276fc7010565bd5ecd15585a19c8a0731bb52d89163bab34985387",
+    "src/agent_comms/native_pi.py": "653258329a819e68976513e0cd017714bf57234e8fe021ef9b488e149f935c9d",
+    "src/agent_comms/proven_source_coverage.py": "d20e2388307c6e061926779457d1299c713109cde683842a01445dc0d52e0869"
   },
   "searches": {
     "event_and_lease_names": [
@@ -1751,8 +1747,8 @@
       },
       {
         "path": "src/agent_comms/historical_native_inputs.py",
-        "line": 123,
-        "source": "    FieldCodec.decode(int, source_seq)"
+        "line": 118,
+        "source": "        FieldCodec.decode(int, source_seq)"
       },
       {
         "path": "src/agent_comms/historical_views.py",
@@ -1981,7 +1977,7 @@
       },
       {
         "path": "src/agent_comms/native_entries.py",
-        "line": 334,
+        "line": 369,
         "source": "        entry = cls.from_wire(value)"
       },
       {
@@ -2041,7 +2037,7 @@
       },
       {
         "path": "src/agent_comms/native_pi.py",
-        "line": 549,
+        "line": 539,
         "source": "                FieldCodec.decode(str, value)"
       },
       {
@@ -3158,27 +3154,27 @@
       },
       {
         "path": "src/agent_comms/attempt_recovery.py",
-        "line": 304,
+        "line": 305,
         "source": "        replay_facts: ReplayFact = ReplayFact.NONE,"
       },
       {
         "path": "src/agent_comms/attempt_recovery.py",
-        "line": 309,
+        "line": 310,
         "source": "        replay_facts = ReplayFact(replay_facts)"
       },
       {
         "path": "src/agent_comms/attempt_recovery.py",
-        "line": 369,
+        "line": 370,
         "source": "        self, snapshot: RecoverySnapshot, evidence: MonitorEvidence, facts: ReplayFact"
       },
       {
         "path": "src/agent_comms/attempt_recovery.py",
-        "line": 373,
+        "line": 374,
         "source": "            ReplayFact.UNKNOWN_EFFECTS if evidence.unknown_effects else ReplayFact.NONE"
       },
       {
         "path": "src/agent_comms/attempt_recovery.py",
-        "line": 375,
+        "line": 376,
         "source": "        ReplayAssessments.accumulate("
       },
       {
@@ -3706,7 +3702,235 @@
         "line": 238,
         "source": "        yield self.state(\"failed\", reason_code, failed_elapsed_ms, phase=phases.ShutdownPhase())"
       }
-    ]
+    ],
+    "resource_owner_consumers": [
+      {
+        "path": "src/agent_comms/attempt_recovery.py",
+        "line": 234,
+        "source": "            with NativeEntry.open_evidence(session_file) as evidence:"
+      },
+      {
+        "path": "src/agent_comms/continued_private_session.py",
+        "line": 41,
+        "source": "    with NativeEntry.open_evidence(session) as evidence:"
+      },
+      {
+        "path": "src/agent_comms/continued_private_session.py",
+        "line": 68,
+        "source": "            NativeContextProof.read_history_evidence(session, header, entries)"
+      },
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 25,
+        "source": "from .native_entries import NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 103,
+        "source": "    source_reads: NativeEvidenceScope | None = None,"
+      },
+      {
+        "path": "src/agent_comms/historical_native_inputs.py",
+        "line": 115,
+        "source": "    with NativeEvidenceScope.borrow(source_reads) as source_reads:"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 87,
+        "source": "            evidence = NativeEvidenceRead(source)"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 160,
+        "source": "class NativeEvidenceRead:"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 179,
+        "source": "    def borrow(cls, session_file: Path, reader: NativeEvidenceRead | None = None):"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 188,
+        "source": "            with NativeEntry.open_evidence(session_file) as acquired:"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 223,
+        "source": "class NativeEvidenceScope(ExitStack):"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 233,
+        "source": "        self.readers: dict[Path, NativeEvidenceRead] = {}"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 237,
+        "source": "    def borrow(cls, scope: NativeEvidenceScope | None = None):"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 249,
+        "source": "    def for_source(self, path: Path) -> NativeEvidenceRead:"
+      },
+      {
+        "path": "src/agent_comms/native_entries.py",
+        "line": 253,
+        "source": "            self.readers[path] = self.enter_context(NativeEntry.open_evidence(path))"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 27,
+        "source": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 326,
+        "source": "        self, input_id: str, session_dir: Path, *, evidence: NativeEvidenceRead | None = None"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 340,
+        "source": "        evidence: NativeEvidenceRead | None = None,"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 345,
+        "source": "        with NativeEvidenceRead.borrow(session_file, evidence) as evidence:"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 357,
+        "source": "    def read_history_evidence("
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 887,
+        "source": "def read_tracked_input_digest("
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 888,
+        "source": "    session_file: Path, input_id: str, *, evidence: NativeEvidenceRead | None = None"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 893,
+        "source": "    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 907,
+        "source": "    *, evidence: NativeEvidenceRead | None = None,"
+      },
+      {
+        "path": "src/agent_comms/native_pi.py",
+        "line": 913,
+        "source": "    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:"
+      },
+      {
+        "path": "src/agent_comms/native_prompt_binding.py",
+        "line": 31,
+        "source": "from .native_pi import NativePiUnavailable, read_tracked_input_digest"
+      },
+      {
+        "path": "src/agent_comms/native_prompt_binding.py",
+        "line": 32,
+        "source": "from .native_entries import NativeEvidenceRead"
+      },
+      {
+        "path": "src/agent_comms/native_prompt_binding.py",
+        "line": 245,
+        "source": "    session_file: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | None = None"
+      },
+      {
+        "path": "src/agent_comms/native_prompt_binding.py",
+        "line": 252,
+        "source": "        observed = read_tracked_input_digest(session_file, binding.input_id, evidence=evidence)"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 20,
+        "source": "from .native_entries import NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 76,
+        "source": "        with NativeEvidenceScope() as source_reads:"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 187,
+        "source": "            with NativeEvidenceScope() as source_reads:"
+      },
+      {
+        "path": "src/agent_comms/native_source_cursor.py",
+        "line": 205,
+        "source": "        source_reads: NativeEvidenceScope,"
+      },
+      {
+        "path": "src/agent_comms/private_send_stage.py",
+        "line": 121,
+        "source": "        with NativeEntry.open_evidence(context.session_file) as evidence:"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 29,
+        "source": "from .native_entries import NativeEvidenceScope"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 81,
+        "source": "        source_reads: NativeEvidenceScope | None = None,"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 89,
+        "source": "        with NativeEvidenceScope.borrow(source_reads) as source_reads:"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 164,
+        "source": "        source_reads: NativeEvidenceScope,"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 181,
+        "source": "    def native_inputs(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> tuple[HistoricalNativeInput, ...]:"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 190,
+        "source": "                 source_reads: NativeEvidenceScope | None = None):"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 192,
+        "source": "        with NativeEvidenceScope.borrow(source_reads) as source_reads:"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 200,
+        "source": "    def last_proof(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> HistoricalNativeInput | None:"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 211,
+        "source": "               source_reads: NativeEvidenceScope | None = None) -> ProvenSourceCoverage:"
+      },
+      {
+        "path": "src/agent_comms/proven_source_coverage.py",
+        "line": 213,
+        "source": "        with NativeEvidenceScope.borrow(source_reads) as source_reads:"
+      },
+      {
+        "path": "src/agent_comms/tracked_turn.py",
+        "line": 384,
+        "source": "                NativeEntry.open_evidence(self.active_session_file)"
+      }
+    ],
+    "displaced_resource_absence": []
   },
   "counts": {
     "event_and_lease_names": 25,
@@ -3715,6 +3939,8 @@
     "replay_owner_consumers": 43,
     "removed_policy_proxies": 0,
     "retry_original": 33,
-    "phase_original": 35
+    "phase_original": 35,
+    "resource_owner_consumers": 45,
+    "displaced_resource_absence": 0
   }
 }

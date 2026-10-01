@@ -16,6 +16,8 @@ PATTERNS = {
     "removed_policy_proxies": r"tool_ever_started|output_started|compaction_started|event_phase|session\.(current|maximum|elapsed_ms)|TurnExposure",
     "retry_original": r"RetryAttemptEvent|AutoRetryStart|SummarizationRetryAttemptStart|SummarizationRetryScheduled|max_attempts|retry_reason_code",
     "phase_original": r"ShutdownPhase|def stalled|phase=|phase:.*TurnPhase",
+    "resource_owner_consumers": r"NativeEvidence(Read|Scope)|NativeEntry\.(open_evidence|read_evidence)|read_history_evidence|read_tracked_input_digest",
+    "displaced_resource_absence": r"if (source_reads|evidence) is None",
 }
 
 

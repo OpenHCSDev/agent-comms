@@ -229,45 +229,46 @@ class RecoveryMonitorCapability:
             if session_file.parent != session_dir:
                 raise RecoveryBlocked("native failure session belongs to another owner")
             binding = read_expected_prompt_binding(store, reserved.input_id)
-            if (
-                binding is None
-                or binding.identity != reserved.identity
-                or not expected_prompt_matches_journal(session_file, binding)
-            ):
+            if binding is None or binding.identity != reserved.identity:
                 raise RecoveryBlocked("native failure lacks its bound original input")
-            proof = NativeContextProof.read_evidence(session_file, reserved.input_id)
-            _header, entries = NativeEntry.read_evidence(session_file)
-            user_index = next(
-                index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id
-            )
-            following = entries[user_index + 1 :]
-            if len(following) != 1:
-                raise RecoveryBlocked("native failure has unfinished or additional session work")
-            terminal = following[0]
-            if not isinstance(terminal, MessageEntry):
-                raise RecoveryBlocked("native recovery requires an unambiguous failed terminal")
-            try:
-                terminal.require_failed_terminal(proof.session_entry_id)
-            except ValueError as error:
-                raise RecoveryBlocked(str(error)) from error
-            cls._require_native_session_exited(session_dir)
-            monitor = cls(store, _grant=_MONITOR_GRANT)
-            return monitor.terminalize_dead_attempt(
-                execution_id,
-                attempt.attempt_ordinal,
-                attempt.owner_generation,
-                expected_attempt_revision=attempt.revision,
-                expected_execution_revision=snapshot.execution.revision,
-                expected_pointer_revision=snapshot.pointer_revision,
-                owner_loss=loss,
-                evidence=MonitorEvidence(
-                    subprocess_dead=True,
-                    backend_done=True,
-                    unknown_effects=True,
-                    reason_code="released_native_failure",
-                    observed_at_ms=int(time.time() * 1000),
-                ),
-            )
+            with NativeEntry.open_evidence(session_file) as evidence:
+                if not expected_prompt_matches_journal(session_file, binding, evidence=evidence):
+                    raise RecoveryBlocked("native failure lacks its bound original input")
+                proof = NativeContextProof.read_evidence(
+                    session_file, reserved.input_id, evidence=evidence
+                )
+                _header, entries = evidence.observe()
+                user_index = next(
+                    index for index, entry in enumerate(entries) if entry.id == proof.session_entry_id
+                )
+                following = entries[user_index + 1 :]
+                if len(following) != 1:
+                    raise RecoveryBlocked("native failure has unfinished or additional session work")
+                terminal = following[0]
+                if not isinstance(terminal, MessageEntry):
+                    raise RecoveryBlocked("native recovery requires an unambiguous failed terminal")
+                try:
+                    terminal.require_failed_terminal(proof.session_entry_id)
+                except ValueError as error:
+                    raise RecoveryBlocked(str(error)) from error
+                cls._require_native_session_exited(session_dir)
+                monitor = cls(store, _grant=_MONITOR_GRANT)
+                return monitor.terminalize_dead_attempt(
+                    execution_id,
+                    attempt.attempt_ordinal,
+                    attempt.owner_generation,
+                    expected_attempt_revision=attempt.revision,
+                    expected_execution_revision=snapshot.execution.revision,
+                    expected_pointer_revision=snapshot.pointer_revision,
+                    owner_loss=loss,
+                    evidence=MonitorEvidence(
+                        subprocess_dead=True,
+                        backend_done=True,
+                        unknown_effects=True,
+                        reason_code="released_native_failure",
+                        observed_at_ms=int(time.time() * 1000),
+                    ),
+                )
 
     @staticmethod
     def _require_native_session_exited(session_dir: Path) -> None:

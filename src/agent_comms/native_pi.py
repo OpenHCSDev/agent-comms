@@ -342,14 +342,7 @@ class NativeContextProof(NativeContextRecord):
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         NativeInputIdText.decode(input_id)
         session_file = Path(session_file).absolute()
-        if evidence is None:
-            with NativeEntry.open_evidence(session_file) as acquired:
-                return cls.read_evidence(
-                    session_file, input_id, request_generation=request_generation,
-                    evidence=acquired,
-                )
-        try:
-            evidence.require_path(session_file)
+        with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
             header, entries = evidence.observe()
             tracked = NativeEntry.tracked_users(entries)
             if input_id not in tracked:
@@ -359,9 +352,6 @@ class NativeContextProof(NativeContextRecord):
                 if row is None:
                     raise NativePiUnavailable("The input has no assembled-context proof")
                 return row.corroborate(session_file, header, tracked)
-        except NativePiUnavailable:
-            evidence.close()
-            raise
 
     @classmethod
     def read_history_evidence(
@@ -900,15 +890,12 @@ def read_tracked_input_digest(
     """Corroborating digest only; this cannot authorize recovery or input replay."""
     NativeInputIdText.decode(input_id)
     session_file = Path(session_file).absolute()
-    if evidence is None:
-        with NativeEntry.open_evidence(session_file) as acquired:
-            return read_tracked_input_digest(session_file, input_id, evidence=acquired)
-    evidence.require_path(session_file)
-    _header, entries = evidence.observe()
-    users = NativeEntry.tracked_users(entries)
-    if input_id not in users:
-        raise NativePiUnavailable("The specified input was never durably committed")
-    return users[input_id].message.input_digest
+    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
+        _header, entries = evidence.observe()
+        users = NativeEntry.tracked_users(entries)
+        if input_id not in users:
+            raise NativePiUnavailable("The specified input was never durably committed")
+        return users[input_id].message.input_digest
 
 
 def _verify_context(
@@ -923,12 +910,11 @@ def _verify_context(
         emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(session_file)
     except (TypeError, ValueError) as error:
         raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
-    proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
-    if proof != emitted:
-        if evidence is not None:
-            evidence.close()
-        raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
-    return proof
+    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
+        proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
+        if proof != emitted:
+            raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
+        return proof
 
 
 def _require_reviewed_selected_source_cli() -> None:

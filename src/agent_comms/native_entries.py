@@ -174,6 +174,27 @@ class NativeEvidenceRead:
         if self.source.path != session_file:
             raise NativePiUnavailable("Native evidence reader belongs to another source")
 
+    @classmethod
+    @contextmanager
+    def borrow(cls, session_file: Path, reader: NativeEvidenceRead | None = None):
+        """Own acquisition and refusal cleanup, without borrowing proof authority.
+
+        A supplied reader stays acquired by its original scope after success.
+        Failed corroboration or cancellation retires its bytes and descriptor;
+        a consumer cannot continue using an observation after that refusal.
+        """
+        session_file = Path(session_file).absolute()
+        if reader is None:
+            with NativeEntry.open_evidence(session_file) as acquired:
+                yield acquired
+        else:
+            try:
+                reader.require_path(session_file)
+                yield reader
+            except BaseException:
+                reader.close()
+                raise
+
     def close(self):
         self.source.close()
         self.entries = ()
@@ -210,6 +231,20 @@ class NativeEvidenceScope(ExitStack):
     def __init__(self) -> None:
         super().__init__()
         self.readers: dict[Path, NativeEvidenceRead] = {}
+
+    @classmethod
+    @contextmanager
+    def borrow(cls, scope: NativeEvidenceScope | None = None):
+        """One owner chooses borrowed or newly acquired resource lifetime."""
+        if scope is None:
+            with cls() as acquired:
+                yield acquired
+        else:
+            try:
+                yield scope
+            except BaseException:
+                scope.close()
+                raise
 
     def for_source(self, path: Path) -> NativeEvidenceRead:
         path = Path(path).absolute()
