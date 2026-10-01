@@ -1,0 +1,43 @@
+{
+  "stage": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+  "pins": {
+    "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "batrachian-toad": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "package_distributions": 69,
+  "SDK": "0.12.1",
+  "native_full_trust": true,
+  "original_file_counts_equal": {
+    "agent-comms": 303,
+    "batrachian-toad": 304,
+    "textual": 266
+  },
+  "actual_metadata_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 122097,
+        "start_ticks": 28898609,
+        "returncode": 0
+      }
+    ]
+  },
+  "artifact_hashes": {
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/activation.json": "48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83",
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/staging-receipt.json": "b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf",
+    "/home/ts/.cache/agent-scratch/source-publication-custody-stage-20260930/paired-ready-receipt.json": "9798c46404cb0be8bd7d8bc91c3770ae8e5db5e83b0fad8a7bf07528d7d54388"
+  },
+  "joint_run": "/home/ts/wt/g458h/u01",
+  "joint_run_outcome": "Failed preseed; correct row/menu screen selected, empty menu DOM/focus. Proven launcher spawn failure reexecutes unguarded main; parent verified raw trace; causal relation not yet proven. Original0input/0POST preserved; Einstein owns guarded launcher and fresh actual continuation.",
+  "bus_run": "/home/ts/wt/g460b/u06",
+  "bus_run_outcome": "Actual independent handle49328 running, not yet terminal/accepted",
+  "same_cohort_user_ready": false,
+  "public_install_unchanged": true,
+  "original_replays": 0,
+  "paid_calls": 0,
+  "fixture_PR255": "Merged34a2ced359170dff8b11b4ef40839095c6fa7ade; test cleanup only, no product/dependency changes",
+  "remaining": "Both actual same-build journeys, stack merge/quiet reset/live acceptance, remaining254/performance and post-stack SessionRevision."
+}
