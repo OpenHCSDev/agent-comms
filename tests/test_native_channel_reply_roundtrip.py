@@ -1,8 +1,10 @@
 """A published native reply automatically reaches the original channel sender."""
 
 import asyncio
+import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import threading
 import time
@@ -316,3 +318,19 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         server.server_close()
         serving.join(timeout=2)
         assert all(not comms.registry.require(name).process_alive for name in projects)
+        if retained_evidence := os.environ.get("AC_NATIVE_ROUNDTRIP_EVIDENCE"):
+            evidence = Path(retained_evidence)
+            evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
+            shutil.copytree(tmp_path, evidence / "private-originals")
+            (evidence / "receipt.json").write_text(json.dumps({
+                "original_root": str(tmp_path),
+                "wire_root_id": root_id,
+                "native_package": str(package),
+                "saved_restart": restart_after_reply,
+                "contended_cursor": contend_cursor,
+                "localhost_posts": len(requests),
+                "provider_failures": failures,
+                "owners_stopped": True,
+                "server_thread_alive": serving.is_alive(),
+                "wire_sha256": hashlib.sha256(comms.bus.log.path.read_bytes()).hexdigest(),
+            }, indent=2) + "\n")
