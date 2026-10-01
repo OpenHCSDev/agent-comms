@@ -1,3 +1,29 @@
+## 2026-10-01 SessionRevision closure merged; shared epoch capability pushed
+
+Core468 merged77fc0838:75 production lines deleted/155 added across14
+consumers. Parent reviewed whole value/identity/cut/observation relation, exact
+external native colon ABI and original FieldCodec. Actual44,661,933-byte
+retained history manual ACP→selected summary→native commit→strict reopen
+passes21.04s; private ACP original input once and interrupted UNKNOWN cases
+pass44.80s. Preserved original source/proof and wheel hashes and all294
+installed Python files match. This is scoped native/ACP acceptance, not a
+physical Toad or public install claim. Next paired candidate includes468,
+with runtime compaction journal reset only at the reviewed quiet cutover.
+
+Shared SQL capability47156152dff deletes1/adds2 production lines: physical
+Column.nullable can decode NULL to a mandatory nominal value through the
+existing codec/storage. Six actualSQLite/existing shape controls pass; no
+codec/storage subclass, schema migration, new store or public effect. Arendt
+470 normally integrated it and closes all original epoch readers/producer;
+actual installed EOF/dead-owner recovery acceptance remains required.
+
+Mendel next owns remaining triage/full execution identity, sequenced with
+Arendt's shared row. Heisenberg and Sch trace the bus tab-return failure at
+the original message-pump/source publication seam; the corrected native
+firstfork gate remains valid. Kepler257 source buffers now use measured body
+rows and direction; physical41MB controls pass but held-scroll CPU79–83%
+and reader discontinuities remain explicit full254 work. Default unchanged.
+
 ## 2026-10-01 merged queue/source checkpoint; bus return defect blocks activation
 
 Toad251/252/250 are merged; final mainf79c8541 production/metadata match the
@@ -311,7 +337,7 @@ These are the next integration dependencies, not new parallel coordinators.
 | Standing prompt replacement | Core464, parent | Merged674abadf;3linesdeleted/16added. Exact reviewed file is now present in live .pi/APPEND_SYSTEM.md, preserving old file/mode. Receipt:evidence/standing-live-verification-rules-20260930/live-file-replacement.json. Existing processes are not claimed to have reread it. |
 | Typed external ACP error payload | Core463, Arendt; parent shared FieldCodec builder | Parent contribution88c9e03f normally merged into463. One shared untagged JSON shape capability, no alternate codec; typed error rewrite and installed SDK/ACP error journey underway. Full deletion count follows published rewrite. |
 | Builtin MroDispatch ratchet | NRA15/Core466, Kepler | Both merged; NRA14 superseded. Original installed ratchet rejects actual421 growth0->6; source/specimen/archive equality verified. Exact pin notification committed to actual OpenHCS owner as8e683bf1000c/260. Production linesdeleted:1 NRA,1 Core;1 additional NRA test line. No claim of downstream installation. |
-| SessionRevision value | New PR after456/458/459/462 merge, parent | Deferred dependency as requested. Convert compaction_outcomes first and all13module positional/None/private-import consumers in one PR; no implementation competing with active stack. |
+| SessionRevision value | Core468 merged77fc0838, Mendel/parent |75 production lines deleted/155 added across14 direct/indirect consumers. Actual native/ACP retained compaction, strict reopen and uncertainty controls accepted; public installation still pending. |
 | No new None-as-state in stack | Each original source owner; parent integration | Parent4595743a8c5 replaces nullable revision/exact_size policy fields with explicit check types,13production linesdeleted/36added.48checks pass2.62s including real pinned native SessionManager. Einstein owns next affected installed journey and458 payload state review; Arendt reviews456 resource/domain distinction; Mendel reviews457/462. Review remains open until published receiving receipts/fixes. |
 
 Actual staged native/ACP/UI gates passed first-fork open/first answer, physical

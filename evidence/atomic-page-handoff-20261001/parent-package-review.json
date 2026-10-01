@@ -115,9 +115,10 @@
   "paid_calls": 0,
   "parallel_followups": {
     "performance": "Heisenberg254 with Kepler256; combined source passes, physical source recording complete; not combined installed Ready",
-    "SessionRevision": "Mendel468; fourteen consumers, actual native checks continue",
+    "SessionRevision": "Core468 merged77fc0838;75 deleted/155 added across14; actual native/ACP accepted and parent verified all294 installedPY+source/proof/wheel hashes. Not in rejected156 cohort; next paired candidate required.",
     "cancel_status": "Arendt; producer idle published, stationary consumer paint not observed",
-    "native_admission_epoch": "Arendt470; complete original-row producer/readers and release behavior, original SQL nullable boundary retained; no duplicate stored state"
+    "native_admission_epoch": "Arendt47094059caf source closes all original producer/readers with originalSQLDDL byte-equal; shared47156152dff normally integrated; actual EOF/recovery gate next",
+    "full_execution_identity": "Mendel nextS14 owner; shared native-row edits sequenced withArendt"
   },
   "frontend_merge": {
     "251": "merged a2761f4b",
