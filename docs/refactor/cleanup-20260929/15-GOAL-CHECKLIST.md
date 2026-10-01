@@ -1,3 +1,30 @@
+## 2026-10-01 corrected installed candidate passes continuous native journey
+
+Immutable atomic-page-handoff candidate Core970 / Toad15601 / Textual6b /
+SDK0.12.1 / native593 matches all original package files. Parent verified
+activation, staging and package-ready hashes. Actual LinuxDriver/native/ACP
+continuous fork/open/first reply/queue/cancel gate passes in85.538s: all5
+physical sends visibly pending before native Started; strict2390 original
+queue/chat frames have no missing or duplicate input. Final cleanup empty.
+Cancellation status caption was not observed after stationary idle; Arendt
+owns consumer convergence rather than a local status mirror.
+
+Toad251a276 and2529b are merged. Parent normally integrated current main into
+2503fe890f8; product and metadata remain identical to frozen156. Independent
+same-build channel/DM/IRC acceptance, quiet publication and ordinary default
+entrypoint verification remain required. Default live runtime is unchanged.
+
+Parallel254 integrates256 and252, retaining12 prepared tool resources and
+eliminating212 preparation-triggered full-scene arrangements in the actual
+source pilot. Kepler completed52.8s physical source scrolling with279 GIL
+samples; footage/profile review is scoped source evidence, not combined
+installed readiness. Mendel468 covers14 consumers after the native gate found
+an indirect retained-summary tuple reader. Native followthrough continues.
+
+Evidence: evidence/atomic-page-handoff-20261001/parent-package-review.json and
+evidence/c1-terminal-data-20260930/installed33/. Historical rejected runs below
+remain evidence, not the current candidate. Full original goal stays active.
+
 ## Backend checkpoint merged; publication fix and parallel follow-ups
 
 Core456/457/458/459/460/462/467 are merged. Parent verified final main9370a601
