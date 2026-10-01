@@ -235,7 +235,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         declared = invoke_tool(comms, "comms_decision", {
             "chosen": "/artifacts/exact-root",
             "rejected": ["/scratch/guessed-root"],
-            "to": "owner",
+            "to": "#retention-acceptance",
         })
         choice = comms.bus.log.full_history()[-1]
         assert FieldCodec.encode(choice.reference) == declared["reference"]
