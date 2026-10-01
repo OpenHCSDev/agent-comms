@@ -74,7 +74,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
     Run with the paired installed interpreter to establish installed acceptance.
     """
     fixture = native_backend
-    from retained_input_origin_observer import actual_s2_ingress, until
+    from retained_input_origin_observer import actual_s2_ingress
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     started = time.monotonic()
     seed = await asyncio.create_subprocess_exec(
@@ -165,7 +165,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         originals = []
 
         async def queue_during_original(observer, original):
-            await until(observer.pilot, lambda: fixture.provider.posts == 1)
+            assert original.has_started
             originals.append(await observer.queue_followup(inputs[1]))
             fixture.provider.response_gate.set()
 
