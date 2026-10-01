@@ -406,3 +406,53 @@ Logs: .artifacts/prompt-resource-bound/{batch01.log,source-batch02.log}.
 These are bounded provider-free source checks, not an installed mixed-route gate.
 Arendt retains the sources= tuple/plural-target lifecycle API and urgent498
 priority; full490 installed validation follows that coherent owner integration.
+
+## Original publication and reply proposal closure
+
+Production checkpoints `2319c2c8` and `ddae45d7` change five production files:
+59 lines added, 17 deleted. Total production diff against current main at this
+checkpoint: 34 files, 730 added, 495 deleted (includes original source-membership
+and route closure above, not a new readiness claim).
+
+CoordinatedTurn retains the original tuple of PublicationReceipt values, removing
+its copied nullable response_message_id and exact_target fields. Failed/ignored
+results contain no publications. The current publisher's existing
+require_published_evidence() supplies its one receipt; the consumer accepts the
+original tuple directly when lifecycle publication becomes plural. Neither an
+alias nor a fallback reader remains. Both foreground CLI outputs serialize the
+original tuple through FieldCodec. Nine existing result fixture/driver files
+migrate their consumers, not their native/UI execution mechanisms. The remaining
+test_audience_manifest result.exact_target belongs to its separate existing
+audience owner, not CoordinatedTurn.
+
+SelectedSourceBatch extends its existing original-route relation with answer
+instructions and response_messages(). No new reply family, store, codec or
+registry: mixed-route proposals decode once through FieldCodec as tuple[Message].
+Message's whole value comparison rejects ungranted sender/type/role/task/notice
+or other metadata; the batch requires each original route once and returns them
+in original route order. A temporary lookup indexes these decoded resource
+values only. The native model may propose text; the canonical fenced publisher
+still owns timing, audience, actual row and receipt. The one-route contract
+remains a direct combined answer. Distinct route answers are never produced by
+broadcasting a shared answer across unrelated original audiences. Malformed
+proposals use the existing NativePiUnavailable/SelectedRequest failure path,
+without retrying the native input.
+
+One production declaration each: CoordinatedTurn, SelectedSourceBatch and Message.
+Search finds no response_message_id consumers in production/tests/tools. The
+selected_result.cursor_status_for method is unchanged; Arendt's urgent498 and
+central NativeCustody/SessionIdentity closure own its failure/coverage semantics.
+The original six terminal IGNORE proofs and public wire are untouched.
+
+Actual imports and AST parsing of changed source passed, with no native/provider
+initialization. Behaviour and installed acceptance remain at the end of coherent
+integration, not a collection of local passing tests.
+
+Arendt directly acknowledged the consumer contracts. Remaining existing-owner
+API: create(sources=participant.batch.sources); plural obligations/intents/receipts;
+exact_target-keyed prepare/publish and complete-terminal recovery. The selected
+runner currently has its legitimate one-route source subset and publisher. Once
+those APIs and Singer's preserved carry are integrated, it will snapshot all
+pending routes, prepare all decoded bodies before any append, then publish each
+original keyed route and consume the authoritative receipt tuple. No selector
+widening, competing carry, factory fallback or public activation in this patch.
