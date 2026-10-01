@@ -20,18 +20,21 @@ calls. Parent verified that scope and notified Tristan with a pinned question.
 Tristan reports the live build is “way better”; this does not close performance.
 
 Toad262 is merged,258 incorporated and259 closed with original negatives
-preserved. Current main production/metadata equals the installed frozen pair.
-Toad254 incorporates263 into its feature branch, not production main. Kepler's
-sole changed-source41MB physical A/B/A/scroll/video/profile journey completed
-87.826s,16 native checks and preserved source; moving CPU remains75–78%, and
-full installed performance/50ms targets are not accepted. Heisenberg integrates
-and reviews that source checkpoint; Kepler completes correlated footage review.
+preserved. Toad254 has now merged as a5f372ed: existing geometry and preparation
+owners cover native reflow and async direction changes (30 production lines
+deleted/66 added). Its actual installed ordinary-wrapper A/B/A, held/reverse/End
+and draft/undo journey completed90.645s with16 checks and unchanged originals.
+Parent personally reviewed down and A-return images. CPU remains high and
+encoder255 is preserved; no final smoothness/50ms/backend-health claim. UI-only
+publication review and full performance follow-up proceed in parallel.
 
-Core472 remains active under Mendel: original schema4 reservation/proof authority
-must be preserved, historical triage owns its required decision, and shared
-TypedTable encoding must use the existing FieldCodec scalar representation.
-The old97fa readiness is rejected by whole-source review; interrupted edits
-remain in the same worktree and its owner has resumed.
+Core472 corrected e0ec908c merged as bd86f28c after whole-source review and
+actual installed native/ACP acceptance. Original SQL4 reservation/proof authority
+is unchanged; historical triage owns its required decision and TypedTable uses
+the existing FieldCodec scalar representation.112 production lines deleted.
+Public installation is pending the next backend cohort. Original rejected97fa
+evidence remains protected. Arendt476 owns the new actual #openhcs admission
+lock/drain failure; Mendel477 owns immutable historical provenance closure.
 
 New owner-requested retained-memory S5 is copied verbatim and indexed after S2.
 Einstein owns phase1 draft473: one ContextSegment/TurnContext assembler, original
@@ -39,8 +42,11 @@ provenance/token accounting, text-free manifests and inspection, with byte-ident
 input and actual saved/configured-provider acceptance. Phase2 draft474 depends
 on S2 retained classes and owns authored pin/supersede/drop/export journeys.
 Schrodinger owns S2 draft475 in parallel;428 was merged planning only.
-First working real-thread context inspection is pending, not fabricated from
-the plan. Both owners coordinate shared preparation/packing directly.
+First real source inspection of nra-architecture reports coordination6078 bytes
+and1520 Pi-estimated tokens with instruction/owner provenance. This is explicitly
+a coordination preview; full native input and wire manifests remain pending.
+Both owners coordinate shared preparation/packing and the original wire builder
+directly. Closed259 evidence reconstruction is not a hold for S2 implementation.
 
 Parent432 imports original469 closure and cleanup2795712f. Attributable owned
 cleanup totals943.01MiB, preserving source, saved sessions, UNKNOWN and shared

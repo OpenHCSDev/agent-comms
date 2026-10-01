@@ -8,10 +8,11 @@ remains active. Historical decisions and evidence are retained in
 
 Default: /home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001.
 Coree191bcf4 / Toad1edd96c0 / Textual6b5895fa / SDK0.12.1 / native593b978a.
-Toad main8ea96a37 has identical production/metadata to installed1edd. Later
-Core469 closure adds documents only. The accepted checkpoint covers all product merges through e191. Newly merged
-Core472 is now awaiting the next paired installation; it has scoped actual
-installed native/ACP proof, not public/default acceptance.
+The accepted default covers Core production through e191 and Toad production
+through 1edd. Core469 adds documents only. Core472 and Toad254 are now merged
+and await publication; each has scoped installed proof, not default acceptance.
+Toad254 merged as a5f372ed after review of head91a4a71e and the actual ordinary
+wrapper running its immutable installed candidate.
 
 Parent executed the existing quiet operator once after saved-draft/normal-client
 closure. Thirteen original owners preserve configurations; all five default
@@ -40,9 +41,9 @@ exact audit and private preimages retained. No original input replay.
 | Workflow | Integration owner | Current disposition and next action |
 | --- | --- | --- |
 | Publication, DM/IRC and native queue checkpoint | Parent262; Heisenberg258, Einstein458, Schrodinger262 | Merged and installed/live verified;258 incorporated,259 closed, all original failures preserved. No repeated unchanged gate. |
-| Full warm-history/scroll/CPU/resources and T4 | Heisenberg254; Kepler263 contribution |263 merged into254 feature branch; latest5a650212 has4 production files30 deleted/66 added. Existing geometry/demand owners cover reflow and async reversal. Kepler's sole41MB real source A/B/A+draftUndo+held/reverse/End15idle run exits0 in87.826s,16 checks,744 GIL samples; CPU75–78% moving/6.3% idle. Review correlated footage/profile and ship a useful verified checkpoint; no installed/50ms acceptance yet. |
+| Full warm-history/scroll/CPU/resources and T4 | Heisenberg254; Kepler263 contribution |254 merged as a5f372ed: 30 production lines deleted/66 added across four files. Actual installed ordinary-wrapper run completed90.645s, all16 native checks; parent personally reviewed down and A-return images. Original history, PIDs, input proofs and wire remained unchanged. Prepared resources, reader, draft and undo survived return. Moving CPU87–93%/idle21.6% includes observers; encoder255 preserved. Scoped geometry/demand acceptance, not smoothness/50ms/backend-health acceptance. Publish UI checkpoint using existing release mechanism; continue full performance in a new draft. |
 | S14 native triage/full execution identity | Mendel472; parent integration | Corrected e0/d4f merged after whole-source review:112 deleted/284 added across12 files, original SQL4/proofs unchanged. Actual installed saved-restart channel/native/ACP passes34.80s;69 controls/6 guards. Public installation pending next backend cohort. Mendel owns unchanged baseline mock-fixture later-source gap, coordinated with476. |
-| S5 phase1 turn-context ownership | Einstein473 | Original plan copied and indexed after S2; one assembler/segments, provenance/token counts, text-free original wire manifests, context CLI; byte-identical input and actual saved/configured-provider acceptance. Publish first real inspection output. |
+| S5 phase1 turn-context ownership | Einstein473 | Working source checkpoint8efe3426 pushed,60 production lines deleted. First real NRA coordination preview6078 bytes/~1520 native-estimated tokens; declared instruction provenance. Eight recorded cases byte-identical. Full native context, --turn/--diff and silent wire manifests pending. Silent observations preserve original message sequence/proofs; compare renderers against identical recorded determining state. Coordinate original wire builder with476/475. |
 | S2 exact retained facts and Decision | Schrodinger475 |475 draft opened frome191 with S2 receiving ownership;428 was planning only. Implement original source projections/retained classes/Decision/native packing; coordinate directly with Einstein. No authoritative memory replica. |
 | S5 phase2 retained context operations | Einstein474 | Draft stacked on473; named dependency S2 retained classes. Add RetainedSegment and authored pin/supersede/drop/export with original source lineage and real compaction/export journeys. |
 | Quiet release closure and one-use retirement | Arendt469; parent executor | Final783a1471 reviewed and merged, zero product changes. Exact audit/private preimages protected. Completed, no new public restart or cutover. |
@@ -55,17 +56,27 @@ installed dependencies, and native gates follow the current physical capture.
 
 ## New live channel regression
 
-Arendt owns the actual first two #openhcs sends on the current installed build:
+Arendt owns draft476 for the actual first two #openhcs sends on the installed build:
 262/7b8ade935c6f “test” and266/1a76688ce443 “testing again”. Direct original
 MessageNotification projection proves architecture-memory/pr159/helper checks
 ended Outcome uncertain on262 and their266 remain Pending. helper2 checked both
 and chose no response; Linnaeus/headless-bootstrap are stopped. Sidebar reports
 NativePiUnavailable for the three failed recipients. Diagnose the original native
 triage failure and derive truthful pending/error handling from its authority;
-no replay of262 or duplicate send of266. A separate CLI history read reaches an attached historical source registry via
-HistoricalSources.page/HistorySource.registry and rejects archived
-last_goal_report_turn. The original public registry is valid. Arendt traces the
-original archive contract; no stripping of fields or compatibility reader.
+no replay of262 or duplicate send of266. The three failures exhaust the raw-write
+budget while acquiring shared wire admission exclusion, before writing prompt
+bytes. The tracked turn announces admission before the writer owns that grant.
+476 separates cancellation-aware pre-admission custody from irreversible write
+budget through the original lifecycle; no increased turn timeout or mirrored state.
+
+Mendel owns separate draft477 for archived history. HistoryArchive.page reaches
+HistorySource.registry and strict-current Thread decoding rejects the historical
+last_goal_report_turn field in two immutable source registries (104/104 and7/7).
+The public registry is valid. Required historical provenance belongs to the
+existing HistorySource manifest, with original snapshots remaining validated
+evidence. No legacy reader, field stripping or original snapshot mutation.
+Any needed one-shot manifest carry stays outside src and preserves determining
+source relationships; runtime owner/turn/goal flags are not historical authority.
 
 ## Completed structural contributions
 
