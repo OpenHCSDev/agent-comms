@@ -35,7 +35,7 @@ remains a valid independent declaration; it does not create a session or start w
 
 Production:5 lines deleted,12 added across2 files. The added owner query includes
 the informative typed refusal; no None-state, new store, copied binding or fallback.
-Fixture: one continuous real CLI/sockets journey,68 lines added.
+Fixture: one continuous real CLI/sockets journey,66 lines added.
 
 Source control04 PASS1.29s, wall2.32s, peak91,640KiB RSS, exit0. It invokes the
 actual `python -m agent_comms.cli --root PRIVATE register --pid CURRENT_PID`, then
@@ -63,5 +63,33 @@ were installed only in the owned scratch/test-deps directory; source/control log
 and private test roots remain under the persistent worktree. Setup-only attempts
 01–03 reached no native/user input; the original failed48 witness stays protected.
 
-Actual installed-wheel CLI/socket verification remains pending. This source
-checkpoint is not a normal fresh-fork failure, live/default or whole-S14 claim.
+## Completed affected installed gate
+
+Functional source `d2d64fc3a529e45481d1d794afaa52cdcb2f2dea` was built with the
+normal `uv build --wheel` and installed using `uv pip install --target ... --no-deps`
+into this task's isolated scratch installation. The unchanged original installed
+Python/SDK/dependencies were reused; no source directory or `.pth` was added and
+every305 installed Core Python files matched the tested source byte-for-byte.
+The immutable current prefix, its packages and public defaults were not changed;
+no full69 build or native package rebuild was performed.
+
+Installed CLI/socket01 PASS, original journey0.628058732s, wall2.32s, external peak
+88,056KiB RSS; CLI child peak84,728KiB. The same test journey was invoked directly,
+without pytest's unrelated conftest hooks, against the installed module and real
+CLI subprocess/Unix server/client. Typed refusal, no request effects, original
+resource publication, independent read, rename, official session identity and
+socket cleanup all passed. No original failed prompt was replayed. This gate
+does not claim native execution, public/default readiness or a fresh-fork defect.
+
+Canonical sanitized receipt:
+[installed-cli-socket01.json](../../evidence/runtime-session-admission-20261001/installed-cli-socket01.json).
+Wheel SHA `fac7af38336a4e05c23cbbd04d92fafa4dd2e12706b167ad9807062d719fe71c`.
+Runner/log/private new root persist in `.observations`; disposable wheel/test
+packages/install occupy19MiB under the owned scratch root. Preserve the original
+48/49 evidence and all unrelated native/UNKNOWN journals. Fresh guard after gate:
+home8.0GiB, RAM18.6GiB, swap13.6GiB; no other gate or fleet was launched.
+
+Ready at this bounded source+actual installed CLI/socket strength. Production
+API is internal to the original Core runtime family; no Toad/wire/native/durable
+format change or reset requirement. Parent owns normal merge and later matched
+publication. CI deferred; no optional native/regression matrix was run.
