@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
@@ -12,6 +12,7 @@ from .retained_task_facts import RetainedTaskFacts
 
 if TYPE_CHECKING:
     from .compaction_boundary import HeldCompaction
+    from .compaction_states import CommittedNativeOutcome
 
 @dataclass(frozen=True)
 class CompactionSource:
@@ -39,3 +40,15 @@ class CompactionSource:
     def require_current(self, held: HeldCompaction) -> None:
         if self != held.capture(self.pending_input_key, self.settings_paths):
             raise RelationViolationError("Compaction source changed; derive fresh evidence")
+
+    def after_native_commit(self, outcome: CommittedNativeOutcome) -> CompactionSource:
+        """Advance only this original cut through its committed native receipt.
+
+        The containing operation owns the receipt. Its caller must still hold
+        writer/owner/input custody and require_current on the returned source;
+        this projection grants neither input admission nor replay. Every other
+        original fact remains subject to the same equality fence.
+        """
+        return replace(self, native=replace(
+            self.native, leaf_id=outcome.leaf_id, revision=outcome.revision,
+        ))

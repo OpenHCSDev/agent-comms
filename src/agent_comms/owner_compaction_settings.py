@@ -41,6 +41,10 @@ class PiCompactionDecision(PiCompactionSettings):
     enabled: bool = field(metadata={"settings_exclude": True})
     trigger: bool = field(metadata={"settings_exclude": True})
 
+    def summary_settings(self) -> PiCompactionSettings:
+        """Project this original decision into the existing native request type."""
+        return PiCompactionSettings(self.reserve_tokens, self.keep_recent_tokens)
+
     def require_current(self, current: PiCompactionDecision) -> None:
         if current != self:
             raise PiSettingsEvidenceError("Selected native compaction settings changed")
