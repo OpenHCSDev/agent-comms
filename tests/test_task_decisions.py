@@ -50,6 +50,108 @@ def admit(comms, name):
     return owner
 
 
+def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms):
+    from agent_comms.retained_task_facts import CurrentHumanConstraintTaskFact, RetainedTaskFacts
+    from agent_comms.task_sources import (
+        CorrectionTaskChange, ExplicitTaskScopeSelection, HumanConstraintPin,
+        TurnTaskScope, UserTaskDrop, UserTaskSupersession,
+    )
+
+    comms.messaging.initialize_private_initial_protocol()
+    owner = comms.registry.declare(Thread("recipient", frozenset({"team"}), str(comms.root)))
+    comms.registry.declare(Thread("unaddressed", frozenset(), str(comms.root)))
+    exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
+    subject = comms.messaging.send_user_message("recipient", exact, worktree=owner.worktree)
+    original_bytes = (comms.root / "bus.jsonl").read_bytes()
+    assert owner.turn_lease is None
+    pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)
+    assert isinstance(pin.task, HumanConstraintPin)
+    assert pin.notice and not pin.starts_turn and pin.task.subject == subject.reference
+    assert exact not in pin.body and "source_turn" not in FieldCodec.encode(pin.task)
+
+    def captured(name):
+        current = comms.registry.require(name)
+        with comms.bus.log.locked():
+            _, facts = comms.bus.log.compaction_messages_unlocked(current.incarnation)
+        return RetainedTaskFacts(facts).for_owner(current, comms.registry.snapshot())
+
+    retained = captured(owner.name)
+    assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (pin,)
+    assert retained.original_text_source(pin) == subject
+    assert sum(f.source.reference == subject.reference for f in retained.facts) == 1
+    assert sum(f.source.reference == pin.reference for f in retained.facts) == 1
+    assert any(isinstance(f, CurrentHumanConstraintTaskFact) for f in retained.facts)
+    assert retained.text.count(exact.replace("\n", "\\n")) == 1
+    assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
+    assert (comms.root / "bus.jsonl").read_bytes().startswith(original_bytes)
+    before = (comms.root / "bus.jsonl").read_bytes()
+    with pytest.raises(RelationViolationError, match="did not receive"):
+        comms.messaging.pin_user_constraint("unaddressed", subject.reference, worktree=owner.worktree)
+    with pytest.raises(RelationViolationError, match="model turn scope"):
+        comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree,
+            scope=ExplicitTaskScopeSelection(TurnTaskScope(project=owner.worktree)))
+    comms.registry.declare(Thread("peer", frozenset(), str(comms.root)))
+    with pytest.raises(RelationViolationError, match="author"):
+        comms.messaging.send_message("peer", owner.name, "claim human source", task=pin.task)
+    assert (comms.root / "bus.jsonl").read_bytes() == before
+    comms.registry.rename(owner.name, "renamed-recipient")
+    renamed = comms.registry.require("renamed-recipient")
+    assert captured(renamed.name).current_authored_sources(renamed, comms.registry.snapshot()) == (pin,)
+    revised = comms.messaging.send_user_message(renamed.name, "Keep the corrected original path.",
+        worktree=owner.worktree, task=UserTaskSupersession(CorrectionTaskChange(pin.reference)))
+    assert captured(renamed.name).current_authored_sources(renamed, comms.registry.snapshot()) == (revised,)
+    comms.messaging.send_user_message(renamed.name, "Drop that constraint.", worktree=owner.worktree,
+        task=UserTaskDrop(CorrectionTaskChange(pin.reference)))
+    assert captured(renamed.name).current_authored_sources(renamed, comms.registry.snapshot()) == ()
+    # A new declaration can refer to equal wording only through its own identity.
+    second = comms.messaging.send_user_message(renamed.name, exact, worktree=owner.worktree)
+    new_pin = comms.messaging.pin_user_constraint(renamed.name, second.reference, worktree=owner.worktree)
+    current = captured(renamed.name)
+    assert current.original_text_source(new_pin) == second and second.reference != subject.reference
+    assert current.current_authored_sources(renamed, comms.registry.snapshot()) == (new_pin,)
+    repeated_pin = comms.messaging.pin_user_constraint(renamed.name, second.reference, worktree=owner.worktree)
+    assert captured(renamed.name).current_authored_sources(renamed, comms.registry.snapshot()) == (repeated_pin,)
+    assert current.original_text_source(new_pin) == second
+    comms.registry.register(replace(renamed, worktree=str(comms.root / "new-project")))
+    assert captured(renamed.name).current_authored_sources(comms.registry.require(renamed.name),
+                                                        comms.registry.snapshot()) == ()
+
+
+def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
+    from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
+
+    comms.messaging.initialize_private_initial_protocol()
+    owner = comms.registry.declare(Thread("recipient", frozenset(), str(comms.root),
+                                         goal=Goal("Original goal", "goal-one")))
+    subject = comms.messaging.send_user_message(owner.name, "Use the original coordinates.",
+                                                worktree=owner.worktree)
+    pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)
+    assert isinstance(pin.task.scope, GoalTaskScope)
+    before = (comms.root / "bus.jsonl").read_bytes()
+    with pytest.raises(RelationViolationError, match="original source"):
+        comms.messaging.pin_user_constraint(owner.name,
+            replace(subject.reference, message_id="foreign-original"), worktree=owner.worktree)
+    with pytest.raises(RelationViolationError, match="original recipient"):
+        comms.messaging.send_user_message("#team", "wrong audience", worktree=owner.worktree, task=pin.task)
+    assert (comms.root / "bus.jsonl").read_bytes() == before
+    comms.registry.register(replace(owner, goal=Goal("Replacement goal", "goal-two")))
+    new_subject = comms.messaging.send_user_message(owner.name, "Use the replacement coordinates.",
+                                                    worktree=owner.worktree)
+    with pytest.raises(RelationViolationError, match="original scope"):
+        comms.messaging.pin_user_constraint(owner.name, new_subject.reference, worktree=owner.worktree,
+                                            change=CorrectionTaskChange(pin.reference))
+    from agent_comms.retained_task_facts import RetainedTaskFacts
+
+    with comms.bus.log.locked():
+        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+    retained = RetainedTaskFacts(facts)
+    current_owner = comms.registry.require(owner.name)
+    assert retained.current_authored_sources(current_owner, comms.registry.snapshot()) == ()
+    assert retained.original_text_source(pin) == subject
+    with pytest.raises(RelationViolationError, match="captured read"):
+        retained.original_text_source(replace(pin, body="altered source"))
+
+
 def test_constraint_original_wording_scope_correction_and_human_authority(comms, monkeypatch):
     from agent_comms.retained_task_facts import CurrentConstraintTaskFact, RetainedTaskFacts
     from agent_comms.task_sources import Constraint, CorrectionTaskChange, UserTaskSupersession

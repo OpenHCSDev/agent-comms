@@ -21,6 +21,9 @@ from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
 from .task_sources import TaskAttachment, NoTaskAttachment
+from .task_sources import HumanConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
+from .task_sources import TaskChange, OriginalTaskChange
+from .message_reference import MessageReference
 
 _LOG = logging.getLogger(__name__)
 
@@ -144,16 +147,37 @@ class Messaging:
     def send_user_message(self, target: str, body: str, *, worktree: str,
                           task: TaskAttachment = NoTaskAttachment()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
-        from .bus_publication import HumanOrigin
-
         # The historical root write fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
-            committed = self.bus.publisher.publish_ordinary(
-                Message(user.name, target, body, MessageType.INFO, task=task),
-                _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
-            )
+            committed = self._publish_user_under_wire_lock(user, target, body, task)
+        return self._notify_user_commit(committed)
+
+    def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
+                            scope: TaskScopeSelection = CurrentTaskScopeSelection(),
+                            change: TaskChange = OriginalTaskChange()) -> Message:
+        """Pin a certified original USER message; never replay it or lease a turn."""
+        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+            user = self._user_identity_under_wire_lock(worktree)
+            owner = self.registry.require(recipient)
+            task = HumanConstraintPin(scope=scope.select_human(owner), subject=subject,
+                                      source_user=user.incarnation, recipient=owner.incarnation,
+                                      change=change)
+            committed = self._publish_user_under_wire_lock(
+                user, owner.name, f"Pinned constraint from original message {subject.seq}:{subject.message_id}",
+                task, notice=True)
+        return self._notify_user_commit(committed)
+
+    def _publish_user_under_wire_lock(self, user, target, body, task, *, notice=False):
+        from .bus_publication import HumanOrigin
+
+        return self.bus.publisher.publish_ordinary(
+            Message(user.name, target, body, MessageType.INFO, task=task, notice=notice),
+            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+        )
+
+    def _notify_user_commit(self, committed):
         # Never turn a committed row into an apparent failed send because a
         # best-effort notification failed. No notification runs on UNKNOWN.
         try:
