@@ -24,7 +24,7 @@ from .response_policy import (
     ResponsePolicy,
 )
 from .thread_identity import ThreadRole
-from .task_decisions import Decision, DecisionAttachment, NoDecision
+from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 
 if TYPE_CHECKING:
     from .historical_views import HistoryCursor
@@ -74,8 +74,8 @@ class Message:
         default=None,
         metadata={"wire_omit_default": True, "wire_order": 11, "publication_exclude": True},
     )
-    decision: DecisionAttachment = field(
-        default_factory=NoDecision, metadata={"wire_omit_default": True, "wire_order": 12}
+    task: TaskAttachment = field(
+        default_factory=NoTaskAttachment, metadata={"wire_omit_default": True, "wire_order": 12}
     )
 
     @property
@@ -105,14 +105,15 @@ class Message:
         return (self.reference,)
 
     def require_decision(self) -> Decision:
-        return self.decision.require_decision()
+        return self.task.require_decision()
 
     @property
-    def retains_authored_choice(self) -> bool:
-        return self.decision.retains_authored_choice
+    def retains_authored_task(self) -> bool:
+        return self.task.retains_authored_task
 
     def require_task_publication(self, sender, snapshot, original_source) -> None:
-        self.decision.require_publication(sender, snapshot, original_source)
+        self.task.require_target(self.target, snapshot)
+        self.task.require_publication(sender, snapshot, original_source)
 
     def require_claim_transition(self) -> ClaimTransition:
         if self.claim_transition is None:
@@ -125,8 +126,8 @@ class Message:
         )
 
         if self.sender_role is ThreadRole.USER:
-            yield from self.decision.user_task_facts(self)
-        yield from self.decision.retained_task_facts(self)
+            yield from self.task.user_task_facts(self)
+        yield from self.task.retained_task_facts(self)
         if self.claim_transition is not None:
             yield ClaimTaskFact(self)
 
@@ -137,7 +138,7 @@ class Message:
             raise RelationViolationError("Message target cannot be empty.")
         if not self.body:
             raise ValueError("Message body cannot be empty.")
-        self.decision.require_sender(self.sender)
+        self.task.require_sender(self.sender)
         if self.claim_transition is not None:
             transition = self.claim_transition
             if type(transition) is not ClaimTransition or (

@@ -11,7 +11,7 @@ from pathlib import Path
 import agent_comms
 
 
-async def run(root, receiving_only=False):
+async def run(root, receiving_only=False, authored_operations_only=False):
     from pytest import MonkeyPatch
     from test_backend_native_lifecycle import native_backend
     from test_native_context_inspection import test_context_manifest_native_acp_and_cli_continuous
@@ -26,7 +26,9 @@ async def run(root, receiving_only=False):
     try:
         original = await anext(fixture)
         async with asyncio.timeout(90):
-            await test_context_manifest_native_acp_and_cli_continuous(original, receiving_only=receiving_only)
+            await test_context_manifest_native_acp_and_cli_continuous(
+                original, receiving_only=receiving_only,
+                authored_operations_only=authored_operations_only)
         receipt["state"] = "SCOPED_PASS"
     except BaseException as error:
         receipt["state"] = "FAILED_NO_REPLAY"
@@ -268,8 +270,12 @@ if __name__ == "__main__":
     parser.add_argument('--configured-source-root', type=Path)
     parser.add_argument('--original-python', type=Path)
     parser.add_argument('--complete-goal-controls', action='store_true')
-    parser.add_argument('--receiving-only', action='store_true')
+    journey = parser.add_mutually_exclusive_group()
+    journey.add_argument('--receiving-only', action='store_true')
+    journey.add_argument('--authored-operations-only', action='store_true')
     options = parser.parse_args()
+    if options.authored_operations_only and (options.configured_source_root or options.complete_goal_controls):
+        parser.error('Authored operations use only the original private localhost fixture')
     if "site-packages" not in Path(agent_comms.__file__).parts:
         raise RuntimeError("This acceptance requires the paired installed Core wheel")
     # Only pytest's fixture decorator/MonkeyPatch is borrowed. Import installed
@@ -282,4 +288,5 @@ if __name__ == "__main__":
         complete_goal_controls(options.root)
     else:
         asyncio.run(run_configured(options) if options.configured_source_root
-                    else run(options.root, receiving_only=options.receiving_only))
+                    else run(options.root, receiving_only=options.receiving_only,
+                             authored_operations_only=options.authored_operations_only))

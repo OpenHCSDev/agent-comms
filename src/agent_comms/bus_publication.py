@@ -158,7 +158,7 @@ class CommittedDelivery(MessageWireRecord):
         addressed = self.audience.includes_lookup(recipient_lookup)
         authored = (
             self.audience.sender_lookup == recipient_lookup
-            and self.message.retains_authored_choice
+            and self.message.retains_authored_task
         )
         return self.messages() if addressed or authored else ()
 

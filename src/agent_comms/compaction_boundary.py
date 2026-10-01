@@ -16,7 +16,7 @@ from .input_disposition import FutureInputQueue, InputDispositions
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativeWitness
 from .registration import Registration
-from .retained_task_facts import RetainedTaskFacts
+from .retained_task_facts import ExactTaskFact, RetainedTaskFacts
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
 from .text_digest import TextDigest
@@ -47,24 +47,25 @@ class CompactionBoundary:
         expected = owner.compaction_attestation(owner_generation, witness)
         # Existing bus publication acquires bus BEFORE registry. Never invert
         # that edge, even though this scope does not yet publish an outcome.
-        with (
-            idle_session_writer_fence(expected.session_file) as executor_fd,
-            _store_lock(self.root / "wire") as wire_lock,
-            _store_lock(self.root / "bus.jsonl") as bus_lock,
-            self.registry.guard_owner_compaction(owner, expected) as (
-                receipt,
-                fd,
-            ),
-            self.inputs.locked() as input_fd,
-        ):
-            if settled:
-                self.inputs._read_unlocked().compaction_rows(
-                    owner, pending_input_key, self.future_queue
+        with idle_session_writer_fence(expected.session_file) as executor_fd:
+            # Read the original journal before taking any bus/registry/input
+            # locks. The existing writer fence retains this exact source cut.
+            native_facts = witness.retained_task_facts()
+            with (
+                _store_lock(self.root / "wire") as wire_lock,
+                _store_lock(self.root / "bus.jsonl") as bus_lock,
+                self.registry.guard_owner_compaction(owner, expected) as (receipt, fd),
+                self.inputs.locked() as input_fd,
+            ):
+                if settled:
+                    self.inputs._read_unlocked().compaction_rows(
+                        owner, pending_input_key, self.future_queue
+                    )
+                yield HeldCompaction(
+                    self, witness, receipt, fd,
+                    (executor_fd, wire_lock.descriptor, bus_lock.descriptor, input_fd),
+                    native_facts,
                 )
-            yield HeldCompaction(
-                self, witness, receipt, fd,
-                (executor_fd, wire_lock.descriptor, bus_lock.descriptor, input_fd),
-            )
 
 
     @staticmethod
@@ -111,6 +112,7 @@ class HeldCompaction:
     receipt: OwnerCompactionAttestation
     authority_fd: int
     retained_fds: tuple[int, ...]
+    native_facts: tuple[ExactTaskFact, ...]
 
     def capture(
         self,
@@ -118,6 +120,7 @@ class HeldCompaction:
         settings_paths: tuple[str, ...] | None,
     ) -> CompactionSource:
         root = self.boundary.root.stat()
+        self.witness.require_current_file(Path(self.witness.session_file))
         snapshot = self.boundary.registry.store._read_unlocked().snapshot()
         owner = snapshot.threads[self.receipt.thread]
         inputs = self.boundary.inputs._read_unlocked()
@@ -129,6 +132,7 @@ class HeldCompaction:
         ).compaction_messages_unlocked(owner.incarnation)
         facts += owner.retained_task_facts()
         facts += input_facts
+        facts += self.native_facts
         return CompactionSource(
             self.witness,
             f"{self.boundary.root}:{root.st_dev}:{root.st_ino}",

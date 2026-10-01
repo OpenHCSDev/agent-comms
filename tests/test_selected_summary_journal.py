@@ -21,7 +21,8 @@ from agent_comms.compaction_states import (
     ReservedSummary,
 )
 from agent_comms.input_disposition import InputDispositions
-from selected_summary_cases import manual_source
+from agent_comms.pi_summary_payloads import SelectedModel
+from selected_summary_cases import manual_summary_source
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
@@ -71,11 +72,7 @@ def reserved(tmp_path):
     session = tmp_path / "session.jsonl"
     session.write_text('{"type":"session","version":3}\n')
     journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-    source = {
-        "source": manual_source(session),
-        "selected": {"provider": "fixture", "modelId": "model", "contextWindow": 1000},
-        "settings": {"reserveTokens": 100, "keepRecentTokens": 100},
-    }
+    source = manual_summary_source(session)
     return journal, str(session), source
 
 
@@ -166,7 +163,7 @@ def test_unproven_private_session_cannot_reserve_selected_summary(reserved):
     # proves it has no old PR94 raw or UNKNOWN input on the same session.
     with sqlite3.connect(journal.path) as db:
         assert db.execute("SELECT count(*) FROM private_raw_inputs").fetchone()[0] == 0
-    private_source = dict(source, source=manual_source(saved))
+    private_source = manual_summary_source(saved)
     with pytest.raises(CompactionJournalError, match="coverage floor"):
         journal.summaries.reserve(str(saved), private_source)
     with (
@@ -200,7 +197,7 @@ def test_private_raw_prewrite_marker_blocks_only_its_saved_session(reserved):
         reopened.private_inputs.send_fence(Path(session), private_input_id="c" * 32),
     ):
         pass
-    assert reopened.summaries.reserve(str(other), dict(source, source=manual_source(other)))
+    assert reopened.summaries.reserve(str(other), manual_summary_source(other))
 
 
 def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity(reserved):
@@ -212,7 +209,7 @@ def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identit
         journal.summaries.reserve(session, source)
     other = Path(session).with_name("other.jsonl")
     other.write_text("{}\n")
-    journal.summaries.reserve(str(other), dict(source, source=manual_source(other)))
+    journal.summaries.reserve(str(other), manual_summary_source(other))
     with (
         pytest.raises(CompactionJournalError, match="blocks native input"),
         journal.private_inputs.send_fence(other),
@@ -224,7 +221,7 @@ def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identit
     fresh_alias = Path(session).with_name("fresh-alias.jsonl")
     fresh_alias.symlink_to(fresh)
     journal.summaries.reserve(
-        str(fresh_alias), dict(source, source=manual_source(fresh_alias))
+        str(fresh_alias), manual_summary_source(fresh_alias)
     )
     with (
         pytest.raises(CompactionJournalError, match="blocks native input"),
@@ -516,11 +513,7 @@ def test_postcommit_fsync_fault_may_leave_blocking_summary_intent(reserved, monk
 def test_reservation_survives_crash_and_never_repeats_id(tmp_path):
     session = tmp_path / "session.jsonl"
     session.write_text("{}\n")
-    source = {
-        "source": manual_source(session),
-        "selected": {"provider": "fixture", "modelId": "fixture", "contextWindow": 1000},
-        "settings": {"reserveTokens": 100, "keepRecentTokens": 100},
-    }
+    source = manual_summary_source(session, selected=SelectedModel("fixture", "fixture", 1000))
     path = tmp_path / "compaction-commits.sqlite3"
     result = subprocess.run(
         [

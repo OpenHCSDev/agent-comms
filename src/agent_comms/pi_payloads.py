@@ -16,6 +16,7 @@ from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origi
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
+from .native_file_artifact import NativeFileArtifact
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
 
 
@@ -136,6 +137,9 @@ class PiUsage(PiPayload):
 
 @dataclass(frozen=True)
 class PiContent(PiPayload, DeclaredFamily, affix="Content"):
+    def tool_calls(self):
+        return ()
+
     def preserve_evidence(self, raw: dict) -> PiContent:
         """Keep unrepresented native fields opaque, never equivalent to plain text."""
         return self if self.to_wire() == raw else UnknownContent(raw)
@@ -204,6 +208,9 @@ class ThinkingContent(PiContent):
 
 @dataclass(frozen=True)
 class ToolCallContent(PiContent, declared_name="toolCall"):
+    def tool_calls(self):
+        return (self,)
+
     def assistant_transcript(self):
         from .transcript_events import ToolStartTranscript
 
@@ -375,6 +382,15 @@ class UnknownDiagnostic(PiDiagnostic):
 
 @dataclass(frozen=True)
 class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
+    def retained_tool_calls(self):
+        return ()
+
+    def retained_tool_facts(self, session, entry, originals):
+        return ()
+
+    def require_artifact_request(self, request):
+        raise ValueError("Native message is not a completed file operation")
+
     def tracked_end(self, session) -> None:
         """Non-assistant messages cannot supply a tracked final response."""
 
@@ -466,6 +482,9 @@ class AbsentMessage(PiMessage):
 
 @dataclass(frozen=True)
 class AssistantMessage(PiMessage):
+    def retained_tool_calls(self):
+        return tuple(call for part in self.parts for call in part.tool_calls())
+
     # Pi's assistant record always carries an array, including failed terminals.
     content: tuple[PiContent, ...] = field(default=(), metadata={"wire_required": True})
     assistant = True
@@ -578,12 +597,53 @@ class UserMessage(PiMessage):
         return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
 
 
+class ToolDetailsPayload(PiPayload):
+    """The shared SDK details field owns normalization of its external shapes."""
+
+    @classmethod
+    def normalize_field(cls, target, key, value, record):
+        if key == "details":
+            return NativeToolDetails.normalize_wire(value)
+        return super().normalize_field(target, key, value, record)
+
+
 @dataclass(frozen=True)
-class ToolResultMessage(PiMessage, declared_name="toolResult"):
+class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult"):
     tool_call_id: str = wire_field("toolCallId", "")
     tool_name: str = wire_field("toolName", "tool")
     is_error: bool = wire_field("isError", False)
-    details: Any = None
+    details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
+
+    def completed_artifacts(self):
+        from .native_tools import NativeTool
+
+        return NativeTool.for_name(self.tool_name).result_artifacts(
+            ProvidedToolResult(content=self.parts, details=self.details), not self.is_error)
+
+    def require_artifact_request(self, request):
+        calls = tuple(call for call in request.retained_tool_calls()
+                      if call.id == self.tool_call_id)
+        if len(calls) != 1 or calls[0].name != self.tool_name:
+            raise ValueError("Completed file operation lacks its exact original SDK call")
+        if not self.completed_artifacts():
+            raise ValueError("Native result has no successful original file operation evidence")
+
+    def retained_tool_facts(self, session, entry, originals):
+        from .retained_task_facts import NativeArtifactTaskFact
+        from .turn_context import JournalProvenance
+
+        artifacts = self.completed_artifacts()
+        if not artifacts:
+            originals.pop(self.tool_call_id, None)
+            return ()
+        try:
+            request = originals.pop(self.tool_call_id)
+        except KeyError as error:
+            raise ValueError("Completed file operation lacks its original SDK request") from error
+        self.require_artifact_request(request)
+        source = JournalProvenance(session.session_file,
+            (request.require_entry_id(), entry.require_entry_id()))
+        return tuple(NativeArtifactTaskFact(source, artifact) for artifact in artifacts)
 
     def transcript_events(self, context):
         from .native_tools import NativeTool
@@ -913,6 +973,9 @@ class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
     def edit_diff(self, ok):
         return None
 
+    def artifacts(self, ok):
+        return ()
+
 
 class MissingToolResult(PiToolResult):
     """No native result was emitted; output and edit evidence are absent."""
@@ -922,43 +985,99 @@ class MissingToolResult(PiToolResult):
 
 
 @dataclass(frozen=True)
-class ProvidedToolResult(PiToolResult):
+class ProvidedToolResult(ToolDetailsPayload, PiToolResult):
     content: tuple[PiContent, ...] = ()
-    # Extension-defined details are deliberately opaque; no second tool schema.
-    details: Any = None
+    details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
     def text(self, limit=4000):
         text = "".join(part.text for part in self.content)
         return text[:limit] + ("…" if len(text) > limit else "")
 
     def edit_diff(self, ok):
-        return NativeEditDetails.capture_diff(self.details) if ok else None
+        return self.details.edit_diff() if ok else None
+
+    def artifacts(self, ok):
+        return self.details.artifacts() if ok else ()
 
 
 @dataclass(frozen=True)
 class NativeEditDetails(PiPayload):
     """Native edit metadata, decoded only when projecting actual edit evidence."""
 
-    patch: str | None = None
-    diff: str | None = None
+    patch: str | None = wire_field("patch")
+    diff: str | None = wire_field("diff")
     first_changed_line: int | None = wire_field("firstChangedLine")
 
     @classmethod
     def capture_diff(cls, raw):
-        from .tool_results import ToolDiff
-
         try:
             details = cls.from_wire(raw)
         except (ValueError, TypeError):
             # Extension-defined metadata may be opaque. Preserve the original
             # result and output; unsupported formatting grants no diff evidence.
             return None
-        if details.patch and details.patch.strip():
-            return ToolDiff(details.patch)
-        if details.diff and details.diff.strip():
+        return details.reported_diff()
+
+    def reported_diff(self):
+        from .tool_results import ToolDiff
+
+        if self.patch and self.patch.strip():
+            return ToolDiff(self.patch)
+        if self.diff and self.diff.strip():
             # This is the external numbered edit format in retained Pi journals.
-            return ToolDiff(details.diff, "numbered")
+            return ToolDiff(self.diff, "numbered")
         return None
+
+
+@dataclass(frozen=True)
+class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
+    """Decode the original owned result once; other extension details stay opaque."""
+    opaque: ClassVar[bool] = False
+    wire_tag = "agentCommsKind"
+
+    @classmethod
+    def normalize_wire(cls, value):
+        if value is None:
+            return {"kind": NoToolDetails.declared_name}
+        if not isinstance(value, dict) or cls.wire_tag not in value:
+            return {"kind": OpaqueToolDetails.declared_name, "payload": value}
+        return super().normalize_wire(value)
+
+    @classmethod
+    def wire_member(cls, value):
+        return cls.decode(value[cls.wire_tag])
+
+    def edit_diff(self):
+        return None
+
+    def artifacts(self):
+        return ()
+
+
+class NoToolDetails(NativeToolDetails):
+    pass
+
+
+@dataclass(frozen=True)
+class OpaqueToolDetails(NativeToolDetails):
+    payload: Any
+    opaque = True
+
+    def edit_diff(self):
+        return NativeEditDetails.capture_diff(self.payload)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FileMutationToolDetails(NativeToolDetails, NativeEditDetails):
+    """Known native publisher metadata, retaining the existing edit evidence."""
+    strict_fields = True
+    artifact: NativeFileArtifact = field(metadata={"wire_name": "agentCommsArtifact"})
+
+    def edit_diff(self):
+        return self.reported_diff()
+
+    def artifacts(self):
+        return (self.artifact,)
 
 
 class McpCallPolicy(DeclaredFamily, affix="McpCallPolicy"):

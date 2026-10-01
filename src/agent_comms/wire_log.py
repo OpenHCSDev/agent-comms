@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import stat
+import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
@@ -121,6 +122,21 @@ class WireLog:
                 digest.update(b"\n")
                 facts.extend(message.retained_task_facts())
         return digest.hexdigest(), tuple(facts)
+
+    def retained_context(self, name: str, registry):
+        """One certified source cut for read-only context inspection/export."""
+        from .exporting import WireExportBoundary
+        from .retained_context import RetainedSegment
+        from .retained_task_facts import RetainedTaskFacts
+        from .turn_context import OwnerProvenance
+
+        with _store_lock(self.path.parent / "wire"), self.locked():
+            snapshot = registry.snapshot()
+            owner = snapshot.require(name)
+            digest, facts = self.compaction_messages_unlocked(owner.incarnation)
+            retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
+            return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest),
+                owner, snapshot, WireExportBoundary(self._private_marker_unlocked().last_seq, time.time()))
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
