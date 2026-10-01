@@ -1,6 +1,9 @@
 # Openhcs recovery paired cutover: preparation
 
 Receiving one-use operator owner: Arendt. Parent is the sole public executor.
+Next475/Toad270 runtime-journal impact is separately recorded in
+[next-retained-summary-cutover-impact-20261001.md](next-retained-summary-cutover-impact-20261001.md).
+It does not change this frozen same-format release's executable or invocation.
 This continues the existing stopped-owner installation seam; production changes
 are zero. The executed469 operator remains retired audit text, not a new launch
 authority. No public preflight, signals, mutation or execution is performed here.

@@ -1,0 +1,146 @@
+{
+  "blocking_summaries": [],
+  "classification": "readonly original installed observation; not quiet cutover admission or execution authority",
+  "companions": {
+    "-journal": false,
+    "-shm": false,
+    "-wal": false
+  },
+  "companions_unchanged": true,
+  "input_document": {
+    "original": {
+      "mode": "0o600",
+      "revision": {
+        "ctime_ns": 1790828288860903178,
+        "identity": {
+          "device": 2083,
+          "inode": 3996611
+        },
+        "mtime_ns": 1790828288847902946,
+        "size": 1152447
+      },
+      "sha256": "7c6fd248957ec02848fa5b5170e81d4695dcbef371f0d8de207a37fdc6a2b128"
+    },
+    "rows": 173,
+    "states": {
+      "bound_unknown": 1,
+      "not_sent": 13,
+      "started": 159
+    },
+    "unresolved": 14
+  },
+  "input_document_unchanged": true,
+  "installed_core": {
+    "url": "https://github.com/OpenHCSDev/agent-comms.git",
+    "vcs_info": {
+      "commit_id": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+      "requested_revision": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+      "vcs": "git"
+    }
+  },
+  "interpreter": "/home/ts/wt/toad-foreground-readiness-remainder-20260930/.artifacts/runtime-reader-geometry-254-20261001/bin/python",
+  "journal": "/var/tmp/agent-comms-live-20260927-wzjtqhza/compaction-commits.sqlite3",
+  "journal_unchanged": true,
+  "observed_utc": "2026-10-01T12:14:31.986496+00:00",
+  "original": {
+    "mode": "0o600",
+    "revision": {
+      "ctime_ns": 1790828361167192429,
+      "identity": {
+        "device": 2083,
+        "inode": 3996327
+      },
+      "mtime_ns": 1790828361167192429,
+      "size": 57344
+    },
+    "sha256": "f7648baa4f877c5c554dbb51257c5b4fd3e937b7f091da1d13ec28650ffa9912"
+  },
+  "pending_publications": [],
+  "private_raw_unknowns": [
+    "4299599e53dae3c3d92e811efda15e40",
+    "35da7f88be84f054e580959998e7c680"
+  ],
+  "protection": {
+    "companions": [
+      "compaction-commits.sqlite3-journal",
+      "compaction-commits.sqlite3-wal",
+      "compaction-commits.sqlite3-shm"
+    ],
+    "frozen_479": "script, invocation, target and gates unchanged",
+    "input_dispositions": "preserve original bytes and typed disposition; never relabel bound_unknown/not_sent or replay",
+    "journal": "declared runtime; retain private preimages then reset at next matched all-stopped cutover",
+    "native_and_input_proof": "preserve originals; no automatic retry/resume/reconstruction",
+    "native_runtime_input_and_prompt_binding": "preserve original SQL rows and sidecar; runtime journal reset grants no admission or completion",
+    "raw_markers": "Original status is always unknown; both have recorded native references. This observation grants no terminal outcome/retry."
+  },
+  "raw_marker_original_relations": [
+    {
+      "input_id": "4299599e53dae3c3d92e811efda15e40",
+      "input_proof_exists": true,
+      "native_source_exists": true,
+      "native_source_size": 2758,
+      "original_native_reference": "NativeInputReference",
+      "original_native_row": true,
+      "original_owner": "openhcs-helper2",
+      "original_prompt_binding": true,
+      "original_source_seq": 262,
+      "session_path_digest": "5198095244d5ad11eeed38a956b3f64f3caacab2c58684705f0156f8aedf1022"
+    },
+    {
+      "input_id": "35da7f88be84f054e580959998e7c680",
+      "input_proof_exists": true,
+      "native_source_exists": true,
+      "native_source_size": 2768,
+      "original_native_reference": "NativeInputReference",
+      "original_native_row": true,
+      "original_owner": "openhcs-helper2",
+      "original_prompt_binding": true,
+      "original_source_seq": 266,
+      "session_path_digest": "64616a849efc950157f1064a67a7c759248dbd3abea18f658d9ec9a28f02fe9a"
+    }
+  ],
+  "source_fields": [
+    "source",
+    "selected",
+    "settings"
+  ],
+  "source_impact": {
+    "core": "0ea6dccbd39b1f8656e2fc2ad983046244d9312d",
+    "declaration": "agent_comms.compaction_records.SelectedSummarySource",
+    "genuine_old_summary_decode_failure_tested": false,
+    "new_required_field": "retained: RetainedTaskFacts",
+    "old_fields": [
+      "source",
+      "selected",
+      "settings"
+    ],
+    "reason_no_decode_claim": "Original selected_summary_attempts contains zero rows; required source field is a declaration-format change.",
+    "retained_has_default": false,
+    "sql_table_column_change": false
+  },
+  "sql_schema_sha256": "ff8d04ceea7349eea1c1caec3af9a141b3ec6ff62e517b6626dd2db4416eff40",
+  "summary_source_rows_observed": 0,
+  "tables": {
+    "enrolled_private_sessions": {
+      "rows": 0,
+      "states": {}
+    },
+    "operations": {
+      "rows": 0,
+      "states": {}
+    },
+    "private_raw_inputs": {
+      "rows": 2,
+      "states": {}
+    },
+    "publications": {
+      "rows": 0,
+      "states": {}
+    },
+    "selected_summary_attempts": {
+      "rows": 0,
+      "states": {}
+    }
+  },
+  "unresolved_operations": []
+}
