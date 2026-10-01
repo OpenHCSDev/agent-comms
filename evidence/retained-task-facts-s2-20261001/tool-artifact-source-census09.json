@@ -1,0 +1,39 @@
+{
+  "status": "SOURCE_PROVENANCE_GAP_NOT_IMPLEMENTED",
+  "reviewed_core": "3f0af4940bfd9f3ade523f230e4240e3acd8ab2a",
+  "original_native_package": "f1178500e5154c38152aeb5d1133ab9fbd84774e2a8bc6b6233ba9b490b4eb4c",
+  "determining_sources": [
+    {
+      "source": "Pi0.85.1 dist/core/tools/write.js:createWriteToolDefinition.execute",
+      "observed": "Actual mutation succeeds inside withFileMutationQueue; result details undefined, so source does not declare path/hash/repository receipt."
+    },
+    {
+      "source": "Pi0.85.1 dist/core/tools/edit.js:execute",
+      "observed": "Result declares diff/patch/firstChangedLine; no full original file digest/repository revision."
+    },
+    {
+      "source": "src/agent_comms/channel_coding_tools.py:CodingCall.commit_terminal",
+      "observed": "Existing durable terminal is coding admission consumption closure, not proof of successful file content; is_error cannot be inferred from its existence."
+    },
+    {
+      "source": "src/agent_comms/pi_payloads.py:ToolResultMessage",
+      "observed": "Original details remain opaque; missing structured producer evidence stays unproved, not reconstructed from prose, native user role, tool arguments or current filesystem."
+    },
+    {
+      "source": "src/agent_comms/_pi_helpers/prepare_compaction.mjs",
+      "observed": "One native store owns cut/revision observation; only bounded metadata crosses helper stdout. Future retention must reuse original native source resource/policy, not add another complete saved-history scan."
+    }
+  ],
+  "required_relation": "Actual completed file mutation -> original ToolResult metadata/call identity -> same native source cut -> exact mandatory packing/commit, while preserving distinct original result identities and unsupported evidence neutrality.",
+  "patterns": [
+    "IDEN-5",
+    "BOUND-2",
+    "IMPL-4",
+    "TIME-9"
+  ],
+  "ownership": "S2 Schrodinger; Mendel explicitly released coding/native metadata; Arendt source/custody crossing claim requested. Einstein current S5/native gate disjoint.",
+  "current_frozen_cohort_mutated": false,
+  "new_provider_calls": 0,
+  "original_inputs_replayed": 0,
+  "full_s2_ready": false
+}
