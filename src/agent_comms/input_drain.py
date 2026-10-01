@@ -6,6 +6,7 @@ import asyncio
 import os
 import sqlite3
 import time
+from dataclasses import replace
 from contextlib import aclosing
 from typing import Any
 
@@ -46,6 +47,8 @@ from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_watch import WireWatch
+from .field_codec import FieldCodec
+from .turn_context import TurnContext, UserFollowupSegment
 
 AGENT_PREFIX = "!agent "
 GOAL_WAIT_RECHECK_INTERVAL = 60.0
@@ -337,18 +340,22 @@ class InputDrain(FutureInputQueue):
             controller = self.runtime.controller.get()
             if controller is UNBOUND_CONTROLLER:
                 controller = self.sessions.client
+            followup = UserFollowupSegment.capture(text.removeprefix(AGENT_PREFIX))
             item, owner = QueuedInput.capture(
                 self,
                 self.sessions.require(session_id),
                 text=display_text,
-                prompt="User follow-up:\n" + text.removeprefix(AGENT_PREFIX),
+                prompt=TurnContext.render_segments((followup,), images=images).text,
                 echo=request.defer_display,
                 images=images,
                 controller=controller,
                 input_id=request.input_id,
                 origin=request.origin,
             )
-            item = request.accepted(item, self.dispositions.read().lookup(item.key), owner)
+            source = self.dispositions.read().rows[item.key]
+            item = request.accepted(item, source, owner)
+            followup = replace(followup, provenance=(*followup.provenance, source.context_provenance()))
+            rendered = TurnContext.render_segments((followup,), images=images)
             self.following_sources.setdefault(session_id, {})[item.input_id] = item.source()
             self.turn_input_keys.setdefault(session_id, set()).add(item.key)
             self.queued_inputs.setdefault(session_id, {})[item.input_id] = item
@@ -356,6 +363,7 @@ class InputDrain(FutureInputQueue):
                 {
                     "type": "prompt",
                     "message": item.prompt,
+                    "contextContributions": FieldCodec.encode(rendered.contributions),
                     "streamingBehavior": "steer",
                     "_input_id": item.input_id,
                     **({"images": [image.to_rpc() for image in images]} if images else {}),

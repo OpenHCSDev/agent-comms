@@ -17,6 +17,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 
 if TYPE_CHECKING:
+    from .input_attempt import StoredInput
     from .presentation import ThreadView
     from .threads import Thread
 
@@ -248,6 +249,17 @@ class InstructionSegment(ContextSegment):
         return self.instruction.render(self.values())
 
 
+@dataclass(frozen=True, kw_only=True)
+class UserFollowupSegment(InstructionSegment, UserInputSegment):
+    @classmethod
+    def capture(cls, content: str) -> UserFollowupSegment:
+        instruction = InstructionFile.read("user-followup.md")
+        return cls(provenance=(instruction.source,), instruction=instruction, content=content)
+
+    def values(self) -> dict[str, object]:
+        return {"content": self.content}
+
+
 @dataclass(frozen=True)
 class PeerState:
     """A projection of original roster declarations, not copied presence state."""
@@ -406,10 +418,12 @@ class TurnContext:
         task: str,
         views: tuple[ThreadView, ...],
         origins: tuple[MessageReference, ...] = (),
+        inputs: tuple[StoredInput, ...] = (),
     ) -> TurnContext:
         source = tuple(WireProvenance(ref) for ref in origins) or (
             OwnerProvenance(owner.incarnation, turn.source_revision(owner)),
         )
+        source += tuple(row.context_provenance() for row in inputs)
         return cls(
             owner.incarnation,
             turn,
@@ -426,9 +440,13 @@ class TurnContext:
         return replace(self, segments=(*self.segments, segment))
 
     def render(self, *, images=()) -> RenderedInput:
+        return self.render_segments(self.segments, images=images)
+
+    @staticmethod
+    def render_segments(segments: tuple[ContextSegment, ...], *, images=()) -> RenderedInput:
         prompt_parts, provider, contributions = [], {}, []
         offset = 0
-        for segment in self.segments:
+        for segment in segments:
             start = len(prompt_parts)
             segment.render_into(prompt_parts, provider)
             if len(prompt_parts) > start:

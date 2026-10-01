@@ -186,12 +186,14 @@ class OwnedTurn:
             RecordedContextTurn,
         )
 
+        input_rows = self.runner.inputs.dispositions.read().rows
         self.context = TurnContext.for_owner(
             self.thread,
             RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),
             self.task,
             self.runner.comms.views.thread_views(),
             tuple(origin.reference for origin in self.origins),
+            tuple(input_rows[key] for key in self.original_keys),
         )
         if self.goal_permit is not None:
             for segment in self.thread.context_goal_segments():

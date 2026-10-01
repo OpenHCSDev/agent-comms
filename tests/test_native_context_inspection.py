@@ -160,6 +160,10 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
             assert {segment.kind for segment in manifest.segments} >= {
                 "system_layer", "transcript", "compaction_summary", "injection_message", "tool_catalog"}
             assert all(segment.provenance for segment in manifest.segments)
+            contributors = tuple(part for segment in manifest.segments for part in segment.contributors)
+            assert {part.kind for part in contributors} >= {'coordination', 'goal', 'user_input'}
+            assert all(part.provenance for part in contributors)
+            assert any(source.declared_name == 'input' for part in contributors for source in part.provenance)
             assert manifest.counter == "pi.estimateTokens"
             selected = await cli("--turn", str(manifest.turn.occurrence.generation))
             assert len(selected["manifests"]) == 1 and selected["text_recorded"] is False

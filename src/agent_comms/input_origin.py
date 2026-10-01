@@ -12,6 +12,7 @@ from .goals import GoalRevision
 from .message_reference import MessageReference
 from .thread_identity import AdmissionIdentity
 from .wire_metadata import WireRootIdText
+from .turn_context import Provenance
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -34,6 +35,12 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
 
     def require_human(self) -> HumanInputOrigin:
         raise RelationViolationError("Input lacks an original human author witness")
+
+
+@dataclass(frozen=True)
+class InputProvenance(Provenance):
+    key: str
+    origin: InputOrigin
 
 
 @dataclass(frozen=True)

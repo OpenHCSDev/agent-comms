@@ -12,7 +12,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation, projected
 from .native_input_record import NativeInputIdText
 from .thread_identity import GenerationCounter, ThreadIncarnation
-from .input_origin import InputOrigin, UnattributedInputOrigin
+from .input_origin import InputOrigin, InputProvenance, UnattributedInputOrigin
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -119,6 +119,9 @@ class StoredInput(InputAttempt):
     """Recorded owner name/admission provenance, with no invented incarnation."""
 
     exists = True
+
+    def context_provenance(self) -> InputProvenance:
+        return InputProvenance(self.key, self.origin)
     key: str = field(metadata={"public_exclude": True})
     sequence: int | None
     owner: str = field(metadata={"public_exclude": True})

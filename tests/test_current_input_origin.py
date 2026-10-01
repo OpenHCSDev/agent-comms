@@ -46,6 +46,14 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         row = InputDispositions(inputs.path).read().lookup(key)
         assert row.origin == origin and row.source_text == command.user_text
         assert len(inputs.read().rows) == 1 and comms.bus.log.full_history() == before
+        from agent_comms.pi_commands import Prompt
+        queued = agent.inputs.backend_inboxes['beta'].get_nowait()
+        queued.pop('_input_id')
+        native_prompt = Prompt.from_wire(queued)
+        assert native_prompt.message == 'User follow-up:\n' + command.user_text
+        contribution, = native_prompt.context_contributions
+        assert contribution.kind == 'user_followup'
+        assert row.context_provenance() in contribution.provenance
         native_id = "b" * 32
         sent = "User follow-up:\n" + command.user_text
         assert inputs.bind(key, admission=row.admission, turn_id="held-native", native_id=native_id, text=sent)
