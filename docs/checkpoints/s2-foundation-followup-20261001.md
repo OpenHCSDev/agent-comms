@@ -152,3 +152,41 @@ integration owner for full S2. No new paid provider run or public/default change
 is authorized by opening this draft. Public activation remains the parent's
 operation. The full S2 goal stays open until these original obligations pass
 their actual required boundaries.
+
+## Artifact native package checkpoint — 2026-10-01
+
+The previously withheld artifact build was authorized under a 0.6 GiB incremental
+budget after reserved headroom was checked. Production was frozen at `62adcde7`
+(the artifact recipe/helper/schema remain the reviewed `d1e6c4bb` bytes). Fresh
+stock assembly and normal `prepare-pi-native` both exited zero. Whole-tree comparison
+with protected 0064 changes only SDK write/edit and the artifact helper/schema.
+The extension/import manifest and all other native bytes are unchanged.
+
+New module and full-tree pins are committed in `stack/pi-native.sha256`: manifest
+`776cd99e55d6917b77209b85e071529f5959b622ab666e6acaa16de6ed9b6a92`, tree
+`abaa5bf07cd1d40b56d23e7201ae58bd0615892b79b728fad5e1e0b25a1c3e1c`.
+The new independent target is `stack/.pi-native-776cd99e55d6917b`. Existing 0064
+and other frozen native packages, original histories and public defaults were
+not changed.
+
+Full `_trusted_package` admission, the normal native CLI version entrypoint and
+actual packaged SDK write/edit controls passed. Controls imported through the
+original deployment fence, verified Unicode/BOM/CRLF bytes and matching artifact
+hashes, preserved failed-edit contents, refused success for aborted work, and
+proved custom operations do not acquire owned artifact claims. Both actual
+result-detail values round-trip through the source decoder exactly. The initial
+external-file control was correctly refused by the import fence; its failure
+is retained, and the corrected trusted inline runner exited zero. These local
+controls do not call a provider or mutate public roots.
+
+Evidence: `native-build-proposal21.json`, capture/build 22/24 logs and measured
+terminal records, `native-artifact-pin23.json`, refused 25 and successful packaged
+26 controls, `native-trust27.json`, normal CLI 28, and `native-handoff29.json`.
+Patterns: MEMB-5/BOUND-2 keep the generated artifact declaration with its existing
+FieldCodec owner; IDEN-5 keeps mutation proof on the original successful result.
+
+This is artifact-package readiness, not installed Core/native/ACP/UI acceptance
+or full S2. The source-only generic `Message.task` change still requires original
+durable carry and USER pin admission; it must not be published as a completed
+format cutover merely because the independent native package is ready. Three
+genuine compactions and separate S4 recall remain unproved.

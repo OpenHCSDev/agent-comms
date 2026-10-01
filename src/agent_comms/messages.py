@@ -112,6 +112,7 @@ class Message:
         return self.task.retains_authored_task
 
     def require_task_publication(self, sender, snapshot, original_source) -> None:
+        self.task.require_target(self.target, snapshot)
         self.task.require_publication(sender, snapshot, original_source)
 
     def require_claim_transition(self) -> ClaimTransition:

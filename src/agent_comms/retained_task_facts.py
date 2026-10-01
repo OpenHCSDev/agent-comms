@@ -33,6 +33,9 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
     def authored_sources(self) -> tuple[Message, ...]:
         return ()
 
+    def wire_sources(self) -> tuple[Message, ...]:
+        return ()
+
     def for_tasks(self, current: frozenset[MessageReference]) -> ExactTaskFact:
         return self
 
@@ -43,6 +46,9 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
 @dataclass(frozen=True)
 class UserSourceTaskFact(ExactTaskFact):
     source: Message
+
+    def wire_sources(self):
+        return (self.source,)
 
     def __post_init__(self) -> None:
         if self.source.sender_role is not ThreadRole.USER:
@@ -55,6 +61,9 @@ class AuthoredTaskFact(ExactTaskFact):
     source: Message
 
     def authored_sources(self):
+        return (self.source,)
+
+    def wire_sources(self):
         return (self.source,)
 
     @abstractmethod
@@ -123,11 +132,34 @@ class CurrentUserTaskCorrectionFact(UserTaskCorrectionFact,
 
 
 @dataclass(frozen=True)
+class HumanConstraintTaskFact(UserSourceTaskFact, AuthoredTaskFact,
+                              declared_name="historical_human_constraint"):
+    def __post_init__(self):
+        super().__post_init__()
+        self.source.task.require_human_constraint()
+
+    def current_fact(self):
+        return CurrentHumanConstraintTaskFact(self.source)
+
+    def historical_fact(self):
+        return HumanConstraintTaskFact(self.source)
+
+
+@dataclass(frozen=True)
+class CurrentHumanConstraintTaskFact(HumanConstraintTaskFact,
+                                     declared_name="current_human_constraint"):
+    pass
+
+
+@dataclass(frozen=True)
 class ClaimTaskFact(ExactTaskFact):
     source: Message
 
     def __post_init__(self) -> None:
         self.source.require_claim_transition()
+
+    def wire_sources(self):
+        return (self.source,)
 
 
 @dataclass(frozen=True)
@@ -176,6 +208,13 @@ class RetainedTaskFacts:
 
     facts: tuple[ExactTaskFact, ...]
 
+    def original_text_source(self, message: Message) -> Message:
+        originals = {source.reference: source for fact in self.facts
+                     for source in fact.wire_sources()}
+        if originals.get(message.reference) != message:
+            raise RelationViolationError("Authored source is outside this captured read")
+        return message.task.original_text_source(message, originals)
+
     def current_authored_sources(self, owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
         """Resolve explicit original-reference lineage, never equal text or time.
 
@@ -188,11 +227,13 @@ class RetainedTaskFacts:
             for message in fact.authored_sources():
                 for root in message.task.current_roots(message, originals, owner, registry):
                     originals[message.reference] = root
-                    _, previous = effective.get(root.reference, (root, root))
+                    lineage = root.task.lineage_reference(root)
+                    _, previous = effective.get(lineage, (root, root))
                     if message.task.revises_after(previous):
-                        effective[root.reference] = (root, message)
-        return tuple(message for root, message in effective.values()
-                     if root.task.require_scoped_task().applies(owner, registry))
+                        effective[lineage] = (root, message)
+        return tuple(selected for root, message in effective.values()
+                     if root.task.require_scoped_task().applies(owner, registry)
+                     for selected in message.task.selected_sources(message))
 
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""

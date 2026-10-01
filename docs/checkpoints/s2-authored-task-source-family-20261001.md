@@ -100,3 +100,49 @@ Full S2 constraints, artifact repository/symbol provenance, automatic retention,
 three genuine native compactions and S4 recall remain open. This source slice
 does not delay independent release of the reviewed partial foundation or artifact
 checkpoint. Native build remains withheld under the parent's disk-budget rule.
+
+## USER wire pin/source checkpoint — 2026-10-01
+
+Production `55d2e6ae` moves the model-turn fields and lease admission into
+`ModelTaskDeclaration`. The existing `ScopedTaskDeclaration` now owns the shared
+scope and original-reference lineage. `HumanConstraintPin` is another declared
+member; it requires no model turn. It stores only the original USER message
+reference, source USER incarnation, intended recipient incarnation and original
+project/goal scope. The wording remains in the original message body.
+
+`Messaging.pin_user_constraint` publishes through the existing cooperative
+`HumanOrigin` path. The publisher uses its acquired certified original read to
+check the original USER sender and frozen recipient, scope and current recipient
+binding before writing a notice. A pin cannot replay the original input, infer
+human authorship from a peer, widen the audience, or borrow a model-turn scope.
+Current scope derives from the existing `Thread.task_scope` and its scope member;
+there is no second goal selection mechanism.
+
+`RetainedTaskFacts.original_text_source` resolves a pin's subject in the same
+frozen retained wire evidence and refuses altered/outside messages. USER facts
+retain the original wording exactly once. Repeated pin operations for the same
+subject select one effective declaration through the member-owned original
+lineage reference; distinct original messages with equal wording remain distinct.
+The existing human supersession supplies exact corrected wording, while the
+`UserTaskDrop` member explicitly retires that lineage. No body deduplication,
+seen registry, mutable constraint ledger or additional persistence schema exists.
+
+The actual private source publisher/certified read journey passes with stopped
+recipients and no model lease: initial pin, exact Unicode/multiline wording,
+current/historical packing, correction, drop, repeated pin, equal wording with
+distinct identity, rename, project and goal replacement, and refusal of foreign
+subjects/authors/audiences/model scopes. Fourteen source cases pass in 3.08s;
+the final two USER journeys pass in .85s after scope selection was delegated
+to the existing scope member. The first expected-error-text failure is retained;
+the author fence already refused the attempted peer claim. The committed-source
+ratchet exits zero with no positive numeric delta. Production changes add 274
+lines and remove 43, separating human source authority from model lease authority
+rather than copying admission code (IDEN-1/IMPL-4/BOUND-2).
+
+The API is published for Einstein's consumer owner and Arendt's original typed
+cutover. It is not installed native/ACP/UI acceptance or a completed task-format
+cutover. Native original HumanInput pinning remains distinct and unimplemented.
+The independent artifact native manifest `776cd99e55d6917b` is unchanged.
+Full S2 retention, three genuine compactions and separate S4 remain open.
+Evidence is `human-source32/33/34`, `human-ratchet35`, `human-final36` and
+`human-source-handoff37.json` in the existing followup evidence directory.
