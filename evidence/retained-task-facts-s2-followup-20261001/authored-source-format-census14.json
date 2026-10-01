@@ -24,22 +24,23 @@
           "seq": 1,
           "id": "75762766597b",
           "kind": "choice",
-          "private": false
+          "private": true
         },
         {
           "seq": 2,
           "id": "cb113bcb6b7f",
           "kind": "user_supersession",
-          "private": false
+          "private": true
         },
         {
           "seq": 3,
           "id": "aea7fe4100ac",
           "kind": "choice",
-          "private": false
+          "private": true
         }
       ],
-      "preserve_original": true
+      "preserve_original": true,
+      "private_annotation": "namespace membership from existing bus_publication.has_private_wire_fields; not a private-attestation proof"
     }
   ]
 }
