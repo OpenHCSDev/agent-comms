@@ -1,0 +1,90 @@
+{
+  "scope": "coordination-input-preview; native system/history and wire manifests pending",
+  "input_supplied": false,
+  "manifest": {
+    "thread": {
+      "name": "nra-architecture",
+      "created_at": 1790049182.3907015
+    },
+    "turn": {
+      "kind": "next"
+    },
+    "segments": [
+      {
+        "kind": "coordination",
+        "provenance": [
+          {
+            "kind": "owner",
+            "owner": {
+              "name": "nra-architecture",
+              "created_at": 1790049182.3907015
+            },
+            "revision": "5d4d62fc04be85c72fa4f3fd35583dd9f8303ca9a81e42fc3d0e1b4c2d778b7f"
+          },
+          {
+            "kind": "file",
+            "path": "/home/ts/wt/comms-turn-context-phase1-20261001/src/agent_comms/instructions/coordination.md",
+            "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+          }
+        ],
+        "sha256": "97c73ad50ea7517cd5bee8b38d1c36fee466a4c172a06b54f6f441fff7d2d0cb",
+        "utf8_bytes": 6078,
+        "tokens": 1520
+      },
+      {
+        "kind": "transcript",
+        "provenance": [
+          {
+            "kind": "owner",
+            "owner": {
+              "name": "nra-architecture",
+              "created_at": 1790049182.3907015
+            },
+            "revision": "43d085b7fd3107970a8cb96218a2eee8e96ac3eb30dff5e18f3d1fb7b81f7219"
+          }
+        ],
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "utf8_bytes": 0,
+        "tokens": 0
+      }
+    ],
+    "counter": "pi.estimateTokens"
+  },
+  "segments": [
+    {
+      "kind": "coordination",
+      "provenance": [
+        {
+          "kind": "owner",
+          "owner": {
+            "name": "nra-architecture",
+            "created_at": 1790049182.3907015
+          },
+          "revision": "5d4d62fc04be85c72fa4f3fd35583dd9f8303ca9a81e42fc3d0e1b4c2d778b7f"
+        },
+        {
+          "kind": "file",
+          "path": "/home/ts/wt/comms-turn-context-phase1-20261001/src/agent_comms/instructions/coordination.md",
+          "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+        }
+      ],
+      "tokens": 1520,
+      "text": "Coordination context: you are thread 'nra-architecture'; parent='agent-comms-ux'. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/code/projects/nominal-refactor-advisor'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: [{\"name\": \"Linnaeus\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"acp-send-reliability-triage\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"agent-comms-2\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"agent-comms-ux\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"agent-comms-ux-fresh\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"codex-bootstrap\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"codex-friction-audit\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"comms-live-repro-20260929\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"comms-maintenance-barrier-acceptance\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"comms-maintenance-gate-owner\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"comms-prompt-restart-independent\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"comms-steering\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"comms428\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"goal-autopause-correction\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"import-private-pr88-review\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"legacy-private-migration-owner\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"mcp-goal-scope-consultant\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"mcp-pr77\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"mcp-pr77-trust-review\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"native-pi-launch-isolation\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nominal-refactor-advisor\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nominal-refactor-advisor-2\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nominal-refactor-advisor-3\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nra-class-first-name-review\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nra-domain-mapping\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nra-ordered-branch-call-review\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nra-pr8-pr10-independent-review\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nra-roster-heuristic-map\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"nra-toad-decision-probe-review\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"opencode-toad-comms-sidebar\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"opencode-toad-maintenance\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"openhcs-architecture-memory\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"openhcs-headless-bootstrap-worker\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"openhcs-helper\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"openhcs-helper2\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"openhcs-pr159-viewer-bind-owner\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"participant\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-acp-steer-disposition-fix\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-channel-scope-epoch-design\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-comms-threads-scaling-fix\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-dm-scoped-ack-api-owner\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-goal-capability-preflight\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-goal-coherent-integration-owner\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-goal-human-recovery-api\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-goal-p15-recovery-independent-review\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-goal-p15-sink-independent-review\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-ingress-disposition-independent-review\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-macos313-backend-ci-fix\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-native-ancestor-fsync-fix\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}, {\"name\": \"pr1-native-goal-preflight-independent-review\", \"status\": \"stopped\", \"activity\": \"idle\", \"activity_detail\": \"\"}]\n\n"
+    },
+    {
+      "kind": "transcript",
+      "provenance": [
+        {
+          "kind": "owner",
+          "owner": {
+            "name": "nra-architecture",
+            "created_at": 1790049182.3907015
+          },
+          "revision": "43d085b7fd3107970a8cb96218a2eee8e96ac3eb30dff5e18f3d1fb7b81f7219"
+        }
+      ],
+      "tokens": 0,
+      "text": ""
+    }
+  ]
+}

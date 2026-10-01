@@ -1,5 +1,17 @@
 # S2: Exact retained task facts
 
+## Current implementation ownership
+
+Schrodinger is the sole S2 integration owner, assigned 2026-10-01. The persistent
+worktree is `/home/ts/wt/comms-retained-task-facts-s2-20261001`, based on reviewed
+main `e191bcf44c292dfedc5b8b62b2b503f06de3ae7b`. This scope implements original
+wire Decision emission/correction, declaration-owned retained classes, canonical
+fact projections and existing native compaction packing/commit closure. Einstein
+owns S5 context assembly separately; Mendel owns native execution identity in
+#472. Shared methods are coordinated directly before edits. No new native fixture
+will run alongside the current Kepler investigation. Paid recall evaluation is a
+separate budget; source and native acceptance remain distinct.
+
 **Source reviewed:** `4295d680`.
 **Rules:** [00-RULES.md](00-RULES.md). **Step 2. Origin:** PR48 proposal.
 **Shared abstractions** ([02-SHARED-ABSTRACTIONS.md](02-SHARED-ABSTRACTIONS.md)). *Builds:* Decision. *Uses:* existing fact stores, source/witness, native packing and commit.

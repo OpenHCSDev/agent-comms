@@ -1,0 +1,128 @@
+{
+  "scope": "silent canonical wire record and all message projection consumers",
+  "ready": false,
+  "installed_native_tested": false,
+  "original_message_bytes_preserved": true,
+  "message_sequence_unchanged_by_observation": true,
+  "awareness_activity_unread_delivery_unchanged_for_same_original_state": true,
+  "source_checks": "122 passed in 69.81s",
+  "files": [
+    {
+      "path": "src/agent_comms/bus_activity_index.py",
+      "added": 7,
+      "deleted": 7
+    },
+    {
+      "path": "src/agent_comms/bus_display_index.py",
+      "added": 5,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "added": 11,
+      "deleted": 11
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "added": 25,
+      "deleted": 25
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "added": 20,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "added": 15,
+      "deleted": 12
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "added": 4,
+      "deleted": 4
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "added": 11,
+      "deleted": 10
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "added": 12,
+      "deleted": 10
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "added": 1,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "added": 3,
+      "deleted": 1
+    },
+    {
+      "path": "src/agent_comms/routing.py",
+      "added": 8,
+      "deleted": 4
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "added": 33,
+      "deleted": 1
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "added": 3,
+      "deleted": 4
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "added": 40,
+      "deleted": 52
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "added": 79,
+      "deleted": 5
+    },
+    {
+      "path": "tests/test_bus_page_index.py",
+      "added": 2,
+      "deleted": 2
+    }
+  ],
+  "production_deleted_lines": 156,
+  "remaining": [
+    "full native provider context observation and query",
+    "all input contribution family migration",
+    "actual installed saved/configured-model continuous journey",
+    "recorded full-provider input byte comparison"
+  ]
+}

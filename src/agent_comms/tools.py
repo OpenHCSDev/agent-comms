@@ -27,6 +27,9 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal
 from .messages import MessageType
+from .message_reference import MessageReference
+from .task_decisions import Decision, DecisionScope
+from .thread_identity import TurnId
 from .relationships import RelationshipEdit
 from .restart_queue import cancel as cancel_restart
 from .restart_queue import enqueue as enqueue_restart
@@ -642,6 +645,36 @@ class CommsSendTool(ToolRequest):
     def apply(self, comms: Comms) -> JsonObject:
         message = comms.messaging.send_message(self.sender, self.target, self.body, self.type)
         return {"id": message.message_id}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsDecisionTool(ToolRequest):
+    label = "Record Decision"
+    description = (
+        "Record a chosen alternative and its valid rejected alternatives on one original "
+        "wire message. Author and source turn come from your admitted execution. "
+        "Defaults to the current project and active goal revision, or current turn. "
+        "A correction must name the original message reference; recording grants no execution."
+    )
+    chosen: str = tool_field("Chosen alternative, preserving exact wording")
+    rejected: tuple[str, ...] = tool_field("Nonempty unique valid rejected alternatives")
+    target: str = tool_field("Thread or channel receiving the original declaration", wire_name="to")
+    scope: DecisionScope | None = tool_field("Current project/goal or turn scope", default=None)
+    supersedes: MessageReference | None = tool_field("Original decision reference being corrected", default=None)
+
+    def apply(self, comms: Comms) -> JsonObject:
+        owner = comms.registry.require(_executing_thread())
+        lease = owner.require_turn_lease()
+        declaration = Decision(
+            chosen=self.chosen, rejected=self.rejected,
+            scope=self.scope or DecisionScope.for_owner(owner),
+            source_turn=lease.identity, source_turn_id=TurnId(lease.turn_id),
+            supersedes=self.supersedes,
+        )
+        message = comms.messaging.send_message(
+            owner.name, self.target, declaration.text, notice=True, decision=declaration
+        )
+        return {"reference": FieldCodec.encode(message.reference), "decision": FieldCodec.encode(message.decision)}
 
 
 @dataclass(frozen=True, kw_only=True)

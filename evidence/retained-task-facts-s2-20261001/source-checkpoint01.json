@@ -1,0 +1,46 @@
+{
+  "source_base": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+  "status": "SOURCE_CHECKPOINT_ONLY",
+  "canonical_owners": [
+    "Message.reference and original wire envelope",
+    "Thread original admitted turn and goal",
+    "InputDocument original input dispositions",
+    "CompactionSource capture and revalidation"
+  ],
+  "new_authoritative_stores": 0,
+  "new_paid_calls": 0,
+  "baseline_scan": {
+    "detectors": 79,
+    "exit_code": 0,
+    "full_raw_path": "/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/baseline-nra314.json",
+    "sha256": "67516a60a1b98fb31c3f4d447e1b5d4655a2bf3b42824a3ba1818c4a0dbdc234",
+    "coverage_limit": "Full CLI payload does not expose complete or omitted-detector fields; no completeness flag is invented."
+  },
+  "negative_control": {
+    "root": "/home/ts/.cache/agent-scratch/s2-decision-source01-20261001",
+    "cause": "Nested bus flock during correction original-reference read",
+    "original_seq": 1,
+    "original_message_id": "16e508ddf398",
+    "exit_code": 130,
+    "replayed": false
+  },
+  "changed_cause_control": {
+    "root": "/home/ts/.cache/agent-scratch/s2-decision-source02-20261001",
+    "original_message_id": "637e3b19a87c",
+    "correction_message_id": "f1526c9e1d5f",
+    "rows": 2,
+    "exit_code": 0
+  },
+  "source_tests": {
+    "source02": "42 passed; one preexisting collaboration error regex failed",
+    "source03": "43 passed",
+    "source04": "14 passed"
+  },
+  "remaining": [
+    "Existing selected/native summary packing and single commit consumer closure",
+    "Explicit authorized superseding user correction relation",
+    "Canonical completed tool/artifact identity provenance",
+    "Effective applicability and supersession selection under goal/turn change",
+    "Three installed native checkpoints and separate recall evaluation"
+  ]
+}
