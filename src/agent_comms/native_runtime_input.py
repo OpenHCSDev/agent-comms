@@ -1,7 +1,7 @@
 """Declared native input and cursor rows, never reconstructed native proof.
 
-These are runtime tables in coordination.sqlite3. Installation resets their
-store at a quiet migration; admission remains fenced by the root authority.
+These original coordination.sqlite3 rows retain irreplaceable reservation,
+send-admission and live-context authority. Installation never resets them.
 """
 
 from __future__ import annotations
@@ -9,17 +9,17 @@ from __future__ import annotations
 import sqlite3
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .coordination_errors import StaleFence
+from .coordination_errors import StaleFence, IdentityConflict
 from .native_admission_epoch import NativeAdmissionEpoch, UnrecordedNativeAdmission
 from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
-from .selected_triage import SelectedTriage
+from .selected_triage import SelectedTriage, RecordedTriageText
 from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         install_native_runtime_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[5]
+    version: Literal[4]
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
 
     @classmethod
@@ -63,6 +63,16 @@ class PublishedReplyRevision(TypedRow):
 
 @dataclass(frozen=True)
 class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTable, TypedTable):
+    def __post_init__(self):
+        self.execution
+
+    @property
+    def execution(self) -> NativeInputExecution:
+        try:
+            return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
+        except (TypeError, ValueError) as error:
+            raise IdentityConflict("Native input execution columns conflict with their stage") from error
+
     @classmethod
     @contextmanager
     def _publication_read(cls, root):
@@ -169,22 +179,14 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             )
         }
     )
-    execution: NativeInputExecution
-    stage: type[NativeInputExecution] = field(
-        init=False, compare=False, repr=False,
-        metadata={"sql": Column(generated="json_extract(execution, '$.kind')")},
-    )
+    stage: type[NativeInputExecution] = field(metadata={"sql": Column(check=NativeInputExecution.sql_constraint("stage"))})
     assignment_id: str = field(
         metadata={"sql": Column(references=(WakeAssignment, "assignment_id"))}
     )
     execution_id: str | None = field(
-        init=False, compare=False, repr=False,
-        metadata={"sql": Column(generated="json_extract(execution, '$.execution_id')", references=(ExecutionRecord, "execution_id"))},
+        metadata={"sql": Column(references=(ExecutionRecord, "execution_id"))}
     )
-    attempt_ordinal: int | None = field(
-        init=False, compare=False, repr=False,
-        metadata={"sql": Column(generated="json_extract(execution, '$.attempt_ordinal')")},
-    )
+    attempt_ordinal: int | None
     owner_lookup: str = field(
         metadata={"sql": Column(references=(Participants, "participant_lookup"))}
     )
@@ -201,18 +203,22 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
-    verdict: type[SelectedTriage] | None = None
+    verdict: Annotated[type[SelectedTriage] | None, RecordedTriageText] = field(
+        default=None, metadata={"sql": Column(check=RecordedTriageText.sql_constraint("verdict"))}
+    )
 
     without_rowid = True
     unique = (("stage", "assignment_id"), ("execution_id", "attempt_ordinal"))
     checks = (
+        "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
+        "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
         "(session_id IS NULL AND session_file IS NULL AND session_entry_id IS NULL "
         "AND request_generation IS NULL AND llm_context_digest IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
         "AND length(session_file)>0 AND session_entry_id IS NOT NULL AND "
         "length(session_entry_id)>0 "
         "AND request_generation>0 AND length(llm_context_digest)=64)",
-        "execution_id IS NULL OR verdict IS NULL",
+        "stage='triage' OR verdict IS NULL",
     )
 
     def require_unproven(self, token_digest: str) -> None:
@@ -250,8 +256,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         return {
             f"{name}_identity_guard": f"""CREATE TRIGGER {name}_identity_guard
             BEFORE UPDATE ON {name}
-            WHEN NEW.input_id IS NOT OLD.input_id OR NEW.execution IS NOT OLD.execution
+            WHEN NEW.input_id IS NOT OLD.input_id OR NEW.stage IS NOT OLD.stage
                 OR NEW.assignment_id IS NOT OLD.assignment_id
+                OR NEW.execution_id IS NOT OLD.execution_id
+                OR NEW.attempt_ordinal IS NOT OLD.attempt_ordinal
                 OR NEW.owner_lookup IS NOT OLD.owner_lookup
                 OR NEW.owner_thread IS NOT OLD.owner_thread
                 OR NEW.owner_generation IS NOT OLD.owner_generation
@@ -303,7 +311,7 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
         metadata={"sql": Column(references=(NativeRuntimeInput, "input_id")), "native_context": str}
     )
     assignment_id: str | None = field(metadata={"native_context": str})
-    stage: type[NativeInputExecution] | None = field(metadata={"native_context": type[NativeInputExecution]})
+    stage: type[NativeInputExecution] | None = field(metadata={"sql": Column(check=NativeInputExecution.sql_constraint("stage")), "native_context": type[NativeInputExecution]})
     session_id: str | None = field(metadata={"native_context": str})
     request_generation: int | None = field(metadata={"native_context": int})
 

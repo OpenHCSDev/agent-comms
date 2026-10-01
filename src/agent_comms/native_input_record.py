@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
 import re
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Literal
 
 from .field_codec import FieldCodec, TextRepresentation
 from .declared_family import DeclaredFamily
@@ -17,6 +17,7 @@ from .coordination_errors import IdentityConflict
 from .coordination_contracts import validate_execution_id
 
 from .coordination_tables.participants import OwnerGenerations
+from .typed_table import TextStorage
 
 
 class NativeInputIdText(TextRepresentation):
@@ -52,6 +53,12 @@ class NativeInputCommit:
 class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     """Original triage or attempt identity, never a send/replay capability."""
 
+    @classmethod
+    def sql_constraint(cls, column: str) -> str:
+        """Preserve the original scalar SQL ABI from the execution declarations."""
+        names = tuple(member.declared_name for member in cls.members_with(cls))
+        return TextStorage.constraints(column, Literal[names])[0]
+
     def require_attempt(self) -> FullNativeExecution:
         raise IdentityConflict("Native triage input has no execution attempt")
 
@@ -61,8 +68,10 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def proves_full_source(self, proof) -> bool:
         return False
 
-    def proves_triage_source(self, proof, evidence) -> bool:
-        return False
+    @abstractmethod
+    def historical_proof(self, record, **source):
+        """Acquire the declared recorded-proof member from the original SQL row."""
+        raise NotImplementedError
 
     @classmethod
     @abstractmethod
@@ -89,11 +98,14 @@ class TriageNativeExecution(NativeInputExecution):
     def binding_fields(self):
         return {"execution_id": None, "attempt_ordinal": None}
 
-    def proves_triage_source(self, proof, evidence) -> bool:
-        return (
-            proof.expected_prompt_equality_established
-            and proof.require_triage_decision().proves_source(evidence)
-        )
+    def historical_proof(self, record, **source):
+        from .historical_native_inputs import TriageHistoricalNativeInput
+        from .selected_triage import SelectedTriage
+
+        # Original nullable SQL emission enters the required recorded-proof
+        # member here. No domain None or callback may fabricate a decision.
+        decision = FieldCodec.decode(type[SelectedTriage], FieldCodec.encode(record.verdict))
+        return TriageHistoricalNativeInput(execution=self, decision=decision, **source)
 
 
 @dataclass(frozen=True)
@@ -129,8 +141,15 @@ class FullNativeExecution(NativeInputExecution):
             and execution.lifecycle.current_attempt_ordinal == self.attempt_ordinal
         )
 
+    def historical_proof(self, record, **source):
+        from .historical_native_inputs import FullHistoricalNativeInput
+
+        FieldCodec.decode(type(None), record.verdict)
+        return FullHistoricalNativeInput(execution=self, **source)
+
     def proves_full_source(self, proof) -> bool:
         return proof.expected_prompt_equality_established
+
 
 
 @dataclass(frozen=True, slots=True)

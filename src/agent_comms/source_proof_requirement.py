@@ -35,6 +35,6 @@ class FullSourceProof(SourceProofRequirement):
 class TriageSourceProof(FullSourceProof):
     def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return any(
-            proof.execution.proves_triage_source(proof, evidence)
+            proof.proves_triage_source(evidence)
             for proof in evidence
         )

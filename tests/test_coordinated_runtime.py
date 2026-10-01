@@ -19,6 +19,8 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import selected_turn
+from agent_comms.historical_native_inputs import FullHistoricalNativeInput, TriageHistoricalNativeInput
+from agent_comms.selected_triage import IgnoreSelectedTriage, FullSelectedTriage
 from agent_comms.assignment_states import (
     CompletedAssignment,
     FailedAssignment,
@@ -320,7 +322,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
             source_seq=initial.message.seq,
         )
         assert len(ignored) == 1 and ignored[0].stage == "triage"
-        assert ignored[0].triage_result == "ignore"
+        assert ignored[0].decision is IgnoreSelectedTriage
         assert ignored[0].execution_id is None
         # Fake journal contract checks the join only, not native acceptance.
         assert ignored[0].expected_prompt_equality_established
@@ -449,7 +451,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
             source_seq=initial.message.seq,
         )
         assert len(one) == 1 and one[0].stage == "full"
-        assert one[0].triage_result is None
+        assert isinstance(one[0], FullHistoricalNativeInput)
         assert one[0].input_id == outcome.input_id
     assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
 
@@ -877,9 +879,9 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
         assert len({row.input_id for row in rows}) == 2
         assert rows[0].assignment_id == rows[1].assignment_id == result.assignment_id
         assert rows[0].execution_id is None and rows[0].attempt_ordinal is None
-        assert rows[0].triage_result == "full"
+        assert rows[0].decision is FullSelectedTriage
         assert rows[1].execution_id and rows[1].attempt_ordinal == 1
-        assert rows[1].triage_result is None
+        assert isinstance(rows[1], FullHistoricalNativeInput)
         assert rows[0].owner_lookup == rows[1].owner_lookup
         assert rows[0].owner_generation == rows[1].owner_generation == 1
         assert all(row.expected_prompt_equality_established for row in rows)

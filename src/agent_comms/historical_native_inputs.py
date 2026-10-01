@@ -9,6 +9,7 @@ grants no response, recovery, model replay, edit, or current-owner authority.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from abc import abstractmethod
 from pathlib import Path
 
 from agent_comms.coordination_errors import IdentityConflict
@@ -16,20 +17,21 @@ from agent_comms.coordinator import Coordination
 
 from .bus_publication import StableLookupText
 from .field_codec import FieldCodec
+from .declared_family import DeclaredFamily
 from .wire_metadata import WireRootIdText
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_pi import NativeContextProof, NativePiUnavailable
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 from .native_runtime_input import NativeRuntimeInput
-from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution
+from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution, TriageNativeExecution, FullNativeExecution
 from .message_reference import MessageReference
 from .selected_triage import SelectedTriage
 from .typed_table import TypedRow
 
 
-@dataclass(frozen=True, slots=True)
-class HistoricalNativeInput(NativeInputRecord):
+@dataclass(frozen=True, kw_only=True)
+class HistoricalNativeInput(NativeInputRecord, DeclaredFamily, affix="HistoricalNativeInput"):
     wire_root_id: str
     source_seq: int
     source_message_id: str
@@ -39,7 +41,6 @@ class HistoricalNativeInput(NativeInputRecord):
     owner_lookup: str
     owner_thread: str
     owner_generation: int
-    triage_result: type[SelectedTriage] | None  # Original recorded decision; full input has none.
     context: NativeContextProof
     # Prelaunch binding facts: None means no binding was durably written
     # before launch (crash ordering), so equality cannot be established.
@@ -47,10 +48,8 @@ class HistoricalNativeInput(NativeInputRecord):
     expected_prompt_equality_established: bool = False
 
 
-    def require_triage_decision(self) -> type[SelectedTriage]:
-        if self.triage_result is None:
-            raise IdentityConflict("Recorded native triage lacks its original decision")
-        return self.triage_result
+    @abstractmethod
+    def proves_triage_source(self, evidence) -> bool: ...
 
     @property
     def reference(self) -> NativeInputReference:
@@ -58,6 +57,23 @@ class HistoricalNativeInput(NativeInputRecord):
             self.input_id, self.assignment_id, type(self.execution),
             self.context.session_id, self.context.request_generation,
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class TriageHistoricalNativeInput(HistoricalNativeInput):
+    execution: TriageNativeExecution
+    decision: type[SelectedTriage]
+
+    def proves_triage_source(self, evidence) -> bool:
+        return self.expected_prompt_equality_established and self.decision.proves_source(evidence)
+
+
+@dataclass(frozen=True, kw_only=True)
+class FullHistoricalNativeInput(HistoricalNativeInput):
+    execution: FullNativeExecution
+
+    def proves_triage_source(self, evidence) -> bool:
+        return False
 
 
 @dataclass(frozen=True)
@@ -157,20 +173,19 @@ def read_historical_native_inputs(
         else:
             equality = False
         evidence.append(
-            HistoricalNativeInput(
-                wire_root_id,
-                source.wire_seq,
-                source.message_id,
-                row.assignment_id,
-                row.execution,
-                row.input_id,
-                row.owner_lookup,
-                row.owner_thread,
-                row.owner_generation,
-                row.verdict,
-                recorded,
-                binding.expected_prompt_digest if binding is not None else None,
-                equality,
+            row.execution.historical_proof(
+                row,
+                wire_root_id=wire_root_id,
+                source_seq=source.wire_seq,
+                source_message_id=source.message_id,
+                assignment_id=row.assignment_id,
+                input_id=row.input_id,
+                owner_lookup=row.owner_lookup,
+                owner_thread=row.owner_thread,
+                owner_generation=row.owner_generation,
+                context=recorded,
+                expected_prompt_digest=binding.expected_prompt_digest if binding is not None else None,
+                expected_prompt_equality_established=equality,
             )
         )
     return tuple(evidence)

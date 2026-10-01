@@ -37,7 +37,7 @@ def assert_native_runtime_schema(db: sqlite3.Connection) -> None:
         )
     except (sqlite3.Error, ValueError, TypeError) as error:
         raise PublicationActivationBlocked("native runtime schema is not installed") from error
-    if meta != NativeRuntimeSchemaMeta(1, 5, _digest(schema)):
+    if meta != NativeRuntimeSchemaMeta(1, 4, _digest(schema)):
         raise PublicationActivationBlocked("native runtime schema version differs")
     if {row.name: row.sql for row in actual} != schema or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
@@ -60,5 +60,5 @@ def install_native_runtime_schema(store: Coordination) -> None:
             schema = _schema()
             for statement in schema.values():
                 db.execute(statement)
-            NativeRuntimeSchemaMeta(1, 5, _digest(schema)).insert(db)
+            NativeRuntimeSchemaMeta(1, 4, _digest(schema)).insert(db)
         assert_native_runtime_schema(db)

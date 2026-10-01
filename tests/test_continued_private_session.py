@@ -135,8 +135,8 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
     from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
     from agent_comms.coordinator import Coordination
-from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    from agent_comms.native_runtime_input import NativeRuntimeInput
+    from agent_comms.native_admission_epoch import RecordedNativeAdmission
 
     journal, session, inputs, source = continued
     inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
@@ -184,7 +184,7 @@ from agent_comms.native_admission_epoch import RecordedNativeAdmission
         with store.session.transaction() as db:
             NativeRuntimeInput(
                 input_id="a" * 32,
-                execution=TriageNativeExecution(),
+                stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
                 assignment_id="claim",
                 owner_lookup="f" * 32,
                 owner_thread="foreign" if damage == "foreign" else "owner",

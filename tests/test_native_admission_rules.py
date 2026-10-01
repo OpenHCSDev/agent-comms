@@ -8,6 +8,7 @@ import pytest
 from agent_comms import native_admission_rules as rules
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import TriageNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinator import Coordination
@@ -99,7 +100,7 @@ async def test_durable_private_admission_names_each_changed_authority(
                 reservation, row=replace(row, session_id="returned")
             ),
             rules.NativeAlreadyDecidedRule: replace(
-                reservation, row=replace(row, verdict="ignore")
+                reservation, row=replace(row, verdict=IgnoreSelectedTriage)
             ),
             rules.NativeBindingRootRule: replace(bound, wire_root_id="0" * 32),
             rules.NativeBindingSourceRule: replace(

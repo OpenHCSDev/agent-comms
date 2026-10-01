@@ -101,3 +101,17 @@ Scratch owner Mendel:
 Private installed gate preparation uses the short owned prefix
 /home/ts/.cache/agent-scratch/ni472; original accepted sr468/native593 resources
 remain protected. No public/default process, store or installed package changed.
+
+
+## Parent correction after97fa: original native SQL4 retained
+
+The original NativeRuntimeInput holds irreplaceable reservation/tokenDigest,
+sent-admission and live-context proof. The earlier schema5/reset proposal is
+withdrawn. No native table reset, reconstruction, converter or469 operator
+extension is needed or permitted. All9 native objects and schema4 digest are
+unchanged; actual470 coordinator and binding rows acquire readonly unchanged.
+Recorded triage historical proof requires its original decision; full has no
+optional decision bag. See evidence/native-execution-identity/CORRECTION-SQL4.md
+for full source/storage consumers and exact original-read receipts. Historical
+97fa acceptance remains preserved; fresh affected installed gate follows this
+working correction checkpoint.

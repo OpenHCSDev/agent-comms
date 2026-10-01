@@ -65,7 +65,8 @@ class NativeSendStage(ABC):
             self.reserve_claim(store, db)
             NativeRuntimeInput(
                 input_id=input_id,
-                execution=self.execution,
+                stage=type(self.execution),
+                **self.execution.binding_fields(),
                 assignment_id=self.assignment.assignment_id,
                 owner_lookup=self.assignment.recipient_lookup,
                 owner_thread=owner.thread.name,
