@@ -1,0 +1,44 @@
+                                                                                                                                                                
+  ☰     <──    ──>   ✓ beta ×  ✓ immediate-fork ×                                                                                                              
+                                ━━━━━━━━━━━━━━━━                                                                                                                
+▼ Channels                                           Name ▾    │▌─────────────────────────────────── User · 21:14:03 ────────────────────────────────────       
++ New Session                                                  │▌▊❯ VISIBILITY_BUSY_TURN                                                                        
+▾ #any                                       Date created ▾    │▌                                                                                               
+  ✓ immediate-fork                                             │▌                                                                                               
+    Ready                                                      │▌─────────────────────────────────── Agent · 21:14:15 ───────────────────────────────────       
+  ✓ beta                                                       │▌[agent error] Request aborted                                                                  
+    Ready                                                      │▌                                                                                               
+▸ #none                                      Date created ▾    │▌▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔      
+▸ #all                                       Date created ▾    │▌  ▶ Agent coordination context                                                                 
+▾ #fork-added                                Date created ▾    │▌                                                                                               
+  ✓ immediate-fork                                             │▌                                                                                               
+    Ready                                                      │▌─────────────────────────────────── User · 21:14:15 ────────────────────────────────────       
+▾ #team                                      Date created ▾    │▌▊❯ VISIBILITY_QUEUED_FOLLOWUP                                                                  
+  ✓ beta                                                       │▌                                                                                               
+    Ready                                                      │▌                                                                                         ▆▆    
+                                                               │▌─────────────────────────────────── Agent · 21:14:15 ───────────────────────────────────       
+                                                               │▌NATIVE_RESPONSE_4                                                                              
+                                                               │▌                                                                                               
+                                                               │▌▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔      
+                                                             < │▌  ▶ Agent coordination context                                                               < 
+                                                               │▌                                                                                               
+                                                               │▌                                                                                               
+                                                               │▌─────────────────────────────────── User · 21:14:22 ────────────────────────────────────       
+                                                               │▌▊❯ VISIBILITY_CANCEL_STARTED                                                                   
+                                                               │▌                                                                                               
+                                                               │▌▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁      
+                                                               │▌▎                                                                                       ▊      
+                                                               │▌▎ Turn cancelled                                                                        ▊      
+                                                               │▌▎                                                                                       ▊      
+                                                               │▌▎ Native input started; turn cancelled — input not retried.                             ▊      
+                                                               │▌▎                                                                                       ▊      
+                                                               │▌▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔      
+                                                               │                                       Turn cancelled                                           
+                                                               │                                                                                                
+                                                               │ ▶ Session details · Thinking · Cancelling · Saved history available                            
+                                                               │                                                                                                
+                                                               │▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎   
+                                                               │▊ ❯                                                                                         ▎   
+40% ───────────────────────────────────────●────────────────   │▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎   
+  ──>   Float                                                  │  selected-offline/fixture · off  ~/wt/g458i/u01/fixture/application/project    0.1K (0.3%)     
+⏎ Send ⇧+⏎ Line ^c Interrupt ^g IRC view ^s Channels                                                                                                ▏^p palette 

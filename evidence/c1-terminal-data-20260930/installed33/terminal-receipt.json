@@ -1,0 +1,16 @@
+{
+  "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "toad": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+  "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+  "driver": "98a0eac445bf446ff4a33c65d0121cda836214d4",
+  "exit_code": 0,
+  "elapsed_seconds": 85.53802990500117,
+  "stage": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+  "runtime_activation_unchanged": true,
+  "manual_replay": false,
+  "old_u01_preserved": true,
+  "old_u02_preserved": true,
+  "public_mutations": 0,
+  "paid_calls": 0,
+  "gate": "existing actual native+ACP+LinuxDriver firstfork/five original preDelivery/oncechat/cancel; raw source proof review pending"
+}

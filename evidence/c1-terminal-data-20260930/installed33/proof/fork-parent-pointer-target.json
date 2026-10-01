@@ -1,0 +1,23 @@
+{
+  "target": "beta",
+  "channel": "#team",
+  "group_expanded": true,
+  "row_type": "ThreadRow",
+  "row_region": [
+    2,
+    11,
+    57,
+    2
+  ],
+  "screen_point": [
+    2,
+    11
+  ],
+  "native_hit_type": "ThreadRow",
+  "native_hit_is_original_row": true,
+  "pointer_after_click": [
+    2,
+    11
+  ],
+  "screen_after_click": "ContextMenu"
+}
