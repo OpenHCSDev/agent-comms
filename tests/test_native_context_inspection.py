@@ -233,7 +233,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
             stored = InputDispositions(owner._comms.root / InputDispositions.filename).read()
             terminals = tuple(stored.lookup(original.key) for original in originals)
             assert all(item.has_started for item in terminals)
-            assert len({item.native_id for item in terminals}) == 3
+            assert len({item.native_id for item in terminals}) == len(originals)
             for item in terminals:
                 item.origin.require_human()
                 assert any(item.context_provenance() in part.provenance for part in contributors)
