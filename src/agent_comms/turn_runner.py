@@ -198,6 +198,13 @@ class TurnRunner:
         state.model.require_selection(thread.model)
         return state
 
+    async def inspect_context(self, session_id, thread):
+        persistent=self.persistent_backends.setdefault(session_id,backend.PersistentPiSession())
+        async def prepare():
+            return await self.prepare_selected_session(session_id, thread)
+        context = await persistent.custody.inspect_context(persistent, prepare)
+        return context.require_session_file(thread.require_saved_session())
+
     async def prompt_owned(
         self, session_id: str, prompt: list[Any], *, display_text: str | None = None,
         input_id: str | None = None,

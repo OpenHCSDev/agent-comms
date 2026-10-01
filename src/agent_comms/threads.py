@@ -213,6 +213,13 @@ class Thread:
         return (GoalDecisionScope(project=self.worktree, goal=goal.checkpoint)
                 if goal is not None else TurnDecisionScope(project=self.worktree))
 
+    def context_goal_segments(self):
+        """Project this declaration's active goal without a second goal state."""
+        from .turn_context import GoalSegment
+
+        goal = self.active_goal
+        return (GoalSegment.capture(self, goal),) if goal is not None else ()
+
     def retained_task_facts(self):
         from .retained_task_facts import GoalTaskFact
 

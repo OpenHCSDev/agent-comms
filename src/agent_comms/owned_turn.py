@@ -174,7 +174,6 @@ class OwnedTurn:
         self.env_extra = self.runner.native_environment(self.thread, self.worktree)
         from .turn_context import (
             TurnContext,
-            GoalSegment,
             AutomaticTitleSegment,
             ReplyRouteSegment,
             InstructionFile,
@@ -190,7 +189,8 @@ class OwnedTurn:
             tuple(origin.reference for origin in self.origins),
         )
         if self.goal_permit is not None:
-            self.context = self.context.prepend(GoalSegment.capture(self.thread))
+            for segment in self.thread.context_goal_segments():
+                self.context = self.context.prepend(segment)
         if self.thread.auto_title_pending:
             instruction = InstructionFile.read("automatic-title.md")
             self.context = self.context.prepend(

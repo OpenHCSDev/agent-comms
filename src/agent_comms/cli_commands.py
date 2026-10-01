@@ -635,10 +635,13 @@ class ContextCliCommand(CliCommand):
     diff: bool = option("--diff", default=False, action="store_true")
 
     def apply(self, ctx: Comms) -> Any:
+        import asyncio
         from .active_route import read_active_route
         from .context_tokens import NativeTokenCounter
         from .field_codec import FieldCodec
-        from .turn_context import TurnContext, GoalSegment, NextContextTurn
+        from .native_turn_context import NativeContextData
+        from .runtime import RuntimeConnection, socket_path
+        from .turn_context import TurnContext, NextContextTurn
 
         owner = ctx.registry.require(self.thread)
         if self.turn is not None or self.diff:
@@ -660,15 +663,30 @@ class ContextCliCommand(CliCommand):
                 return latest.changed_since(prior)
             return {"manifests": FieldCodec.encode(selected), "text_recorded": False}
         context = TurnContext.for_owner(owner, NextContextTurn(), "", ctx.views.thread_views())
-        if owner.active_goal is not None:
-            context = context.prepend(GoalSegment.capture(owner))
+        for segment in owner.context_goal_segments():
+            context = context.prepend(segment)
         route = read_active_route()
         counter = NativeTokenCounter(Path(route.native_package))
         counts = counter.measure(tuple(segment.text() for segment in context.segments))
+        connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
+
+        async def inspect_native():
+            try:
+                payload = await connection.request("context")
+                return FieldCodec.decode(NativeContextData, payload).require_session_file(
+                    owner.require_saved_session()
+                )
+            finally:
+                await connection.close()
+
+        native = asyncio.run(inspect_native())
+        native_context = native.for_turn(owner, NextContextTurn())
         return {
-            "scope": "coordination-input-preview; native system/history and wire manifests pending",
+            "scope": "next-native-base-and-core-contributors; before future input and provider hooks",
             "input_supplied": False,
+            "native_manifest": FieldCodec.encode(native_context.segments),
             "manifest": FieldCodec.encode(context.manifest(counts.counts, counter=counts.counter)),
+            "native_provider_context": native_context.render().provider,
             "segments": [
                 dict(
                     kind=segment.declared_name,

@@ -87,6 +87,8 @@ cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
 python3 "$stack_root/patch-native-request-observation.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
+python3 "$stack_root/patch-native-turn-context.py" \
+    "$stage/node_modules/@earendil-works/pi-coding-agent"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
     -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-request-progress-adapters.patch"
 python3 "$stack_root/prepare-native-import-boundary.py" \
