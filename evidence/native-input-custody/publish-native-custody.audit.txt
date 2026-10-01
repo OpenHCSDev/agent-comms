@@ -37,7 +37,7 @@ from agent_comms.store_files import _atomic_write_text
 
 SOURCE = Path('/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930')
 CURRENT = Path('/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930')
-TARGET = Path('/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001')
+TARGET = Path('/home/ts/.local/share/agent-comms/runtime-native-publication-joined-20261001')
 NATIVE = Path('/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent')
 OLD_NATIVE = Path('/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent')
 ROOT = Path('/var/tmp/agent-comms-live-20260927-wzjtqhza')
@@ -45,14 +45,14 @@ ROOT_ID = 'e206f3766e60451a989ca34df0e2a94b'
 LINKS = Path('/home/ts/.local/bin')
 COMMANDS = ('agent-comms', 'agent-comms-acp', 'agent-comms-agent', 'agent-comms-nk-foreground', 'toad')
 PINS = {
-    'agent-comms': '970bc527f4ddd9b3bde5522dc671aea11fd27ece',
-    'batrachian-toad': '15601a4f785fd6ee3e53e12b3a971ae1186f4482',
+    'agent-comms': 'e191bcf44c292dfedc5b8b62b2b503f06de3ae7b',
+    'batrachian-toad': '66098518c4850e8e0bf83ed983383538f993c4ef',
     'textual': '6b5895fa0a72aeec2aeaef7206d5debfa0c1803c',
 }
-ACTIVATION_SHA = 'e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94'
-STAGING_SHA = '1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa'
-PAIR_READY = Path('/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-ready-receipt.json')
-PAIR_READY_SHA = 'e37581c021162de4fff37ad4fe8e3afe215302697c95219105c001ba5d3256cf'
+ACTIVATION_SHA = '7c887479390742c051bea1c05adf142fbdcb10b1e39ae1bac9a67a8d24d4b093'
+STAGING_SHA = 'd27f064e32d93d0b008f5884635a39317f6baddca69cf50d69f27e0c6d9e82a0'
+PAIR_READY = Path('/home/ts/.cache/agent-scratch/native-publication-joined-stage-20261001/paired-ready-receipt.json')
+PAIR_READY_SHA = 'be54103798654ae136b491a4a3a1f3729d524acb4afb5f81e287b568c931574d'
 
 
 def digest(path):

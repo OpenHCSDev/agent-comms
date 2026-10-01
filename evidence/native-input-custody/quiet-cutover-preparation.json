@@ -1,29 +1,31 @@
 {
-  "state": "PREPARED-NOT-EXECUTED-SAME-COHORT-ACTUAL-GATES-PENDING",
-  "operator_sha256": "cab02f55c0cb0f319132c3d993432e76815667647708a8c4221d49eecc7ca1b5",
+  "state": "PREPARED-REJECTED-COHORT-NOT-EXECUTED",
+  "operator_sha256": "d8baaf37fa9a11dc5809fbe9a79c69cfd0eb139717f9b8ac96aaf5009f6327b8",
   "source_interpreter": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/python",
   "current_defaults": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
-  "target": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
+  "target": "/home/ts/.local/share/agent-comms/runtime-native-publication-joined-20261001",
   "pins": {
-    "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
-    "batrachian-toad": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+    "agent-comms": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+    "batrachian-toad": "66098518c4850e8e0bf83ed983383538f993c4ef",
     "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
   },
-  "activation_sha256": "e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94",
-  "staging_sha256": "1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa",
-  "package_ready_sha256": "e37581c021162de4fff37ad4fe8e3afe215302697c95219105c001ba5d3256cf",
+  "activation_sha256": "7c887479390742c051bea1c05adf142fbdcb10b1e39ae1bac9a67a8d24d4b093",
+  "staging_sha256": "d27f064e32d93d0b008f5884635a39317f6baddca69cf50d69f27e0c6d9e82a0",
+  "package_ready_sha256": "be54103798654ae136b491a4a3a1f3729d524acb4afb5f81e287b568c931574d",
   "actual_acceptance": {
-    "joint": "pending same156/970/6b cohort",
-    "bus": "pending same156/970/6b cohort"
+    "joint": "REJECTED: held original UIUpdate exposed six duplicate source-counter frames after join/checkpoint read; Heisenberg258 owns closure",
+    "bus": "original running gate may finish; does not clear rejected joint gate; execution hash remains unfilled"
   },
   "compaction_journal": "declared runtime reset; old compatibility/read-identical revoked",
   "input_dispositions": "protected original bytes/UNKNOWN; version1 fields/discriminators unchanged",
-  "scope": "target/pin preparation and AST parse only; earlier owner/client evidence is historical, not current admission; no public preflight/execution",
+  "scope": "target/pin preparation, AST parse and target-only require_stage artifact/native check; historical owner/client evidence is not current admission; no public preflight/execution",
   "public_signals": 0,
   "public_writes": 0,
   "native_inputs": 0,
   "provider_calls": 0,
   "current_observation": "evidence/native-input-custody/current-release-observation.json",
-  "prior_operator_sha256": "ac3d3bab2d7eec85820f5f7da01a09ea2dcc11f18120c35780e06a96e913af67",
-  "prior_operator_commit": "cdf081e85af57ef2572b8699c50475b1a598249c"
+  "prior_operator_sha256": "cab02f55c0cb0f319132c3d993432e76815667647708a8c4221d49eecc7ca1b5",
+  "prior_operator_commit": "2e9fb193a3ac384975a881f17751de5a78470b09",
+  "activation_authorized": false,
+  "next_requirement": "replacement meaningful cohort freeze and BOTH accepted same-cohort actual native/UI + bus artifacts; parent sole executor"
 }

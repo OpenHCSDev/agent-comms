@@ -2,34 +2,38 @@
 
 Arendt prepares this one-use operator in the existing Core456 persistent WT.
 Parent alone reviews and executes publication. This updates the same existing
-operator for the reviewed156/970/6b freeze; no second restart mechanism is added.
+operator for the reviewed660/e191/6b freeze; no second restart mechanism is added.
 The prior85 operator SHAac3d3bab and exact audit remain in committed history
 (cdf081e8), followed by original client classification atd8c53e3d.
-Core main9370a601 has the reviewed970 production tree.468 is a separate followup,
-not a member of this candidate.
+Coree191 includes merged468,470 and471. The previous atomic-page-handoff
+preparation is superseded and preserved in committed history2e9fb193; no earlier
+cohort gate is reused as admission for this target.
 
 ## Exact release and evidence
 
 - Original owners SOURCE: `runtime-native-budget-request-progress-20260930/bin/python`
   (Core6feb); capture their fresh credentials/arguments/settings only in RAM.
 - CURRENT five defaults: `runtime-body-readiness-20260930`.
-- TARGET: `runtime-atomic-page-handoff-20261001`.
-- Core970bc527f4ddd9b3bde5522dc671aea11fd27ece,
-  Toad15601a4f785fd6ee3e53e12b3a971ae1186f4482,
+- TARGET: `runtime-native-publication-joined-20261001`.
+- Coree191bcf44c292dfedc5b8b62b2b503f06de3ae7b,
+  Toad66098518c4850e8e0bf83ed983383538f993c4ef,
   Textual6b5895fa0a72aeec2aeaef7206d5debfa0c1803c, SDK0.12.1.
 - Native/root unchanged: native593b978a717ae8f6, wireRoot
   e206f3766e60451a989ca34df0e2a94b,
   `/var/tmp/agent-comms-live-20260927-wzjtqhza`.
-- Activation SHA `e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94`.
-- Staging SHA `1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa`.
-- Package-ready SHA `e37581c021162de4fff37ad4fe8e3afe215302697c95219105c001ba5d3256cf` at
-  `/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-ready-receipt.json`.
+- Activation SHA `7c887479390742c051bea1c05adf142fbdcb10b1e39ae1bac9a67a8d24d4b093`.
+- Staging SHA `d27f064e32d93d0b008f5884635a39317f6baddca69cf50d69f27e0c6d9e82a0`.
+- Package-ready SHA `be54103798654ae136b491a4a3a1f3729d524acb4afb5f81e287b568c931574d` at
+  `/home/ts/.cache/agent-scratch/native-publication-joined-stage-20261001/paired-ready-receipt.json`.
 - These original artifacts were read and hashes/pins/stage/SDK verified.
   Packaging is separate from actual joint-native/UI and bus acceptance.
   Older cohort receipts cannot admit this target.
 
 Both original same-cohort Einstein joint-native/UI and Sch bus/hot-view gates
-are **mandatory, pending and unfilled**. Packaging cannot substitute for them.
+are **mandatory and unfilled**. The660/e191 joint UI target is now REJECTED: six
+duplicate source-counter frames appeared while a later original UIUpdate was
+held. Heisenberg258 owns the source/read/application-cut closure. This packaged
+target is retained only as rejected preparation, never Ready for activation. Packaging cannot substitute for them.
 No complete public operator preflight, stop, client retirement, reset, publication
 or restart was run by this preparation.
 
@@ -87,7 +91,7 @@ barrier it:
 | BusActivityIndex / ActivityCheckpoint schema3 | Derived runtime projection: retain original file, remove its declared `.path`. |
 | BusDisplayIndex / DisplayCheckpoint schema2 | Derived runtime projection: remove declared `.path` for every original registry name and alias, including USER records. Unrelated viewer files stay untouched; no glob deletion. |
 | CompactionJournal, `compaction-commits.sqlite3` and named SQLite physical companions | **Runtime/reset at cutover**, per latest00-RULES18; old read-identical74 revoked. Retain private file preimages, remove this runtime journal, initialize the empty current schema through original CompactionJournal. No old schema/source_json reader, carry, compatibility or journal-derived proof mirror. Incompatible old runtime journal contents do not refuse reset. |
-| InputDispositions / InputDocument / StoredInput family | Original UNKNOWN/native-disposition authority: preserve file and every row unchanged, retain private preimage. Core6feb→970 keeps document version1/fields/discriminators; constructors now validate existing identities more strictly. Decode only through original current owner. An invalid input record refuses before stops rather than being erased, normalized, or guessed NotSent. |
+| InputDispositions / InputDocument / StoredInput family | Original UNKNOWN/native-disposition authority: preserve file and every row unchanged, retain private preimage. Core6feb→e191 keeps document version1/fields/discriminators; constructors now validate existing identities more strictly. Decode only through original current owner. An invalid input record refuses before stops rather than being erased, normalized, or guessed NotSent. |
 
 The source changes in CompactionPrivateInputs replace fresh.device/inode access
 with fresh.file_identity; that projection itself does not change table fields.
@@ -126,3 +130,39 @@ refuses automatic rerun. Failure after all-stop leaves explicit phase and privat
 preimages for parent review. It cannot silently relaunch or replay originals.
 After actual release closure, preserve reviewed source/hash and remove the
 one-use executable. This checkpoint is prepared only.
+
+
+## Native-publication joined cohort preparation
+
+The same operator is retargeted to package259's exact e191/660/6b/native593
+freeze. Activation, staging and paired-ready bytes match the parent-reviewed
+hashes above. Target-only require_stage checks original artifacts, pins, SDK and
+native trust; it does not instantiate public Comms, acquire public route/wire
+custody, capture owners, stop clients, or invoke main. Both actual journey gate
+artifact/hash arguments remain mandatory and unfilled until parent acceptance.
+No current public preflight, signal, reset, link/route write or input occurred.
+
+The 468 SessionRevision journal representation belongs to the already-declared
+runtime CompactionJournal reset, including only its named physical companions.
+470's nominal NativeAdmissionEpoch keeps the original input SQL declaration
+byte-identical; it does not authorize deletion or reclassification of UNKNOWN.
+InputDocument and original native/binding/context/input-proof/wire/goals/decisions
+remain protected unchanged. No old journal decode/carry or alternate reader.
+
+The conditional thirteen SOURCE owners remain the reviewed one-use batch
+precondition. The sole executor must recapture actual owner configs/count/full
+ProcessIdentity/incarnation/interpreter and client condition at quiet admission.
+A changed count/source receives routine checkpoint review, never guessed
+admission or an invented schedule. Historical client4091704 evidence remains
+historical; graceful retirement and draft custody belong to parent review.
+
+
+### Rejected target retained, no release authority
+
+Parent rejected259/660 after the original held-UIUpdate source-cut observation.
+The exact packaged pins/hashes and audit are preserved at prepared/negative
+strength; they are not rewritten into an accepted gate or executed. The existing
+bus gate may finish normally, but cannot substitute for the rejected joint gate.
+No new package/native build, public preflight, owner/client signal or reset was
+started. Further retargeting waits for Heisenberg's meaningful replacement source
+freeze and parent-reviewed actual acceptance. This remains draft469.
