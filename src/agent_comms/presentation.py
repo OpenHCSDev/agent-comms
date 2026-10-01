@@ -332,7 +332,7 @@ class BusPresentation:
         initial = semantics.empty_metrics
         projected = BusDisplayIndex(self._path, viewer).snapshot(
             bus_revision, semantics, initial,
-            lambda record, metrics: semantics.observe(Message.from_wire(record), metrics),
+            lambda record, metrics: semantics.observe_wire(record, metrics),
         )
         if projected is None:
             metrics = initial

@@ -22,6 +22,7 @@ from .declared_family import DeclaredFamily
 from .display_order import ThreadSort
 from .errors import UnregisteredThreadError
 from .locked_store import LockedStore
+from .wire_record import WireRecord
 from .messages import Message
 from .presentation import ThreadView
 from .registry_document import RegistrySnapshot
@@ -534,9 +535,10 @@ class ThreadRelationships:
             complete = [line for line in lines if line.endswith(b"\n")]
             limited = bool(start) or len(complete) > self.RECENT_MESSAGES
             messages = tuple(
-                Message.from_wire(json.loads(line))
+                message
                 for line in complete[-self.RECENT_MESSAGES :]
                 if line.strip()
+                for message in WireRecord.public_from_wire(json.loads(line)).messages()
             )
             self._recent_revision = revision
             self._recent, self._limited = messages, limited

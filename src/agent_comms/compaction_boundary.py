@@ -18,6 +18,7 @@ from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativeWitness
 from .registration import Registration
 from .routing import DeliveryScope
+from .retained_task_facts import RetainedTaskFacts
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
 from .text_digest import TextDigest
@@ -126,9 +127,15 @@ class HeldCompaction:
             snapshot.aliases,
             ChannelCatalog(self.boundary.root / ChannelCatalog.filename).read().targets_for(owner.tags),
         )
-        rows = self.boundary.inputs._read_unlocked().compaction_rows(
+        inputs = self.boundary.inputs._read_unlocked()
+        rows = inputs.compaction_rows(
             owner, pending_input_key, self.boundary.future_queue
         )
+        bus_revision, facts = WireLog(
+            self.boundary.root / "bus.jsonl"
+        ).compaction_messages_unlocked(delivery)
+        facts += owner.retained_task_facts()
+        facts += inputs.retained_task_facts(owner)
         return CompactionSource(
             self.witness,
             f"{self.boundary.root}:{root.st_dev}:{root.st_ino}",
@@ -137,8 +144,9 @@ class HeldCompaction:
             self.receipt.turn_id,
             self.receipt.goal_id,
             self.receipt.goal_revision,
-            WireLog(self.boundary.root / "bus.jsonl").delivery_revision_unlocked(delivery),
+            bus_revision,
             TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,
+            RetainedTaskFacts(facts),
             pending_input_key,
             settings_paths,
             self.boundary.settings_revision(settings_paths),
