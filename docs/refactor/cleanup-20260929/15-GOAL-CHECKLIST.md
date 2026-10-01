@@ -1,3 +1,35 @@
+## 2026-10-01 shared admission fix merged; paired installation preparing
+
+Parent reviewed and merged Core484 as50d77a17. Six production modules delete61
+lines and add133: all cancellable original coordinator, prompt-binding sidecar,
+InputDocument and journal exclusions now precede consumption of the original
+one-use admission token. One held PrivateInputSend extends the original journal
+role and preserves SQLite exclusion across the durable UNKNOWN checkpoint;
+reserve/release/reacquire send code was deleted. No send is retried after token
+consumption. Existing state/owner rules remain on their original declarations.
+The original d0c838 seq273 failure is preserved and not replayed.
+
+Actual installed originalRED reproduced Err11 at18.896s. Installed candidate
+three-owner shared-binding contention passed23.736s: all three turns active
+before release, three localhost POSTs and three distinct original native joins.
+A joined pregrant cancellation sent zero bytes/POSTs; a separate fresh original
+completed triage/full reply over two POSTs in16.433s. All fixture workers retired.
+No public mutation or paid call. Installed323 source files match the accepted
+production; later8a9 changes only evidence. Main merged normally into parent.
+Mendel prepares the normal paired package retaining Toad0dd/Text4e/Diff8fa/native
+0064 after cleanup restores home headroom. Arendt extends the original stopped
+installation seam with an explicit preserve-runtime member: journal formats did
+not change in484, so another reset and600MB native-preimage copy are unnecessary.
+The default remains queue4345 until this next cohort is installed and verified.
+
+Disk inventory measured533 top-level WT directories,377 with Git metadata;
+Core and Toad each register143 worktrees. Recent48h file allocations are a proxy,
+not net growth. Mendel owns verified inactive checkout/environment retirement;
+tracked source/evidence survives in retained branches and common Git objects.
+The first19.7MB bytecode cleanup is real but insufficient; home dropped below8GiB.
+New heavy allocations remain paused, while source and bounded review continue.
+General native tool/turn latency has its own active draft485, owned by Arendt.
+
 ## 2026-10-01 queue foundation installed; scoped default queue verification passed
 
 The parent executed the frozen483 operator once after all thirteen owners were
