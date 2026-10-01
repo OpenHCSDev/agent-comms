@@ -1,0 +1,89 @@
+{
+  "python": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-origin-context-0064-20261001/bin/python",
+  "core": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-origin-context-0064-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "fixture": "/home/ts/wt/s5i07",
+  "public_inputs": 0,
+  "paid_provider_calls": 0,
+  "state": "FAILED_NO_REPLAY",
+  "error": "TypeError(\"App.export_screenshot() got an unexpected keyword argument 'filename'\")",
+  "local_provider_posts": 2,
+  "original_provider_requests": "/home/ts/wt/s5i07/original-provider-requests.json",
+  "elapsed_seconds": 35.92824684496736,
+  "driver_helper_head": "90f98cb26c24ec4a6ef9abd544488b4459c8e292",
+  "scope": "First actual original image/controller followup, native nested Core tool and joint terminal reply reached actual frame; only driver screenshot API failed. Second original/CLI final controls not reached.",
+  "original_input_dispositions": {
+    "rows": {
+      "acp:608a11697e6d4b6cb7251702c0aeeba6": {
+        "admission": 1,
+        "key": "acp:608a11697e6d4b6cb7251702c0aeeba6",
+        "kind": "started",
+        "native_id": "3c8183d122c69e198419cba01468f4e3",
+        "origin": {
+          "admission": {
+            "admission_generation": 1,
+            "incarnation": {
+              "created_at": 1790848972.8623474,
+              "name": "context-source"
+            }
+          },
+          "author": {
+            "created_at": 1790848987.155206,
+            "sender": "user",
+            "worktree": "/home/ts/wt/s5i07/sdk-source/project"
+          },
+          "goal": {
+            "id": "04f9e34b73b143f685ec48788785bb9d",
+            "revision": 2
+          },
+          "kind": "human",
+          "project": "/home/ts/wt/s5i07/sdk-source/project",
+          "root_id": "a13dc1a6574e4684a683816e76a866cc"
+        },
+        "owner": "context-source",
+        "sent_text": "Coordination context: you are thread 'context-source'; parent=None. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/wt/s5i07/sdk-source/project'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: [{\"name\": \"context-peer\", \"status\": \"running\", \"activity\": \"thinking\", \"activity_detail\": \"Independent context fixture\"}]\n\nS5_CONTEXT_FIRST_ORIGINAL",
+        "sequence": null,
+        "source_text": "S5_CONTEXT_FIRST_ORIGINAL @s2-original-image.png",
+        "target": "context-source",
+        "turn_id": "c7ba512da1294c158bc8a4312a311e53"
+      },
+      "acp:637cb462a6d14ce9b9df703da074eae4": {
+        "admission": 1,
+        "key": "acp:637cb462a6d14ce9b9df703da074eae4",
+        "kind": "started",
+        "native_id": "fa364ffcca7901c4fea89aedeec6dbd7",
+        "origin": {
+          "admission": {
+            "admission_generation": 1,
+            "incarnation": {
+              "created_at": 1790848972.8623474,
+              "name": "context-source"
+            }
+          },
+          "author": {
+            "created_at": 1790848987.155206,
+            "sender": "user",
+            "worktree": "/home/ts/wt/s5i07/sdk-source/project"
+          },
+          "goal": {
+            "id": "04f9e34b73b143f685ec48788785bb9d",
+            "revision": 2
+          },
+          "kind": "human",
+          "project": "/home/ts/wt/s5i07/sdk-source/project",
+          "root_id": "a13dc1a6574e4684a683816e76a866cc"
+        },
+        "owner": "context-source",
+        "sent_text": "User follow-up:\nS5_CONTEXT_QUEUED_ORIGINAL",
+        "sequence": null,
+        "source_text": "S5_CONTEXT_QUEUED_ORIGINAL",
+        "target": "context-source",
+        "turn_id": "c7ba512da1294c158bc8a4312a311e53"
+      }
+    },
+    "version": 1
+  },
+  "native_manifest": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "public_changes": [],
+  "original_inputs_replayed": 0,
+  "whole_phase1_ready": false
+}

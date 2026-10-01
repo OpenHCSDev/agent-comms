@@ -1,0 +1,31 @@
+F.....................                                                   [100%]
+=================================== FAILURES ===================================
+__ test_queue_observation_owns_capture_and_rejects_malformed_available_scope ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-turn-context-phase1-20261001/.artifacts/queue-source56/test_queue_observation_owns_ca0')
+
+    def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tmp_path):
+        from agent_comms.acp_extension import (
+            AvailableQueueProjection, PendingQueueProjection, QueueChangedUpdate,
+            QueueScope, UnavailableQueueProjection,
+        )
+        comms, agent, _, _ = _owner(tmp_path)
+        comms.messaging.initialize_private_initial_protocol()
+        admission = comms.registry.snapshot().admission_identity('beta')
+        scope = QueueScope('beta', admission, comms.registry.require('beta').pid)
+        for projection in (PendingQueueProjection(), UnavailableQueueProjection()):
+            observation = QueueChangedUpdate(None, 0, projection)
+            assert FieldCodec.decode(QueueChangedUpdate, FieldCodec.encode(observation)) == observation
+            with pytest.raises(ValueError, match='queue'):
+                observation.projection.capture_human_input(comms, observation.scope)
+        malformed = {'scope': None, 'revision': 0, 'projection': {'kind': 'available'}}
+>       with pytest.raises(ValueError, match='original attachment scope'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'original attachment scope'
+E         Actual message: 'Expected a string family kind.'
+
+tests/test_current_input_origin.py:48: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_current_input_origin.py::test_queue_observation_owns_capture_and_rejects_malformed_available_scope
+1 failed, 21 passed in 2.18s
