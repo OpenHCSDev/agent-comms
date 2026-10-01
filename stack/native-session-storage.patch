@@ -1648,14 +1648,14 @@
 +export async function generateSummaryWithUsage(currentMessages, model, reserveTokens, apiKey, headers, signal, customInstructions, previousSummary, thinkingLevel, streamFn, env, retry, callbacks, sessionId, boundedChunk = false) {
 +    signal?.throwIfAborted();
 +    const policy=CompactionPolicy.fromEnvironment(env);
-+    const byteLimit=policy.inputBytes(model,reserveTokens);
++    const inputTokens=policy.inputTokens(model,reserveTokens);
 +    const source=boundedChunk ? new HistorySummarySource(currentMessages,previousSummary)
 +        : callbacks?.summarySource ?? new HistorySummarySource(currentMessages,previousSummary);
-+    const sourceBytes=source.sourceBytes;
++    const sourceTokens=source.tokenLength();
 +    if (!boundedChunk) callbacks = { ...callbacks, summarySource: source,
 +        summaryPlan: callbacks?.summaryPlan ?? policy.plan([source]) };
-+    if(!boundedChunk && sourceBytes>byteLimit*policy.sourceBudgetRatio) {
-+        const chunkBytes=Math.floor(byteLimit*policy.sourceBudgetRatio);
++    if(!boundedChunk && sourceTokens>policy.sourceTokens(model,reserveTokens)) {
++        const chunkTokens=policy.sourceTokens(model,reserveTokens);
 +        const controller=new AbortController();
 +        const abort=()=>controller.abort(signal?.reason);
 +        if(signal?.aborted)abort();else signal?.addEventListener('abort',abort,{once:true});
@@ -1681,7 +1681,7 @@
 +                        partCallbacks,sessionId,true);
 +                    combinedUsage=combinedUsage?combineUsage(combinedUsage,item.usage):item.usage;
 +                    result.append(item.text,index);
-+                }, controller, input.chunks(chunkBytes));
++                }, controller, input.chunks(chunkTokens));
 +                return result;
 +            } catch(error) {result.close();throw error;}
 +        };
@@ -1689,8 +1689,8 @@
 +        try {
 +            reduced=await summarizeSource(source,'map');
 +            for(;;) {
-+                const bytes=reduced.byteLength();
-+                if(bytes<=chunkBytes) {
++                const tokens=reduced.tokenLength();
++                if(tokens<=chunkTokens) {
 +                    // This is now an admitted single model-sized source.
 +                    const text=[...reduced.pieces()].join('');
 +                    callbacks?.onSummaryStart?.(
@@ -1702,12 +1702,12 @@
 +                }
 +                const next=await summarizeSource(reduced,'synthesis');
 +                reduced.close();reduced=next;
-+                if(reduced.byteLength()>=bytes)throw new Error('Compaction summaries did not shrink within native policy');
++                if(reduced.tokenLength()>=tokens)throw new Error('Compaction summaries did not shrink within native policy');
 +            }
 +        } finally {reduced?.close();signal?.removeEventListener('abort',abort);}
 +    }
 +    if(!boundedChunk)callbacks=sourceCallbacks(callbacks);
-+    const maxTokens = policy.summaryTokens(model, byteLimit, reserveTokens);
++    const maxTokens = policy.summaryTokens(model, inputTokens, reserveTokens);
      // Use update prompt if we have a previous summary, otherwise initial prompt
      let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
      if (customInstructions) {
@@ -1724,7 +1724,7 @@
          promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
      }
      promptText += basePrompt;
-+    if (Buffer.byteLength(promptText, 'utf8') > byteLimit) throw new Error('Compaction prompt exceeds its context budget');
++    policy.requireRequest(buildSummarizationContext(promptText),model,reserveTokens);
      const completionOptions = createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel, sessionId);
 -    const response = await completeSummarization(model, buildSummarizationContext(promptText), completionOptions, streamFn, retry, callbacks);
 -    const failure = getSummarizationFailure(response, "Summarization");

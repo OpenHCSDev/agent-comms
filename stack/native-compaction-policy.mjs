@@ -121,19 +121,23 @@ export class CompactionPolicy {
         if (tokens < 4096) throw new BudgetAdmissionError('Compaction model context is too small');
         return tokens;
     }
-    inputBytes(model, reserveTokens) {
-        // Conservative source/map storage bound, not restored context capacity.
-        // Full history is segmented within this resource; it is never discarded.
-        return this.inputTokens(model, reserveTokens);
+    sourceTokens(model, reserveTokens) {
+        return Math.floor(this.inputTokens(model, reserveTokens) * this.sourceBudgetRatio);
     }
     contextTokens(messages, model) {
         return new ContextBudget(model, convertToLlm(Array.from(messages))).input;
     }
     contextFits(messages, model, reserveTokens) {
-        return this.contextTokens(messages, model) <= this.inputTokens(model, reserveTokens);
+        return this.requestFits({messages: convertToLlm(Array.from(messages))}, model, reserveTokens);
     }
     requireContext(messages, model, reserveTokens) {
-        if (!this.contextFits(messages, model, reserveTokens))
+        this.requireRequest({messages: convertToLlm(Array.from(messages))}, model, reserveTokens);
+    }
+    requestFits(context, model, reserveTokens) {
+        return new ContextBudget(model, context).input <= this.inputTokens(model, reserveTokens);
+    }
+    requireRequest(context, model, reserveTokens) {
+        if (!this.requestFits(context, model, reserveTokens))
             throw new BudgetAdmissionError('Compaction result exceeds its selected context budget');
     }
     retainedFits(required, messages, model, reserveTokens) {
@@ -164,8 +168,8 @@ export class CompactionPolicy {
         }
         return compose(narrative.slice(0, lower).toWellFormed());
     }
-    summaryTokens(model, byteLimit, reserveTokens) {
-        return Math.min(reserveTokens, this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(byteLimit * this.summaryOutputRatio)),
+    summaryTokens(model, inputTokens, reserveTokens) {
+        return Math.min(reserveTokens, this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(inputTokens * this.summaryOutputRatio)),
             model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
     }
     requireSummaryOutput(usage, maxTokens) {

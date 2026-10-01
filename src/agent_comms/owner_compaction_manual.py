@@ -119,6 +119,7 @@ async def compact_manual_owner(
             bridge.journal,
             prepared.witness,
             source,
+            owner=owner,
             expected_package=Path(package),
             tokens_before=prepared.tokens_before,
             custom_instructions=instructions.strip() if instructions else None,
