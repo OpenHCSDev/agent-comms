@@ -4,18 +4,20 @@ import json
 import os
 import pickle
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from agent_comms.compaction_errors import CompactionJournalError, CompactionJournalUnknownError
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import NativePiUnavailable, _read_private_file, _trusted_package
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.pi_summary_payloads import SelectedModel
-from selected_summary_cases import manual_summary_source
+from selected_summary_cases import manual_summary_record
 
 
 def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> None:
@@ -322,8 +324,8 @@ def test_uncertain_parent_fsync_does_not_return_enrollment(
     assert len(list((tmp_path / "native-sessions" / "a").glob("enrolled-*.jsonl"))) == 1
 
 
-def _private_source(session) -> dict:
-    return manual_summary_source(
+def _private_source(session) -> SelectedSummarySource:
+    return manual_summary_record(
         session, "alice", selected=SelectedModel("openrouter", "z-ai/glm-5.3-flash", 1000),
         settings=PiCompactionSettings(100, 2000),
     )
@@ -352,7 +354,11 @@ def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(
             admission_generation=4,
         )
     changed_owner = _private_source(fresh.path)
-    changed_owner["source"]["incarnation"]["created_at"] = 1.5
+    changed_owner = replace(
+        changed_owner, source=replace(
+            changed_owner.source, incarnation=ThreadIncarnation("alice", 1.5)
+        )
+    )
     with pytest.raises(CompactionJournalError, match="coverage differs"):
         journal.summaries.reserve(
             str(fresh.path), changed_owner, fresh_session=fresh, admission_generation=3

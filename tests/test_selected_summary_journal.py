@@ -1,6 +1,5 @@
 """Provider-free durable pre-send selected-summary operation IDs and input gate."""
 
-import json
 import os
 import sqlite3
 import subprocess
@@ -13,16 +12,18 @@ import pytest
 from agent_comms.compaction_errors import CompactionJournalError, CompactionJournalUnknownError
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import SelectedSummaryAttempt
+from agent_comms.compaction_identity import SelectedCommitReference
+from agent_comms.text_digest import TextDigest
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.compaction_states import (
-    AbortedNoWriteOperation,
-    CommittedOperation,
+    AbortedNoWriteNativeOutcome,
+    CommittedNativeOutcome,
     DeclinedPrestartSummary,
     ReservedSummary,
 )
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_summary_payloads import SelectedModel
-from selected_summary_cases import manual_summary_source
+from selected_summary_cases import manual_summary_record, native_intent
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX durable journal")
 
@@ -72,7 +73,7 @@ def reserved(tmp_path):
     session = tmp_path / "session.jsonl"
     session.write_text('{"type":"session","version":3}\n')
     journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
-    source = manual_summary_source(session)
+    source = manual_summary_record(session)
     return journal, str(session), source
 
 
@@ -83,7 +84,7 @@ def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
     reopened = CompactionJournal(journal.path)
     attempt = reopened.summaries.get(operation_id)
     assert attempt.state == ReservedSummary()
-    assert json.loads(attempt.source_json) == source
+    assert attempt.source_json == source.journal_json()
     assert reopened.summaries.unresolved(session) == (attempt,)
     assert not native_input_admitted(journal.path.parent, session)
     with pytest.raises(CompactionJournalError, match="never replay"):
@@ -163,7 +164,7 @@ def test_unproven_private_session_cannot_reserve_selected_summary(reserved):
     # proves it has no old PR94 raw or UNKNOWN input on the same session.
     with sqlite3.connect(journal.path) as db:
         assert db.execute("SELECT count(*) FROM private_raw_inputs").fetchone()[0] == 0
-    private_source = manual_summary_source(saved)
+    private_source = manual_summary_record(saved)
     with pytest.raises(CompactionJournalError, match="coverage floor"):
         journal.summaries.reserve(str(saved), private_source)
     with (
@@ -197,7 +198,7 @@ def test_private_raw_prewrite_marker_blocks_only_its_saved_session(reserved):
         reopened.private_inputs.send_fence(Path(session), private_input_id="c" * 32),
     ):
         pass
-    assert reopened.summaries.reserve(str(other), manual_summary_source(other))
+    assert reopened.summaries.reserve(str(other), manual_summary_record(other))
 
 
 def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity(reserved):
@@ -209,7 +210,7 @@ def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identit
         journal.summaries.reserve(session, source)
     other = Path(session).with_name("other.jsonl")
     other.write_text("{}\n")
-    journal.summaries.reserve(str(other), manual_summary_source(other))
+    journal.summaries.reserve(str(other), manual_summary_record(other))
     with (
         pytest.raises(CompactionJournalError, match="blocks native input"),
         journal.private_inputs.send_fence(other),
@@ -221,7 +222,7 @@ def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identit
     fresh_alias = Path(session).with_name("fresh-alias.jsonl")
     fresh_alias.symlink_to(fresh)
     journal.summaries.reserve(
-        str(fresh_alias), manual_summary_source(fresh_alias)
+        str(fresh_alias), manual_summary_record(fresh_alias)
     )
     with (
         pytest.raises(CompactionJournalError, match="blocks native input"),
@@ -276,23 +277,32 @@ def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reser
 
 def test_link_requires_exact_committed_native_intent_binding(reserved):
     journal, session, source = reserved
+    intent, owner, native_source, _ = native_intent(session)
     wrong = journal.operations.begin(
         session,
-        {"selectedSummaryOperationId": "0" * 32},
+        intent, owner=owner, source=native_source,
+        selected=SelectedCommitReference("0" * 32),
         inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
     )
-    journal.operations.resolve(wrong, CommittedOperation(), {"fixture": "metadata"})
+    journal.operations.resolve(wrong, CommittedNativeOutcome(
+        "native-entry", intent.witness.revision, intent.witness.leaf_id, intent.metadata_digest
+    ))
     operation_id = journal.summaries.reserve(session, source)
     with pytest.raises(CompactionJournalError, match="Exact committed"):
         journal.summaries.link_commit(operation_id, wrong)
     commit_id = journal.operations.begin(
         session,
-        {"selectedSummaryOperationId": operation_id},
+        intent, owner=owner, source=native_source,
+        selected=SelectedCommitReference(
+            operation_id, TextDigest.of(journal.summaries.get(operation_id).source_json).value
+        ),
         inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
     )
     with pytest.raises(CompactionJournalError, match="is intent; reconcile exact ID"):
         journal.summaries.link_commit(operation_id, commit_id)
-    journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
+    journal.operations.resolve(commit_id, CommittedNativeOutcome(
+        "native-entry", intent.witness.revision, intent.witness.leaf_id, intent.metadata_digest
+    ))
     journal.summaries.link_commit(operation_id, commit_id)
     assert journal.summaries.get(operation_id).state.commit_id == commit_id
     assert journal.summaries.unresolved(session) == ()
@@ -301,7 +311,7 @@ def test_link_requires_exact_committed_native_intent_binding(reserved):
     with pytest.raises(CompactionJournalError, match="unrelated native commit"):
         journal.operations.begin(
             session,
-            {},
+            intent, owner=owner, source=native_source,
             inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
         )
     with pytest.raises(CompactionJournalError, match="never replay"):
@@ -316,10 +326,11 @@ def test_selected_reservation_two_process_race_has_exactly_one_winner(reserved):
 import json,sys
 from pathlib import Path
 from agent_comms.compaction_journal import CompactionJournal,CompactionJournalError
+from agent_comms.compaction_records import SelectedSummarySource
 j=CompactionJournal(Path(sys.argv[1]))
 sys.stdin.buffer.read(1)
 try:
-    j.summaries.reserve(sys.argv[2],json.loads(sys.argv[3]),operation_id=sys.argv[4])
+    j.summaries.reserve(sys.argv[2],SelectedSummarySource.read(sys.argv[3]),operation_id=sys.argv[4])
 except CompactionJournalError:
     print('blocked')
 else:
@@ -327,7 +338,7 @@ else:
 """
     workers = [
         subprocess.Popen(
-            [sys.executable, "-c", script, str(journal.path), session, json.dumps(source), c * 32],
+            [sys.executable, "-c", script, str(journal.path), session, source.journal_json(), c * 32],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -373,28 +384,37 @@ def test_mark_unknown_fsync_fault_stays_unresolved(reserved, monkeypatch):
 
 def test_competing_native_begin_refused_unless_exact_reserved_operation_bound(reserved):
     journal, session, source = reserved
+    intent, owner, native_source, _ = native_intent(session)
     operation_id = journal.summaries.reserve(session, source)
-    for intent in ({}, {"selectedSummaryOperationId": "f" * 32}):
+    for selected in (None, SelectedCommitReference("f" * 32)):
         with pytest.raises(CompactionJournalError, match="unrelated native commit"):
             journal.operations.begin(
                 session,
-                intent,
+                intent, owner=owner, source=native_source, selected=selected,
                 inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
             )
     assert journal.operations.unresolved(session) == ()
     commit_id = journal.operations.begin(
         session,
-        {"selectedSummaryOperationId": operation_id},
+        intent, owner=owner, source=native_source,
+        selected=SelectedCommitReference(
+            operation_id, TextDigest.of(journal.summaries.get(operation_id).source_json).value
+        ),
         inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
     )
     assert journal.operations.get(commit_id).state.declared_name == "intent"
     assert not native_input_admitted(journal.path.parent, session)
-    journal.operations.resolve(commit_id, AbortedNoWriteOperation(), {"status": "aborted-no-write"})
+    journal.operations.resolve(commit_id, AbortedNoWriteNativeOutcome(
+        intent.witness.revision, intent.witness.leaf_id
+    ))
     journal.summaries.mark_unknown(operation_id)
     with pytest.raises(CompactionJournalError, match="not a commit reservation"):
         journal.operations.begin(
             session,
-            {"selectedSummaryOperationId": operation_id},
+            intent, owner=owner, source=native_source,
+            selected=SelectedCommitReference(
+                operation_id, TextDigest.of(journal.summaries.get(operation_id).source_json).value
+            ),
             inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
         )
 
@@ -420,14 +440,20 @@ def test_exact_prestart_clean_decline_is_recorded_but_not_send_authority(reserve
 @pytest.mark.parametrize("terminal", ["linked", "declined-prestart"])
 def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkeypatch, terminal):
     journal, session, source = reserved
+    intent, owner, native_source, _ = native_intent(session)
     operation_id = journal.summaries.reserve(session, source, operation_id="a" * 32)
     if terminal == "linked":
         commit_id = journal.operations.begin(
             session,
-            {"selectedSummaryOperationId": operation_id},
+            intent, owner=owner, source=native_source,
+            selected=SelectedCommitReference(
+                operation_id, TextDigest.of(journal.summaries.get(operation_id).source_json).value
+            ),
             inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
         )
-        journal.operations.resolve(commit_id, CommittedOperation(), {"fixture": "metadata"})
+        journal.operations.resolve(commit_id, CommittedNativeOutcome(
+            "native-entry", intent.witness.revision, intent.witness.leaf_id, intent.metadata_digest
+        ))
     original_fsync = os.fsync
 
     def deny_fsync(_fd):
@@ -468,7 +494,7 @@ def test_terminal_postcommit_fsync_unknown_blocks_across_reopen(reserved, monkey
     with pytest.raises(CompactionJournalError, match="unrelated native commit"):
         reopened.operations.begin(
             session,
-            {},
+            intent, owner=owner, source=native_source,
             inputs=InputDispositions(reopened.path.parent / InputDispositions.filename).read(),
         )
 
@@ -489,9 +515,10 @@ def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reaso
 
 def test_native_unknown_refuses_summary_reservation(reserved):
     journal, session, source = reserved
+    intent, owner, native_source, _ = native_intent(session)
     journal.operations.begin(
         session,
-        {"witness": "native"},
+        intent, owner=owner, source=native_source,
         inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
     )
     with pytest.raises(CompactionJournalError, match="Unresolved native"):
@@ -513,7 +540,7 @@ def test_postcommit_fsync_fault_may_leave_blocking_summary_intent(reserved, monk
 def test_reservation_survives_crash_and_never_repeats_id(tmp_path):
     session = tmp_path / "session.jsonl"
     session.write_text("{}\n")
-    source = manual_summary_source(session, selected=SelectedModel("fixture", "fixture", 1000))
+    source = manual_summary_record(session, selected=SelectedModel("fixture", "fixture", 1000))
     path = tmp_path / "compaction-commits.sqlite3"
     result = subprocess.run(
         [
@@ -523,13 +550,14 @@ def test_reservation_survives_crash_and_never_repeats_id(tmp_path):
 import os,sys,json
 from pathlib import Path
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.compaction_records import SelectedSummarySource
 CompactionJournal(Path(sys.argv[1])).summaries.reserve(
-    sys.argv[2], json.loads(sys.argv[3]), operation_id='c'*32)
+    sys.argv[2], SelectedSummarySource.read(sys.argv[3]), operation_id='c'*32)
 os._exit(17)
 """,
             str(path),
             str(session),
-            json.dumps(source),
+            source.journal_json(),
         ],
         check=False,
         timeout=10,
@@ -539,10 +567,8 @@ os._exit(17)
     assert not native_input_admitted(tmp_path, str(session))
 
 
-def test_invalid_source_or_id_refuses_before_reservation(reserved):
+def test_invalid_operation_id_refuses_before_reservation(reserved):
     journal, session, source = reserved
-    with pytest.raises((ValueError, TypeError)):
-        journal.summaries.reserve(session, {})
     with pytest.raises(ValueError, match="operation ID"):
         journal.summaries.reserve(session, source, operation_id="not-hex")
     assert journal.summaries.unresolved(session) == ()
