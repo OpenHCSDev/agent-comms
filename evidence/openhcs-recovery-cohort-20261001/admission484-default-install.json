@@ -1,5 +1,5 @@
 {
-  "state": "installed; default native admission verified; physical UI followthrough pending",
+  "state": "installed; default native admission and physical saved-history opening verified",
   "publication_phase": "retained-batch-launched-configurations-verified-public-ui-pending",
   "public_owner_count": 13,
   "pins": {
@@ -29,5 +29,6 @@
   },
   "remaining_general_latency_owner": "Arendt / Core485",
   "remaining_performance_owner": "Heisenberg / Toad275; Mendel paired builder",
-  "default_fully_usable_claim": false
+  "default_fully_usable_claim": false,
+  "physical_review": "admission484-default-physical-review.json"
 }
