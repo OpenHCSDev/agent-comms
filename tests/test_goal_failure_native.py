@@ -23,6 +23,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import SelectedSummaryAttempt
 from agent_comms.compaction_states import LinkedSummary, CommittedOperation
 from agent_comms.acp_failure import PromptFailureReceipt
+from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 from agent_comms.goal_failure_observation import read_failed_turn_projection
@@ -280,6 +281,11 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert agent.inputs.dispositions.read().rows[key] == unknown
             registry = comms.registry.snapshot()
             owner = registry.threads[sid]
+            assert owner.active_turn is None
+            assert any(
+                json.loads(path.read_text()).get("reason") == FailureReason.MODEL_REQUEST_FAILED
+                for path in (comms.root / "diagnostics").glob("*.json")
+            )
             before = store.path.read_bytes()
             projected = read_failed_turn_projection(
                 store.path, owner=owner, owner_status=registry.statuses[sid],

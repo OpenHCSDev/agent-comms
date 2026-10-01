@@ -55,6 +55,7 @@ class FailureReason(StrEnum):
     AUTHORITY_CHANGED = "input_authority_changed"
     FOLLOWUP_UNRECOGNIZED = "unrecognized_followup_input"
     INPUT_MISSING = "current_prompt_input_missing"
+    MODEL_REQUEST_FAILED = "model_request_failed"
     FINAL_STOP_MISSING = "assistant_final_stop_missing"
     QUEUED_INPUT_MISSING = "queued_input_start_missing"
 

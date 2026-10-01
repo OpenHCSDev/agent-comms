@@ -113,3 +113,21 @@ walk/project-socket latency checkpoint remains intact. Next acceptance is the
 same real installed saved-fork/native journey with growth across a tool result,
 one journaled compaction, a subsequent admissible response, and cancellation /
 true overbudget refusal preserving the original without replay.
+
+## Authoritative native error terminal
+
+`ErrorStopReason.apply` now records `ModelRequestFailed` in the existing TurnFailure
+family when the original native error terminal arrives. Explicitly requested aborts
+retain their existing cancellation behavior. InputMissing still has higher
+precedence; malformed/missing native terminal evidence retains FinalStopMissing.
+No error text is matched and no input receipt is reclassified. Diagnostics now
+retain `model_request_failed` rather than losing the received native terminal
+under `assistant_final_stop_missing`.
+
+Installed actual native/ACP failed-goal journey passed in8.62s: three localhost
+POSTs, authoritative native failure, protected paused goal, canonical idle registry,
+unchanged original history prefix and unrelated reserved input, no automatic retry.
+`evidence/native-tool-latency-allocation-20261001/installed-error-terminal-01.json`.
+The public loading-view discrepancy still needs its original publication trace;
+this gate establishes backend settlement and failure classification, not every
+live UI consumer. Active tool-round budget compaction remains the stated follow-up.
