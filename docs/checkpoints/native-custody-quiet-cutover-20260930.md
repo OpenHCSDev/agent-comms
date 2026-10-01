@@ -9,26 +9,33 @@ preparation; no old executable or second restart implementation is published.
 - Original owners SOURCE: `runtime-native-budget-request-progress-20260930/bin/python`
   (Core6feb); capture their fresh credentials/arguments/settings only in RAM.
 - CURRENT five defaults: `runtime-body-readiness-20260930`.
-- TARGET: `runtime-native-source-queue-cohort-20260930`.
+- TARGET: `runtime-source-publication-custody-20260930`.
 - Core970bc527f4ddd9b3bde5522dc671aea11fd27ece,
-  Toadd3ba4cf330acd4d2eec6cd806fab8113c3a046ec,
+  Toad85d45b512cac88bdf5dd8870f41e53768ab3c009,
   Textual6b5895fa0a72aeec2aeaef7206d5debfa0c1803c, SDK0.12.1.
 - Native/root unchanged: native593b978a717ae8f6, wireRoot
   e206f3766e60451a989ca34df0e2a94b,
   `/var/tmp/agent-comms-live-20260927-wzjtqhza`.
-- Activation SHA c354f5e5ad7faff5901b144bf5233ad305d589e0b1d073dc51223eb6f016daa3.
-- Staging SHA f3302a072935ed902192143322bea92059677f0a50738436ce05047499f2f880.
-- Package-ready receipt SHA
-  535179e7c82049900b9c5475dbc0251bed837e5e85910fe980202913fdcfde53,
-  `/home/ts/.cache/agent-scratch/native-source-queue-cohort-stage-20260930/paired-ready-receipt.json`.
+- Activation, staging and package-ready receipt hashes: **unfilled until new corrected package artifacts exist**. Earlier d3ba cohort hashes are retired from this operator.
 
-These artifacts were read and hashes verified. All five original links were
-observed pointing at CURRENT. This is packaging/publication preimage observation,
-not idle admission or actual user-path acceptance. Einstein joint-native/UI and
-Sch bus/hot-view acceptance artifacts are **pending and unfilled**. The operator
-requires BOTH reviewed artifact paths and hashes at execution and refuses
-package-ready/activation/staging files as substitutes. No native gate is claimed
-by this preparation. No public preflight, stop, reset or publication was run.
+Corrected source freeze is reviewed; packaging remains in progress. Einstein
+joint-native/UI and Sch bus/hot-view acceptance artifacts are **pending and
+unfilled**. The operator requires BOTH reviewed artifact paths and hashes at
+execution and refuses package-ready/activation/staging files as substitutes.
+No native gate is claimed by this preparation. No complete public operator
+preflight, stop, reset or publication was run.
+
+Read-only original guarded registry/process observations at 2026-10-01
+00:06:36 UTC found thirteen live executable owners, all idle and on the exact
+SOURCE interpreter. Registry bytes were stable across the observation. All
+five links still point at CURRENT; route/root/native are unchanged. Four
+unretired-or-unclassified client candidates remain in this observation; this
+is not a no-client admission. The observation preserves exact process IDs and
+birth values in `evidence/native-input-custody/current-release-observation.json`,
+with no captured environments/credentials or command arguments published.
+Fresh quiet preflight must recapture current configurations, identities,
+interpreters, count and clients. Changed observations receive routine review;
+this dated observation is neither a reservation nor a quiet schedule.
 
 ## Existing acquired custody
 

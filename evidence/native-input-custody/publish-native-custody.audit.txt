@@ -3,7 +3,7 @@
 Credentials/arguments belong to the canonical RAM-only retained batch.
 Only declared runtime projections reset after all original owners stop.
 No settings restoration, durable conversion, input replay, or owner start loop.
-Preflight is read-only. --execute requires the reviewed actual-gate artifact.
+Preflight is read-only. --execute requires both reviewed actual-gate artifacts.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ from agent_comms.store_files import _atomic_write_text
 
 SOURCE = Path('/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930')
 CURRENT = Path('/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930')
-TARGET = Path('/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930')
+TARGET = Path('/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930')
 NATIVE = Path('/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent')
 OLD_NATIVE = Path('/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent')
 ROOT = Path('/var/tmp/agent-comms-live-20260927-wzjtqhza')
@@ -46,13 +46,13 @@ LINKS = Path('/home/ts/.local/bin')
 COMMANDS = ('agent-comms', 'agent-comms-acp', 'agent-comms-agent', 'agent-comms-nk-foreground', 'toad')
 PINS = {
     'agent-comms': '970bc527f4ddd9b3bde5522dc671aea11fd27ece',
-    'batrachian-toad': 'd3ba4cf330acd4d2eec6cd806fab8113c3a046ec',
+    'batrachian-toad': '85d45b512cac88bdf5dd8870f41e53768ab3c009',
     'textual': '6b5895fa0a72aeec2aeaef7206d5debfa0c1803c',
 }
-ACTIVATION_SHA = 'c354f5e5ad7faff5901b144bf5233ad305d589e0b1d073dc51223eb6f016daa3'
-STAGING_SHA = 'f3302a072935ed902192143322bea92059677f0a50738436ce05047499f2f880'
-PAIR_READY = Path('/home/ts/.cache/agent-scratch/native-source-queue-cohort-stage-20260930/paired-ready-receipt.json')
-PAIR_READY_SHA = '535179e7c82049900b9c5475dbc0251bed837e5e85910fe980202913fdcfde53'
+ACTIVATION_SHA = ''  # Unfilled until the corrected cohort package artifact exists.
+STAGING_SHA = ''  # Unfilled until the corrected cohort package artifact exists.
+PAIR_READY = Path('/home/ts/.cache/agent-scratch/source-publication-custody-stage-20260930/paired-ready-receipt.json')
+PAIR_READY_SHA = ''  # Unfilled until the corrected cohort package artifact exists.
 
 
 def digest(path):
