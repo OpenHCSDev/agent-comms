@@ -57,4 +57,7 @@ Focused controls: 26 passed in 6.66s; 20 passed in 7.21s. Earlier failed control
 remain in owned scratch. A preexisting obsolete QueuedInputContext three-argument
 fixture is separate. Actual installed baseline history CLI reproduced the retired
 last_goal_report_turn rejection with original bytes unchanged. Installed candidate
-acceptance is pending; these controls do not establish readiness.
+acceptance is recorded in `evidence/archived-source-identity/READY-PHYSICAL04.md`:
+actual st/Xvfb Saved sessions/native selector/original41MB NRA history/focused
+End/painted return passed on unchanged Core52c and Toad268a20. Public quiet
+carry/install remains parent-owned.

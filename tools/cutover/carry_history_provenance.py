@@ -48,8 +48,10 @@ def carry(manifest: Path):
         })
         source.validate()
         encoded = FieldCodec.encode(source)
-        assert encoded["provenance"] == FieldCodec.encode(provenance)
-        assert {key: value for key, value in encoded.items() if key != "provenance"} == raw
+        if encoded["provenance"] != FieldCodec.encode(provenance):
+            raise ValueError("Original determining provenance changed during encoding")
+        if {key: value for key, value in encoded.items() if key != "provenance"} != raw:
+            raise ValueError("Original source descriptor changed during provenance carry")
         after = {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in before}
         if before != after:
             raise ValueError("Original historical source changed during provenance carry")
