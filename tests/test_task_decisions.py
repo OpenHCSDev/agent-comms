@@ -267,3 +267,69 @@ def test_original_goal_input_and_user_sources_share_compaction_fence(comms, monk
         with pytest.raises(RelationViolationError, match="source changed"):
             source.require_current(held)
     assert (saved.read_bytes(), inputs.path.read_bytes()) == before
+
+
+def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, monkeypatch):
+    from agent_comms.compaction_boundary import CompactionBoundary
+    from agent_comms.input_disposition import FutureInputQueue, InputDispositions
+    from agent_comms.owner_compaction_prepare import NativeWitness
+    from agent_comms.retained_task_facts import (
+        CurrentDecisionTaskFact, CurrentUserDecisionCorrectionTaskFact,
+        DecisionTaskFact, RetainedTaskFacts,
+    )
+    from agent_comms.task_decisions import CorrectionDecisionChange, UserDecisionSupersession
+
+    for name in ("alpha", "beta", "gamma"):
+        owner = admit(comms, name)
+        saved = comms.root / f"{name}-source.jsonl"
+        saved.write_text('{"type":"session","id":"source-only"}\n')
+        comms.registry.register(replace(owner, session_file=str(saved)))
+    owner = comms.registry.require("alpha")
+    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    request = {"chosen": "PRIVATE_ORIGINAL_CHOICE", "rejected": ["PRIVATE_ALTERNATIVE"], "to": "beta"}
+    first = invoke_tool(comms, "comms_decision", request)
+    original = comms.bus.log.full_history()[0]
+    supersession = comms.messaging.send_user_message(
+        "#team", "Retract that declared choice, without revealing its private text.",
+        worktree=owner.worktree,
+        decision=UserDecisionSupersession(CorrectionDecisionChange(original.reference)),
+    )
+    invoke_tool(comms, "comms_decision", {
+        **request, "chosen": "PUBLIC_LATER_CHOICE", "rejected": ["PUBLIC_ALTERNATIVE"],
+        "to": "#team", "change": {"kind": "correction", "original": first["reference"]},
+    })
+    later = comms.bus.log.full_history()[-1]
+    wire_before = (comms.root / "bus.jsonl").read_bytes()
+    inputs = InputDispositions(comms.root / InputDispositions.filename)
+
+    class EmptyFutureQueue(FutureInputQueue):
+        def future_inputs(self, owner, pending_input_key):
+            return {}
+
+    boundary = CompactionBoundary(comms.registry, inputs, EmptyFutureQueue())
+    captured = {}
+    for name in ("alpha", "beta", "gamma"):
+        current = comms.registry.require(name)
+        _, generation = comms.registry.live_owner_with_generation(name)
+        witness = NativeWitness("source-only", current.session_file, "leaf", "kept", "1:2:3:4:5")
+        with boundary.hold(current, generation, witness) as held:
+            source = held.capture(None, None)
+            source.require_current(held)
+        captured[name] = source.retained
+    snapshot = comms.registry.snapshot()
+    assert captured["alpha"].current_decisions(comms.registry.require("alpha"), snapshot) == (supersession,)
+    assert captured["beta"].current_decisions(comms.registry.require("beta"), snapshot) == ()
+    outsider = captured["gamma"]
+    assert outsider.current_decisions(comms.registry.require("gamma"), snapshot) == ()
+    assert tuple(fact.source for fact in outsider.facts) == (supersession, later)
+    assert not any(isinstance(fact, (CurrentDecisionTaskFact, CurrentUserDecisionCorrectionTaskFact))
+                   for fact in outsider.facts)
+    assert "PRIVATE_ORIGINAL_CHOICE" not in outsider.text
+    assert "PRIVATE_ALTERNATIVE" not in outsider.text
+    assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(outsider)) == outsider
+    assert (comms.root / "bus.jsonl").read_bytes() == wire_before
+    # A malformed cut omitting this owner's applicable original still refuses;
+    # neutral foreign history is not a generic missing-source fallback.
+    with pytest.raises(RelationViolationError, match="lacks its original"):
+        RetainedTaskFacts((DecisionTaskFact(later),)).current_decisions(
+            comms.registry.require("alpha"), snapshot)

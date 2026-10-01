@@ -9,6 +9,8 @@ from acp.schema import TextContentBlock
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
+from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin
@@ -110,3 +112,49 @@ def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(tmp
     routed = replace(restored, origin=WireInputOrigin(origin.root_id, MessageReference(1, "original-id")))
     assert routed.origin.retained_fact(routed) == InputTaskFact(routed)
     assert FieldCodec.decode(ReservedInput, FieldCodec.encode(routed)) == routed
+
+
+@pytest.mark.parametrize("state", [ActiveGoal(), PausedGoal(), CompletedGoal()])
+def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_path, state):
+    comms, agent, _, _ = _owner(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    absent = capture(comms)
+    assert absent.goal == AbsentGoalCheckpoint()
+    assert FieldCodec.encode(absent)["goal"] == {"kind": "absent"}
+
+    owner = comms.registry.require("beta")
+    goal = Goal("Recorded scope", "original-goal", revision=4, state=state)
+    comms.registry.register(replace(owner, goal=goal))
+    present = capture(comms)
+    assert present.goal == PresentGoalCheckpoint(goal.checkpoint)
+    assert comms.registry.require("beta").require_goal_checkpoint(goal.checkpoint) == goal
+    assert FieldCodec.encode(GoalRevision(goal.id, goal.revision)) == {
+        "id": "original-goal", "revision": 4,
+    }
+    assert FieldCodec.encode(goal)["state"]["kind"] == state.declared_name
+    encoded = FieldCodec.encode(present)
+    assert encoded["goal"] == {
+        "kind": "present", "revision": {"id": "original-goal", "revision": 4},
+    }
+    restored = FieldCodec.decode(HumanInputOrigin, encoded)
+    assert restored == present
+    with pytest.raises(ValueError):
+        FieldCodec.decode(HumanInputOrigin, {**encoded, "goal": None})
+
+    with _store_lock(comms._wire_lock_path), pytest.raises(RelationViolationError, match="scope"):
+        QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
+                            echo=True, images=(), controller=Client(), origin=absent)
+    assert agent.inputs.dispositions.read().rows == {}
+
+    with _store_lock(comms._wire_lock_path):
+        queued, _ = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
+                                        echo=True, images=(), controller=Client(), origin=restored)
+    assert agent.inputs.dispositions.read().lookup(queued.key).origin == restored
+    assert restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
+    current = comms.registry.require("beta")
+    comms.registry.register(replace(current, goal=replace(goal, revision=5)))
+    assert not restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
+    comms.registry.register(replace(comms.registry.require("beta"), goal=None))
+    assert not restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
+    with pytest.raises(ValueError, match="goal changed"):
+        comms.registry.require("beta").require_goal_checkpoint(goal.checkpoint)
