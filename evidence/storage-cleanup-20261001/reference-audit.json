@@ -1,0 +1,164 @@
+{
+  "time_ns": 1790819823183044310,
+  "candidates": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-presentation-subscription-20260930/installed",
+      "allocated_unique_inode_bytes": 20959232,
+      "single_link_file_bytes": 18706432,
+      "multiply_linked_files": 138,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-native-compaction-latency-20260929/installed",
+      "allocated_unique_inode_bytes": 28430336,
+      "single_link_file_bytes": 12718080,
+      "multiply_linked_files": 683,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-cleanup-c1-pi-vocabulary-20260929/installed",
+      "allocated_unique_inode_bytes": 28680192,
+      "single_link_file_bytes": 12967936,
+      "multiply_linked_files": 683,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-final.bP2B4c/installed",
+      "allocated_unique_inode_bytes": 18759680,
+      "single_link_file_bytes": 18759680,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-final.bP2B4c/extracted",
+      "allocated_unique_inode_bytes": 37371904,
+      "single_link_file_bytes": 37371904,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-final.bP2B4c/source/build",
+      "allocated_unique_inode_bytes": 18567168,
+      "single_link_file_bytes": 18567168,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-merge-gate.dFZCMk/installed",
+      "allocated_unique_inode_bytes": 23175168,
+      "single_link_file_bytes": 23175168,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-merge-gate.dFZCMk/extracted",
+      "allocated_unique_inode_bytes": 37376000,
+      "single_link_file_bytes": 37376000,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-merge-gate.dFZCMk/harness-skills",
+      "allocated_unique_inode_bytes": 94208,
+      "single_link_file_bytes": 94208,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-merge-gate.dFZCMk/source/build",
+      "allocated_unique_inode_bytes": 18567168,
+      "single_link_file_bytes": 18567168,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-packaging.m2d7dq/installed",
+      "allocated_unique_inode_bytes": 25661440,
+      "single_link_file_bytes": 25661440,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-packaging.m2d7dq/source/build",
+      "allocated_unique_inode_bytes": 18518016,
+      "single_link_file_bytes": 18518016,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-release-check.0Hsx38/installed",
+      "allocated_unique_inode_bytes": 18833408,
+      "single_link_file_bytes": 18833408,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-release-check.0Hsx38/extracted",
+      "allocated_unique_inode_bytes": 37371904,
+      "single_link_file_bytes": 37371904,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-release-check.0Hsx38/source/build",
+      "allocated_unique_inode_bytes": 18567168,
+      "single_link_file_bytes": 18567168,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-verified.m2eSI1/installed",
+      "allocated_unique_inode_bytes": 18759680,
+      "single_link_file_bytes": 18759680,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-verified.m2eSI1/extracted",
+      "allocated_unique_inode_bytes": 37371904,
+      "single_link_file_bytes": 37371904,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/wt/recovered-skill-validation-20260930/openhcs-skill-verified.m2eSI1/source/build",
+      "allocated_unique_inode_bytes": 18567168,
+      "single_link_file_bytes": 18567168,
+      "multiply_linked_files": 0,
+      "semantic_data_files": []
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/comms-native-admission-contention-20260929/installed",
+      "allocated_unique_inode_bytes": 180985856,
+      "single_link_file_bytes": 129265664,
+      "multiply_linked_files": 1931,
+      "semantic_data_files": []
+    }
+  ],
+  "process_refs": [],
+  "process_scan_errors": [
+    {
+      "pid": 1786010,
+      "type": "PermissionError",
+      "comm": "systemd",
+      "stat_state": "S"
+    },
+    {
+      "pid": 1786012,
+      "type": "PermissionError",
+      "comm": "(sd-pam)",
+      "stat_state": "S"
+    }
+  ],
+  "launcher_refs": [],
+  "metadata_refs": [],
+  "donor_refs": [],
+  "route_sha256": "ea0bf1c06564cac1b4e7d55ac0a18540566f129b4a3c91dc4985a9b1771ca579",
+  "route_root_keys": [
+    "/home/ts/.agent-comms",
+    "/var/tmp/agent-comms-live-20260927-wzjtqhza"
+  ],
+  "donor_scan_exit": 1,
+  "donor_scan_error": "",
+  "safe_to_remove": false
+}
