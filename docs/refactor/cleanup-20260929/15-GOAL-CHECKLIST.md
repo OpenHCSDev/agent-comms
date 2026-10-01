@@ -1,29 +1,37 @@
-## 2026-10-01 current delivery: inbox continuity and regression-first scrolling
+## 2026-10-01 bundled485/487/488/278 now default-installed
 
-Default remains the verified Core484/Toad276/native0064 cohort below. Newly
-merged Core487 (`782ca8c2`) and Toad278 (`223d2348`) declare external CLI receiving
-capability independently of authorship. Their installed candidate real st/Xvfb
-journey passed30.712s: two CLI tabs, canonical channel acknowledgement, DM reply,
-offline status and refusal of native launch. No provider/public operations;
-26 Core plus24 Toad production lines deleted. This pair is not default yet.
+Parent merged receivingToad279 (`6fa34d91`) and published the normal69 paired
+installation at `/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001`.
+Core1304 includes485/487/488; installedToad a9fc source includes278, receiving279
+only changes Core pin and delivery documentation. Textual4e9/Diff8fa/SDK0.12.1;
+compiled project-IPC native manifest17d6/tree69b974. All five default entrypoints
+and the canonical active route now point to this reviewed pair. One normal
+Ctrl+Q closed the idle Toad client before admission, without desktop focus change.
 
-Parent owns Core488, correcting the actual helper2 successful native output
-`IGNORE` being mislabeled IdentityConflict and stopping its inbox. Strict JSON
-validation remains. A rejected outcome atomically records verified native context
-and canonical FailedAssignment, publishes the existing non-waking alert and lets
-distinct fresh input proceed. No synthetic decision, input retry, new SQL format
-or state store. Published working headbdac1c24 includes merged487 normally;488 is now merged
-as944ef817 after the combined installed acceptance.
-Its pre-integration installed continuous ACP/native journey passed23.98s over
-four localhost requests: channel/native reply, malformed triage, fresh channel
-decision, fresh human terminal answer. Combined487/488 installed acceptance passed24.31s with four localhost requests
-and complete owner/server cleanup; source sanity17pass and changed-source debt ratchet has no positive
-deltas. Core production deletes27 lines and adds155 across8 modules. Default
-activation requires the paired receiving stage. Tristan now explicitly requires
-the tested485 checkpoint in the same release as487/278/488. Its managed-tool
-startup, scheduled-queue compaction and native-error terminal gates passed
-10.29s/13.13s/8.62s respectively. General provider waits and active-tool budget
-continuation remain follow-up scope; the broader performance target is separate.
+Exact installed acceptance passed: rejected-triage → fresh channel → human22.40s;
+scheduled compaction+queued original12.88s; native model-error terminal8.34s;
+42,044,804-byte saved-source greeting/read8.37s (3localhost requests, original
+unchanged); real st/LinuxDriver external CLI channel/ACK/two tabs/DM/reply/offline
+30.747s (zero provider/public requests). Three phase PNGs individually checked.
+Failed test-launcher configuration attempts are preserved and not counted.
+Full four-source/assets/directURL equality and native trust passed.
+
+The canonical preserve-runtime stopped-owner batch completed for17 idle owners,
+verified original configuration readback and protected34 original session/proof/
+input/goal/runtime files under stopped custody. No runtime reset or input replay.
+Native source/proof hashes remain unchanged after launch; coordination DB changes
+from ordinary restarted presence are expected. Actual default saved-history
+attachment completed25.201s on isolated display8571: nra-architecture retained
+content and Ready painted, original owner unchanged, test window and owned
+children cleaned. Before/after PNGs individually reviewed; this is attachment
+verification, not scrolling performance or full provider latency acceptance. Receipt at parent `.release-private/bundled-485-488-278-20261001/`.
+
+Arendt's follow-up is Core489, not remaining485 implementation. It unifies session
+compaction with final ContextBudget, then paused original-turn compaction and
+continuation. General provider-wait attribution and stale terminal chat display
+remain open; no completed follow-up live gate is claimed. These do not hold this
+useful installed checkpoint. Full performance and retained-task closure remain
+active parallel work.
 
 Performance priority is now Tristan's three recent regressions before broader
 A–E. Full required scope, discriminators and acceptance are preserved in Toad275
@@ -34,9 +42,9 @@ and277 bodies and committed evidence/performance275-feedback-edges-20261001/.
 | Heisenberg / Toad275 | #254 geometry wrapper erasing scroll travel; sole viewport integration owner | observe travel per held PageUp before/after254 |
 | Einstein / Toad275 | e7dbc widget-count walks on height path | walk_children calls/sec on busy idle workload |
 | Kepler / Toad275 | #269 full admission repeated per edge page load | admissions/page load; shared pass-resource contract |
-| Arendt / Core485 | Native tool/turn latency, generation-budget admission, compaction eligibility and terminal publication | nearest code-bearing installed checkpoint; exact unresolved blocker |
+| Arendt / Core489 | Final request budget, paused original-turn compaction/continuation and remaining provider waits | implementation checkpoint and same-input native/ACP continuation gate |
 | Schrodinger / Core481 | S2 producer/native artifact and retained-source ownership | coherent useful producer checkpoint; remaining fullS2 scope in follow-up |
-| Parent / Core488 and432 | Inbox continuity, merged-pair staging and installed activation | combined real ACP/native acceptance then default entrypoint |
+| Parent / Core432 | Bundled279 installed and default saved-history attachment checked; remaining integration | useful producer checkpoint and coherent deletion closure |
 | Singer | Verified disposable worktree/build cleanup | safe cleanup completion receipt; preserve active source/native/session donors |
 
 Einstein474's actual installed human pin/compaction/export/fresh native journey is
