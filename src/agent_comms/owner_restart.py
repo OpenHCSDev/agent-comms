@@ -36,9 +36,9 @@ class OwnerRestartRequest:
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
         if self.names is None:
-            return [thread for thread in snapshot.threads.values()
-                    if thread.role.executable and snapshot.statuses[thread.name].active
-                    and thread.process_alive]
+            return [candidate for thread in snapshot.threads.values()
+                    for candidate in thread.execution.restart_candidates(
+                        thread, snapshot.statuses[thread.name])]
         return list({snapshot.require_active(name).name: snapshot.require_active(name)
                      for name in self.names}.values())
 
@@ -179,6 +179,7 @@ class AdmittedOwnerBatch:
             cutover.require_selection(snapshot, threads)
             captured = []
             for thread in threads:
+                thread.execution.require_native()
                 generation = snapshot.admission_generations[thread.name]
                 thread.role.require_executable()
                 snapshot.statuses[thread.name].require_active()

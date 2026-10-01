@@ -99,6 +99,9 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
         return True
 
     @classmethod
+    def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
+        return cls.available_for(status, owner_pid=thread.pid)
+    @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
         return {
             declared.metadata.get("wire_name", declared.name): declared.metadata["context_binding"]
@@ -202,6 +205,12 @@ def _bounded_inbox_response(
     return bounded
 
 
+class NativeOwnerCommand:
+    @classmethod
+    def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
+        return thread.execution.native_command_available(cls, status, owner_pid=thread.pid)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsPinChannelTool(ToolRequest):
     label = "Pin Channel"
@@ -238,7 +247,7 @@ class CommsPinThreadTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsModelTool(ToolRequest):
+class CommsModelTool(NativeOwnerCommand, ToolRequest):
     label = "Change Thread Model"
     description = (
         "Change this thread's model, or another thread's model, for its future turns. "
@@ -732,7 +741,7 @@ class CommsInboxTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsForkTool(ToolRequest):
+class CommsForkTool(NativeOwnerCommand, ToolRequest):
     label = "Comms Fork"
     description = "Fork a child agent thread from a registered parent's persistent session."
     context = "thread"
@@ -770,7 +779,7 @@ class OwnerLifecycleControl:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStopTool(OwnerLifecycleControl, ToolRequest):
+class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     label = "Stop Comms Thread"
     description = "Stop a thread after verifying that its process owns the registered identity."
     context = "thread"
@@ -783,7 +792,7 @@ class CommsStopTool(OwnerLifecycleControl, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStartTool(OwnerLifecycleControl, ToolRequest):
+class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     label = "Start Comms Thread"
     description = (
         "Start a stopped agent thread with its saved conversation and configuration. "
@@ -804,7 +813,7 @@ class CommsStartTool(OwnerLifecycleControl, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsQueueRestartTool(OwnerLifecycleControl, ToolRequest):
+class CommsQueueRestartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     label = "Queue Idle Owner Restart"
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "

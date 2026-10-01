@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
+from .thread_execution import ThreadExecution, NativeThreadExecution
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -174,3 +175,5 @@ class ThreadPublicationIdentity:
     role: ThreadRole
     session_file: str | None
     worktree: str
+    execution: type[ThreadExecution] = field(default=NativeThreadExecution,
+                                            metadata={"wire_omit_default": True})

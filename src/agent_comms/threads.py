@@ -11,6 +11,7 @@ from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .thread_provenance import ThreadProvenance
+from .thread_execution import ThreadExecution, NativeThreadExecution
 from .pi_vocabulary import ThinkingLevel
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
@@ -69,6 +70,8 @@ class Thread(ThreadProvenance):
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     role: ThreadRole = ThreadRole.AGENT
+    execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
+                                            metadata={"wire_omit_default": True})
     active_turn: ActiveTurn | None = None
     channel_scope_generation: int = 0
     turn_generation: int = 0
@@ -251,7 +254,8 @@ class Thread(ThreadProvenance):
     @property
     def publication_identity(self) -> ThreadPublicationIdentity:
         return ThreadPublicationIdentity(
-            self.incarnation, self.process_identity, self.role, self.session_file, self.worktree
+            self.incarnation, self.process_identity, self.role, self.session_file, self.worktree,
+            self.execution,
         )
 
     def without_turn_admission(self) -> Thread:

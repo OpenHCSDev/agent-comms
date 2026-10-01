@@ -24,7 +24,7 @@ from .registry_document import RegistrySnapshot
 from .routing import TurnRouting
 from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
-from .thread_identity import OwnerIdentity
+from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence
 from .turn_phase import PreparingPhase, TurnPhase
@@ -40,6 +40,30 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
 
     @abstractmethod
     def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification: ...
+
+    def after_inbox_read(self, notification, source, reads, document, snapshot):
+        return notification
+
+
+@dataclass(frozen=True)
+class ExternalRecipientActivity(RecipientActivity):
+    incarnation: ThreadIncarnation
+
+    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
+        from .presentation import MessageNotification
+
+        return MessageNotification(notification.recipient_identity, "Waiting for agent",
+            "External CLI participant checks its inbox; no native prompt transport is attached.",
+            priority=4)
+
+    def after_inbox_read(self, notification, source, reads, document, snapshot):
+        if self.incarnation.current(snapshot) and source.message.seq in reads.seen_sequences(
+            self.incarnation.name, snapshot, document=document
+        ):
+            return replace(notification, state="Checked by CLI",
+                           detail="The external participant acknowledged this original inbox message.",
+                           priority=2, busy=False)
+        return notification
 
 
 @dataclass(frozen=True)
@@ -114,14 +138,7 @@ class AgentActivity:
             lookup = stable_thread_lookup(thread.created_at)
             if lookup not in observations:
                 continue
-            try:
-                snapshot.require_active(thread.name)
-                process = thread.require_process()
-            except RelationViolationError:
-                continue
-            if not process.alive():
-                continue
-            observations[lookup] = LiveRecipientActivity(thread, self.activity_of(thread.name, snapshot=snapshot))
+            observations[lookup] = thread.execution.observe_recipient(self, snapshot, thread)
         return observations
 
     def _emit_activity(self, activity: Activity) -> None:

@@ -163,6 +163,7 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
     with _store_lock(comms._wire_lock_path):
         snapshot = comms.registry.snapshot()
         owner = comms.registry.require(name)
+        owner.execution.require_native()
         status = snapshot.statuses[owner.name]
         if not owner.role.executable or not status.active or not owner.process_alive:
             raise RelationViolationError("Queued restart requires a live agent owner")

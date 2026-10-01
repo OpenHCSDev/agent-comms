@@ -109,7 +109,10 @@ class MessageNotification:
         for source in sources:
             key = (source.message.seq, source.message.message_id)
             for outcome in NotificationAssignment.for_delivery(source, rows):
-                notification = outcome.project(observations[outcome.recipient.recipient_lookup])
+                observation = observations[outcome.recipient.recipient_lookup]
+                notification = observation.after_inbox_read(
+                    outcome.project(observation), source, reads, document, snapshot
+                )
                 result[key].append(
                     replace(
                         notification,
@@ -507,7 +510,8 @@ class ThreadView:
         ordinary = self._display_presentation()
         if self.status.active:
             ordinary = self.activity.readiness.presentation(ordinary, busy=self.activity.state.busy)
-        return replace(ordinary, binding=self.binding)
+        return replace(self.thread.execution.presentation(self.thread, self.status, ordinary),
+                       binding=self.binding)
 
     def _display_presentation(self) -> ThreadPresentation:
         if self.status.active and self.thread.executing and not self.activity.state.busy:
