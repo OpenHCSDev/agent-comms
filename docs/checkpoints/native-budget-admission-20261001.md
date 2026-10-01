@@ -96,7 +96,14 @@ This corrects IDEN-6: display notices were being used as execution identity.
 
 The autonomous follow-up sanity case now queues before the original writer starts,
 checks the real scheduled reservation and compaction rows, then exercises native
-start and follow-up authority. Installed native acceptance remains pending. No
+start and follow-up authority. Installed wheel acceptance passed in13.13s:
+actual native localhost provider, scheduler, ACP prompt queue and selected summary
+journal, one scheduled input and one queued input started once after one committed
+compaction. Thirteen provider POSTs include budgeted summary segments and both
+original inputs. The original history prefix and unrelated reserved receipt were
+preserved; the canonical registry is idle. Published receipt:
+`evidence/native-tool-latency-allocation-20261001/installed-scheduled-queue-compaction-01.json`.
+No
 public reserved or UNKNOWN input has been settled, restored or replayed by this
 change. Budget growth during an already Started tool round remains separate work.
 
