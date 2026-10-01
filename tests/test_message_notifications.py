@@ -1,5 +1,7 @@
 """Read real persisted notification assignments without scheduling a model."""
 from dataclasses import replace
+import pytest
+from agent_comms.errors import RelationViolationError
 
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
@@ -23,7 +25,8 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     )
     assert comms.registry.require('beta').active_turn is None
     wrong = replace(message, body='Different source bytes')
-    assert comms.views.message_notifications((wrong,)) == {(wrong.seq, wrong.message_id): ()}
+    with pytest.raises(RelationViolationError, match="original source"):
+        comms.views.message_notifications((wrong,))
 
 
 def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811

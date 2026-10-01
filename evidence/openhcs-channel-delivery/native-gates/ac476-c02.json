@@ -1,0 +1,40 @@
+{
+  "elapsed_seconds": 26.177789849985857,
+  "owners": 3,
+  "history_rows": 220,
+  "bus_bytes": 711850,
+  "localhost_provider_posts": 3,
+  "native_originals": [
+    {
+      "session": "wire/native-sessions/85e0c5457513a92c43857fb2600f778f/2026-10-01T04-42-40-289Z_01a0f5c5-8f20-74aa-8e71-fab4382a02d8.jsonl",
+      "entry_id": "f19803ee"
+    },
+    {
+      "session": "wire/native-sessions/eff1310d7fa9c903a95bd863aa51433b/2026-10-01T04-42-40-520Z_01a0f5c5-9007-7211-a133-05cee67de15d.jsonl",
+      "entry_id": "89e8f973"
+    },
+    {
+      "session": "wire/native-sessions/db4a40e7ef1e3d915733fe240311c201/2026-10-01T04-42-40-944Z_01a0f5c5-91af-7044-bfa5-f07e804b3fef.jsonl",
+      "entry_id": "902d9fb9"
+    }
+  ],
+  "failure": null,
+  "all_owned_workers_retired": true,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "installed_interpreter": "/home/ts/.local/share/agent-comms/runtime-native-applied-cohort-20261001/bin/python",
+  "acp_notification_count": 19,
+  "all_native_turns_active_before_provider_release": true,
+  "acp_fact_counts": {
+    "CoordinationChangedUpdate": 3,
+    "CursorAdvancedUpdate": 4,
+    "GoalChangedUpdate": 5,
+    "InputDeliveryChangedUpdate": 6,
+    "QueueChangedUpdate": 3,
+    "TranscriptSnapshotUpdate": 4,
+    "TurnChangedUpdate": 3
+  },
+  "original_receipt_path": "/home/ts/wt/ac476-c02/receipt.json",
+  "original_receipt_sha256": "96e639ebbfe799491b593bf515adb7620ba4bc8a7e5d22b972a18dc9bd9dece1"
+}
