@@ -439,7 +439,9 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
     outcome = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
     ).run()
-    assert outcome is not None and outcome.exact_target == "sender"
+    assert outcome is not None and tuple(
+        receipt.exact_target for receipt in outcome.publications
+    ) == ("sender",)
     assert len(calls) == 1  # direct FULL, no separate triage invocation
     assert "expected: this is yours" in calls[0][1]
     assert '"audience":"direct"' in calls[0][1]
