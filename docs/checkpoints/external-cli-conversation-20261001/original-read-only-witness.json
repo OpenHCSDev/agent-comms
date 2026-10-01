@@ -1,0 +1,38 @@
+{
+  "registrations": [
+    {
+      "name": "Linnaeus",
+      "role": "agent",
+      "status": "running",
+      "pid": 1295254,
+      "alive": false,
+      "model": null,
+      "session_file": null,
+      "worktree": "/home/ts/wt/openhcs-memory-session-20260929"
+    },
+    {
+      "name": "openhcs-headless-bootstrap-worker",
+      "role": "agent",
+      "status": "running",
+      "pid": 1566867,
+      "alive": false,
+      "model": null,
+      "session_file": null,
+      "worktree": "/home/ts/wt/openhcs-headless-bootstrap-20260929"
+    }
+  ],
+  "original_registry_sha256_at_read": "3c78eea60826d82bb7beaaa401ae63aa7a720cc30592a3c3bcd249a7c9a32188",
+  "logs": [
+    {
+      "path": "/home/ts/.local/state/toad/logs/Agent_Comms_2026-10-01T12_41_32_850351.txt",
+      "sha256": "1ccd60682c44324a1efec94f4f65d8824291f18d0f54e68006571f4c76ab69f9",
+      "bytes": 1489
+    },
+    {
+      "path": "/home/ts/.local/state/toad/logs/Agent_Comms_2026-10-01T12_41_42_090447.txt",
+      "sha256": "c38a2763f8364cba4fb5def9cb52cacedba3c80e22e1b54ab91a21d53632ade1",
+      "bytes": 1518
+    }
+  ],
+  "writes": 0
+}
