@@ -79,7 +79,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
     from agent_comms.goals import AbsentGoalCheckpoint, PresentGoalCheckpoint
     from agent_comms.goal_actions import ClearGoalAction
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
-    from agent_comms.task_decisions import CorrectionTaskChange, UserTaskSupersession
+    from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
     from agent_comms.compaction_journal import CompactionJournal
     from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.compaction_states import ManualCommittedSummary
@@ -290,7 +290,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
             attempt = await observer.run(compact_receiver())
         captured = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
         snapshot = owner._comms.registry.snapshot()
-        assert captured.retained.current_decisions(snapshot.threads[receiver.name], snapshot) == ()
+        assert captured.retained.current_authored_sources(snapshot.threads[receiver.name], snapshot) == ()
         assert {fact.source.reference for fact in captured.retained.facts} == {
             supersession.reference, owner._comms.bus.log.full_history()[-1].reference}
         with NativeEntry.open_evidence(Path(receiver.session_file)) as reader:
