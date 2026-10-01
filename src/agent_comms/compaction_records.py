@@ -55,7 +55,9 @@ class SelectedSummarySource:
     def journal_json(self) -> str:
         record = FieldCodec.encode(self)
         return RetainedTaskFacts.frame_journal(
-            record, retained_payload=RetainedTaskFacts.canonical_journal_bytes(record["retained"])
+            record, retained_payload=RetainedTaskFacts.canonical_journal_bytes(
+                FieldCodec.encode(self.retained)
+            )
         )
 
     @classmethod
