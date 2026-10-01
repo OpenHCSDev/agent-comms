@@ -288,8 +288,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         }))
         original_origin = originals[-1].origin.require_human()
         owner._comms.goals.update_goal(thread.name, ClearGoalAction(
-            expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable,
-            owner_store=owner.turns.goals.open_goal_store())
+            expect=GoalPrecondition(goal_id=goal.id)), actor=RuntimeInvocable)
         replacement = owner._comms.goals.update_goal(thread.name, SetGoalAction(
             text='Replacement acceptance scope', expect=GoalPrecondition(expected_owner=thread.require_process())),
             actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())

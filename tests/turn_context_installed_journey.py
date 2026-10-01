@@ -176,6 +176,90 @@ async def run_configured(options):
         print(json.dumps(receipt), flush=True)
 
 
+def complete_goal_controls(root):
+    """Authorized local controls on completed state; no native/input dispatcher."""
+    import hashlib
+    from agent_comms.comms import Comms
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.input_attempt import InputAttempt
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.goals import AbsentGoalCheckpoint, PresentGoalCheckpoint
+    from agent_comms.goal_actions import ClearGoalAction, SetGoalAction, StandbyGoalAction, GoalPrecondition, RuntimeInvocable
+    from agent_comms.cli_commands import ContextCliCommand
+
+    started = time.monotonic()
+    service = Comms(root / 'wire')
+    originals = FieldCodec.decode(tuple[InputAttempt, ...], json.loads(
+        (root / 'context-journey' / 'original-inputs.json').read_text()))
+    dispositions = InputDispositions(service.root / InputDispositions.filename)
+    assert all(dispositions.read().lookup(item.key) == item and item.has_started for item in originals)
+    source = service.registry.require('context-source')
+    receiver = service.registry.require('context-receiver')
+    retained = [Path(source.require_saved_session()), Path(receiver.require_saved_session()),
+                root / 'original-provider-requests.json', service.root / 'input_dispositions.json']
+    before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in retained}
+    original_origin = originals[-1].origin.require_human()
+    if isinstance(source.goal_checkpoint, PresentGoalCheckpoint):
+        assert original_origin.applies(source, service.registry.snapshot())
+    else:
+        assert isinstance(source.goal_checkpoint, AbsentGoalCheckpoint)
+        assert not original_origin.applies(source, service.registry.snapshot())
+    receipt = {'scope': 'authorized post-terminal goal controls and recorded CLI; continuous49 remains FAILED',
+               'python': sys.executable, 'core': agent_comms.__file__, 'root': str(root),
+               'native_prompts': 0, 'provider_calls': 0, 'input_replays': 0, 'owner_restarts': 0,
+               'original_goal': FieldCodec.encode(source.goal_checkpoint)}
+    try:
+        if isinstance(source.goal_checkpoint, PresentGoalCheckpoint):
+            service.goals.update_goal(source.name, ClearGoalAction(
+                expect=GoalPrecondition(goal_id=source.goal.id)), actor=RuntimeInvocable)
+        snapshot = service.registry.snapshot()
+        absent = snapshot.threads[source.name].goal_checkpoint
+        assert isinstance(absent, AbsentGoalCheckpoint)
+        assert not original_origin.applies(snapshot.threads[source.name], snapshot)
+        replacement = service.goals.update_goal(source.name, SetGoalAction(
+            text='Replacement acceptance scope'), actor=RuntimeInvocable)
+        assert replacement.id != original_origin.goal.revision.id
+        snapshot = service.registry.snapshot()
+        current = snapshot.threads[source.name].goal_checkpoint
+        assert isinstance(current, PresentGoalCheckpoint)
+        assert current.revision.id == replacement.id
+        assert not original_origin.applies(snapshot.threads[source.name], snapshot)
+        # The completed peer has no live turn. The canonical standby owner must
+        # reject this; never fabricate process/lease activity to satisfy a test.
+        try:
+            service.goals.update_goal(source.name, StandbyGoalAction(
+                wait_for=('context-peer',), expect=GoalPrecondition(goal_id=replacement.id)),
+                actor=RuntimeInvocable)
+        except ValueError as error:
+            assert 'No declared dependency has an active turn' in str(error)
+            receipt['standby_refused_without_active_dependency'] = str(error)
+        else:
+            raise AssertionError('Standby accepted a completed, non-active dependency')
+        durable = dispositions.read()
+        assert all(durable.lookup(item.key) == item for item in originals)
+        difference = ContextCliCommand(thread=source.name, diff=True).apply(service)
+        manifests = service.bus.log.context_manifests(source.incarnation)
+        assert difference['turn'] != difference['previous_turn']
+        recorded = ContextCliCommand(thread=source.name,
+            turn=manifests[-1].turn.occurrence.generation).apply(service)
+        assert recorded['text_recorded'] is False
+        assert recorded['manifests'] == FieldCodec.encode(tuple(item for item in manifests
+            if item.turn.matches_generation(manifests[-1].turn.occurrence.generation)))
+        after = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in retained}
+        assert before == after
+        receipt.update(state='SCOPED_POST_TERMINAL_CONTROLS_PASS',
+            absent=FieldCodec.encode(absent), replacement=FieldCodec.encode(current),
+            old_scope_inapplicable=True, original_inputs_durably_unchanged=True,
+            retained_hashes=after, recorded_cli=recorded, context_diff=difference)
+    except BaseException as error:
+        receipt.update(state='FAILED_NO_REPLAY', error=repr(error))
+        raise
+    finally:
+        receipt['elapsed_seconds'] = time.monotonic() - started
+        (root / 'goal-completion-receipt51.json').write_text(json.dumps(receipt, indent=2))
+        print(json.dumps(receipt), flush=True)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
@@ -183,6 +267,7 @@ if __name__ == "__main__":
     parser.add_argument("--toad-driver-dir", type=Path, required=True)
     parser.add_argument('--configured-source-root', type=Path)
     parser.add_argument('--original-python', type=Path)
+    parser.add_argument('--complete-goal-controls', action='store_true')
     options = parser.parse_args()
     if "site-packages" not in Path(agent_comms.__file__).parts:
         raise RuntimeError("This acceptance requires the paired installed Core wheel")
@@ -192,4 +277,7 @@ if __name__ == "__main__":
     sys.path.append(str(options.toad_driver_dir))
     sys.path.append(str(Path(__file__).resolve().parents[1] / 'tools' / 'cutover'))
     os.environ['PATH'] = os.pathsep.join((str(Path(sys.executable).parent), os.environ.get('PATH', os.defpath)))
-    asyncio.run(run_configured(options) if options.configured_source_root else run(options.root))
+    if options.complete_goal_controls:
+        complete_goal_controls(options.root)
+    else:
+        asyncio.run(run_configured(options) if options.configured_source_root else run(options.root))
