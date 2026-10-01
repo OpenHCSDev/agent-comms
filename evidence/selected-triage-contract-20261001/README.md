@@ -33,4 +33,47 @@ Verify malformed decision followed by a fresh valid decision and normal input
 through the installed native/ACP path. Source tests prepare that journey; they
 do not establish live readiness. Report deleted lines with the working patch.
 
-State: investigation; no implementation or installed fix claimed yet.
+## Working checkpoint
+
+The declared SelectedTriageOutcome family owns successful versus rejected model
+results. Both preserve strict decoding. A rejected result atomically commits its
+verified original native context and settles the original claim as FailedAssignment;
+it publishes the existing non-waking failure alert and continues the inbox. It
+never invents IGNORE/FULL, repeats the native input, or changes participant identity.
+
+The original nullable SQL decision is classified at the existing FieldCodec
+boundary into a TriageDecisionRecord. FailedTriageHistoricalNativeInput requires
+the canonical failed claim and the corroborated native source, with no decision
+field. Valid decisions retain their original proof semantics, including FULL
+decisions followed by a later execution failure. Notification inflight projection
+derives from absence of native context, rather than absence of a valid verdict.
+No SQL format, schema, runtime store or native bundle is added.
+
+Focused source sanity: 10 passed / 64 deselected in 6.33 seconds. These are
+preparation only, not the installed-path evidence below.
+
+Actual installed continuous ACP/native journey02: PASS, 23.98 seconds. Two real
+native owners, real private bus/SQLite/ACP, unchanged trusted native0064, exactly
+four localhost provider requests and zero paid/public requests:
+
+1. Channel request and actual answerer native reply.
+2. Questioner's native result is malformed bare IGNORE. Canonical failed claim,
+   recorded native proof, non-waking failure alert and exact ACP cursor injection.
+3. A distinct fresh channel source is automatically admitted and decided normally.
+4. A fresh human ACP input receives an actual native terminal answer.
+
+No original input is retried. All owner processes stop and the fixture server
+thread exits. Receipt/originals remain in installed-continuity02/. The Core wheel
+is actually installed, with 305 Python files byte-equal to source; dependencies
+come from the accepted installed default484 donor, not a Core source overlay.
+The first actual attempt01 is retained: its test incorrectly expected covered
+prefix2 after the non-waking alert advanced coverage to3. Exact injected source
+remained2. That assertion was corrected to preserve both authoritative meanings;
+no runtime failure was hidden. Journey02 uses distinct fresh fixture inputs.
+
+Patterns: IMPL-4 (finish the result family and all consumers), IDEN-3 (classify
+external absence once), BOUND-1 (strict boundary decoding), TIME-9 (reuse sealed
+FieldCodec). The malformed-result failure is distinct from unknown native send;
+this checkpoint does not grant recovery or replay of uncertain original inputs.
+
+State: code and scoped installed journey ready; not merged or default live yet.
