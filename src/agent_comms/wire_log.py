@@ -17,6 +17,7 @@ from agent_comms.coordination_tables.publications import (
 
 from .bus_publication import (
     CommittedDelivery,
+    stable_thread_lookup,
     has_private_wire_fields,
     unique_wire_object,
 )
@@ -40,7 +41,7 @@ from .wire_record import WireRecord, WireScan
 
 if TYPE_CHECKING:
 
-    from .routing import DeliveryScope
+    from .thread_identity import ThreadIncarnation
 
 
 class WireLog:
@@ -104,7 +105,7 @@ class WireLog:
                 if manifest.thread == incarnation
             )
 
-    def compaction_messages_unlocked(self, delivery: DeliveryScope):
+    def compaction_messages_unlocked(self, recipient: ThreadIncarnation):
         """One strict wire traversal supplies both the source cut and exact facts.
 
         Caller owns the original bus lock. Outgoing declared decisions belong
@@ -112,12 +113,10 @@ class WireLog:
         """
         digest = hashlib.sha256()
         facts = []
-        for message in self._iter_log_unlocked():
-            authored_decision = (
-                delivery.canonical(message.sender) == delivery.actor
-                and message.retains_authored_choice
-            )
-            if authored_decision or delivery.delivers(message.sender, message.target):
+        lookup = stable_thread_lookup(recipient.created_at)
+        marker = self._private_marker_unlocked()
+        for record in self.verified_records_unlocked(marker):
+            for message in record.compaction_messages_for(lookup):
                 digest.update(json.dumps(FieldCodec.encode(message), sort_keys=True).encode())
                 digest.update(b"\n")
                 facts.extend(message.retained_task_facts())

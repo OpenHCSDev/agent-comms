@@ -1,0 +1,40 @@
+F........                                                                [100%]
+=================================== FAILURES ===================================
+_ test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_facts _
+
+tmp_path = PosixPath('/home/ts/wt/s5r01/test_original_channel_recipien0')
+
+    def test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_facts(tmp_path):
+        comms, _ = _root(tmp_path)
+        sender = replace(comms.registry.require("sender"), role=ThreadRole.USER)
+        comms.registry.register(sender)
+        original = comms.registry.require("Alice")
+>       first = comms.messaging.send_initial_cohort("sender", "#team", "Original exact user constraint")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_compaction_recipient_scope.py:19: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.messaging.Messaging object at 0x7fed007a27b0>
+sender = 'sender', target = '#team', body = 'Original exact user constraint'
+type = <MessageType.INFO: 'info'>, notice = False
+
+    def send_initial_cohort(
+        self,
+        sender: str,
+        target: str,
+        body: str,
+        type: MessageType = MessageType.INFO,
+        *,
+        notice: bool = False,
+    ) -> Message:
+        """Test-gated full-N send. No automatic SQL acceptance or live wake."""
+        with _store_lock(self._wire_lock_path):
+            if sender not in self.registry or not self.registry.require(sender).role.executable:
+>               raise RelationViolationError("Initial sender must be a registered executable.")
+E               agent_comms.errors.RelationViolationError: Initial sender must be a registered executable.
+
+src/agent_comms/messaging.py:114: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_compaction_recipient_scope.py::test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_facts
+1 failed, 8 passed in 2.11s

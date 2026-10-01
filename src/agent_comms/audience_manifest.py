@@ -145,6 +145,10 @@ class FrozenAudience:
         """Names supplied to the separate pure wake resolver; no membership lookup."""
         return frozenset(item.canonical_thread for item in self.recipients)
 
+    def includes_lookup(self, lookup: str) -> bool:
+        """Membership in the original frozen audience, independent of current names/tags."""
+        return any(item.recipient_lookup == lookup for item in self.recipients)
+
 
 def freeze_audience(
     prepared_message: Message,

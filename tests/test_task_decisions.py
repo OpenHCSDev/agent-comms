@@ -48,11 +48,10 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert rows[1].decision.supersedes == original.reference
     assert correction["reference"] == FieldCodec.encode(rows[1].reference)
     from agent_comms.retained_task_facts import RetainedTaskFacts
-    from agent_comms.routing import DeliveryScope
 
     with comms.bus.log.locked():
         revision, facts = comms.bus.log.compaction_messages_unlocked(
-            DeliveryScope("alpha", {}, frozenset({"#team"}))
+            alpha.incarnation
         )
     retained = RetainedTaskFacts(facts)
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(
