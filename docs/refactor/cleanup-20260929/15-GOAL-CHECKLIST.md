@@ -1,4 +1,37 @@
-## 2026-10-01 default checkpoint live and verified; remaining scope active
+## 2026-10-01 recovery checkpoint installed; scoped live verification underway
+
+The parent executed the frozen479 recovery operator once after normal draft-saving
+Toad shutdown. All five default entrypoints now use runtime-openhcs-recovery-cohort-20261001:
+Corecac7 / Toad7572 / Textual6b / SDK0.12.1 / native593. The original stopped batch
+restarted thirteen owners and verified their original configurations under its
+wire custody. Native sessions, input proofs, InputDoc and uncertain inputs were
+preserved; this unchanged-journal cohort required no journal reset or replay.
+The user's Toad was reopened in the same st terminal without changing desktop
+focus or mouse position. The private publication receipt records completion.
+
+Installed original architecture-memory, PR159, helper and comms428 observations
+now derive ReadyDrainReadiness. The parent's actual isolated st recording ran
+32.685s with 1,982 physical video frames: architecture saved history, channel-bar
+opening and channel return painted correctly. PR159 attached without ACP errors,
+but was still blank two seconds after opening, despite eight mounted history
+blocks; sixteen blocks existed at the next capture. This is a concrete remaining
+cold preparation/paint latency finding assigned to Heisenberg275, not a passed
+receiver-paint or overall-usability claim. All protected original hashes were
+unchanged and owned process cleanup was empty. Kepler owns one bounded fresh
+functional installed receiver check; no original UNKNOWN will be resent.
+
+The separate queue/receiving checkpoint is packaged as Core4345 / Toad0dd9
+(complete src tree equal to reviewed25d) / Textual4e / Diff8fa / native0064.
+Normal69 installation, full source assets, direct URLs and native trust passed.
+Einstein is authorized for its existing two-POST receiving-only journey, including
+actual queue paint before Started and one original input's handoff to chat.
+This candidate is not the public default. Mendel next prepares the accepted
+Textual18/Toad275 performance pair; full velocity, End/PageDown, workspace and
+focus scope remains active. Sch's new artifact-native776 package passes actual
+SDK write/edit and full trust, but USER admission/private carry and full S2 are
+still open. Arendt483 owns the future475 journal cutover, separate from executed479.
+
+## Earlier 2026-10-01 default checkpoint live and verified; historical
 
 Parent executed the reviewed quiet469 operator once after Tristan saved drafts
 and closed Toad. Thirteen original owners restarted in29.54s with their exact
