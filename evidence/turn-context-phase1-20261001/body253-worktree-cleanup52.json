@@ -1,0 +1,44 @@
+{
+  "path": "/home/ts/wt/toad-body-readiness-253-contribution-20260930",
+  "process_refs": [],
+  "errors": [],
+  "time_ns": 1790855957554689466,
+  "metadata_refs": [],
+  "metadata_error": "",
+  "common_git_dir": "/home/ts/.agent-comms/.test-tmp/toad-worktree/.git",
+  "status": "",
+  "submodules_present": false,
+  "merged": true,
+  "safe": true,
+  "zombies_without_address_space": [
+    {
+      "pid": "216738",
+      "error": "[Errno 13] Permission denied: '/proc/216738/environ'"
+    },
+    {
+      "pid": "1561676",
+      "error": "[Errno 13] Permission denied: '/proc/1561676/environ'"
+    },
+    {
+      "pid": "1953373",
+      "error": "[Errno 13] Permission denied: '/proc/1953373/environ'"
+    },
+    {
+      "pid": "3406723",
+      "error": "[Errno 13] Permission denied: '/proc/3406723/environ'"
+    }
+  ],
+  "completed_ns": 1790856098520465162,
+  "head": "d3aaefaf7b9afbf480559222c29fcf2207e124c8",
+  "branch_retained": "perf/body-readiness-253-contribution-20260930",
+  "worktree_removed": true,
+  "worktree_allocated_bytes": 79765504,
+  "proof_archive": "/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/storage-cleanup-20261001/body253-worktree-audit/body253-original-proofs.tar.gz",
+  "proof_archive_bytes": 30510293,
+  "proof_files": 2514,
+  "proof_hashes_verified": true,
+  "free_before": 9191337984,
+  "free_after": 9238945792,
+  "actual_df_delta_bytes": 47607808,
+  "proof_archive_sha256": "079cb91984a50e6ad18002fbb22b8e3c3f69dee83a374072929db80bbd4ddd2e"
+}
