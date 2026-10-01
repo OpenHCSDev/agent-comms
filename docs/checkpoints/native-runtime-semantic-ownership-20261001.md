@@ -18,6 +18,19 @@ No parallel PayloadBudget, RetainedContext, SessionIdentity, Cursor or Custody
 family will be introduced. A class declaration occurring once does not establish
 unique authority: every competing decision must also disappear from consumers.
 
+## Implemented phase/replay relation
+
+[Phase/replay source receipt](native-phase-replay-source-ownership-20261001.md)
+records the supplied patch's receiving implementation in this same draft. Phase
+members cross the watchdog event boundary; shutdown is an existing-family member.
+Replay joins/revocation belong to ReplayAssessments. Watchdog replay booleans and
+all proxy writers are deleted. Three retry observations share their original
+PiEvent fields/behavior and the event is carried directly, without session copies.
+Complete authored Core and pinned Toad searches distinguish the watchdog observation
+from the persisted lease projection. No persisted watchdog-event reader was found
+in that scope. Production: 172 lines deleted, 120 added across ten files. This is
+implementation progress, not final validation or completion of the whole lifecycle.
+
 ## Actual existing-owner search
 
 [source-owner-search.json](../../evidence/runtime-lifecycle-semantic-pass-20261001/source-owner-search.json)

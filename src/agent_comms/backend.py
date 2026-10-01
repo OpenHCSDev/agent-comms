@@ -54,7 +54,7 @@ from .store_files import _store_lock
 from .turn_admission import UnwrittenPrompt
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
-from .turn_phase import TurnPhase
+from .turn_phase import ShutdownPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import ProgressWatchdog
@@ -661,10 +661,7 @@ class TurnSession:
             state="failed",
             reason_code="session_identity_uncertain",
             elapsed_ms=0,
-            phase="shutdown",
-            retryable=False,
-            replay_safe=False,
-            side_effects_possible=True,
+            phase=ShutdownPhase(),
         )
         self.output.record_failure(failures.IdentityUncertain(_IDENTITY_FAILURE_TEXT))
         await self.abort_stalled_rpc()

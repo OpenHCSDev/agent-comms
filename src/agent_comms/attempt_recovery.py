@@ -369,22 +369,9 @@ class RecoveryMonitorCapability:
         self, snapshot: RecoverySnapshot, evidence: MonitorEvidence, facts: ReplayFact
     ) -> None:
         """Project observations monotonically; the attempt owner performs the write."""
-        before = snapshot.replay
         observed = facts | (
             ReplayFact.UNKNOWN_EFFECTS if evidence.unknown_effects else ReplayFact.NONE
         )
-        if before is not None:
-            observed |= before.facts
-            safe = not observed and before.replay_safe
-            possible = before.side_effects_possible or evidence.unknown_effects or bool(facts)
-        elif observed:
-            safe, possible = False, True
-        else:
-            return
-        ReplayAssessments(
-            snapshot.execution.execution_id,
-            observed,
-            safe,
-            possible,
-            1 if before is None else before.revision + 1,
-        ).record(self._store.session._connection, snapshot.replay)
+        ReplayAssessments.accumulate(
+            self._store.session._connection, snapshot.execution.execution_id, observed
+        )
