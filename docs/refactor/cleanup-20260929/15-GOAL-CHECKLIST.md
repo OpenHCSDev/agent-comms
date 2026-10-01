@@ -1,5 +1,18 @@
 ## Standing correction: semantic ownership before validation
 
+Owner-supplied patch `plans/0001-turn-state-crosses-its-boundary-as-itself.patch`
+at the shared project root (36471530) was read completely and assigned to
+Arendt's integrated lifecycle scope (#489), with Schrodinger informed about
+compaction phase producers. It converts TurnState's phase and exposure boundary
+to types and adds the missing ShutdownPhase; eight files, 141 additions and
+45 deletions in the supplied patch. Do not apply it as another isolated symptom
+fix. Existing ReplayAssessments and recovery already decide replay evidence:
+resolve that authority relationship before retaining a new exposure family.
+Check actual event/diagnostic/UI consumers of the changed wire shape. The patch
+also introduces an observation dataclass named TurnEffects alongside the existing
+ACP capability of that name; reuse existing owners by meaning, not by labels.
+Not implemented, merged or live yet.
+
 Native runtime lifecycle: Arendt owns the complete source fact/consumer pass.
 Compaction: Schrodinger owns the complete source fact/consumer pass. They
 coordinate shared boundaries directly; other contributors do not patch these
