@@ -47,7 +47,7 @@ Full live channel acceptance follows quiet history carry, not before it.
 | Receiver admission and DM/IRC readiness | Arendt476/267; parent installation | Both merged. Native cancel-before-grant and independent reply pass; actual DM readiness passes. Quiet installation and post-carry channel acceptance remain. |
 | Original archived history | Mendel477/268 | Both merged. Physical Saved→native41MB history→End→IRC passes36.43s. Final combined private ArchiveJourney PASSES36.23s under SAME45s deadline: actual Saved/native41MB history/focus/End/IRC personally reviewed. Failed05 observer export preserved; optional unused selector DTO skipped in merged273, retaining its PNG/time. Original source/index carry prepared, not published. |
 | Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271; Kepler profiles |269 merged: body constructions275→119; actual41MB journey16 checks pass91.07s. CPU remains high. Native library PR1 merged f6d3cdd0: Resize owns sizing;5 production lines deleted. Actual installed four-consumer check removes4 mount-triggered full layouts and preserves ordinary/prepared/fixed/padded resize behavior. Full original41MB comparison and TC1/T9/buffer/velocity/End/focus/resource scope remain. Not yet the public default. |
-| Original TC1 terminal execution lifecycle | Arendt implementation; Kepler actual PTY/ACP journey | Newly assigned independent continuation of the original TC1 plan. One execution owner, all terminal ACP/controller/widget consumers; no changes to Heisenberg's session/transcript/viewport files without direct agreement. Draft and installed journey pending; no product readiness claim. |
+| Original TC1 terminal execution lifecycle | Arendt274 implementation; Kepler actual PTY/ACP journey | Independent continuation of the original TC1 plan, tracked in new draft274. One execution owner, all terminal ACP/controller/widget consumers; no changes to Heisenberg's session/transcript/viewport files without direct agreement. Installed journey pending; no product readiness claim. |
 | S5 phase1 context ownership | Einstein473 | Installed native/ACP/context --turn/--diff journey19 passes26.408s on frozen private270/451; no paid calls. Current3948 coherent source includes476/477 and nominal S2 changes. Full logical attribution and byte-identical actual user/provider acceptance remain DRAFT. |
 | S2 retained facts and provenance | Schrodinger475; Toad pair272 | Selected installed native retention passes9.59s. Authenticated ingress origin extends original PromptRequest/reservation/StoredInput; unproven historical inputs stay neutral. General constraints/artifact proofs/three checkpoints unfinished. Explicit controller producer methods granted; Einstein coordinates context API. |
 | S5 phase2 authored retained operations | Einstein474 | Dependency: S2 retained classes. Pin/supersede/drop/export and real compaction/fresh-thread journeys remain. |
@@ -79,9 +79,12 @@ attempt. The continuous custom-tool receiving boundary remains unproven.
 
 Heisenberg's private performance journey need not wait for public477 carry:
 Mendel's already-valid private g477/p01 root supported combined06's physical
-Saved/native original41MB/End/IRC path. Mendel hands off that existing certified
-fixture directly; Heisenberg retains the whole A/B/A/fast/reverse/End/idle
-video/profile journey and its source work. Public acceptance still follows the
+Saved/native original41MB/End/IRC path. Its41MB is an archived HistoryWindow,
+not a current-agent binding: it can prove saved scrolling, not warm agentA/B/A.
+Mendel hands off that existing certified fixture directly; Heisenberg must use
+the existing real saved-native admission fixture for current-agentA/B/A, rather
+than substitute archive selection for that requirement. Whole fast/reverse/End/
+idle video/profile and source work remain his. Public acceptance still follows
 quiet installation. No copied provenance defaults or public old-manifest binding.
 
 ## Quiet history carry
