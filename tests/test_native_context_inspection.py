@@ -2,6 +2,9 @@
 
 import asyncio
 import os
+import json
+import sys
+import time
 from pathlib import Path
 
 from agent_comms.comms import Comms
@@ -10,6 +13,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.runtime import RuntimeConnection, socket_path
 from agent_comms.threads import Thread
+from agent_comms.goals import Goal
+from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -55,3 +60,118 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
         assert fixture.provider.posts == 0
         assert fixture.session.read_bytes().startswith(before)
         assert fixture.saved_inputs() == []
+
+
+async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
+    """Two original inputs, real native owner/ACP and actual CLI processes.
+
+    The existing SDK source contract seeds real history/summary/image/resource
+    entries. Provider transport is localhost; no application/protocol substitute.
+    Run with the paired installed interpreter to establish installed acceptance.
+    """
+    fixture = native_backend
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+    started = time.monotonic()
+    seed = await asyncio.create_subprocess_exec(
+        "node", str(Path(__file__).with_name("native_turn_context_contract.mjs")),
+        str(package), str(fixture.root.parent / "sdk-source"),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+    )
+    out, err = await seed.communicate()
+    assert seed.returncode == 0, err.decode()
+    source = json.loads(out)
+    fixture.session = Path(source["session_file"])
+    # The SDK session's declared worktree is the source contract's project.
+    project = fixture.root.parent / "sdk-source" / "project"
+    models = fixture.config / "models.json"
+    document = json.loads(models.read_text())
+    document["providers"]["response-local"]["models"][0]["input"] = ["text", "image"]
+    models.write_text(json.dumps(document))
+    original_source = fixture.session.read_bytes()
+    owner = canonical_agent(
+        Comms(fixture.root), agent_bin="pi",
+        agent_args=["--model", "response-local/fixture", "--thinking", "off", "--offline",
+                    "--no-extensions", "--no-skills", "--no-prompt-templates"],
+        auto_wake=False, runtime_enabled=True,
+    )
+    failures, updates = [], []
+
+    class View:
+        async def session_update(self, session_id, update):
+            updates.append(update)
+            failures.extend(fact for fact in decode_updates(update.get("_meta"))
+                            if isinstance(fact, (InputFailedUpdate, RequestFailedUpdate)))
+
+    owner.on_connect(View())
+    thread = Thread("context-source", frozenset(), str(project),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        session_file=str(fixture.session), model="response-local/fixture", thinking_level="off",
+        goal=Goal("Preserve the exact retained source; never replay an uncertain input.", "context-goal"))
+    owner._comms.registry.declare(thread)
+    output = fixture.root.parent / "context-journey"
+    output.mkdir(mode=0o700)
+
+    async def cli(*options):
+        child = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "agent_comms.cli", "--root", str(fixture.root),
+            "context", thread.name, *options,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        data, error = await child.communicate()
+        assert child.returncode == 0, (data.decode(), error.decode())
+        return json.loads(data)
+
+    try:
+        await owner._runtime.start()
+        await owner.load_session(str(project), thread.name)
+        await owner.turns.prepare_selected_session(thread.name, thread)
+        before_query = fixture.session.read_bytes()
+        preview = await cli()
+        (output / "next-context.json").write_text(json.dumps(preview))
+        assert preview["input_supplied"] is False
+        assert {row["kind"] for row in preview["segments"]} >= {"coordination", "goal", "user_input"}
+        assert "Original source summary." in json.dumps(preview["native_provider_context"])
+        assert fixture.session.read_bytes() == before_query
+        baseline_sequence = owner._comms.bus.log.latest_sequence()
+        inputs = ("S5_CONTEXT_FIRST_ORIGINAL", "S5_CONTEXT_SECOND_ORIGINAL")
+        for index, text in enumerate(inputs, 1):
+            blocks = [{"type": "text", "text": text}]
+            if index == 1:
+                blocks.append({"type": "image", "mimeType": "image/png",
+                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=="})
+            response = await owner.prompt(thread.name, blocks)
+            assert response.stop_reason == "end_turn" and not failures, failures
+            manifests = owner._comms.bus.log.context_manifests(thread.incarnation)
+            assert len(manifests) == index
+            manifest = manifests[-1]
+            assert {segment.kind for segment in manifest.segments} >= {
+                "system_layer", "transcript", "compaction_summary", "injection_message", "tool_catalog"}
+            assert all(segment.provenance for segment in manifest.segments)
+            assert manifest.counter == "pi.estimateTokens"
+            selected = await cli("--turn", str(manifest.turn.occurrence.generation))
+            assert len(selected["manifests"]) == 1 and selected["text_recorded"] is False
+            assert text not in json.dumps(selected)
+            (output / f"recorded-turn-{index}.json").write_text(json.dumps(selected))
+        difference = await cli("--diff")
+        assert difference["turn"] != difference["previous_turn"]
+        (output / "context-diff.json").write_text(json.dumps(difference))
+        assert fixture.provider.posts == 2
+        assert owner._comms.bus.log.latest_sequence() == baseline_sequence
+        assert fixture.session.read_bytes().startswith(original_source)
+        rows = list(map(json.loads, fixture.session.read_text().splitlines()))
+        users = [json.dumps(row["message"]) for row in rows
+                 if row.get("type") == "message" and row["message"].get("role") == "user"]
+        assert all(sum(marker in text for text in users) == 1 for marker in inputs)
+        requests = fixture.provider.requests
+        assert "Original source summary." in json.dumps(requests[0])
+        assert "Original kept question" in json.dumps(requests[0])
+        assert "image_url" in json.dumps(requests[0])
+        (output / "provider-requests.json").write_text(json.dumps(requests))
+        print("S5_CONTEXT_JOURNEY", json.dumps({"elapsed_seconds": time.monotonic()-started,
+            "local_posts": fixture.provider.posts, "original_inputs": inputs,
+            "manifests": len(manifests), "query_preserved_journal": True,
+            "source_render_bytes_identical": source["provider_bytes_identical"],
+            "public_changes": [], "failures": [], "artifact_root": str(output),
+            "python": sys.executable}), flush=True)
+    finally:
+        await owner.shutdown()
