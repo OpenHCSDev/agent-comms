@@ -748,10 +748,10 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         admission_generation=1,
     )
     try:
-        assert await projection.render(first_initial, assignment, owner, 1024) == ""
+        assert await projection.render(first_initial, assignment, owner) == ""
         assert entered.is_set()
         for _ in range(40):
-            assert await projection.render(first_initial, assignment, owner, 1024) == ""
+            assert await projection.render(first_initial, assignment, owner) == ""
         assert len(calls) == 1  # no queued/retired builder fleet
         assert await asyncio.wait_for(asyncio.to_thread(lambda: 42), timeout=1) == 42
         second_base = tmp_path / "second"

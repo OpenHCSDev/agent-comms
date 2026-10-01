@@ -40,12 +40,17 @@ def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pendi
 
         # Cross the canonical SQL page boundary; a full snapshot must not cap at
         # one page or an arbitrary number of pending candidates.
-        originals = tuple(send(f"Original pending question {index}") for index in range(101))
+        originals = tuple(
+            send(f"Original pending question {index}: " + "λ" * 512) for index in range(101)
+        )
         snapshot = pending_sealed_assignments(store, lookup, "receiver")
         assert tuple(row.wire_seq for row in snapshot) == tuple(row.seq for row in originals)
         with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
             assert selected.batch.assignments == snapshot
             prompt = SelectedPrompt(selected).triage()
+            # Mandatory original content belongs to native selected-model admission,
+            # not a Python-wide byte cap or the optional awareness resource bound.
+            assert len(prompt.encode("utf-8")) > 32 * 1024
             assert all(original.body in prompt for original in originals)
             late = send("Arrived after work-start capture")
             assert late.seq not in tuple(row.wire_seq for row in selected.batch.assignments)
