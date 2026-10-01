@@ -12,7 +12,9 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .thread_provenance import ThreadProvenance
 from .pi_vocabulary import ThinkingLevel
-from .goals import Goal, GoalRevision
+from .goals import (
+    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
+)
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
     ThreadIncarnation,
@@ -188,7 +190,7 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("live owner does not hold the requested turn")
 
     def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
-        if self.goal_checkpoint != checkpoint:
+        if self.goal_checkpoint != PresentGoalCheckpoint(checkpoint):
             raise ValueError("The goal changed before this action; the action was not applied.")
         assert self.goal is not None
         return self.goal
@@ -238,8 +240,9 @@ class Thread(ThreadProvenance):
         return goal
 
     @property
-    def goal_checkpoint(self) -> GoalRevision | None:
-        return self.goal.checkpoint if self.goal is not None else None
+    def goal_checkpoint(self) -> GoalCheckpoint:
+        return (PresentGoalCheckpoint(self.goal.checkpoint)
+                if self.goal is not None else AbsentGoalCheckpoint())
 
     @property
     def has_process(self) -> bool:

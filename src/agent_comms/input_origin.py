@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated
 from .bus_publication import HumanOrigin
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .goals import GoalRevision
+from .goals import GoalCheckpoint
 from .message_reference import MessageReference
 from .thread_identity import AdmissionIdentity
 from .wire_metadata import WireRootIdText
@@ -69,11 +69,7 @@ class HumanInputOrigin(InputOrigin):
     author: HumanOrigin
     admission: AdmissionIdentity
     project: str
-    goal: GoalRevision | None
-
-    @staticmethod
-    def goal_revision(owner: Thread) -> GoalRevision | None:
-        return GoalRevision(owner.goal.id, owner.goal.revision) if owner.goal else None
+    goal: GoalCheckpoint
 
     @classmethod
     def capture(cls, comms: Comms, admission: AdmissionIdentity) -> HumanInputOrigin:
@@ -89,7 +85,7 @@ class HumanInputOrigin(InputOrigin):
             root_id = WireRootIdText.decode(root_id)
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
             return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
-                       admission, owner.worktree, cls.goal_revision(owner))
+                       admission, owner.worktree, owner.goal_checkpoint)
 
     def require_ingress(self, comms, snapshot, admission, controller):
         from .runtime import UNBOUND_CONTROLLER
@@ -102,7 +98,7 @@ class HumanInputOrigin(InputOrigin):
             raise RelationViolationError("User input origin attachment changed")
         self.author.require_registered(snapshot)
         owner = snapshot.require_active(admission.incarnation.name)
-        if (self.project, self.goal) != (owner.worktree, self.goal_revision(owner)):
+        if (self.project, self.goal) != (owner.worktree, owner.goal_checkpoint):
             raise RelationViolationError("User input scope changed before reservation")
 
     def retained_fact(self, source):
@@ -115,4 +111,4 @@ class HumanInputOrigin(InputOrigin):
 
     def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:
         return (self.admission.incarnation.resolved(snapshot) == owner.incarnation
-                and (self.project, self.goal) == (owner.worktree, self.goal_revision(owner)))
+                and (self.project, self.goal) == (owner.worktree, owner.goal_checkpoint))
