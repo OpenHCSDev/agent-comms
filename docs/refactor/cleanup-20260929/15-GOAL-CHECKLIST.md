@@ -1,3 +1,25 @@
+## Standing correction: semantic ownership before validation
+
+Native runtime lifecycle: Arendt owns the complete source fact/consumer pass.
+Compaction: Schrodinger owns the complete source fact/consumer pass. They
+coordinate shared boundaries directly; other contributors do not patch these
+areas independently. Stop symptom fixes and test-first investigation. Inventory
+payload budget, session identity, source coverage, turn custody and cursor
+position, including every declaration, decision, check and consumer. Implement
+one owner type per fact, delete competing authorities in the same change, and
+include declaration-search evidence in every PR claiming derivation. Tests and
+the installed live journey follow the coherent implementation, at the end.
+
+The new architecture-memory failure is not fixed by live491. Diagnostic
+98d570af492341409865c7f4467395fa failed before selected summary dispatch:
+compaction_summaries.reserve caps the retained-content envelope at 65,536 bytes.
+Source reading also proves compaction_operations.begin applies the same bare
+cap to commit intent containing retained facts; resolve has a third cap that
+must be classified from its actual evidence consumers. A first-cap increase
+would merely move failure to commit. Schrodinger owns the retained-context
+payload type shared by reservation, commit intent and recovery. Preserve the
+failed original attempt; no automatic replay. No readiness claim for this fix.
+
 ## 19:26UTC urgent491 global source pairing repair default-installed
 
 Core491 merged eae8818e, receivingToad281 merged37e7867b; paired d077/457 source
