@@ -1,0 +1,503 @@
+{
+  "owner": "Schrodinger460",
+  "purpose": "installed TUI physical interaction video review",
+  "output": "/home/ts/.cache/agent-scratch/g460-u06-physical-saved-v03-20261001",
+  "command": [
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+    "acp",
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python -m agent_comms.acp",
+    "--session",
+    "beta",
+    "--project-dir",
+    "/home/ts/wt/g460b/v03/project"
+  ],
+  "terminal_command": [
+    "st",
+    "-e",
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+    "acp",
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python -m agent_comms.acp",
+    "--session",
+    "beta",
+    "--project-dir",
+    "/home/ts/wt/g460b/v03/project"
+  ],
+  "fps": 8,
+  "screen": [
+    1600,
+    1000
+  ],
+  "profiling_requested": false,
+  "state_capture_requested": false,
+  "private_root": "/home/ts/wt/g460b/v03/wire",
+  "capture_target": "private",
+  "physical_journey": "observe",
+  "original_owner_before": {
+    "root": "/home/ts/wt/g460b/v03/wire",
+    "mode": "private"
+  },
+  "recorder_argv": [
+    "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/tools/record_installed_tui.py",
+    "--capture-target",
+    "private",
+    "--journey",
+    "observe",
+    "--private-root",
+    "/home/ts/wt/g460b/v03/wire",
+    "--output",
+    "/home/ts/.cache/agent-scratch/g460-u06-physical-saved-v03-20261001",
+    "--owner",
+    "Schrodinger460",
+    "--startup-wait",
+    "8",
+    "--max-duration",
+    "18",
+    "--tail-seconds",
+    "2",
+    "--fps",
+    "8",
+    "--width",
+    "1600",
+    "--height",
+    "1000",
+    "--fit-window",
+    "--review-timing",
+    "deferred",
+    "--",
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+    "acp",
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python -m agent_comms.acp",
+    "--session",
+    "beta",
+    "--project-dir",
+    "/home/ts/wt/g460b/v03/project"
+  ],
+  "recorder_source_sha256": "84ce00e9495fa8a2a89d4ba68f4d93588829c06ec73752586d9b8f38896ad236",
+  "started_utc": "2026-10-01T00:49:44.373487+00:00",
+  "assessment": "unreviewed",
+  "capture_completed": true,
+  "completed": true,
+  "review_timing": "deferred",
+  "review": {
+    "start_seconds": 0,
+    "seconds": 3,
+    "fps": 8,
+    "frames_limit": 24,
+    "slowdown": 8,
+    "timestamp_basis": "source video seconds"
+  },
+  "runtime_before": {
+    "selection": "AGENT_COMMS_RUNTIME_ROOT",
+    "bin_directory": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin",
+    "launcher": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+    "launcher_sha256": "5c8b88f9da6ca6234619275ab1ab8e069be5799ed62b154a63c86d3128337cbf",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+        "sha256": "5c8b88f9da6ca6234619275ab1ab8e069be5799ed62b154a63c86d3128337cbf"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/agent-comms-acp",
+        "sha256": "cc8027c5d0f4d0c75738d91fe3f30695eb0904b1438805ecf86f5ac62533d267"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+        "sha256": "5c8b88f9da6ca6234619275ab1ab8e069be5799ed62b154a63c86d3128337cbf"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/agent-comms-acp",
+        "sha256": "cc8027c5d0f4d0c75738d91fe3f30695eb0904b1438805ecf86f5ac62533d267"
+      }
+    },
+    "activation_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/activation.json",
+    "activation_sha256": "48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83",
+    "activation": {
+      "stage": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+      "pins": {
+        "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+        "batrachian-toad": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+        "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+      },
+      "sdk": "0.12.1",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+      "state": "verified-immutable-cohort",
+      "staging_receipt_sha256": "b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf"
+    },
+    "observed": {
+      "python": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python",
+      "prefix": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "7081212f5c8abb817d48e857c01a09593f198f98deef25895835e2694ea5752c",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+              "requested_revision": "85d45b512cac88bdf5dd8870f41e53768ab3c009"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "74d7ca0a6760e18c8de6733f6264af85ece6c496680bd6fffe51d3da4ce65dd8",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+              "requested_revision": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "cfe59ae24b79298af78bcf0146898ff76bee81e86902f74c3500ccd3f0ff285e",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+              "requested_revision": "970bc527f4ddd9b3bde5522dc671aea11fd27ece"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/home/ts/wt/g460b/v03/wire",
+        "wire_root_id": "b05a3284895f42279e25f75faa0123b5",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "display": ":8207",
+  "ui_identity": {
+    "pid": 182316,
+    "start_ticks": 29142443
+  },
+  "window": "2097158",
+  "capture_launch_monotonic": 291424.706307742,
+  "terminal_pid": 182315,
+  "terminal_processes": {
+    "182315": {
+      "start_ticks": 29142438,
+      "command": "st -e /home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad acp /home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python -m agent_comms.acp --session beta --project-dir /home/ts/wt/g460b/v03/project "
+    },
+    "182316": {
+      "start_ticks": 29142443,
+      "command": "toad                                                                                                                                                                                                                                                                                                                                                       "
+    },
+    "182335": {
+      "start_ticks": 29142499,
+      "command": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+    },
+    "182358": {
+      "start_ticks": 29142606,
+      "command": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=15) --multiprocessing-fork "
+    },
+    "182396": {
+      "start_ticks": 29143107,
+      "command": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=24) --multiprocessing-fork "
+    },
+    "182402": {
+      "start_ticks": 29143230,
+      "command": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=27) --multiprocessing-fork "
+    }
+  },
+  "duration_seconds": 17.26856991200475,
+  "capture_returncode": 255,
+  "runtime_after": {
+    "selection": "AGENT_COMMS_RUNTIME_ROOT",
+    "bin_directory": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin",
+    "launcher": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+    "launcher_sha256": "5c8b88f9da6ca6234619275ab1ab8e069be5799ed62b154a63c86d3128337cbf",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+        "sha256": "5c8b88f9da6ca6234619275ab1ab8e069be5799ed62b154a63c86d3128337cbf"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/agent-comms-acp",
+        "sha256": "cc8027c5d0f4d0c75738d91fe3f30695eb0904b1438805ecf86f5ac62533d267"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/toad",
+        "sha256": "5c8b88f9da6ca6234619275ab1ab8e069be5799ed62b154a63c86d3128337cbf"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/agent-comms-acp",
+        "sha256": "cc8027c5d0f4d0c75738d91fe3f30695eb0904b1438805ecf86f5ac62533d267"
+      }
+    },
+    "activation_path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/activation.json",
+    "activation_sha256": "48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83",
+    "activation": {
+      "stage": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+      "pins": {
+        "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+        "batrachian-toad": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+        "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+      },
+      "sdk": "0.12.1",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+      "state": "verified-immutable-cohort",
+      "staging_receipt_sha256": "b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf"
+    },
+    "observed": {
+      "python": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/bin/python",
+      "prefix": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "7081212f5c8abb817d48e857c01a09593f198f98deef25895835e2694ea5752c",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+              "requested_revision": "85d45b512cac88bdf5dd8870f41e53768ab3c009"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "74d7ca0a6760e18c8de6733f6264af85ece6c496680bd6fffe51d3da4ce65dd8",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+              "requested_revision": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "cfe59ae24b79298af78bcf0146898ff76bee81e86902f74c3500ccd3f0ff285e",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+              "requested_revision": "970bc527f4ddd9b3bde5522dc671aea11fd27ece"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/home/ts/wt/g460b/v03/wire",
+        "wire_root_id": "b05a3284895f42279e25f75faa0123b5",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "runtime_unchanged": true,
+  "video": {
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+        "profile": "Constrained Baseline",
+        "codec_type": "video",
+        "codec_tag_string": "avc1",
+        "codec_tag": "0x31637661",
+        "mime_codec_string": "avc1.42c028",
+        "width": 1600,
+        "height": 1000,
+        "coded_width": 1600,
+        "coded_height": 1000,
+        "has_b_frames": 0,
+        "pix_fmt": "yuv420p",
+        "level": 40,
+        "chroma_location": "left",
+        "field_order": "progressive",
+        "is_avc": "true",
+        "nal_length_size": "4",
+        "id": "0x1",
+        "r_frame_rate": "8/1",
+        "avg_frame_rate": "8/1",
+        "time_base": "1/16384",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 288768,
+        "duration": "17.625000",
+        "bit_rate": "152950",
+        "bits_per_raw_sample": "8",
+        "nb_frames": "141",
+        "extradata_size": 38,
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.1.102 libx264"
+        }
+      }
+    ],
+    "format": {
+      "filename": "/home/ts/.cache/agent-scratch/g460-u06-physical-saved-v03-20261001/terminal.mp4",
+      "nb_streams": 1,
+      "nb_programs": 0,
+      "nb_stream_groups": 0,
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+      "format_long_name": "QuickTime / MOV",
+      "start_time": "0.000000",
+      "duration": "17.625000",
+      "size": "338368",
+      "bit_rate": "153585",
+      "probe_score": 100,
+      "tags": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf63.1.102"
+      }
+    }
+  },
+  "events": [],
+  "journey_review": null,
+  "review_intervals": [
+    {
+      "label": "main",
+      "start": 0,
+      "seconds": 3
+    }
+  ],
+  "artifacts": {
+    "terminal.mp4": {
+      "bytes": 338368,
+      "sha256": "ede597198e4c87ec494b96e817d6377c5da7c79efd9f94ce367088b8009caf77"
+    },
+    "before.png": {
+      "bytes": 105604,
+      "sha256": "4c3016ae1dd232609d88a7aa157b8e336664889ec9d6b0e7dd19c171ae183bd6"
+    },
+    "after.png": {
+      "bytes": 100020,
+      "sha256": "edc539dea3c557074c1f75054afd445eb3204c88d48c5283db9df59f44308e0b"
+    }
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 182243,
+        "start_ticks": 29142355,
+        "returncode": 0
+      },
+      {
+        "pid": 182313,
+        "start_ticks": 29142429,
+        "returncode": 0
+      },
+      {
+        "pid": 182315,
+        "start_ticks": 29142438,
+        "returncode": 0
+      },
+      {
+        "pid": 182316,
+        "start_ticks": 29142443,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 182317,
+        "start_ticks": 29142444,
+        "returncode": 0
+      },
+      {
+        "pid": 182318,
+        "start_ticks": 29142452,
+        "returncode": 0
+      },
+      {
+        "pid": 182319,
+        "start_ticks": 29142460,
+        "returncode": 0
+      },
+      {
+        "pid": 182328,
+        "start_ticks": 29142469,
+        "returncode": 255
+      },
+      {
+        "pid": 182471,
+        "start_ticks": 29143270,
+        "returncode": 0
+      },
+      {
+        "pid": 182656,
+        "start_ticks": 29144170,
+        "returncode": 0
+      },
+      {
+        "pid": 182732,
+        "start_ticks": 29144262,
+        "returncode": 0
+      },
+      {
+        "pid": 182734,
+        "start_ticks": 29144333,
+        "returncode": 0
+      },
+      {
+        "pid": 182806,
+        "start_ticks": 29144502,
+        "returncode": 0
+      }
+    ]
+  },
+  "original_owner_after": {
+    "root": "/home/ts/wt/g460b/v03/wire",
+    "mode": "private"
+  }
+}
