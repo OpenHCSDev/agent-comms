@@ -118,9 +118,10 @@ class CorrectionDecisionChange(DecisionChange, declared_name="correction"):
     def require_original(self, original_source: CertifiedSourceRead | None) -> Message:
         if original_source is None:
             raise RelationViolationError("Decision correction requires the original publication read")
-        from .private_bus_checkpoint import source_references_unlocked
+        from .private_bus_checkpoint import delivery_references_unlocked
 
-        original, = source_references_unlocked(original_source, (self.original,))
+        delivery, = delivery_references_unlocked(original_source, (self.original,))
+        original = delivery.message
         if original.reference != self.original:
             raise RelationViolationError("Decision correction requires its original wire reference")
         return original
