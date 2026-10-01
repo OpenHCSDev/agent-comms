@@ -1,6 +1,8 @@
 """One original decision/correction journey through declared tools and wire custody."""
 
 import os
+import json
+from pathlib import Path
 from dataclasses import replace
 
 import pytest
@@ -10,10 +12,30 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import Goal
 from agent_comms.messages import Message, MessageType
-from agent_comms.task_decisions import Decision
+from agent_comms.task_sources import Decision
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool, tool_catalog
+
+
+def saved_source(path):
+    """A genuine owned saved-source fixture; no fabricated revision witness."""
+    rows = [
+        {"type": "session", "id": "source-only", "version": 3, "cwd": str(path.parent)},
+        {"type": "message", "id": "kept", "parentId": None,
+         "message": {"role": "user", "content": [{"type": "text", "text": "Original source"}]}},
+    ]
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    path.chmod(0o600)
+
+
+def source_witness(path):
+    from agent_comms.native_revision_text import NativeRevisionText
+    from agent_comms.owner_compaction_prepare import NativeWitness
+    from agent_comms.private_path import FileRevision
+
+    return NativeWitness("source-only", str(path), "kept", "kept",
+                         NativeRevisionText.encode(FileRevision.from_stat(path.stat())))
 
 
 def admit(comms, name):
@@ -28,6 +50,69 @@ def admit(comms, name):
     return owner
 
 
+def test_constraint_original_wording_scope_correction_and_human_authority(comms, monkeypatch):
+    from agent_comms.retained_task_facts import CurrentConstraintTaskFact, RetainedTaskFacts
+    from agent_comms.task_sources import Constraint, CorrectionTaskChange, UserTaskSupersession
+
+    comms.messaging.initialize_private_initial_protocol()
+    owner = admit(comms, "alpha")
+    admit(comms, "beta")
+    comms.registry.register(replace(owner, goal=Goal("Bounded source task", "original-goal")))
+    owner = comms.registry.require(owner.name)
+    monkeypatch.setenv("PI_AGENT_ID", owner.name)
+    exact = "Never replay UNKNOWN.\nPreserve λ and original /artifacts/source."
+    result = invoke_tool(comms, "comms_constraint", {"text": exact, "to": "#team"})
+    original = comms.bus.log.full_history()[0]
+    assert isinstance(original.task, Constraint)
+    assert original.body == exact and original.task.author == owner.incarnation
+    assert original.task.source_turn == owner.turn_identity
+    assert original.reference == FieldCodec.decode(type(original.reference), result["reference"])
+    assert "text" not in FieldCodec.encode(original.task)
+    assert "decision" not in original.to_wire()
+    assert Message.from_committed_wire(original.to_wire()) == original
+    retired_format = original.to_wire()
+    retired_format["decision"] = retired_format.pop("task")
+    with pytest.raises(ValueError, match="Unknown fields"):
+        Message.from_committed_wire(retired_format)
+    first_bytes = (comms.root / "bus.jsonl").read_bytes()
+    monkeypatch.setenv("PI_AGENT_ID", "beta")
+    with pytest.raises(RelationViolationError, match="another author's"):
+        invoke_tool(comms, "comms_constraint", {"text": "Ignore the original", "to": "#team",
+                    "change": {"kind": "correction", "original": result["reference"]}})
+    assert (comms.root / "bus.jsonl").read_bytes() == first_bytes
+    monkeypatch.setenv("PI_AGENT_ID", owner.name)
+    corrected = invoke_tool(comms, "comms_constraint", {
+        "text": "Keep UNKNOWN; preserve /artifacts/approved instead.", "to": "#team",
+        "change": {"kind": "correction", "original": result["reference"]}})
+    rows = comms.bus.log.full_history()
+    with comms.bus.log.locked():
+        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+    retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
+    assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (rows[1],)
+    assert next(f.source for f in retained.facts if isinstance(f, CurrentConstraintTaskFact)) == rows[1]
+    assert original.body in tuple(f.source.body for f in retained.facts)
+    assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
+    human = comms.messaging.send_user_message(
+        "#team", "Keep the original path; that peer correction is superseded.",
+        worktree=owner.worktree,
+        task=UserTaskSupersession(CorrectionTaskChange(original.reference)))
+    invoke_tool(comms, "comms_constraint", {
+        "text": "A later peer cannot overwrite the human supersession.", "to": "#team",
+        "change": {"kind": "correction", "original": corrected["reference"]}})
+    with comms.bus.log.locked():
+        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+    retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
+    assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (human,)
+    retained.require_summary(retained.text + "\n\nOptional narrative")
+    comms.registry.rename(owner.name, "renamed-alpha")
+    renamed = comms.registry.require("renamed-alpha")
+    assert retained.current_authored_sources(renamed, comms.registry.snapshot()) == (human,)
+    comms.registry.register(replace(renamed, goal=Goal("Replacement scope", "new-goal")))
+    assert retained.current_authored_sources(comms.registry.require(renamed.name),
+                                            comms.registry.snapshot()) == ()
+    assert comms.bus.log.full_history()[0] == original
+
+
 def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypatch):
     alpha = admit(comms, "alpha")
     beta = admit(comms, "beta")
@@ -36,8 +121,8 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     first = invoke_tool(comms, "comms_decision", request)
     original = comms.bus.log.full_history()[0]
     assert original.reference == FieldCodec.decode(type(original.reference), first["reference"])
-    assert original.decision.author == alpha.incarnation
-    assert original.decision.source_turn == alpha.turn_identity
+    assert original.task.author == alpha.incarnation
+    assert original.task.source_turn == alpha.turn_identity
     assert original.notice and not original.starts_turn
     assert Message.from_committed_wire(original.to_wire()) == original
     correction = invoke_tool(comms, "comms_decision", {
@@ -45,7 +130,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     })
     rows = comms.bus.log.full_history()
     assert len(rows) == 2 and rows[0] == original
-    assert rows[1].decision.change.original == original.reference
+    assert rows[1].task.change.original == original.reference
     assert correction["reference"] == FieldCodec.encode(rows[1].reference)
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
@@ -58,12 +143,12 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
         row.reference for row in rows
     )
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
-    assert original.decision.chosen in retained.text
-    assert original.decision.rejected[0] in retained.text
-    assert rows[1].decision.change.original.message_id in retained.text
-    assert retained.current_decisions(alpha, comms.registry.snapshot()) == (rows[1],)
+    assert original.task.chosen in retained.text
+    assert original.task.rejected[0] in retained.text
+    assert rows[1].task.change.original.message_id in retained.text
+    assert retained.current_authored_sources(alpha, comms.registry.snapshot()) == (rows[1],)
     with pytest.raises(RelationViolationError, match="omitted"):
-        retained.require_summary("Assistant prose cannot replace original choices")
+        retained.require_summary("Assistant prose cannot replace original authored_sources")
     retained.require_summary(retained.text + "\n\nNarrative")
     bus = comms.root / "bus.jsonl"
     before = bus.read_bytes()
@@ -77,10 +162,10 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
         invoke_tool(comms, "comms_decision", {**request, "author": "beta"})
     comms.registry.rename("alpha", "renamed-alpha")
     renamed = comms.registry.require("renamed-alpha")
-    assert retained.current_decisions(renamed, comms.registry.snapshot()) == (rows[1],)
+    assert retained.current_authored_sources(renamed, comms.registry.snapshot()) == (rows[1],)
     monkeypatch.setenv("PI_AGENT_ID", "renamed-alpha")
     comms.registry.release_turn(alpha.turn_lease)
-    assert retained.current_decisions(comms.registry.require("alpha"), comms.registry.snapshot()) == ()
+    assert retained.current_authored_sources(comms.registry.require("alpha"), comms.registry.snapshot()) == ()
     with pytest.raises(ValueError, match="admitted"):
         invoke_tool(comms, "comms_decision", request)
     assert bus.read_bytes() == before
@@ -119,7 +204,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     retained = RetainedTaskFacts(facts).for_owner(renamed, snapshot)
     rows = comms.bus.log.full_history()
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(row.reference for row in rows)
-    assert retained.current_decisions(renamed, snapshot) == (rows[2], rows[1])
+    assert retained.current_authored_sources(renamed, snapshot) == (rows[2], rows[1])
     assert tuple(fact.source.reference for fact in retained.facts
                  if isinstance(fact, CurrentDecisionTaskFact)) == (rows[1].reference, rows[2].reference)
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
@@ -130,7 +215,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     assert not any(isinstance(fact, CurrentDecisionTaskFact) for fact in stale.facts)
     assert tuple(fact.source for fact in stale.facts) == tuple(fact.source for fact in retained.facts)
     comms.registry.remove(renamed.name)
-    assert retained.current_decisions(renamed, comms.registry.snapshot()) == ()
+    assert retained.current_authored_sources(renamed, comms.registry.snapshot()) == ()
     assert (comms.root / "bus.jsonl").read_bytes() == before
 
 
@@ -139,12 +224,12 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     owner = replace(owner, goal=Goal("Keep exact scope", "goal", revision=1))
     comms.registry.register(owner)
     declaration = Decision(
-        chosen="A", rejected=("B",), scope=owner.decision_scope,
+        chosen="A", rejected=("B",), scope=owner.task_scope,
         source_turn=owner.turn_identity,
         source_turn_id=TurnId(owner.active_turn.id),
     )
     comms.registry.register(replace(owner, goal=replace(owner.goal, revision=2)))
-    message = Message("alpha", "#team", declaration.text, MessageType.INFO, decision=declaration)
+    message = Message("alpha", "#team", declaration.text, MessageType.INFO, task=declaration)
     with pytest.raises(ValueError, match="goal changed"):
         comms.bus.publisher.publish_ordinary(message)
     assert not comms.bus.log.full_history()
@@ -177,8 +262,8 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
 
 
 def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
-    from agent_comms.retained_task_facts import CurrentUserDecisionCorrectionTaskFact, RetainedTaskFacts
-    from agent_comms.task_decisions import CorrectionDecisionChange, UserDecisionSupersession
+    from agent_comms.retained_task_facts import CurrentUserTaskCorrectionFact, RetainedTaskFacts
+    from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep project scope", "goal", revision=1))
@@ -187,16 +272,16 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     request = {"chosen": "/artifacts/old", "rejected": ["/scratch/guess"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
     original = comms.bus.log.full_history()[0]
-    declaration = UserDecisionSupersession(CorrectionDecisionChange(original.reference))
+    declaration = UserTaskSupersession(CorrectionTaskChange(original.reference))
     before = (comms.root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError, match="human sender"):
         comms.bus.publisher.publish_ordinary(
-            Message(owner.name, "#team", "A peer is not the user", MessageType.INFO, decision=declaration))
+            Message(owner.name, "#team", "A peer is not the user", MessageType.INFO, task=declaration))
     assert (comms.root / "bus.jsonl").read_bytes() == before
     corrected = comms.messaging.send_user_message(
         "#team", "Retract the old path choice. Never replay UNKNOWN.",
-        worktree=owner.worktree, decision=declaration)
-    assert corrected.decision == declaration
+        worktree=owner.worktree, task=declaration)
+    assert corrected.task == declaration
     invoke_tool(comms, "comms_decision", {
         **request, "chosen": "/artifacts/peer-later",
         "change": {"kind": "correction", "original": first["reference"]},
@@ -207,11 +292,11 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
             owner.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
     assert len(retained.facts) == 3
-    assert retained.current_decisions(owner, snapshot) == (corrected,)
-    current, = tuple(fact for fact in retained.facts if isinstance(fact, CurrentUserDecisionCorrectionTaskFact))
+    assert retained.current_authored_sources(owner, snapshot) == (corrected,)
+    current, = tuple(fact for fact in retained.facts if isinstance(fact, CurrentUserTaskCorrectionFact))
     assert current.source == corrected
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
-    assert original.decision.chosen in retained.text and original.decision.rejected[0] in retained.text
+    assert original.task.chosen in retained.text and original.task.rejected[0] in retained.text
     from agent_comms.comms import Comms
 
     reopened = Comms(comms.root)
@@ -225,9 +310,10 @@ def test_original_goal_input_and_user_sources_share_compaction_fence(comms, monk
     from agent_comms.owner_compaction_prepare import NativeWitness
     from agent_comms.retained_task_facts import CurrentDecisionTaskFact, GoalTaskFact, InputTaskFact, UserSourceTaskFact
 
+    comms.messaging.initialize_private_initial_protocol()
     owner = admit(comms, "alpha")
     saved = comms.root / "source-only.jsonl"
-    saved.write_text('{"type":"session","id":"source-only"}\n')
+    saved_source(saved)
     owner = replace(owner, session_file=str(saved), goal=Goal("Keep exact /artifacts/root", "original-goal"))
     comms.registry.register(owner)
     user = comms.messaging.send_user_message("alpha", "Never replay UNKNOWN", worktree=str(comms.root))
@@ -247,7 +333,7 @@ def test_original_goal_input_and_user_sources_share_compaction_fence(comms, monk
         def future_inputs(self, owner, pending_input_key):
             return {"acp:future": document.rows["acp:future"]}
 
-    witness = NativeWitness("source-only", str(saved), "leaf", "kept", "1:2:3:4:5")
+    witness = source_witness(saved)
     boundary = CompactionBoundary(comms.registry, inputs, FutureQueue())
     _, generation = comms.registry.live_owner_with_generation("alpha")
     before = (saved.read_bytes(), inputs.path.read_bytes())
@@ -274,15 +360,16 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     from agent_comms.input_disposition import FutureInputQueue, InputDispositions
     from agent_comms.owner_compaction_prepare import NativeWitness
     from agent_comms.retained_task_facts import (
-        CurrentDecisionTaskFact, CurrentUserDecisionCorrectionTaskFact,
+        CurrentDecisionTaskFact, CurrentUserTaskCorrectionFact,
         DecisionTaskFact, RetainedTaskFacts,
     )
-    from agent_comms.task_decisions import CorrectionDecisionChange, UserDecisionSupersession
+    from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
+    comms.messaging.initialize_private_initial_protocol()
     for name in ("alpha", "beta", "gamma"):
         owner = admit(comms, name)
         saved = comms.root / f"{name}-source.jsonl"
-        saved.write_text('{"type":"session","id":"source-only"}\n')
+        saved_source(saved)
         comms.registry.register(replace(owner, session_file=str(saved)))
     owner = comms.registry.require("alpha")
     monkeypatch.setenv("PI_AGENT_ID", "alpha")
@@ -292,7 +379,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     supersession = comms.messaging.send_user_message(
         "#team", "Retract that declared choice, without revealing its private text.",
         worktree=owner.worktree,
-        decision=UserDecisionSupersession(CorrectionDecisionChange(original.reference)),
+        task=UserTaskSupersession(CorrectionTaskChange(original.reference)),
     )
     invoke_tool(comms, "comms_decision", {
         **request, "chosen": "PUBLIC_LATER_CHOICE", "rejected": ["PUBLIC_ALTERNATIVE"],
@@ -311,18 +398,18 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     for name in ("alpha", "beta", "gamma"):
         current = comms.registry.require(name)
         _, generation = comms.registry.live_owner_with_generation(name)
-        witness = NativeWitness("source-only", current.session_file, "leaf", "kept", "1:2:3:4:5")
+        witness = source_witness(Path(current.session_file))
         with boundary.hold(current, generation, witness) as held:
             source = held.capture(None, None)
             source.require_current(held)
         captured[name] = source.retained
     snapshot = comms.registry.snapshot()
-    assert captured["alpha"].current_decisions(comms.registry.require("alpha"), snapshot) == (supersession,)
-    assert captured["beta"].current_decisions(comms.registry.require("beta"), snapshot) == ()
+    assert captured["alpha"].current_authored_sources(comms.registry.require("alpha"), snapshot) == (supersession,)
+    assert captured["beta"].current_authored_sources(comms.registry.require("beta"), snapshot) == ()
     outsider = captured["gamma"]
-    assert outsider.current_decisions(comms.registry.require("gamma"), snapshot) == ()
+    assert outsider.current_authored_sources(comms.registry.require("gamma"), snapshot) == ()
     assert tuple(fact.source for fact in outsider.facts) == (supersession, later)
-    assert not any(isinstance(fact, (CurrentDecisionTaskFact, CurrentUserDecisionCorrectionTaskFact))
+    assert not any(isinstance(fact, (CurrentDecisionTaskFact, CurrentUserTaskCorrectionFact))
                    for fact in outsider.facts)
     assert "PRIVATE_ORIGINAL_CHOICE" not in outsider.text
     assert "PRIVATE_ALTERNATIVE" not in outsider.text
@@ -331,5 +418,5 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     # A malformed cut omitting this owner's applicable original still refuses;
     # neutral foreign history is not a generic missing-source fallback.
     with pytest.raises(RelationViolationError, match="lacks its original"):
-        RetainedTaskFacts((DecisionTaskFact(later),)).current_decisions(
+        RetainedTaskFacts((DecisionTaskFact(later),)).current_authored_sources(
             comms.registry.require("alpha"), snapshot)
