@@ -1,0 +1,23 @@
+{
+  "source": "cd08d8564143026348d681fb467da1458c6db236",
+  "argv": [
+    "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/bin/python",
+    "/home/ts/wt/comms-turn-context-phase2-20261001/tests/turn_context_installed_journey.py",
+    "/home/ts/wt/s5integrated01",
+    "--test-support-site",
+    "/usr/lib/python3.14/site-packages",
+    "--toad-driver-dir",
+    "/home/ts/wt/toad-receiving-485-488-278-20261001/tests",
+    "--authored-operations-only"
+  ],
+  "installed_core": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "installed_dependency_site": "/home/ts/wt/toad-receiving-native491-20261001/.artifacts/runtime-native491-20261001/lib/python3.14/site-packages",
+  "native": "/home/ts/wt/comms-combined474-global491-native-20261001/stack/.pi-native-53b8c413d90aa6b1/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest": "53b8c413d90aa6b1b8fe17fad35d2261cb7fe8c53eaa852f6ac4a073016fd9f6",
+  "fixture": "/home/ts/wt/s5integrated01",
+  "local_posts": 2,
+  "paid_public_inputs": 0,
+  "replays": 0,
+  "pid": 2109115,
+  "started_utc": "2026-10-01T19:45:01Z"
+}

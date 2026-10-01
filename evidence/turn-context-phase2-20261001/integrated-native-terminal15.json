@@ -1,0 +1,11 @@
+{
+  "python": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/bin/python",
+  "core": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "fixture": "/home/ts/wt/s5integrated01",
+  "public_inputs": 0,
+  "paid_provider_calls": 0,
+  "state": "SCOPED_PASS",
+  "local_provider_posts": 2,
+  "original_provider_requests": "/home/ts/wt/s5integrated01/original-provider-requests.json",
+  "elapsed_seconds": 42.53305274399463
+}

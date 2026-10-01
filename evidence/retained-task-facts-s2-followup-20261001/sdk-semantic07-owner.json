@@ -1,0 +1,10 @@
+{
+  "owner": "Schrodinger481",
+  "purpose": "actual copied SDK local write/edit semantic control, not a native build or installed candidate",
+  "original": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent",
+  "copy": "/home/ts/.cache/agent-scratch/s2-sdk-file-artifact-semantic-20261001-01/sdk-source-copy",
+  "hardlinks": false,
+  "paid_calls": 0,
+  "public_changes": [],
+  "cleanup": "owned successful regular copy eligible after proof capture/no references"
+}
