@@ -1414,9 +1414,10 @@
       * List all sessions for a directory.
 --- a/dist/core/compaction/compaction.js
 +++ b/dist/core/compaction/compaction.js
-@@ -1,3 +1,5 @@
+@@ -1,3 +1,6 @@
 +import { EntryMessageRange, HistorySummarySource, ReducedSummarySource } from "./agent-comms-source.js";
 +import { CompactionPolicy } from "./agent-comms-policy.js";
++import { BudgetAdmissionError } from "@earendil-works/pi-ai/api/agent-comms-context-budget";
  /**
   * Context compaction for long sessions.
   *
@@ -1710,7 +1711,7 @@
      // Use update prompt if we have a previous summary, otherwise initial prompt
      let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
      if (customInstructions) {
-@@ -494,92 +469,78 @@
+@@ -494,92 +469,80 @@
      }
      // Serialize conversation to text so model doesn't try to continue it
      // Convert to LLM messages first (handles custom types like bashExecution, custom, etc.)
@@ -1810,7 +1811,7 @@
 +        return { text: textContent, usage: response.usage };
 +    }, signal);
 +}
-+export function prepareCompaction(store, settings, model, leafId=store.lastId) {
++export function prepareCompaction(store, settings, model, leafId=store.lastId, retainedText="") {
 +    const last=store.metadata(leafId);
 +    if(!last || last.type==='compaction')return undefined;
 +    const previous=store.latest(leafId,'compaction');
@@ -1828,21 +1829,23 @@
 +        extractFileOpsFromMessage(message,fileOps);
 +    const {readFiles,modifiedFiles}=computeFileLists(fileOps);
 +    const annotations=formatFileOperations(readFiles,modifiedFiles);
-+    const annotationBytes=policy.messageBytes(createCompactionSummaryMessage(annotations,tokensBefore,Date.now()));
-+    const retainedLimit=policy.retainedBytes(model,settings.reserveTokens)-annotationBytes;
-+    let accumulated=0, retainedBytes=0, cut;
++    const required=createCompactionSummaryMessage(`${retainedText}\n\n${annotations}`,tokensBefore,Date.now());
++    policy.requireContext([required],model,settings.reserveTokens);
++    let accumulated=0, cut;
++    const retained=[];
 +    for(const meta of store.ancestors(leafId)) {
 +        if(meta.sequence<floor)break;
 +        const entry=store.get(meta.id);
 +        const messages=sessionEntryToContextMessages(entry);
-+        const bytes=messages.reduce((sum,message)=>sum+policy.messageBytes(message),0);
-+        if(meta.type!=='compaction' && retainedBytes+bytes>retainedLimit)break;
-+        if(meta.type!=='compaction' && messages.some(isCutPointMessage))cut=meta;
-+        if(meta.type!=='compaction')retainedBytes+=bytes;
++        if(meta.type!=='compaction') {
++            retained.unshift(...messages);
++            if(!policy.retainedFits(required,retained,model,settings.reserveTokens))break;
++            if(messages.some(isCutPointMessage))cut=meta;
++        }
 +        accumulated+=messages.reduce((sum,message)=>sum+estimateTokens(message),0);
 +        if(accumulated>=settings.keepRecentTokens && cut)break;
 +    }
-+    if(!cut)throw new Error('No atomic retained suffix fits the selected context budget');
++    if(!cut)throw new BudgetAdmissionError('No atomic retained suffix fits the selected context budget');
 +    // Include adjacent context-invisible metadata immediately before the retained message.
 +    for(const meta of store.ancestors(cut.parentId)) {
 +        if(meta.sequence<floor || meta.type==='compaction' || sessionEntryToContextMessages(store.get(meta.id)).length)break;
@@ -1862,16 +1865,16 @@
 -        fileOps,
 -        settings,
 -    };
-+        previousSummary:previous?.summary,fileOps,settings,contextWindow:model.contextWindow,
++        previousSummary:previous?.summary,fileOps,settings,contextWindow:model.contextWindow,retainedText,
 +        retainedMessages:new EntryMessageRange(store,leafId,cut.sequence,last.sequence+1)};
  }
  // ============================================================================
  // Main compaction function
-@@ -608,31 +569,55 @@
+@@ -608,31 +569,57 @@
   */
--export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
-+export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId, retainedText = "") {
-     const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
+ export async function compact(preparation, model, apiKey, headers, customInstructions, signal, thinkingLevel, streamFn, env, retry, callbacks, sessionId) {
+-    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, } = preparation;
++    const { firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, retainedText, } = preparation;
 -    // Generate summaries and merge into one
 -    let summary;
 -    let summaryUsage;
@@ -1899,10 +1902,12 @@
 +    const annotations = formatFileOperations(readFiles, modifiedFiles);
 +    contextPolicy.packSummary(retainedText, "", annotations, tokensBefore, preparation.retainedMessages,
 +        model, settings.reserveTokens, createCompactionSummaryMessage);
-+    const summaryBytes=contextPolicy.inputBytes(model,settings.reserveTokens)-contextPolicy.retainedBytes(model,settings.reserveTokens);
++    const required=createCompactionSummaryMessage(`${retainedText}\n\n${annotations}`,tokensBefore,Date.now());
++    const summaryTokens=contextPolicy.inputTokens(model,settings.reserveTokens)-
++        contextPolicy.contextTokens([required,...preparation.retainedMessages],model);
 +    const pieces=isSplitTurn ? 2 : 1;
 +    customInstructions=[customInstructions,
-+        `Keep the generated summary within ${Math.floor(summaryBytes/pieces)} UTF-8 JSON string bytes. File annotations are supplied separately; preserve relevant paths in the structured summary without duplicating the cumulative file ledger.`]
++        `Keep the generated summary within ${Math.floor(summaryTokens/pieces)} tokens. File annotations are supplied separately; preserve relevant paths in the structured summary without duplicating the cumulative file ledger.`]
 +        .filter(Boolean).join('\n\n');
 +    const history = new HistorySummarySource(messagesToSummarize, previousSummary);
 +    const prefix = new TurnPrefixSummarySource(turnPrefixMessages);
@@ -2429,14 +2434,15 @@
      /** Whether this is a split turn (cut point in middle of turn) */
      isSplitTurn: boolean;
      tokensBefore: number;
-@@ -130,7 +102,9 @@
+@@ -130,7 +102,10 @@
      /** Compaction settions from settings.jsonl	*/
      settings: CompactionSettings;
 +    contextWindow: number;
 +    retainedMessages: EntryMessageRange;
++    retainedText: string;
  }
 -export declare function prepareCompaction(pathEntries: SessionEntry[], settings: CompactionSettings): CompactionPreparation | undefined;
-+export declare function prepareCompaction(store: EntryStore, settings: CompactionSettings, model: Pick<Model<any>, 'contextWindow'>, leafId?: string | null): CompactionPreparation | undefined;
++export declare function prepareCompaction(store: EntryStore, settings: CompactionSettings, model: Pick<Model<any>, 'contextWindow'>, leafId?: string | null, retainedText?: string): CompactionPreparation | undefined;
  /**
   * Generate summaries for compaction using prepared data.
   * Returns CompactionResult - SessionManager adds uuid/parentUuid when saving.
@@ -2444,8 +2450,7 @@
   * @param customInstructions - Optional custom focus for the summary
   * @param sessionId - Optional routing session ID forwarded without enabling prompt caching
   */
--export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<CompactionResult>;
-+export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string, retainedText?: string): Promise<CompactionResult>;
+ export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<CompactionResult>;
  //# sourceMappingURL=compaction.d.ts.map
 \ No newline at end of file
 --- a/dist/core/export-html/index.js

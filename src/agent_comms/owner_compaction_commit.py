@@ -89,7 +89,18 @@ class OwnerCompactionCommit:
             pending_input_key=pending_input_key,
             settings_paths=settings_paths,
         )
-        return prepared, source
+        # Capture determines the required original facts. Native policy then
+        # allocates that exact payload together with its atomic recent suffix;
+        # both reads remain tied to the original source revision and leaf.
+        allocated = prepare_native_source(
+            self.native.package_dir, source.native.session_file,
+            settings=settings, context_window=context_window, retained_text=source.retained.text,
+        )
+        if allocated is None:
+            raise CompactionJournalError("Captured compaction source lost its native preparation")
+        source = source.at_prepared_cut(allocated.witness)
+        self.require_source_current(owner, owner_generation, source)
+        return allocated, source
 
     def require_source_current(self, owner: Thread, owner_generation: int,
                                source: CompactionSource) -> None:

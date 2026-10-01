@@ -41,6 +41,16 @@ class CompactionSource:
         if self != held.capture(self.pending_input_key, self.settings_paths):
             raise RelationViolationError("Compaction source changed; derive fresh evidence")
 
+    def at_prepared_cut(self, witness: NativeWitness) -> CompactionSource:
+        """Allocate a cut for these exact facts without changing their source.
+
+        Preparation may move only first_kept_entry_id. Original session, leaf
+        and revision remain fenced; the caller must require_current before use.
+        """
+        if replace(witness, first_kept_entry_id=self.native.first_kept_entry_id) != self.native:
+            raise RelationViolationError("Compaction allocation changed its original native source")
+        return replace(self, native=witness)
+
     def after_native_commit(self, outcome: CommittedNativeOutcome) -> CompactionSource:
         """Advance only this original cut through its committed native receipt.
 
