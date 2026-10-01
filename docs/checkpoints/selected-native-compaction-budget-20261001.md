@@ -87,3 +87,72 @@ worker cancellation/retirement, unresolved native-write refusal). This is not
 updated-wheel or real-provider acceptance. The frozen079 prefix/native package
 were not edited. Updated-wheel ordinary manual/adaptive path qualification
 remains required after this coherent source checkpoint is published.
+
+## Original configured canonical fork and final installed API checkpoint
+
+The original frozen079 candidate completed the one authorized canonical-fork
+input, without replay or recovery. Selected attempt95fe linked commit00811;
+native compaction608c415c was saved at23:35:53.485Z. The same original user
+entryc5b7e179 was followed by native assistant42c3f6d7 at23:36:06.526Z with
+stop and the exact requested acknowledgement. The original configured Sol model
+and provider were unchanged. The inherited native file was42,044,813B before
+this operation. The child-scoped retained facts were849B, not the original
+parent's147KB facts; this acceptance does not recreate the parent's exact task
+scope. Original failed parent inputs were never replayed.
+
+The distinct final Python package pins Coreae660f2b and Toad9c110000,
+Textual559547, diff8fa7, SDK0.12.1 and unchanged native5184. Its normal69
+installation has901 source files byte-equal to the four declared Git sources;
+native full trust and dependency compatibility passed. All105 protected files
+from earlier prefixes stayed unchanged. The existing installed native helper
+returned its ready preparation for the actual settled canonical saved source.
+Original commit metadata and payload digests matched that saved entry; the new
+existing result-family manual response/terminal and adaptive projection retained
+the original49,113-byte summary and original commit. No summary generation,
+commit, provider call, input or source mutation occurred in this qualification.
+This is installed helper/result projection, not a second full manual/adaptive
+execution, and it does not qualify the still-failing physical warm return.
+The immutable prefix is the receiving worktree's
+`.artifacts/runtime-compaction499-result-family-20261001`.
+
+## Original character-cadence source and consumer closure
+
+The canonical producer chain is the original provider AssistantMessageEventStream
+through selectedStream's visible queue, native completeSummarization callbacks,
+sourceCallbacks and CompactionPlan.progress, then RPC output. Each text callback
+gets aggregate source counts from the one plan but the current concurrent leaf's
+phase. History and current-turn source members share that original plan.
+
+Python's existing PiRpcChannel decodes the progress record once.
+SelectedSummarySlot awaits its existing on_event callback inside readline.
+Manual calls the existing effects publication directly; adaptive goes through
+TurnProgress.consume, then that same effects publication. AcpEventConsumer
+awaits TurnRunner.observe_compaction before sending CompactionChangedUpdate.
+CompactionObservation reads the original registry owner and lease; transition_turn
+reads current state again. A differing phase takes the original wire/registry
+write and a fresh state read before the turn update. The registry is not a
+per-character text store. Existing observed_at_ms(compare=False) already prevents
+clock-only writes. Concurrent leaf summary_phase changes still compare unequal.
+Arendt owns that existing source/turn projection declaration and its consumers;
+Sch owns producer semantics. No timer, throttle or progress mirror is proposed.
+
+The original ACP log contains5,105 measured progress records and5,100 text
+fragments,21,406 characters,2,386 leaf-phase switches and2,412 turn updates.
+Native callback clock gaps were median23ms for history and33ms for current-turn.
+The all-source-completed callback clock is23:21:42.251Z; saved native commit is
+23:35:53.485Z,851.234s later. These clocks locate a downstream gap after provider
+summary generation, but do not partition final packing, RPC buffering/consumption,
+registry locking/publication and native commit. ACP records have no receive
+timestamps. This is a concrete consumer backpressure lead, not a claim that all
+851 seconds are registry work or a direct provider TTFT measurement.
+
+Toad's declared CompactionRenderer consumes the original CompactionChangedUpdate;
+it excludes map text using the original source phase, then appends to the
+operation-owned CompactionStream under LiveOutput. StreamingMarkdown.write uses
+Textual MarkdownStream's existing queue and coalescing append worker. There is
+no typewriter pacing or per-character delay. Large sources may require full
+paged-source preparation; Heisenberg owns the physical/cost/resource evidence.
+CompactionEnd retires that live resource and invalidates the existing transcript.
+The new candidate policy does not prove the public498/native53b8 stream cadence.
+Original recordings and journals are protected. Source evidence and package
+qualification are under `evidence/selected-native-compaction-budget-20261001`.

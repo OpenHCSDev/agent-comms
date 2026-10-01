@@ -1,0 +1,72 @@
+{
+  "state": "original readonly source/cadence finding; latency fix not claimed",
+  "candidate_core": "07934d583cd1175f17a8843d3e7feec5093c2fb5",
+  "candidate_native": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "default_core": "9954cdd73dff20e590aebf15467a170f0a69e799",
+  "default_native": "53b8c413d90aa6b1",
+  "log": "/home/ts/.local/state/toad/logs/Agent_Comms_2026-10-01T18_52_03_807638.txt",
+  "log_sha256": "a4dfe0fb8803bde8ee2543c141b16299c9076e3a84640d3b3027c42d8a80122b",
+  "progress_records": 5105,
+  "text_records": 5100,
+  "text_chars": 21406,
+  "phases": {
+    "history": {
+      "text_records": 3095,
+      "chars": 13101,
+      "first_native_clock_ms": 1790896804127,
+      "last_native_clock_ms": 1790896901868,
+      "median_native_clock_gap_ms": 23.0,
+      "max_native_clock_gap_ms": 2649
+    },
+    "current-turn": {
+      "text_records": 2005,
+      "chars": 8305,
+      "first_native_clock_ms": 1790896803348,
+      "last_native_clock_ms": 1790896863421,
+      "median_native_clock_gap_ms": 33.0,
+      "max_native_clock_gap_ms": 672
+    }
+  },
+  "leaf_phase_switches": 2386,
+  "all_turn_changed_records": 2412,
+  "last_source_progress": {
+    "line": 7519,
+    "chars": 0,
+    "source": {
+      "sourceBytesDone": 389430,
+      "sourceBytesTotal": 389430,
+      "summaryPhase": "history",
+      "startedAtMs": 1790896800107,
+      "observedAtMs": 1790896902251
+    }
+  },
+  "native_commit": {
+    "id": "00811c7a6dc947c79f090f4b5317ebb8",
+    "entry": "608c415c",
+    "utc": "2026-10-01T23:35:53.485Z",
+    "summary_chars": 49059,
+    "summary_utf8_bytes": 49113,
+    "usage": {
+      "input": 100720,
+      "output": 5108,
+      "totalTokens": 105828,
+      "reasoning": 0
+    }
+  },
+  "native_answer": {
+    "entry": "42c3f6d7",
+    "user_entry": "c5b7e179",
+    "utc": "2026-10-01T23:36:06.526Z",
+    "stop_reason": "stop",
+    "text": "Compaction499UI20261001-one acknowledged.",
+    "usage": {
+      "input": 37779,
+      "output": 14,
+      "totalTokens": 37793
+    }
+  },
+  "all_source_generated_to_native_commit_seconds": 851.234,
+  "source_observation_clock_excluded_from_equality": true,
+  "registry_read_on_every_progress": true,
+  "scope": "Native clock sampled when original callback emits; not direct provider network-arrival or ACP receive/paint clock. Gap includes native final packing, buffered RPC consumption, synchronous registry/publication and commit. No sole-cause attribution. Default stream not measured by this candidate."
+}
