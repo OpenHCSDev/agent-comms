@@ -30,6 +30,29 @@ def capture(comms):
     return HumanInputOrigin.capture(comms, comms.registry.snapshot().admission_identity("beta"))
 
 
+def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tmp_path):
+    from agent_comms.acp_extension import (
+        AvailableQueueProjection, PendingQueueProjection, QueueChangedUpdate,
+        QueueScope, UnavailableQueueProjection,
+    )
+    comms, agent, _, _ = _owner(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    admission = comms.registry.snapshot().admission_identity('beta')
+    scope = QueueScope('beta', admission, comms.registry.require('beta').pid)
+    for projection in (PendingQueueProjection(), UnavailableQueueProjection()):
+        observation = QueueChangedUpdate(None, 0, projection)
+        assert FieldCodec.decode(QueueChangedUpdate, FieldCodec.encode(observation)) == observation
+        with pytest.raises(ValueError, match='queue'):
+            observation.projection.capture_human_input(comms, observation.scope)
+    malformed = FieldCodec.encode(QueueChangedUpdate(scope, 0, AvailableQueueProjection()))
+    malformed['scope'] = None
+    with pytest.raises(ValueError, match='original attachment scope'):
+        FieldCodec.decode(QueueChangedUpdate, malformed)
+    observation = QueueChangedUpdate(scope, 0, AvailableQueueProjection())
+    assert observation.projection.capture_human_input(comms, scope) == capture(comms)
+    assert not agent.inputs.dispositions.read().rows
+
+
 async def test_original_human_followup_survives_forwarding_reservation_and_native_disposition(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()

@@ -17,7 +17,7 @@ from .agent_events import CompactionEvent
 from .compaction_states import CompactionPublishedMetadata
 from .declared_family import DeclaredFamily
 from .input_attempt import ACPInputIdText, InputAttempt
-from .input_origin import InputOrigin, UnattributedInputOrigin
+from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .field_codec import FieldCodec
 from .goal_presentation import GoalExecution
 from .goals import Goal
@@ -307,6 +307,13 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     @abstractmethod
     def feedback(self, supported: bool) -> str: ...
 
+    def validate_scope(self, scope: QueueScope | None) -> None:
+        """Pending/unavailable wire observations may have no scope."""
+
+    def capture_human_input(self, comms, scope: QueueScope | None) -> HumanInputOrigin:
+        """Pending/unavailable observations cannot certify original ingress."""
+        raise ValueError(self.feedback(True))
+
 
 @dataclass(frozen=True)
 class PendingQueueProjection(QueueProjection):
@@ -340,12 +347,25 @@ class AvailableQueueProjection(QueueProjection):
     def feedback(self, supported: bool) -> str:
         return ""
 
+    def validate_scope(self, scope: QueueScope | None) -> None:
+        # Null is admitted by the external observation envelope for unavailable
+        # queues. An available observation without its scope is malformed, not
+        # another waiting state or permission to infer a different admission.
+        if scope is None:
+            raise ValueError('Available input queue has no original attachment scope.')
+
+    def capture_human_input(self, comms, scope: QueueScope) -> HumanInputOrigin:
+        return HumanInputOrigin.capture(comms, scope.admission)
+
 
 @dataclass(frozen=True)
 class QueueChangedUpdate(AgentCommsUpdate):
     scope: QueueScope | None
     revision: int
     projection: QueueProjection
+
+    def __post_init__(self):
+        self.projection.validate_scope(self.scope)
 
     def for_session(self, session_id: str) -> QueueChangedUpdate:
         return (
