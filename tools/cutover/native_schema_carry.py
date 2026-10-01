@@ -137,6 +137,7 @@ def carry_coordination(db, original, target):
     before_objects, before_rows = objects(db), inventory(db)
     old_inputs = [dict(zip(columns(db, 'native_runtime_input'), row)) for row in rows(db, 'native_runtime_input')]
     from agent_comms.native_input_record import NativeInputExecution
+    from agent_comms.native_runtime_input import NativeRuntimeSchemaMeta
     from agent_comms.coordination_tables.assignments import WakeAssignment
     if any(name.startswith('selected_native_sources') for name in before_objects):
         raise ValueError('Intermediate batch4 source attestation requires its owning carry review')
@@ -163,13 +164,15 @@ def carry_coordination(db, original, target):
         if cursor[1] != anchor:
             raise ValueError('Original cursor anchor differs from its physical native input')
     with closing(sqlite3.connect(':memory:')) as target_shape:
-        for sql in target.runtime.values():
-            target_shape.execute(sql)
+        NativeRuntimeSchemaMeta.create_schema(target_shape)
         payload = {}
         for name in ('native_runtime_input', 'current_native_cursor'):
             fields = columns(target_shape, name)
             payload[name] = (fields, projection(db, name, fields, {'assignment_id'}))
-        payload['native_runtime_schema_meta'] = (columns(target_shape, 'native_runtime_schema_meta'), [(1, 5, target.runtime_digest)])
+        payload[NativeRuntimeSchemaMeta.declared_name] = (
+            columns(target_shape, NativeRuntimeSchemaMeta.declared_name),
+            rows(target_shape, NativeRuntimeSchemaMeta.declared_name),
+        )
         payload['native_runtime_triage_sources'] = (columns(target_shape, 'native_runtime_triage_sources'), [])
     rebuild(db, target.runtime, payload)
     for item, execution, assignments in captured:
