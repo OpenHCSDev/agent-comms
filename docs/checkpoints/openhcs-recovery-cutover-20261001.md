@@ -95,3 +95,32 @@ receipt is `evidence/openhcs-recovery-cutover/operator-controls01.json`; this pr
 that resource/artifact boundary, not public preflight or batch execution. Native
 and source uncertainty authorities remain untouched. No runtime reset is required
 by this source-format cohort; original native SQL schema4 is preserved.
+
+
+## Final combined affected gates: received, not public activation
+
+Kepler's fresh existing476 native fixture on exact finalcac7/7572/native593 passed
+18.5917s: original writer waiting before grant, joined cancel with zero POSTs,
+unchanged deferred input, independent triageFULL plus one canonical reply from
+two native originals/two localhost POSTs. Eleven notification packets contain
+thirteen typed facts. All workers retired; no public/paid input or replay.
+Persistent original receipt: /home/ts/wt/ac476-final-native02/receipt.json,
+SHA25668c000b95ac097db84d281e7e4b00c30003a161aef7cdc103d2f59c4ee203064.
+Kepler published its scoped review on evidence branch c610b51b. It does not claim
+Toad UI or public provenance publication.
+
+Mendel's combined06 actual external installed archive journey passed on that
+same final pair: native saved history, End to the original17:14:47 answer and
+channel history return. Arendt personally inspected those three PNGs. Required
+native/End DTOs remain captured; the unused expanded-selector remote DTO alone
+is an image marker in tool273, with the original45s bound retained. Cleanup is
+empty; original41MB source/public manifests and archives remain unchanged per
+contributor protection checks. No native inputs, bindings or public writes.
+Raw recorder assessment remains unreviewed (recorder metadata, not a semantic
+review); Mendel and Arendt's actual frame inspection supplies that distinction.
+Receipt SHA256c6daa9ed34f36a9efd02d6445e2c27432c6e3bc25dbfa3863a7d3fc005296abd.
+Sanitized receiving review: evidence/openhcs-recovery-cutover/
+final-private-archive-review.json. Parent alone accepts scope-correct actual gate
+artifacts for the operator. Command defaults still contain no gate hashes and
+there is no execution by Arendt. Public channel acceptance follows the reviewed
+provenance/index publication; its preserved pre-carry refusal is not a pass.
