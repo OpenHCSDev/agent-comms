@@ -1,0 +1,33 @@
+{
+  "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "toad": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+  "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+  "driver": "3a3a36059da0c615990ff39f18754ab16ff064b1",
+  "pid": 51672,
+  "argv": [
+    "script",
+    "-q",
+    "-e",
+    "-f",
+    "-T",
+    "/home/ts/wt/g458g/m01/terminal.timing",
+    "-c",
+    "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/bin/python /home/ts/wt/g458g/menu-control.py",
+    "/home/ts/wt/g458g/m01/terminal.ansi"
+  ],
+  "activation_sha256": "c354f5e5ad7faff5901b144bf5233ad305d589e0b1d073dc51223eb6f016daa3",
+  "private_fixture": "/home/ts/wt/g458g/m01/fixture",
+  "provider_budget": 0,
+  "paid_calls": 0,
+  "public_mutations": 0,
+  "old_u01_preserved": true,
+  "old_input_replay": false,
+  "started_utc": "2026-09-30T23:28:00.745028+00:00",
+  "resource_preflight": {
+    "level": "warning",
+    "ram_available_gib": 15.8,
+    "home_free_gib": 11.3,
+    "swap_used_gib": 8.7,
+    "authorization": "one bounded serial gate; original no-input failure retained; explicit reviewed driver continuation"
+  }
+}

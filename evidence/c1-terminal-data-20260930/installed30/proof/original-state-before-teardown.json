@@ -1,0 +1,63 @@
+{
+  "observed_ns": 289171193880882,
+  "original_error_type": "TimeoutError",
+  "original_error": "",
+  "screen_type": "ContextMenu",
+  "provider_posts": 0,
+  "fixture_root": "/home/ts/wt/g458h/u01/fixture/private-root/wire",
+  "native_driver": "LinuxDriver",
+  "headless": false,
+  "capture_phase": "after_original_predicate_failure_before_fixture_teardown",
+  "canonical_threads": {
+    "beta": {
+      "name": "beta",
+      "tags": [
+        "team"
+      ],
+      "worktree": "/home/ts/wt/g458h/u01/fixture/application/project",
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 125683,
+        "start_time": 28914606
+      },
+      "session_file": null,
+      "model": "selected-offline/fixture",
+      "thinking_level": "off",
+      "goal": null,
+      "created_at": 1790813502.8033261,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "title": null,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "user": {
+      "name": "user",
+      "tags": [],
+      "worktree": "/home/ts/wt/g458h/u01/fixture/application/project",
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "session_file": null,
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "created_at": 1790813503.70661,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "title": null,
+      "role": "user",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "native_dom": [],
+  "focused_type": "NoneType",
+  "focused_id": null
+}

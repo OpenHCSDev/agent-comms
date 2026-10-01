@@ -46,3 +46,9 @@ The inherited milestone/outcome gap above is now corrected in the second source 
 `tracked-state-focus20.log`: **41 passed in 1.51 s** through actual decoder/stream/saved projection plus state relation tests and guards. `tracked-state-focus19.log` preserves the failed test's wrong exception-class assertion; the product continues to raise original NativePiUnavailable. These are source checks, not an installed native journey.
 
 Arendt owns the disjoint selected-start resource pair and the parent's newly granted prepared-model caller closure. The frozen ea8/c075 install remains untouched. The producer owner will integrate those state closures, current main and substantive 252/460 domain corrections before ONE affected real native/ACP/Toad journey; this source checkpoint does not declare readiness or replay old attempts.
+
+## Current main ACP crossing and next user journey
+
+Normal merge of main `03e9e4b6` incorporates 463 typed ACP error decoding and 465 original proxy retirement. No C1 production change is made by this integration. The existing Pi/terminal payload, FieldCodec JSON shape and C1 guard crossing passes **34 in0.89s**; `merged-source22.json` records the exact source and scope. This supports source preparation only.
+
+The next newly coherent installed native/ACP/Toad gate must show the original input in submission for an idle agent and queue for a busy agent **before delivery**. Once physically presented, the same original input must remain visible once through its transfer into native user/chat, joined by original ACP and native IDs. Kepler owns the actual incremental ANSI oracle, Heisenberg owns the duplicate caption/source publication correction, Arendt owns selected-start/prepared StateData, and Einstein owns the sole installed joint gate. No old uncertain input or frozen gate is replayed. Current live253 does not include these queue/backend candidate changes.

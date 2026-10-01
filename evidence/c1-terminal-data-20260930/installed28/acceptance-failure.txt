@@ -1,0 +1,21 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/l0a_native_installed_pilot.py", line 310, in main
+    await acceptance(app, pilot, agent, comms, entered, release,
+                     hold_next, requests)
+  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/input_visibility_native_installed_pilot.py", line 203, in acceptance
+    await fork_acceptance(app, pilot, agent, comms, entered, release, hold_next, requests)
+  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/first_fork_native_installed_pilot.py", line 150, in acceptance
+    parent_view, dialog = await open_fork_dialog(app, pilot, comms, release, hold_next)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/first_fork_native_installed_pilot.py", line 84, in open_fork_dialog
+    row = await reveal_thread_row(app, pilot, 'beta', '#team')
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/saved_state_user_journey_pilot.py", line 257, in reveal_thread_row
+    await until(pilot, lambda: any(row.target_name == name for row in group.member_rows))
+  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/l0a_native_installed_pilot.py", line 51, in until
+    while not predicate():
+              ~~~~~~~~~^^
+  File "/home/ts/wt/toad-input-delivery-visibility-20260930/tests/saved_state_user_journey_pilot.py", line 257, in <lambda>
+    await until(pilot, lambda: any(row.target_name == name for row in group.member_rows))
+                                                                      ^^^^^^^^^^^^^^^^^
+AttributeError: 'ChannelGroup' object has no attribute 'member_rows'
