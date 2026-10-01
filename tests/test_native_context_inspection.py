@@ -13,7 +13,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_turn_context import NativeContextData
 from agent_comms.runtime import RuntimeConnection, socket_path
 from agent_comms.threads import Thread
-from agent_comms.goals import Goal
+from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, RuntimeInvocable, SetGoalAction, StandbyGoalAction
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from delivery_owner_fixture import canonical_agent
 
@@ -99,15 +99,18 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
     class View:
         async def session_update(self, session_id, update):
             updates.append(update)
-            failures.extend(fact for fact in decode_updates(update.get("_meta"))
+            failures.extend(fact for fact in decode_updates(update.field_meta)
                             if isinstance(fact, (InputFailedUpdate, RequestFailedUpdate)))
 
     owner.on_connect(View())
     thread = Thread("context-source", frozenset(), str(project),
         process_identity=ProcessIdentity.capture(os.getpid()),
-        session_file=str(fixture.session), model="response-local/fixture", thinking_level="off",
-        goal=Goal("Preserve the exact retained source; never replay an uncertain input.", "context-goal"))
+        session_file=str(fixture.session), model="response-local/fixture", thinking_level="off")
     owner._comms.registry.declare(thread)
+    peer = Thread("context-peer", frozenset(), str(project),
+                  process_identity=ProcessIdentity.capture(os.getpid()))
+    owner._comms.registry.declare(peer)
+    peer_lease = owner._comms.agents.begin_turn(peer.name, "context-fixture-peer", "Independent context fixture")
     output = fixture.root.parent / "context-journey"
     output.mkdir(mode=0o700)
 
@@ -124,6 +127,16 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
     try:
         await owner._runtime.start()
         await owner.load_session(str(project), thread.name)
+        # Seed an authentic active-but-waiting goal through its declaration and
+        # original grant/wait owners. A bare ActiveGoal without a READY grant is
+        # correctly blocked by the live observer; never patch that scheduler.
+        goal = owner._comms.goals.update_goal(thread.name, SetGoalAction(
+            text="Preserve the exact retained source; never replay an uncertain input.",
+            expect=GoalPrecondition(expected_owner=thread.require_process())),
+            actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())
+        owner._comms.goals.update_goal(thread.name, StandbyGoalAction(
+            wait_for=(peer.name,), expect=GoalPrecondition(goal_id=goal.id)),
+            actor=RuntimeInvocable)
         await owner.turns.prepare_selected_session(thread.name, thread)
         before_query = fixture.session.read_bytes()
         preview = await cli()
@@ -175,3 +188,4 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
             "python": sys.executable}), flush=True)
     finally:
         await owner.shutdown()
+        owner._comms.agents.finish_turn(peer_lease)

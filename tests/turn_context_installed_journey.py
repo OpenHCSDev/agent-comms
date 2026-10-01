@@ -19,11 +19,13 @@ async def run(root):
     root.mkdir(mode=0o700)
     monkey = MonkeyPatch()
     fixture = native_backend.__wrapped__(root, monkey)
+    original = None
     receipt = {"python": sys.executable, "core": agent_comms.__file__, "fixture": str(root),
                "public_inputs": 0, "paid_provider_calls": 0}
     try:
         original = await anext(fixture)
-        await test_context_manifest_native_acp_and_cli_continuous(original)
+        async with asyncio.timeout(90):
+            await test_context_manifest_native_acp_and_cli_continuous(original)
         receipt["state"] = "SCOPED_PASS"
     except BaseException as error:
         receipt["state"] = "FAILED_NO_REPLAY"
@@ -32,6 +34,8 @@ async def run(root):
     finally:
         await fixture.aclose()
         monkey.undo()
+        if original is not None:
+            receipt["local_provider_posts"] = original.provider.posts
         receipt["elapsed_seconds"] = time.monotonic() - started
         (root / "terminal-receipt.json").write_text(json.dumps(receipt, indent=2))
         print(json.dumps(receipt), flush=True)

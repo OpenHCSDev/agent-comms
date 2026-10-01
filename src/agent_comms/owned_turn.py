@@ -331,14 +331,8 @@ class OwnedTurn:
         # Existing local ACP owner session only. If delivery is uncertain,
         # the keyed metadata remains pending; never invent a bus recipient.
         await self.runner.effects.publish_pending_compaction(self.session_id, self.thread_name)
-        from .turn_context import InjectionSegment, OwnerProvenance
-
-        self.context = self.context.append(
-            InjectionSegment(
-                provenance=(OwnerProvenance(self.thread.incarnation, self.turn_id),),
-                content=self.runner.comms.bus.awareness_prompt(self.thread),
-            )
-        )
+        for segment in self.runner.comms.bus.awareness_segments(self.thread):
+            self.context = self.context.append(segment)
         pending_key = self.original.compaction_key(self.thread.session_file)
         if self.runner.adaptive_compaction_enabled and pending_key is not None:
             from .owner_compaction_adaptive import maybe_compact_owner_turn

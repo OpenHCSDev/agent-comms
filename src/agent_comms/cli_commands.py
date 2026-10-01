@@ -665,6 +665,8 @@ class ContextCliCommand(CliCommand):
         context = TurnContext.for_owner(owner, NextContextTurn(), "", ctx.views.thread_views())
         for segment in owner.context_goal_segments():
             context = context.prepend(segment)
+        for segment in ctx.bus.awareness_segments(owner):
+            context = context.append(segment)
         launch = PrivateNkLaunch.from_environment(
             ctx.root, ctx.owners.restart_environment(os.environ)
         )

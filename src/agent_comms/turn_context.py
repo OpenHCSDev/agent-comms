@@ -153,11 +153,6 @@ class MeasuredNativeSegment(ContextSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InjectionSegment(SuppliedSegment, ContextSegment):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
 class SystemLayerSegment(MeasuredNativeSegment):
     content: str
     tokens: int
