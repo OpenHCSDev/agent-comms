@@ -38,8 +38,18 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         install_native_runtime_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[5]
+    version: Literal[5] = field(default=5, kw_only=True)
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        """Create this owner's current declarations on an explicitly fresh store."""
+        from .coordinated_runtime_schema import _schema, _digest
+
+        schema = _schema()
+        for statement in schema.values():
+            db.execute(statement)
+        cls(singleton=1, ddl_digest=_digest(schema)).insert(db)
 
     @classmethod
     def triggers(cls) -> dict[str, str]:

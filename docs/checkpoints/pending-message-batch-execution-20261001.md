@@ -181,7 +181,8 @@ The carry must freeze after the remaining response-route relation is settled:
    coordinator state before the installer publishes the coherent pair. Keep
    original DB/journal hashes. No restart between DB and sidecar publication.
 
-The carry is not implemented or activation-ready yet. No runtime old reader,
+The one-shot carry is implemented in `tools/cutover/native_source_carry.py`,
+not yet executed or activation-ready. No runtime old reader,
 compatibility alias, automatic rewrite or reset is provided. Parent and Arendt
 received the concrete contract on PR493; no acknowledgment is assumed.
 
@@ -205,3 +206,35 @@ Complete the nominal family/route/carry implementation first; batch validation
 and the actual affected installed native/ACP journey last. The earlier five
 originals plus late-arrival installed native PASS (21.199 s) belongs to source
 `3e14c2ee`, whose wheel and original fixture remain preserved separately.
+
+## One-shot source carry implementation (not executed)
+
+`prepare_original(root)` runs with the authentic schema-four interpreter. It
+strictly reads original input/cursor declarations and the existing sidecar
+owner, checks original binding/input/source and cursor references, and exports
+raw SQL cells plus source file witnesses. No original journal decoding,
+process/native calls, `Comms` initialization, schema install or public mutation.
+Old multi-source prototype tables are explicitly refused, not silently carried
+as another source truth.
+
+`carry_into(staged_root, packet, expected_stage_non_native_digest)` runs with the
+target on the parent's disposable COPIED coordinator. The mandatory reviewed
+stage digest allows Arendt's separately owned lifecycle carry to run first;
+native carry must leave that reviewed non-native state unchanged. It refuses
+the original root and hardlink aliases. It replaces only the copied native
+schema, copies every surviving RAW SQL cell and strictly acquires it with the
+current declarations. Existing `NativeInputExecution.record_sources` creates
+triage membership or verifies FULL against existing execution links. It refuses
+additional unproven FULL members and retains uncertain reservations as-is.
+The current `NativeRuntimeSchemaMeta.create_schema` owns schema creation for
+both bootstrap and cutover; there is no second DDL installer or version owner.
+
+The original binding rows are projected into a separate current sidecar artifact
+using existing `create_sidecar_file` / `sidecar_connection`. The old binding file
+is not replaced by this tool. Output names both artifacts and original counts;
+parent alone assembles/publishes them under stopped-owner custody. A failure
+cannot activate anything and preserves originals plus the failed copied stage.
+Parent must preserve its original journal/witness archive, integrate the final
+response-route/lifecycle migration, and execute the one affected installed
+journey after coherent source closure. No test or migration run was substituted
+for design. Delete the transient cutover tool once that carry is accepted.
