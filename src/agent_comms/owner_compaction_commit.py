@@ -198,10 +198,14 @@ class OwnerCompactionCommit:
         """Link one committed result after rechecking the same owner and ingress."""
         evidence = operation.committed_outcome()
         intent = NativeIntent.read(operation)
+        if intent.witness != source.native:
+            raise CompactionJournalError("Selected native commit belongs to another source")
+        committed_source = source.after_native_commit(evidence)
         with self.boundary.hold(
-            owner, owner_generation, intent.witness, pending_input_key=source.pending_input_key
+            owner, owner_generation, committed_source.native,
+            pending_input_key=source.pending_input_key,
         ) as held:
-            source.require_current(held)
+            committed_source.require_current(held)
             if self.journal.operations.get(operation.commit_id) != operation:
                 raise CompactionJournalError("Selected native commit changed")
             current_identity = identity.after_native_commit(intent.witness.session_file, evidence)
