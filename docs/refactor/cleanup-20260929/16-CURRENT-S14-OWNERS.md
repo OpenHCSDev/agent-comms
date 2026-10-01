@@ -31,9 +31,9 @@ Full254 performance continues independently and does not hold this release.
 
 | Workflow | Integration owner | Current work and acceptance |
 | --- | --- | --- |
-| Transcript source and sidebar publication | Heisenberg, Toad252 | Source6d58fe3a includes917c pivot and shared SidebarGroup member custody. Actual saved-resource/held-preparation source pilots pass one history/answer, readable channel member, collapse during held work and original relationship-row reuse. Same-cohort installed gate remains due. |
-| Continuous physical queue/fork/cancel journey | Einstein, Core458; original input controls Kepler251 | First physical Enter pending-before-Started and once-chat passed u02/u03. Remaining fork/five-input journey incomplete. Reviewed25562/251214 cleanup and native mounted/focused dialog helpers are integrated. Run the corrected immutable pair after preflight, retaining strict original queue/frame assertions. |
-| Canonical bus and open DM/IRC/tab-return projection | Schrodinger, Core460 | u05 hot original/reply/status and 31-second open-view uniqueness pass; first return response is saved once and delivered through ACP, but UI predicate fails. Capture original worker/resource/frame state before cleanup on the corrected build. |
+| Transcript source and sidebar publication | Heisenberg, Toad252 | Source6d58fe3a pivot/sidebar corrections are integrated. Corrected launcher gets through actual menu/fork/five input/cancel controls; strict emitted frame983 still duplicates saved/live first-fork input and answer. Trace original advance_committed/page publication/retirement atomicity; no unchanged rerun or waiver. |
+| Continuous physical queue/fork/cancel journey | Einstein, Core458; original input controls Kepler251 | First physical Enter pending-before-Started and once-chat passed u02/u03. u02 all five continuous functional controls pass; strict emitted-frame review fails duplicate first-fork input+reply. Original terminal1/cleanup[] preserved. Main-guard correction proves earlier unmounted menu symptom was not a product verdict. Source252 correction is next dependency. |
+| Canonical bus and open DM/IRC/tab-return projection | Schrodinger, Core460 | Corrected u06 terminal0 passes source/protocol/compositor text journey: hot replies/handling,31 samples,3 tab-return sends and cold source once. Original NO_COLOR/TERM=dumb captures have unproven physical color visibility; qualify using actual terminal path without recoloring or replay. |
 | Paired source, metadata, merging and public cutover | Parent, Toad250/Core432 | Review whole affected owners/consumers, merge coherent source, freeze exact pins, require actual same-build journeys, then canonical quiet cutover. |
 | Full warm-history/scroll/CPU/resources | Heisenberg, Toad254 | Source4ad3c6aa preserves original body readiness, native geometry reuse and shared retirement/page admission. Source controls pass; physical CPU/tab/fast-reverse-End improvement remains unverified. |
 
@@ -56,7 +56,7 @@ remains available for the deferred value-type inventory; no new provider fleet.
   changes. Verified disposable cleanup and SessionRevision inventory complete.
 - Parent459: shared fresh-file/source proof policies and native controls complete;
   source5743a8c5 included in970. No enrollment permission reconstructed from stat.
-- Core463/464/465/466 and Textual15 are merged. Prompt replacement is active in
+- Core463/464/465/466, Textual15 and test-only Toad255 are merged. Prompt replacement is active in
   the project file; no claim that existing workers reread it. Typed ACP errors,
   attachment close/join and shared NRA ratchet are in970. Textual damage fix6b
   is staged; public Textual remains2e49.

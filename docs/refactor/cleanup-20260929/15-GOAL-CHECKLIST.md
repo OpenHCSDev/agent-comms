@@ -1,36 +1,34 @@
-## Current checkpoint: corrected source pair frozen, new assembly dispatched
+## Current actual acceptance: bus functional pass, native paint failure
 
-Toad25085d45b512cac88bdf5dd8870f41e53768ab3c009 normally includes251214aaacb,
-2526d58fe3a and25562d6a36c plus current253/main. Exact Core970/Textual6b/SDK0.12.1/
-native593/auditd392 metadata is unchanged. New normal immutable stage is
-runtime-source-publication-custody-20260930; Schrodinger is its existing builder.
-Actual native/ACP/Linux terminal queue/fork/cancel and open-DM/IRC/tab-return bus
-journeys run independently in parallel after same-cohort preflight. The prior
-failed prefix and original native inputs remain intact. Public scoped253 stays
-unchanged; neither source freeze nor package controls establish live readiness.
+Corrected immutable85/970/6b/SDK0.12.1/native593 package/source/runtime preflight
+passes69distributions,303/304/266 original file equality and cleanup[]. Public
+installation remains scoped253 and the full goal remains active.
 
-Parent reviewed whole source publication and shared sidebar owners/consumers.
-252917c fixes undefined captured loader and concurrent duplicate-history
-publication:1production line deleted/3added.2526d58 shares original member-lock
-custody across channel and relationship families:117production lines deleted,
-including deindentation;19substantive deleted ignoring whitespace. Actual saved
-resource and held-preparation source pilots pass one history/readable answer,
-original wire notice, channel row while next preparation waits, real collapse
-during held work, reversal, native strips and original relationship-row reuse.
-These pilots use Coreba938/Textual2e49; same-cohort installed acceptance is due.
+Bus u06 terminal0/129.467s passes actual protocol/source/compositor-text hot
+DM/IRC reply+handling,31 duplicate-free samples,3 physical tab-return sends
+and cold source/native input once. Original SVG color visibility remains
+unproven: inherited NO_COLOR/TERM=dumb produces black-on-black captures. Sch
+owns terminal qualification, preserving artifacts without recoloring/replay.
 
-251214 adds native mounted/focused/hittable dialog readiness through one existing
-fixture helper, without forcing focus or changing bindings/timeouts.25562
-completes original owner/child/lock cleanup after failures while preserving
-exception chain;0production delta. Original m01/u04 failures remain separately
-qualified. Schrodinger460 preserves native/ACP return answer once plus hot31s
-uniqueness/idle positives; exact failed UI zero-versus-two count remains unknown.
-Next-run failure capture records original workers/resources/frame before cleanup.
+Native u01 exposed an unguarded test wrapper: renderer spawn reexecuted main
+and failed fixture creation. Standard main guard correction is test-only;
+actual u02 then passes roster/menu/declared Escape, canonical fork+immediate
+open+first reply, all5 physical pending-before-Started, busy queue and cancel.
+Strict original emitted frame983 still paints FIRST_FORK_NEW_INPUT and
+NATIVE_RESPONSE_2 twice after handoff (queue/submissions empty). Terminal1/
+78.971s, final cleanup[], original source postcleanup has one input/reply but
+cannot reconstruct failure-instant resources. Heisenberg252 owns atomic
+saved-history/live publication and retirement closure; no assertion waiver,
+unchanged rerun or broad readiness claim.
 
-Heisenberg resumes original254 performance in parallel; Arendt updates the
-existing canonical quiet operator for this new source target, gates unfilled
-until actual new receipts. Current owners and full remaining scope are in
-16-CURRENT-S14-OWNERS.md. No original prompt replay, public reset or signals.
+Reviewed source pivot/shared member corrections are in frozen25085d45b51.
+Toad255 test cleanup is merged34a2ced3; no product/dependency changes. Arendt's
+same prepared operator binds new package hashes but both actual-ready gates
+remain unfilled. Actual public13idle/4same-Toad-root clients were observed;
+future quiet admission must recapture state and retire clients gracefully.
+Native sessions/proofs/UNKNOWN and durable history remain protected. Current
+owners and full remaining scope stay in16-CURRENT-S14-OWNERS.md. Detailed
+parent evidence:evidence/source-publication-custody-20260930/parent-package-review.json.
 
 ## 2026-09-30 normal candidate installed; physical regression acceptance started
 
