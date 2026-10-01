@@ -1,0 +1,1 @@
+Installed workflow01 refused before fixture creation: pytest --basetemp parent .artifacts did not exist (FileNotFoundError). No root/input/native/provider side effects. Subsequent console read also did not execute because its output parent did not exist. Corrected by creating the owned artifacts parent before a fresh workflow02.

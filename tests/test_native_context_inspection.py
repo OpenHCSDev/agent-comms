@@ -17,7 +17,7 @@ from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, RuntimeIn
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
-from agent_comms.task_decisions import CurrentDecisionScopeSelection, OriginalDecisionChange
+from agent_comms.task_sources import CurrentTaskScopeSelection, OriginalTaskChange
 from agent_comms.tools import tool_catalog
 from delivery_owner_fixture import canonical_agent
 
@@ -66,7 +66,9 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
         assert fixture.saved_inputs() == []
 
 
-async def test_context_manifest_native_acp_and_cli_continuous(native_backend, receiving_only=False):
+async def test_context_manifest_native_acp_and_cli_continuous(
+    native_backend, receiving_only=False, authored_operations_only=False
+):
     """Actual Toad originals/followup, native Core tool and CLI on one source.
 
     The existing SDK source contract seeds real history/summary/image/resource
@@ -79,7 +81,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
     from agent_comms.goals import AbsentGoalCheckpoint, PresentGoalCheckpoint
     from agent_comms.goal_actions import ClearGoalAction
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
-    from agent_comms.task_decisions import CorrectionDecisionChange, UserDecisionSupersession
+    from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
     from agent_comms.compaction_journal import CompactionJournal
     from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.compaction_states import ManualCommittedSummary
@@ -93,6 +95,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
     out, err = await seed.communicate()
     assert seed.returncode == 0, err.decode()
     source = json.loads(out)
+    fresh_session, fresh_project = fixture.session, fixture.project
     fixture.session = Path(source["session_file"])
     # The SDK session's declared worktree is the source contract's project.
     project = fixture.root.parent / "sdk-source" / "project"
@@ -122,6 +125,18 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
         process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=str(fixture.session), model="response-local/fixture", thinking_level="off")
     owner._comms.registry.declare(thread)
+    if authored_operations_only:
+        from retained_context_native_journey import authored_context_operations
+
+        try:
+            await owner._runtime.start()
+            await owner.load_session(str(project), thread.name)
+            await owner.turns.prepare_selected_session(thread.name, thread)
+            await authored_context_operations(fixture, owner, thread, fresh_session, fresh_project)
+            assert failures == [], failures
+        finally:
+            await owner.shutdown()
+        return
     peer = Thread("context-peer", frozenset({'team'}), str(project),
                   process_identity=ProcessIdentity.capture(os.getpid()))
     owner._comms.registry.declare(peer)
@@ -177,8 +192,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
         choice = 'PRIVATE_ORIGINAL_CONTEXT_CHOICE'
         fixture.provider.tool_call = ('comms_decision', {
             'chosen': choice, 'rejected': ['PRIVATE_ORIGINAL_CONTEXT_ALTERNATIVE'],
-            'to': peer.name, 'scope': FieldCodec.encode(CurrentDecisionScopeSelection()),
-            'change': FieldCodec.encode(OriginalDecisionChange()),
+            'to': peer.name, 'scope': FieldCodec.encode(CurrentTaskScopeSelection()),
+            'change': FieldCodec.encode(OriginalTaskChange()),
         })
         fixture.provider.response_gate = asyncio.Event()
         originals = []
@@ -195,12 +210,12 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
                     private_choice, = owner._comms.bus.log.full_history()
                     supersession = owner._comms.messaging.send_user_message('#team',
                         'PUBLIC_USER_CORRECTION_WITHOUT_PRIVATE_BODY', worktree=str(project),
-                        decision=UserDecisionSupersession(CorrectionDecisionChange(private_choice.reference)))
+                        task=UserTaskSupersession(CorrectionTaskChange(private_choice.reference)))
                     fixture.provider.tool_call = ('comms_decision', {
                         'chosen': 'PUBLIC_CORRECTED_CONTEXT_CHOICE',
                         'rejected': ['PUBLIC_CONTEXT_ALTERNATIVE'], 'to': '#team',
-                        'scope': FieldCodec.encode(CurrentDecisionScopeSelection()),
-                        'change': FieldCodec.encode(CorrectionDecisionChange(private_choice.reference)),
+                        'scope': FieldCodec.encode(CurrentTaskScopeSelection()),
+                        'change': FieldCodec.encode(CorrectionTaskChange(private_choice.reference)),
                     })
                 previous = owner._comms.bus.log.context_manifests(thread.incarnation)
                 image = {'mimeType': 'image/png',
@@ -290,7 +305,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
             attempt = await observer.run(compact_receiver())
         captured = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
         snapshot = owner._comms.registry.snapshot()
-        assert captured.retained.current_decisions(snapshot.threads[receiver.name], snapshot) == ()
+        assert captured.retained.current_authored_sources(snapshot.threads[receiver.name], snapshot) == ()
         assert {fact.source.reference for fact in captured.retained.facts} == {
             supersession.reference, owner._comms.bus.log.full_history()[-1].reference}
         with NativeEntry.open_evidence(Path(receiver.session_file)) as reader:
@@ -336,8 +351,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
         assert fixture.provider.posts == 5
         assert owner._comms.bus.log.latest_sequence() == baseline_sequence + 3
         decision, user_correction, correction = owner._comms.bus.log.full_history()
-        assert decision.decision.chosen == choice
-        assert decision.decision.author == thread.incarnation
+        assert decision.task.chosen == choice
+        assert decision.task.author == thread.incarnation
         first_request = fixture.provider.requests[0]
         actual_tool = next(tool['function'] for tool in first_request['tools']
                            if tool['function']['name'] == declaration['name'])

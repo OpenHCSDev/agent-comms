@@ -1,0 +1,11 @@
+{
+  "state": "SDK_ORIGINAL_PATCH_SEAMS_SYNTAX_PASS_NOT_PACKAGE_OR_TOOL_EXECUTION",
+  "files": {
+    "evidence/retained-task-facts-s2-followup-20261001/sdk-recipe04/dist/core/tools/write.js": "b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0",
+    "evidence/retained-task-facts-s2-followup-20261001/sdk-recipe04/dist/core/tools/edit.js": "b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18",
+    "evidence/retained-task-facts-s2-followup-20261001/sdk-recipe04/dist/core/tools/agent-comms-file-artifact.js": "dde3e1a7ec4662238bf5c4fdb188aaa8092f72d9a541bba6e201b9b8bdcce227"
+  },
+  "new_native_build": false,
+  "new_provider_calls": 0,
+  "public_changes": []
+}

@@ -1,0 +1,90 @@
+{
+  "scope": "original human wire pin -> actual selected compaction -> atomic export -> fresh native ACP/Toad input",
+  "source": {
+    "seq": 1,
+    "message_id": "888e4f2ac61f"
+  },
+  "pin": {
+    "seq": 2,
+    "message_id": "70f974d55660"
+  },
+  "human_author": {
+    "name": "user",
+    "created_at": 1790871653.3267865
+  },
+  "selected_commit": "377886fff1df462ab992d831e2ef2527",
+  "native_compaction_entry": "931e3aea",
+  "fresh_native_input": {
+    "kind": "started",
+    "key": "acp:e4ea2f3958c24b84b4c5097aa4f5224a",
+    "sequence": null,
+    "owner": "authored-context-fresh",
+    "admission": 3,
+    "target": "authored-context-fresh",
+    "source_text": "S5_EXPORTED_CONTEXT_FIRST_INPUT",
+    "origin": {
+      "kind": "human",
+      "root_id": "bf5de15ba3614a6383e6ed1fc1fa5b66",
+      "author": {
+        "sender": "user",
+        "created_at": 1790871653.3267865,
+        "worktree": "/home/ts/wt/s5authored01/sdk-source/project"
+      },
+      "admission": {
+        "incarnation": {
+          "name": "authored-context-fresh",
+          "created_at": 1790871669.9886823
+        },
+        "admission_generation": 3
+      },
+      "project": "/home/ts/wt/s5authored01/project",
+      "goal": {
+        "kind": "absent"
+      }
+    },
+    "turn_id": "0da5a961d14e4abdacb7220fb8b18556",
+    "native_id": "f168bc6f6c29f061c3f455cc8115dccc",
+    "sent_text": "Coordination context: you are thread 'authored-context-fresh'; parent=None. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/wt/s5authored01/project'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: [{\"name\": \"context-source\", \"status\": \"running\", \"activity\": \"idle\", \"activity_detail\": \"\"}]\n\nS5_EXPORTED_CONTEXT_FIRST_INPUT\nChannel/source awareness unavailable; no delivery or read is implied.\n"
+  },
+  "export": {
+    "destination": "/home/ts/wt/s5authored01/project/AGENTS.md",
+    "format": "retained",
+    "scope": {
+      "kind": "authored_source",
+      "sources": [
+        {
+          "seq": 2,
+          "message_id": "70f974d55660"
+        }
+      ]
+    },
+    "limit": {
+      "kind": "full"
+    },
+    "boundary": {
+      "through_seq": 2,
+      "export_started_at": 1790871669.8216434
+    },
+    "source_messages": 1,
+    "exported_messages": 1,
+    "omitted_messages": 0,
+    "time_filtered_messages": 0,
+    "invalid_time_messages": 0,
+    "oversized_messages": 0,
+    "bytes_written": 879,
+    "output_sha256": "2c3885ca9a22945478c5caceeb47f8b56c479be0b4a7e27f86d1a9fab393d874",
+    "truncated": false,
+    "redacted_messages": 0,
+    "first_sequence": 2,
+    "last_sequence": 2,
+    "first_timestamp": 1790871653.856315,
+    "last_timestamp": 1790871653.856315
+  },
+  "verbatim_source_intact": true,
+  "fresh_session_had_no_parent_summary": true,
+  "local_provider_posts": 2,
+  "paid_public_inputs": 0,
+  "original_inputs_retried": 0,
+  "core": "/home/ts/.cache/agent-scratch/comms-s5-phase2-cli-20261001/venv/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "toad": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-s5-receiving61-20261001/lib/python3.14/site-packages/toad/__init__.py"
+}

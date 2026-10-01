@@ -1,0 +1,11 @@
+{"target_validated": true, "changed_messages": 1}
+{"state": "RETAINED_TASK_SOURCE_CARRY_INSTALLED", "root_id": "dc95316ef9544043960216f657421a28", "original_sha256": "6cfdabce242fe20fe0fd6e9f0f32f129db7ef89ce2fa5509a8239e5678dd23c6", "target_sha256": "24ff4421aeb9ee635b9e994418ed1b97509125760b24e99200a38920b8e6f6a6", "changed_references": [{"seq": 1, "message_id": "e3b3b3e38380"}], "through_seq": 1, "original_lock_retained": true, "native_writes": 0, "input_replays": 0}
+Candidate maintenance unavailable (ProjectionRebuildRequiredError)
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/tools/cutover/retained_task_installed_pilot.py", line 80, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/tools/cutover/retained_task_installed_pilot.py", line 53, in main
+    assert original in retained.current_authored_sources(beta, service.registry.snapshot())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

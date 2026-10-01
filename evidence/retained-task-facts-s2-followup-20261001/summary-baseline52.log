@@ -1,0 +1,3327 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-retained-task-facts-s2-followup-20261001
+configfile: pyproject.toml
+plugins: anyio-4.14.2, typeguard-4.5.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 61 items
+
+tests/test_selected_summary_journal.py ...FFFFFFFFFFFFFFFFFFFFFFFFF.F    [ 49%]
+tests/test_fresh_private_session.py ..............ss...F.FF........      [100%]
+
+=================================== FAILURES ===================================
+________ test_reservation_is_durable_unresolved_and_blocks_every_input _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b8388a0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_reservation_is_durable_unresolved_and_blocks_every_input(reserved):
+        journal, session, source = reserved
+>       operation_id = journal.summaries.reserve(session, source, operation_id="a" * 32)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+______ test_raw_send_fence_blocks_every_same_session_status_not_unrelated ______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b838510>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_raw_send_fence_blocks_every_same_session_status_not_unrelated(reserved):
+        journal, session, source = reserved
+        other = Path(session).with_name("other.jsonl")
+        other.write_text('{"type":"session","id":"other"}\n')
+        with journal.private_inputs.send_fence(Path(session)):
+            pass
+>       operation_id = journal.summaries.reserve(session, source)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:109: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_________ test_raw_send_fence_serializes_concurrent_direct_reservation _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b7a1250>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_raw_send_fence_serializes_concurrent_direct_reservation(reserved):
+        journal, session, source = reserved
+        started, finished = threading.Event(), threading.Event()
+        failures: list[BaseException] = []
+    
+        def reserve() -> None:
+            started.set()
+            try:
+                journal.summaries.reserve(session, source)
+            except BaseException as error:
+                failures.append(error)
+            finally:
+                finished.set()
+    
+        worker = threading.Thread(target=reserve, daemon=True)
+        with journal.private_inputs.send_fence(Path(session)):
+            worker.start()
+            assert started.wait(2)
+>           assert not finished.wait(0.05), "reservation committed during raw-send exclusion"
+E           AssertionError: reservation committed during raw-send exclusion
+E           assert not True
+E            +  where True = wait(0.05)
+E            +    where wait = <threading.Event at 0x7fec0b787390: set>.wait
+
+tests/test_selected_summary_journal.py:149: AssertionError
+________ test_unproven_private_session_cannot_reserve_selected_summary _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b788050>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_unproven_private_session_cannot_reserve_selected_summary(reserved):
+        journal, session, source = reserved
+        private_dir = journal.path.parent / "native-sessions" / ("f" * 32)
+        private_dir.mkdir(parents=True)
+        saved = private_dir / "old-pr94-session.jsonl"
+        saved.write_text('{"type":"session","id":"legacy"}\n')
+        # This file can predate marker deployment; absence of a marker never
+        # proves it has no old PR94 raw or UNKNOWN input on the same session.
+        with sqlite3.connect(journal.path) as db:
+            assert db.execute("SELECT count(*) FROM private_raw_inputs").fetchone()[0] == 0
+        private_source = dict(source, source=manual_source(saved))
+        with pytest.raises(CompactionJournalError, match="coverage floor"):
+>           journal.summaries.reserve(str(saved), private_source)
+
+tests/test_selected_summary_journal.py:171: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+________ test_private_raw_prewrite_marker_blocks_only_its_saved_session ________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b7885a0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_private_raw_prewrite_marker_blocks_only_its_saved_session(reserved):
+        journal, session, source = reserved
+        other = Path(session).with_name("other.jsonl")
+        other.write_text('{"type":"session","id":"other"}\n')
+        journal.private_inputs.reserve(Path(session), "a" * 32)
+        reopened = CompactionJournal(journal.path)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+>           reopened.summaries.reserve(session, source)
+
+tests/test_selected_summary_journal.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b8a7a50>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    def test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity(reserved):
+        journal, session, source = reserved
+        alias = Path(session).with_name("alias.jsonl")
+        alias.symlink_to(Path(session))
+        journal.private_inputs.reserve(alias, "a" * 32)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+>           journal.summaries.reserve(session, source)
+
+tests/test_selected_summary_journal.py:212: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_private_raw_marker_survives_child_crash_before_selected_reserve[before-write] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b5199a0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+moment = 'before-write'
+
+        marker = Path(session).with_name("fake-local-raw-write")
+        script = """
+    import os,sys
+    from pathlib import Path
+    from agent_comms.compaction_journal import CompactionJournal
+    j=CompactionJournal(Path(sys.argv[1]))
+    j.private_inputs.reserve(Path(sys.argv[2]),'a'*32)
+    if sys.argv[3]=='after-write':
+        fd=os.open(sys.argv[4],os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        os.write(fd,b'FAKE RAW BYTES')
+        os.close(fd)
+    os._exit(0)
+    """
+        process = subprocess.run(
+            [sys.executable, "-c", script, str(journal.path), session, moment, str(marker)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert process.returncode == 0, process.stderr
+        assert marker.exists() is (moment == "after-write")
+        reopened = CompactionJournal(journal.path)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+            reopened.summaries.reserve(session, source)
+    
+    
+>   def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reserved, monkeypatch):
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:262: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_private_raw_marker_survives_child_crash_before_selected_reserve[after-write] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b6349f0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+moment = 'after-write'
+
+        marker = Path(session).with_name("fake-local-raw-write")
+        script = """
+    import os,sys
+    from pathlib import Path
+    from agent_comms.compaction_journal import CompactionJournal
+    j=CompactionJournal(Path(sys.argv[1]))
+    j.private_inputs.reserve(Path(sys.argv[2]),'a'*32)
+    if sys.argv[3]=='after-write':
+        fd=os.open(sys.argv[4],os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        os.write(fd,b'FAKE RAW BYTES')
+        os.close(fd)
+    os._exit(0)
+    """
+        process = subprocess.run(
+            [sys.executable, "-c", script, str(journal.path), session, moment, str(marker)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert process.returncode == 0, process.stderr
+        assert marker.exists() is (moment == "after-write")
+        reopened = CompactionJournal(journal.path)
+        with pytest.raises(CompactionJournalError, match="never replay"):
+            reopened.summaries.reserve(session, source)
+    
+    
+>   def test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries(reserved, monkeypatch):
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:262: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+____ test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries ____
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b58ec30>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fec0ba5add0>
+
+>   ???
+
+tests/test_selected_summary_journal.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+___________ test_link_requires_exact_committed_native_intent_binding ___________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b4d41d0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+        session,
+        {"selectedSummaryOperationId": "0" * 32},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
+    journal.operations.resolve(wrong, CommittedOperation(), {"fixture": "metadata"})
+    operation_id = journal.summaries.reserve(session, source)
+    with pytest.raises(CompactionJournalError, match="Exact committed"):
+        journal.summaries.link_commit(operation_id, wrong)
+>   commit_id = journal.operations.begin(
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+        session,
+        {"selectedSummaryOperationId": operation_id},
+        inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+    )
+
+tests/test_selected_summary_journal.py:288: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+______ test_selected_reservation_two_process_race_has_exactly_one_winner _______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b61c7e0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    import json,sys
+    from pathlib import Path
+    from agent_comms.compaction_journal import CompactionJournal,CompactionJournalError
+    j=CompactionJournal(Path(sys.argv[1]))
+    sys.stdin.buffer.read(1)
+    try:
+        j.summaries.reserve(sys.argv[2],json.loads(sys.argv[3]),operation_id=sys.argv[4])
+    except CompactionJournalError:
+        print('blocked')
+    else:
+        print('reserved')
+    """
+        workers = [
+            subprocess.Popen(
+                [sys.executable, "-c", script, str(journal.path), session, json.dumps(source), c * 32],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for c in "ab"
+        ]
+        for worker in workers:
+            assert worker.stdin is not None
+            worker.stdin.write("G")
+            worker.stdin.close()
+        outcomes = []
+        for worker in workers:
+            assert worker.stdout is not None and worker.stderr is not None
+            worker.wait(timeout=10)
+            assert worker.returncode == 0, worker.stderr.read()
+            outcomes.append(worker.stdout.read().strip())
+        assert sorted(outcomes) == ["blocked", "reserved"]
+>       assert len(journal.summaries.blocking(session)) == 1
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Traceback (most recent call last):
+E           File "<string>", line 8, in <module>
+E             j.summaries.reserve(sys.argv[2],json.loads(sys.argv[3]),operation_id=sys.argv[4])
+E             ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/src/agent_comms/compaction_summaries.py", line 106, in reserve
+E             envelope = FieldCodec.decode(SelectedSummarySource, source)
+E           File "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/src/agent_comms/field_codec.py", line 313, in decode
+E             return cast(T, cls._decode(target, data))
+E                            ~~~~~~~~~~~^^^^^^^^^^^^^^
+E           File "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/src/agent_comms/field_codec.py", line 518, in _decode
+E             return target(
+E                 **{
+E             ...<3 lines>...
+E                 }
+E             )
+E         TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+E         
+E       assert 1 == 0
+E        +  where 1 = <Popen: returncode: 1 args: ['/home/ts/.cache/agent-scratch/s2-audit-env-202...>.returncode
+
+tests/test_selected_summary_journal.py:349: AssertionError
+_____________ test_selected_attempt_does_not_block_another_session _____________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b62f6a0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+>   ???
+
+tests/test_selected_summary_journal.py:360: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+________________ test_mark_unknown_fsync_fault_stays_unresolved ________________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b9f05f0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fec0b62f750>
+
+    fsync = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("denied")))
+>   with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:367: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+__ test_competing_native_begin_refused_unless_exact_reserved_operation_bound ___
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b9cfd90>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    for intent in ({}, {"selectedSummaryOperationId": "f" * 32}):
+        with pytest.raises(CompactionJournalError, match="unrelated native commit"):
+>           journal.operations.begin(
+                   ^^^^^^^^^^^^^^^^^^^
+                session,
+                intent,
+                inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+            )
+
+tests/test_selected_summary_journal.py:379: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_exact_prestart_clean_decline_is_recorded_but_not_send_authority[split_turn] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b34e840>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'split_turn'
+
+    operation_id = journal.summaries.reserve(session, source)
+    journal.summaries.decline_prestart(operation_id, reason)
+    attempt = journal.summaries.get(operation_id)
+>   assert (
+             
+        attempt.state.declared_name == "declined-prestart"
+        and attempt.state.decline_reason == reason
+    )
+
+tests/test_selected_summary_journal.py:408: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_exact_prestart_clean_decline_is_recorded_but_not_send_authority[unsupported] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b310b50>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'unsupported'
+
+    operation_id = journal.summaries.reserve(session, source)
+    journal.summaries.decline_prestart(operation_id, reason)
+    attempt = journal.summaries.get(operation_id)
+>   assert (
+             
+        attempt.state.declared_name == "declined-prestart"
+        and attempt.state.decline_reason == reason
+    )
+
+tests/test_selected_summary_journal.py:408: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_____ test_terminal_postcommit_fsync_unknown_blocks_across_reopen[linked] ______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b932dd0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fec0b933050>
+terminal = 'linked'
+
+    operation_id = journal.summaries.reserve(session, source, operation_id="a" * 32)
+    if terminal == "linked":
+        commit_id = journal.operations.begin(
+>           session,
+                   ^^
+            {"selectedSummaryOperationId": operation_id},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+
+tests/test_selected_summary_journal.py:426: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_terminal_postcommit_fsync_unknown_blocks_across_reopen[declined-prestart] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b320590>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fec0b866ed0>
+terminal = 'declined-prestart'
+
+    operation_id = journal.summaries.reserve(session, source, operation_id="a" * 32)
+    if terminal == "linked":
+        commit_id = journal.operations.begin(
+>           session,
+                   ^^
+            {"selectedSummaryOperationId": operation_id},
+            inputs=InputDispositions(journal.path.parent / InputDispositions.filename).read(),
+        )
+
+tests/test_selected_summary_journal.py:426: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+______ test_uncertain_or_changed_source_decline_is_not_a_clean_skip[busy] ______
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b320980>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'busy'
+
+    def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reason):
+        journal, session, source = reserved
+        operation_id = journal.summaries.reserve(session, source)
+        with pytest.raises(CompactionJournalError, match="not a clean skip"):
+            journal.summaries.decline_prestart(operation_id, reason)
+>       journal.summaries.mark_unknown(operation_id)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:484: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_uncertain_or_changed_source_decline_is_not_a_clean_skip[source_mismatch] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b320a60>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'source_mismatch'
+
+    def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reason):
+        journal, session, source = reserved
+        operation_id = journal.summaries.reserve(session, source)
+        with pytest.raises(CompactionJournalError, match="not a clean skip"):
+            journal.summaries.decline_prestart(operation_id, reason)
+>       journal.summaries.mark_unknown(operation_id)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:484: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_uncertain_or_changed_source_decline_is_not_a_clean_skip[model_mismatch] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0ba93310>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'model_mismatch'
+
+    def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reason):
+        journal, session, source = reserved
+        operation_id = journal.summaries.reserve(session, source)
+        with pytest.raises(CompactionJournalError, match="not a clean skip"):
+            journal.summaries.decline_prestart(operation_id, reason)
+>       journal.summaries.mark_unknown(operation_id)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:484: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_uncertain_or_changed_source_decline_is_not_a_clean_skip[settings_mismatch] _
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b4ff2a0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+reason = 'settings_mismatch'
+
+    def test_uncertain_or_changed_source_decline_is_not_a_clean_skip(reserved, reason):
+        journal, session, source = reserved
+        operation_id = journal.summaries.reserve(session, source)
+        with pytest.raises(CompactionJournalError, match="not a clean skip"):
+            journal.summaries.decline_prestart(operation_id, reason)
+>       journal.summaries.mark_unknown(operation_id)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:484: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_______________ test_native_unknown_refuses_summary_reservation ________________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b4fc4b0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+>   ???
+
+tests/test_selected_summary_journal.py:501: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+________ test_postcommit_fsync_fault_may_leave_blocking_summary_intent _________
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0b4fcde0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fec0b4fc3d0>
+
+    monkeypatch.setattr(os, "fsync", lambda _fd: (_ for _ in ()).throw(OSError("denied")))
+    with pytest.raises(CompactionJournalUnknownError, match="never dispatch"):
+        journal.summaries.reserve(session, source, operation_id="b" * 32)
+    monkeypatch.setattr(os, "fsync", fsync)
+    assert journal.summaries.get("b" * 32).state.declared_name == "reserved"
+>   assert not native_input_admitted(journal.path.parent, session)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:510: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_____________ test_reservation_survives_crash_and_never_repeats_id _____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/evidence/retained-task-facts-s2-followup-20261001/pytest-summary-baseline52/test_reservation_survives_cras0')
+
+        source = manual_summary_source(session, selected=SelectedModel("fixture", "fixture", 1000))
+        path = tmp_path / "compaction-commits.sqlite3"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                """
+    import os,sys,json
+    from pathlib import Path
+    from agent_comms.compaction_journal import CompactionJournal
+    CompactionJournal(Path(sys.argv[1])).summaries.reserve(
+        sys.argv[2], json.loads(sys.argv[3]), operation_id='c'*32)
+    os._exit(17)
+    """,
+                str(path),
+                str(session),
+                json.dumps(source),
+            ],
+            check=False,
+            timeout=10,
+        )
+        assert result.returncode == 17
+        assert CompactionJournal(path).summaries.get("c" * 32).state.declared_name == "reserved"
+        assert not native_input_admitted(tmp_path, str(session))
+    
+    
+    def test_invalid_source_or_id_refuses_before_reservation(reserved):
+        journal, session, source = reserved
+>       with pytest.raises((ValueError, TypeError)):
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       assert 1 == 17
+E        +  where 1 = CompletedProcess(args=['/home/ts/.cache/agent-scratch/s2-audit-env-20261001/bin/python', '-c', "\nimport os,sys,json\n...elId": "fixture", "contextWindow": 1000}, "settings": {"reserveTokens": 100, "keepRecentTokens": 100}}'], returncode=1).returncode
+
+tests/test_selected_summary_journal.py:544: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "<string>", line 5, in <module>
+    CompactionJournal(Path(sys.argv[1])).summaries.reserve(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sys.argv[2], json.loads(sys.argv[3]), operation_id='c'*32)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/src/agent_comms/compaction_summaries.py", line 106, in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+  File "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/src/agent_comms/field_codec.py", line 313, in decode
+    return cast(T, cls._decode(target, data))
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/src/agent_comms/field_codec.py", line 518, in _decode
+    return target(
+        **{
+    ...<3 lines>...
+        }
+    )
+TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+___ test_repeated_identical_refusal_preserves_blocker_without_new_authority ____
+
+reserved = (<agent_comms.compaction_journal.CompactionJournal object at 0x7fec0baecad0>, '/home/ts/wt/comms-retained-task-facts-s...': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}})
+
+    assert journal.summaries.blocking(session) == (refused,)
+    with pytest.raises(CompactionJournalError, match="refusal transition forbidden"):
+>       journal.summaries.refuse(operation_id, "different observation")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_selected_summary_journal.py:560: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'owner', 'cre...r': 'fixture', 'modelId': 'model', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 100}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+__ test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history __
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/evidence/retained-task-facts-s2-followup-20261001/pytest-summary-baseline52/test_returned_enrollment_admit0')
+
+    root = tmp_path
+    fresh = create_fresh_private_session(root / "native-sessions" / "alice-lookup", worktree=root)
+    journal = CompactionJournal(root / "compaction-commits.sqlite3")
+    with pytest.raises(CompactionJournalError, match="coverage floor"):
+        journal.summaries.reserve(str(fresh.path), _private_source(fresh.path))
+    journal.private_inputs.enroll(
+        fresh,
+>       incarnation=ThreadIncarnation("alice", 1.0),
+        owner_lookup="alice-lookup",
+        owner_generation=2,
+        admission_generation=3,
+    )
+
+tests/test_fresh_private_session.py:342: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'alice', 'cre... 'modelId': 'z-ai/glm-5.3-flash', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 2000}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+__ test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/evidence/retained-task-facts-s2-followup-20261001/pytest-summary-baseline52/test_raw_unknown_even_on_retur0')
+
+    fresh = create_fresh_private_session(
+        tmp_path / "native-sessions" / "alice-lookup", worktree=tmp_path
+    )
+    journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+    journal.private_inputs.enroll(
+        fresh,
+        incarnation=ThreadIncarnation("alice", 1.0),
+        owner_lookup="alice-lookup",
+        owner_generation=2,
+        admission_generation=3,
+    )
+    journal.private_inputs.reserve(fresh.path, "b" * 32)
+    with pytest.raises(CompactionJournalError, match="never replay"):
+        journal.summaries.reserve(
+            str(fresh.path),
+            _private_source(fresh.path),
+>           fresh_session=fresh,
+            admission_generation=3,
+        )
+
+tests/test_fresh_private_session.py:399: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'alice', 'cre... 'modelId': 'z-ai/glm-5.3-flash', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 2000}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+_ test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_selected _
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/evidence/retained-task-facts-s2-followup-20261001/pytest-summary-baseline52/test_visible_enrollment_after_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fec0b33ea50>
+
+    from agent_comms import compaction_journal as module
+    
+    fresh = create_fresh_private_session(
+        tmp_path / "native-sessions" / "alice-lookup", worktree=tmp_path
+    )
+    journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+    original_fsync = module.os.fsync
+    fail = True
+    
+    def uncertain_fsync(fd: int) -> None:
+        nonlocal fail
+        if fail and os.fstat(fd).st_ino == tmp_path.stat().st_ino:
+            fail = False
+            raise OSError("injected post-COMMIT directory fsync")
+        original_fsync(fd)
+    
+    monkeypatch.setattr(module.os, "fsync", uncertain_fsync)
+    with pytest.raises(CompactionJournalUnknownError, match="durability UNKNOWN"):
+        journal.private_inputs.enroll(
+            fresh,
+            incarnation=ThreadIncarnation("alice", 1.0),
+            owner_lookup="alice-lookup",
+            owner_generation=2,
+            admission_generation=3,
+        )
+    # The SQL row is visible on reopen, but no returned enrollment ACK exists.
+    monkeypatch.setattr(module.os, "fsync", original_fsync)
+    assert CompactionJournal(journal.path).path.exists()
+    with pytest.raises(CompactionJournalError, match="coverage differs"):
+        journal.summaries.reserve(
+            str(fresh.path),
+            _private_source(fresh.path),
+>           fresh_session=fresh,
+            admission_generation=3,
+        )
+
+tests/test_fresh_private_session.py:439: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_summaries.py:106: in reserve
+    envelope = FieldCodec.decode(SelectedSummarySource, source)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:313: in decode
+    return cast(T, cls._decode(target, data))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.field_codec.FieldCodec'>
+target = <class 'agent_comms.compaction_records.SelectedSummarySource'>
+data = {'source': {'kind': 'manual', 'owner': {'pid': 1687693, 'start_time': 34564403}, 'incarnation': {'name': 'alice', 'cre... 'modelId': 'z-ai/glm-5.3-flash', 'contextWindow': 1000}, 'settings': {'reserveTokens': 100, 'keepRecentTokens': 2000}}
+
+    @classmethod
+    def _decode(cls, target: Any, data: Any) -> Any:
+        target, representation = cls._representation(target)
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
+            return representation.decode(data)
+        if target is Any:
+            cls.encode(data)  # still require valid JSON data
+            return data
+        origin, args = get_origin(target), get_args(target)
+        if origin is type and args and issubclass(args[0], DeclaredFamily):
+            if type(data) is not str:
+                raise ValueError("Expected a declared family name.")
+            return args[0].decode(data)
+        if origin is Literal:
+            if any(type(data) is type(value) and data == value for value in args):
+                return data
+            raise ValueError(f"Value does not match {target}")
+        if origin in (Union, types.UnionType):
+            errors = []
+            for alternative in args:
+                try:
+                    return cls.decode(alternative, data)
+                except (TypeError, ValueError) as error:
+                    errors.append(error)
+            # Keep declaration-owned failure detail through an optional/union
+            # boundary (e.g. a native UNKNOWN reason that fails validation).
+            raise ValueError(f"Value does not match {target}: {errors[0]}") from errors[0]
+        if origin is frozenset:
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            return frozenset(cls.decode(args[0], item) for item in data)
+        if origin in (list, tuple):
+            if not isinstance(data, list):
+                raise ValueError("Expected a JSON array.")
+            if origin is list:
+                return [cls.decode(args[0], item) for item in data]
+            if len(args) == 2 and args[1] is Ellipsis:
+                return tuple(cls.decode(args[0], item) for item in data)
+            if len(data) != len(args):
+                raise ValueError("Tuple length does not match declaration.")
+            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
+        if origin is dict:
+            if not isinstance(data, dict) or args[0] is not str:
+                raise ValueError("Expected a JSON object with string keys.")
+            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
+        if isinstance(target, type) and issubclass(target, DeclaredFamily):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a family object.")
+            tag = target.family_discriminator
+            name = data.get(tag)
+            if not isinstance(name, str):
+                raise ValueError(f"Expected a string family {tag}.")
+            target = target.decode(name)
+            data = {key: value for key, value in data.items() if key != tag}
+        if isinstance(target, type) and is_dataclass(target):
+            if not isinstance(data, dict):
+                raise ValueError("Expected a record object.")
+            declared = cls._fields(target)
+            if any(
+                field.metadata.get("wire_required") and key not in data for field, key in declared
+            ):
+                raise ValueError(f"Missing required fields for {target.__name__}")
+            computed = {member.wire_name for member in cls._projections(target, "wire").values()}
+            unknown = set(data) - {key for _, key in declared} - computed
+            if unknown:
+                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+            if any(
+                field.metadata.get("wire_nonnull") and key in data and data[key] is None
+                for field, key in declared
+            ):
+                raise ValueError(f"Null field for {target.__name__}")
+            for field, key in declared:
+                choices = field.metadata.get("wire_choices")
+                if choices is not None and key in data and data[key] not in choices():
+                    raise ValueError(f"Field {key} must be one of: {', '.join(choices())}")
+            hints = cls._types(target)
+>           return target(
+                **{
+                    field.name: cls.decode(hints[field.name], data[key])
+                    for field, key in declared
+                    if key in data
+                }
+            )
+E           TypeError: SelectedSummarySource.__init__() missing 1 required positional argument: 'retained'
+
+src/agent_comms/field_codec.py:518: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_selected_summary_journal.py::test_reservation_is_durable_unresolved_and_blocks_every_input
+FAILED tests/test_selected_summary_journal.py::test_raw_send_fence_blocks_every_same_session_status_not_unrelated
+FAILED tests/test_selected_summary_journal.py::test_raw_send_fence_serializes_concurrent_direct_reservation
+FAILED tests/test_selected_summary_journal.py::test_unproven_private_session_cannot_reserve_selected_summary
+FAILED tests/test_selected_summary_journal.py::test_private_raw_prewrite_marker_blocks_only_its_saved_session
+FAILED tests/test_selected_summary_journal.py::test_private_raw_marker_and_selected_reservation_share_symlink_alias_identity
+FAILED tests/test_selected_summary_journal.py::test_private_raw_marker_survives_child_crash_before_selected_reserve[before-write]
+FAILED tests/test_selected_summary_journal.py::test_private_raw_marker_survives_child_crash_before_selected_reserve[after-write]
+FAILED tests/test_selected_summary_journal.py::test_private_raw_prewrite_parent_fsync_unknown_never_writes_or_retries
+FAILED tests/test_selected_summary_journal.py::test_link_requires_exact_committed_native_intent_binding
+FAILED tests/test_selected_summary_journal.py::test_selected_reservation_two_process_race_has_exactly_one_winner
+FAILED tests/test_selected_summary_journal.py::test_selected_attempt_does_not_block_another_session
+FAILED tests/test_selected_summary_journal.py::test_mark_unknown_fsync_fault_stays_unresolved
+FAILED tests/test_selected_summary_journal.py::test_competing_native_begin_refused_unless_exact_reserved_operation_bound
+FAILED tests/test_selected_summary_journal.py::test_exact_prestart_clean_decline_is_recorded_but_not_send_authority[split_turn]
+FAILED tests/test_selected_summary_journal.py::test_exact_prestart_clean_decline_is_recorded_but_not_send_authority[unsupported]
+FAILED tests/test_selected_summary_journal.py::test_terminal_postcommit_fsync_unknown_blocks_across_reopen[linked]
+FAILED tests/test_selected_summary_journal.py::test_terminal_postcommit_fsync_unknown_blocks_across_reopen[declined-prestart]
+FAILED tests/test_selected_summary_journal.py::test_uncertain_or_changed_source_decline_is_not_a_clean_skip[busy]
+FAILED tests/test_selected_summary_journal.py::test_uncertain_or_changed_source_decline_is_not_a_clean_skip[source_mismatch]
+FAILED tests/test_selected_summary_journal.py::test_uncertain_or_changed_source_decline_is_not_a_clean_skip[model_mismatch]
+FAILED tests/test_selected_summary_journal.py::test_uncertain_or_changed_source_decline_is_not_a_clean_skip[settings_mismatch]
+FAILED tests/test_selected_summary_journal.py::test_native_unknown_refuses_summary_reservation
+FAILED tests/test_selected_summary_journal.py::test_postcommit_fsync_fault_may_leave_blocking_summary_intent
+FAILED tests/test_selected_summary_journal.py::test_reservation_survives_crash_and_never_repeats_id
+FAILED tests/test_selected_summary_journal.py::test_repeated_identical_refusal_preserves_blocker_without_new_authority
+FAILED tests/test_fresh_private_session.py::test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history
+FAILED tests/test_fresh_private_session.py::test_raw_unknown_even_on_returned_fresh_coverage_remains_selected_blocker
+FAILED tests/test_fresh_private_session.py::test_visible_enrollment_after_parent_fsync_unknown_does_not_authorize_selected
+=================== 29 failed, 30 passed, 2 skipped in 3.65s ===================
