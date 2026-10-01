@@ -116,7 +116,8 @@
   "parallel_followups": {
     "performance": "Heisenberg254 with Kepler256; combined source passes, physical source recording complete; not combined installed Ready",
     "SessionRevision": "Mendel468; fourteen consumers, actual native checks continue",
-    "cancel_status": "Arendt; producer idle published, stationary consumer paint not observed"
+    "cancel_status": "Arendt; producer idle published, stationary consumer paint not observed",
+    "native_admission_epoch": "Arendt470; complete original-row producer/readers and release behavior, original SQL nullable boundary retained; no duplicate stored state"
   },
   "frontend_merge": {
     "251": "merged a2761f4b",
