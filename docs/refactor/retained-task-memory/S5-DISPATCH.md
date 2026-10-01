@@ -74,3 +74,18 @@ and SDK38 JSON equality establish the required render-byte preservation.
 Exact receipt paths are in `evidence/turn-context-phase1-20261001/`. Original failed
 32–35 and the pre-capture name collision40 stay intact; no repeated original input.
 Phase2 pin/supersede/drop/export operations are not claimed as Phase1 delivery.
+
+## Parent global foundation review correction43
+
+The39/41 installed journeys and SDK38 source/render comparison remain accepted.
+Phase1 merge readiness is pending independent S2 foundation acceptance or a proper
+PR stack with its owner Sch#475. The current473 diff to main includes S2's NEW
+`CommsDecisionTool`, `task_decisions`, `retained_task_facts` and `input_origin`. That
+tool catalog is a real provider-input change. The SDK render comparison measures
+observation versus the original SDK Context on the same combined43df cohort; it
+does not establish provider catalog equivalence to current main. Likewise, the
+logical-coordinate deletion/byte comparison baseline b9d953 is unmerged S2, not
+an independently accepted main foundation. Earlier full Ready framing is
+superseded by `phase1-foundation-review43.json`. No positive raw evidence is
+withdrawn, no whole475/general constraint/artifact/three-checkpoint completion is
+claimed, and no new paid call/replay/rebuild is needed for this scope correction.
