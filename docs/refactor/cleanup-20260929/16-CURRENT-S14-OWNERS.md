@@ -58,8 +58,10 @@ The next S2/S5 private pair is independent of the frozen receiver release.
 Mendel owns its single normal69-package stage in parent270; Schrodinger and
 Einstein own the shared installed journey. Source pins are Core3f0af494
 (includes context d7c2cf3d), Toad2727f32d8ec and verified nativef1178500.
-The receiving checkpoint38614c38 is pushed; installed source/assets/entrypoint
-and full native trust checks are still in progress. No second native builder,
+The receiving checkpoint38614c38 is pushed; source-proof d4c921e8 confirms
+all323 Core/305 Toad/266 Textual Git code and asset files,69 normal packages,
+entrypoint and full native trust. All4157 files in the old pair remain unchanged.
+The actual shared journey is pending. No second native builder,
 public package change or readiness claim. This journey must exercise the Core
 declared tool catalog/nested-family tool and actual Toad original/followup
 ingress/context, unlike earlier19's four stock SDK tools.
