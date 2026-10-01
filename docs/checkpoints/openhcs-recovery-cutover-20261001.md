@@ -95,3 +95,59 @@ receipt is `evidence/openhcs-recovery-cutover/operator-controls01.json`; this pr
 that resource/artifact boundary, not public preflight or batch execution. Native
 and source uncertainty authorities remain untouched. No runtime reset is required
 by this source-format cohort; original native SQL schema4 is preserved.
+
+
+## Final combined affected gates: received, not public activation
+
+Kepler's fresh existing476 native fixture on exact finalcac7/7572/native593 passed
+18.5917s: original writer waiting before grant, joined cancel with zero POSTs,
+unchanged deferred input, independent triageFULL plus one canonical reply from
+two native originals/two localhost POSTs. Eleven notification packets contain
+thirteen typed facts. All workers retired; no public/paid input or replay.
+Persistent original receipt: /home/ts/wt/ac476-final-native02/receipt.json,
+SHA25668c000b95ac097db84d281e7e4b00c30003a161aef7cdc103d2f59c4ee203064.
+Kepler published its scoped review on evidence branch c610b51b. It does not claim
+Toad UI or public provenance publication.
+
+Mendel's combined06 actual external installed archive journey passed on that
+same final pair: native saved history, End to the original17:14:47 answer and
+channel history return. Arendt personally inspected those three PNGs. Required
+native/End DTOs remain captured; the unused expanded-selector remote DTO alone
+is an image marker in tool273, with the original45s bound retained. Cleanup is
+empty; original41MB source/public manifests and archives remain unchanged per
+contributor protection checks. No native inputs, bindings or public writes.
+Raw recorder assessment remains unreviewed (recorder metadata, not a semantic
+review); Mendel and Arendt's actual frame inspection supplies that distinction.
+Receipt SHA256c6daa9ed34f36a9efd02d6445e2c27432c6e3bc25dbfa3863a7d3fc005296abd.
+Sanitized receiving review: evidence/openhcs-recovery-cutover/
+final-private-archive-review.json. Parent alone accepts scope-correct actual gate
+artifacts for the operator. Command defaults still contain no gate hashes and
+there is no execution by Arendt. Public channel acceptance follows the reviewed
+provenance/index publication; its preserved pre-carry refusal is not a pass.
+
+
+## Original custody owns configuration readback
+
+Parent's final source review identified a material operator race: comparing the
+whole original Thread after restart_owners returns loses original wire custody.
+A legitimate resumed saved266 input or goal can change active_turn, turn_generation
+or last_finished_turn_id, so that comparison can incorrectly report a settings
+failure after completed effects.
+
+The existing member now overrides complete(stopped), runs its after_stopped hook,
+then stopped.launch(), then verifies the full original Thread with only the
+canonical replacement ProcessIdentity and captures the exact target interpreter,
+WHILE FencedOwnerBatch retains its original wire descriptor. Receipt readback is
+written before that capability returns. The duplicate outside-lock comparison is
+deleted. No configuration field roster, state mirror, store or lifecycle kernel is
+introduced; the full original process/settings proof remains in its acquired
+custody. This is outside-src only and does not alter the frozen installed pair.
+
+Parent's accepted final positive DM readiness artifact:
+/home/ts/wt/comms-cleanup-live-integration-20260929/evidence/openhcs-recovery-cohort-20261001/final-dm-readiness.json,
+SHA2567fbea482b2c4a0dab2a48c8eaba1c8eca1129499fa4d4c2520c368a6c99b0ba2.
+This supplies the scoped --ui-gate artifact; the final archive gate remains
+c6daa9ed34f36a9efd02d6445e2c27432c6e3bc25dbfa3863a7d3fc005296abd.
+Public pre-carry channel refusal is still negative evidence. Parent's fresh
+quiet/client check and user client disposition precede any actual execution.
+No public preflight or execution was performed by Arendt.
