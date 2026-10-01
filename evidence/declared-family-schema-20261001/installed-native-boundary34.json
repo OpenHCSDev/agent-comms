@@ -1,0 +1,405 @@
+{
+  "state": "SCOPED_REAL_NATIVE_NESTED_CORE_TOOL_BOUNDARY_PASS_WHOLE_JOURNEY_FAILED_ORACLE",
+  "fixture": "/home/ts/wt/s5i06",
+  "installed_core": "3f0af4940bfd9f3ade523f230e4240e3acd8ab2a",
+  "native_manifest": "f1178500e5154c38152aeb5d1133ab9fbd84774e2a8bc6b6233ba9b490b4eb4c",
+  "sdk_actual_prepared_tool": {
+    "name": "comms_decision",
+    "label": "Record Decision",
+    "description": "Record a chosen alternative and its valid rejected alternatives on one original wire message. Author and source turn come from your admitted execution. Defaults to the current project and active goal revision, or current turn. A correction must name the original message reference; recording grants no execution.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "chosen": {
+          "type": "string",
+          "description": "Chosen alternative, preserving exact wording"
+        },
+        "rejected": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Nonempty unique valid rejected alternatives"
+        },
+        "to": {
+          "type": "string",
+          "description": "Thread or channel receiving the original declaration"
+        },
+        "scope": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "current"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "explicit"
+                },
+                "scope": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "goal"
+                        },
+                        "project": {
+                          "type": "string"
+                        },
+                        "goal": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "project",
+                        "goal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "turn"
+                        },
+                        "project": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "project"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind",
+                "scope"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "Current project/goal or explicit scope",
+          "default": {
+            "kind": "current"
+          }
+        },
+        "change": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "original"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "correction"
+                },
+                "original": {
+                  "type": "object",
+                  "properties": {
+                    "seq": {
+                      "type": "integer"
+                    },
+                    "message_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "seq",
+                    "message_id"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "original"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "Original declaration or correction naming its original reference",
+          "default": {
+            "kind": "original"
+          }
+        }
+      },
+      "required": [
+        "chosen",
+        "rejected",
+        "to"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "shared_FieldCodec_catalog_equal": true,
+  "actual_tool_catalog": {
+    "sha256": "1ce0c73e2508d7d30a69e893111885017a3b33ac47da77f00d84c7136faf6fc3",
+    "utf8_bytes": 18049,
+    "recorded_native_manifest_matches": 2
+  },
+  "prepared_native_context": {
+    "path": "/home/ts/wt/s5i06/context-journey/next-context.json",
+    "sha256": "8ab986ca98db81d0497c7ab61f912d0b07ade0a800dfb25434afd475c288c488"
+  },
+  "native_tool_call": {
+    "kind": "message",
+    "id": "d2ddb07d",
+    "parentId": "148cd891",
+    "timestamp": "2026-10-01T09:21:03.152Z",
+    "message": {
+      "kind": "assistant",
+      "content": [
+        {
+          "kind": "toolCall",
+          "id": "local-tool-once",
+          "name": "comms_decision",
+          "arguments": {
+            "chosen": "Preserve the original context source",
+            "rejected": [
+              "Reconstruct author from the native user role"
+            ],
+            "to": "context-peer",
+            "scope": {
+              "kind": "current"
+            },
+            "change": {
+              "kind": "original"
+            }
+          }
+        }
+      ],
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "totalTokens": 0,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      },
+      "stopReason": "toolUse",
+      "diagnostics": []
+    }
+  },
+  "native_tool_response": {
+    "kind": "message",
+    "id": "8bc7be94",
+    "parentId": "d2ddb07d",
+    "timestamp": "2026-10-01T09:21:03.864Z",
+    "message": {
+      "kind": "toolResult",
+      "content": [
+        {
+          "kind": "text",
+          "text": "{\n  \"reference\": {\n    \"seq\": 1,\n    \"message_id\": \"6f69038c5f76\"\n  },\n  \"decision\": {\n    \"kind\": \"choice\",\n    \"chosen\": \"Preserve the original context source\",\n    \"rejected\": [\n      \"Reconstruct author from the native user role\"\n    ],\n    \"scope\": {\n      \"kind\": \"goal\",\n      \"project\": \"/home/ts/wt/s5i06/sdk-source/project\",\n      \"goal\": {\n        \"id\": \"c4cc9374ce714107aa46a2e4bf76f2d1\",\n        \"revision\": 2\n      }\n    },\n    \"source_turn\": {\n      \"incarnation\": {\n        \"name\": \"context-source\",\n        \"created_at\": 1790846434.8665957\n      },\n      \"generation\": 1\n    },\n    \"source_turn_id\": {\n      \"value\": \"87e3f5e6685b499bb356ff2bc30cafc9\"\n    }\n  }\n}"
+        }
+      ],
+      "usage": null,
+      "diagnostics": [],
+      "toolCallId": "local-tool-once",
+      "toolName": "comms_decision",
+      "details": {
+        "reference": {
+          "seq": 1,
+          "message_id": "6f69038c5f76"
+        },
+        "decision": {
+          "kind": "choice",
+          "chosen": "Preserve the original context source",
+          "rejected": [
+            "Reconstruct author from the native user role"
+          ],
+          "scope": {
+            "kind": "goal",
+            "project": "/home/ts/wt/s5i06/sdk-source/project",
+            "goal": {
+              "id": "c4cc9374ce714107aa46a2e4bf76f2d1",
+              "revision": 2
+            }
+          },
+          "source_turn": {
+            "incarnation": {
+              "name": "context-source",
+              "created_at": 1790846434.8665957
+            },
+            "generation": 1
+          },
+          "source_turn_id": {
+            "value": "87e3f5e6685b499bb356ff2bc30cafc9"
+          }
+        }
+      }
+    }
+  },
+  "original_decision": {
+    "seq": 1,
+    "from": "context-source",
+    "to": "context-peer",
+    "ts": 1790846463.6587694,
+    "type": "info",
+    "text": "Decision: Preserve the original context source\nValid rejected alternatives:\n- Reconstruct author from the native user role",
+    "sender_role": "agent",
+    "notice": true,
+    "decision": {
+      "kind": "choice",
+      "chosen": "Preserve the original context source",
+      "rejected": [
+        "Reconstruct author from the native user role"
+      ],
+      "scope": {
+        "kind": "goal",
+        "project": "/home/ts/wt/s5i06/sdk-source/project",
+        "goal": {
+          "id": "c4cc9374ce714107aa46a2e4bf76f2d1",
+          "revision": 2
+        }
+      },
+      "source_turn": {
+        "incarnation": {
+          "name": "context-source",
+          "created_at": 1790846434.8665957
+        },
+        "generation": 1
+      },
+      "source_turn_id": {
+        "value": "87e3f5e6685b499bb356ff2bc30cafc9"
+      }
+    },
+    "id": "6f69038c5f76"
+  },
+  "original_stored_inputs": [
+    {
+      "kind": "started",
+      "key": "acp:6df77c0d59a340dcbf1f394f4724abfb",
+      "sequence": null,
+      "owner": "context-source",
+      "admission": 1,
+      "target": "context-source",
+      "source_text": "S5_CONTEXT_QUEUED_ORIGINAL",
+      "origin": {
+        "kind": "human",
+        "root_id": "a930828342de4ab4990f34005d07e0ec",
+        "author": {
+          "sender": "user",
+          "created_at": 1790846448.680481,
+          "worktree": "/home/ts/wt/s5i06/sdk-source/project"
+        },
+        "admission": {
+          "incarnation": {
+            "name": "context-source",
+            "created_at": 1790846434.8665957
+          },
+          "admission_generation": 1
+        },
+        "project": "/home/ts/wt/s5i06/sdk-source/project",
+        "goal": {
+          "id": "c4cc9374ce714107aa46a2e4bf76f2d1",
+          "revision": 2
+        }
+      },
+      "turn_id": "87e3f5e6685b499bb356ff2bc30cafc9",
+      "native_id": "d1ad89de467d19e437fd11ca0793e93b",
+      "sent_text": "User follow-up:\nS5_CONTEXT_QUEUED_ORIGINAL"
+    },
+    {
+      "kind": "started",
+      "key": "acp:c61d6fb50b8e451fa10698fbd070e0f3",
+      "sequence": null,
+      "owner": "context-source",
+      "admission": 1,
+      "target": "context-source",
+      "source_text": "S5_CONTEXT_FIRST_ORIGINAL @s2-original-image.png",
+      "origin": {
+        "kind": "human",
+        "root_id": "a930828342de4ab4990f34005d07e0ec",
+        "author": {
+          "sender": "user",
+          "created_at": 1790846448.680481,
+          "worktree": "/home/ts/wt/s5i06/sdk-source/project"
+        },
+        "admission": {
+          "incarnation": {
+            "name": "context-source",
+            "created_at": 1790846434.8665957
+          },
+          "admission_generation": 1
+        },
+        "project": "/home/ts/wt/s5i06/sdk-source/project",
+        "goal": {
+          "id": "c4cc9374ce714107aa46a2e4bf76f2d1",
+          "revision": 2
+        }
+      },
+      "turn_id": "87e3f5e6685b499bb356ff2bc30cafc9",
+      "native_id": "7382ffe940b6b36aa68b0180d47f0cab",
+      "sent_text": "Coordination context: you are thread 'context-source'; parent=None. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/wt/s5i06/sdk-source/project'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: [{\"name\": \"context-peer\", \"status\": \"running\", \"activity\": \"thinking\", \"activity_detail\": \"Independent context fixture\"}]\n\nS5_CONTEXT_FIRST_ORIGINAL"
+    }
+  ],
+  "native_header": {
+    "kind": "session",
+    "id": "01a0f6c3-fdef-70d1-aca2-38b4ad8e43c6",
+    "parentId": null,
+    "timestamp": "2026-10-01T09:20:34.800Z",
+    "version": 3,
+    "cwd": "/home/ts/wt/s5i06/sdk-source/project",
+    "agentCommsSelectedFresh": null
+  },
+  "original_inputs_replayed": 0,
+  "paid_provider_calls": 0,
+  "public_changes": [],
+  "limits": [
+    "Original HTTP request JSON was not saved before helper failure; no HTTP-schema byte claim",
+    "Native prepared catalog matches both recorded provider-context catalogs by original hash and length",
+    "Whole GUI journey failed old per-user reply oracle; original same-turn joint reply is retained",
+    "Full473/475/Toad Ready is not claimed"
+  ]
+}

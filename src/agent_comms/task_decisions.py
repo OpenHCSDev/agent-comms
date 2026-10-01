@@ -152,6 +152,10 @@ class DecisionAttachment(DeclaredFamily, affix="DecisionAttachment"):
     def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         raise RelationViolationError("Ordinary message is not a decision lineage event")
 
+    def current_roots(self, message: Message, originals: dict[MessageReference, Message],
+                      owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
+        return ()
+
     def revises_after(self, previous: Message) -> bool:
         raise RelationViolationError("Ordinary message cannot revise a declared choice")
 
@@ -191,6 +195,13 @@ class UserDecisionSupersession(DecisionAttachment, declared_name="user_supersess
     def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return self.change.root_source(message, originals)
 
+    def current_roots(self, message, originals, owner, registry):
+        # This exact user row may address a recipient who never received the
+        # private original. It only revises an eligible captured owned lineage.
+        if self.change.original not in originals:
+            return ()
+        return (self.root_source(message, originals),)
+
     def revises_after(self, previous: Message) -> bool:
         return True
 
@@ -221,6 +232,11 @@ class Decision(DecisionAttachment, declared_name="choice"):
 
     def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return self.change.root_source(message, originals)
+
+    def current_roots(self, message, originals, owner, registry):
+        if not self.applies(owner, registry):
+            return ()
+        return (self.root_source(message, originals),)
 
     def revises_after(self, previous: Message) -> bool:
         return previous.decision.permits_agent_revision

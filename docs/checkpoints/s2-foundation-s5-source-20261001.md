@@ -5,6 +5,49 @@ Einstein for S5 native context observation and inspection. Parent owns global
 review, merge, installed selection and cutover. This is a partial checkpoint,
 not completion of the full S2 plan.
 
+## Current receiving source correction
+
+Source checkpoint `3b6b658b7c2d69f84c2d86c7f988bd2c8c0da09c` normally
+integrates Core #480 and closes two later source findings. The 0064 installed
+journeys below retain their original source identities; they do not certify
+these new Python declarations. Einstein owns the single new installed receiving
+journey, Kepler its original-source oracle, and Mendel the normal paired package.
+Core #480's process contract also requires the paired Toad #274 consumer.
+
+`Thread.goal_checkpoint` derives the captured identity from the sole original
+goal. `HumanInputOrigin` and `OwnerCompactionAttestation` consume the same
+`GoalCheckpoint` family: named absent or present with the existing `GoalRevision`.
+The duplicate input-origin goal getter is deleted. Existing registry Goal and
+GoalRevision wire formats remain unchanged; the new captured field has one
+strict format, with no null decoder or compatibility reader. Source checks cover
+active, paused and completed goals, replacement and clearing before reservation.
+
+`DecisionAttachment.current_roots` owns current-lineage eligibility. A public
+correction reaching a recipient who never received its private ancestor remains
+an exact historical original row, without acquiring that ancestor or its choice
+authority. Applicable owned corrections still require the original source.
+The consumer uses this family operation on its existing certified captured read;
+no additional bus read, retained store, cache or identity roster is introduced.
+The actual A-private-B / public-team-C publisher and held source-cut reproducer
+failed before this correction and passes afterward. Its privacy and authority
+assertions compare original Message objects, rather than JSON body substrings.
+
+The current correction deletes 161 remaining dormant prototype/test lines.
+Against the original census baseline the two obsolete files are wholly deleted:
+244 production-prototype lines and 196 test lines. Neither is an input to the
+native builder or pinned package. Actual native CompactionPolicy and all native
+0064 source/import/tree pins are unchanged. The Python correction is +51/-22
+across six existing production files relative to the integrated-main checkpoint.
+
+The final required debt ratchet passes on this committed source with no positive
+numeric deltas. Source receipts are `goal-checkpoint-source48.json`,
+`cross-audience-source54.json`, `dead-trigger-declaration53.json` and
+`final-source-handoff56.json` in the S2 evidence directory. The latter records
+exact source hashes and the installed gate still required. Failed collection,
+wrong exception expectation and JSON escaping oracles remain preserved.
+This is a source checkpoint, not installed or public readiness. Full S2 remains
+in draft #481.
+
 ## Exact source and delivery dependency
 
 The existing normal installed Core source is
@@ -14,7 +57,7 @@ native `0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1`,
 with paired Toad `89655a17336da92eed0d4cd06443925af909e914`, Textual
 `6b5895fa0a72aeec2aeaef7206d5debfa0c1803c` and ACP SDK 0.12.1.
 
-Current main is `464b05dc3da1e96aca608383160999c95472b33b`. The catalog at
+The source census baseline is main `464b05dc3da1e96aca608383160999c95472b33b`. The catalog at
 that main is not the catalog used by the combined acceptance: the foundation
 adds `comms_decision`. S5's preservation comparison must name its accepted S2
 foundation, never imply unchanged provider input relative to old main.
@@ -44,6 +87,13 @@ paths, relative to current main. This count is not the whole S2 or S5 delta.
 The complete combined `src/agent_comms` plus `stack` comparison is 85 paths,
 2,446 additions and 691 deletions; it includes shared callers and stack tests.
 The exact per-path census is `partial-foundation-scope43.json`.
+
+Parent's existing installed `tools.tool_catalog` comparison against accepted
+Core #480 establishes 32 tools versus 33 in the combined checkpoint. The sole
+addition is `comms_decision`: no tool is removed and canonical JSON for every
+common catalog row is unchanged. This is a catalog boundary check, not a whole
+provider-prompt comparison. Original receipt and both catalogs are preserved in
+parent #432's `.artifacts/s2-foundation-catalog-review-20261001/`.
 
 The replaced dormant retention declaration is deleted (149 lines), with its
 obsolete tests deleted (132 lines). No second memory store, decoder, semantic
@@ -86,5 +136,8 @@ acceptance is private; public/default activation remains the parent's operation.
    goal replacement, unresolved failure and queued original input.
 5. S4 configured-model recall under its separately authorized budget and oracle.
 
-These are explicit followup obligations. Acceptance or merge of this partial
-foundation must not mark the full S2 goal complete.
+These explicit obligations remain open in draft **#481**, owned by Schrodinger,
+stacked on #475 before its foundation merge. Its persistent worktree is
+`/home/ts/wt/comms-retained-task-facts-s2-followup-20261001`; the binding followup
+ledger is `docs/checkpoints/s2-foundation-followup-20261001.md`. Acceptance or
+merge of this partial foundation must not mark the full S2 goal complete.

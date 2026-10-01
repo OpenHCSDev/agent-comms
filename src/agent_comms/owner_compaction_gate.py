@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
-from .goals import GoalRevision
+from .goals import AbsentGoalCheckpoint, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint
 from .thread_identity import GenerationCounter, TurnId
 
 if TYPE_CHECKING:
@@ -53,11 +53,11 @@ class OwnerCompactionAttestation:
         self.goal_checkpoint
 
     @property
-    def goal_checkpoint(self) -> GoalRevision | None:
+    def goal_checkpoint(self) -> GoalCheckpoint:
         if self.goal_id is None:
-            return None
+            return AbsentGoalCheckpoint()
         assert self.goal_revision is not None
-        return GoalRevision(self.goal_id, self.goal_revision)
+        return PresentGoalCheckpoint(GoalRevision(self.goal_id, self.goal_revision))
 
     def require_current(
         self, owner: RegistryOwner, snapshot: RegistrySnapshot, expected: Thread
