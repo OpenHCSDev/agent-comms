@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -45,10 +46,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
     parser.add_argument("--test-support-site", type=Path, required=True)
+    parser.add_argument("--toad-driver-dir", type=Path, required=True)
     options = parser.parse_args()
     if "site-packages" not in Path(agent_comms.__file__).parts:
         raise RuntimeError("This acceptance requires the paired installed Core wheel")
     # Only pytest's fixture decorator/MonkeyPatch is borrowed. Import installed
     # Core first and append the support directory; do not process donor .pth files.
     sys.path.append(str(options.test_support_site))
+    sys.path.append(str(options.toad_driver_dir))
+    os.environ['PATH'] = os.pathsep.join((str(Path(sys.executable).parent), os.environ.get('PATH', os.defpath)))
     asyncio.run(run(options.root))
