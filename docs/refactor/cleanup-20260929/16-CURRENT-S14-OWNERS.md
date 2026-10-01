@@ -132,3 +132,16 @@ has zero increases.38 codec/guard/tool checks pass; one unrelated stale error
 regex fails identically on exact baseline and is preserved.475 receiving full
 catalog22 checks pass. Installed S2 native acceptance remains its owner's scope;
 478 is not a live feature claim.
+
+## Newly exposed saved-history opening defect
+
+Mendel owns the Toad archive-opening counterpart to477; create its draft from
+current main before edits. Fresh installed channel paints but actual Saved
+sessions button click fails because CommsScreen._load_content removes all
+children from the content container, including the button. Parent confirmed the
+same production defect on current264/d685 source. The duplicate chat constructor
+also omits wire_root during hydration although compose supplies it. Close both
+through the existing content owner: preserve stable chrome, hydrate only the chat
+region, and use one construction authority. Ctrl+h is a diagnostic path, not
+acceptance of the failed button. Core477 SQL history/catalog/native paths pass;
+actual physical Saved sessions opening and complete paired acceptance remain.
