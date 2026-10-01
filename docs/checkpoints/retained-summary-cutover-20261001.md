@@ -126,3 +126,36 @@ Raw original wire/metadata crossed only RAM/stdin between original and target
 readers; no user content is published or persisted in this evidence. Runtime
 journal reset strength remains private installed file/SQL custody; actual future
 cohort/native/UI gates and parent execution approval remain required.
+
+## Foundation execution entry ready for parent review
+
+Execute ONLY the reviewed foundation source-format checkpoint using
+tools/cutover/execute_retained_summary_foundation.py. It decodes the approved
+review plan once through the original FieldCodec, passes the EXISTING
+PreserveOwnerRuntime capability and delegates to publish. It adds no audience,
+stop, lock, reset, source reader or target-start implementation. Installed target
+--help passed without any public effect. Parent supplies the existing accepted
+receiving61 artifact hashes; no new native/UI/provider gate is requested here.
+
+Exact invocation shape (parent supplies its private approved plan/receipt):
+
+```sh
+/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-s5-receiving61-20261001/bin/python \
+  /home/ts/wt/comms-retained-summary-cutover-20261001/tools/cutover/execute_retained_summary_foundation.py \
+  --review-plan /absolute/private/approved-foundation-plan.json \
+  --receipt /absolute/private/foundation-cutover.json --execute
+```
+
+The approved plan fields are the ReviewedRetainedSummaryCohort declaration:
+target, source_interpreter, current_prefix, original_route, native, activation
+and source_proof {path,sha256}, and actual_gates [{path,sha256},...]. All four
+dependency heads come solely from the reviewed activation/proof artifacts.
+Original audience/configuration/client/route/default refusal precedes admission;
+the existing batch recaptures current audience and RAM credentials, fences every
+idle original, stops all, retains preimages/resets only declared runtime journal,
+performs expected-route/default publication and starts via stopped.launch.
+Protected UNKNOWN/input/native/proof/goal bytes are verified before launch.
+No old effort restoration, old journal decode, client kill or uncertain replay.
+
+This ready source has not been publicly executed by Arendt. Parent is the only
+executor; normal idle Toad shutdown and live queue acceptance belong to parent.
