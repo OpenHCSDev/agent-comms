@@ -137,3 +137,39 @@ UNKNOWN. Follow canonical terminal publication to the actual installed UI before
 claiming the stale loading view fixed. No new public/provider inputs during
 forensics; at most the already authorized configured saved fork if a missing clock
 cannot be obtained from original evidence.
+
+## Named retained-history cause allocation, 2026-10-01
+
+One actual installed selected workflow on an isolated 42,044,804-byte original
+fork completed localhost triage + greeting (2 provider POSTs, paid/public0).
+The driver then failed on an invalid `CoordinatedTurn.text` assertion. Preserve
+that failure: a separate read-only join verified its exact publication receipt,
+response marker and both native input records without executing another input.
+Native/proof/bus/registry/coordinator bytes were unchanged by that observation.
+
+Actual call brackets: initial package verification3.194s;
+NativeStartupAdmission.acquire0.12ms/0.03ms; native attestation1.444s/1.383s;
+committed-input initial evidence2.125s/2.057s;
+PrivateSendAdmission.verify4.151s/4.190s. SelectedAttempt.prepare41.94ms.
+This isolated run does not reproduce or allocate historical45.830s predispatch.
+
+The next named local cause is repeat full-journal typed decoding. NativeSendStage
+verification opens the same file once for context and again for prompt digest.
+NativeSourceCursor._advance_proven calls prefix/last_proof/evidence; each calls
+read_historical_native_inputs and each of its two rows independently opens the
+same file for context and prompt equality: twelve full decodes in one cursor
+settlement. The actual selected run has a25.2s post-commit remainder containing
+publication and cursor settlement; the cursor itself was not separately bracketed.
+Read-only cProfile proves the twelve scans and attributes their CPU mainly to
+NativeEntry.from_evidence/PiPayload/FieldCodec. Its27s-per-four-scan measurements
+include profiler overhead and must not be reported as native journey wall time.
+
+Receiving fix trajectory: borrow the existing acquired NativeEvidenceRead across
+context/prompt and cursor observations, retain original-byte/inode/mode checks on
+every observation, close the resource on refusal/exit and source switch. Retain
+SQL/frozen-source joins, UNKNOWN barriers and owner revalidation. No retained
+proof cache or acceptance shortcut. Kepler490 received the NativeSendStage.verify
+boundary notice; batch selection/source/receipt semantics remain his ownership.
+Sanitized evidence: evidence/request-budget-custody-20261001/
+retained-greeting-cause-allocation.json. Full private proof root remains protected
+at /var/tmp/arendt-cause-489-jaafsyfi/wire; no input replay to repair the driver.
