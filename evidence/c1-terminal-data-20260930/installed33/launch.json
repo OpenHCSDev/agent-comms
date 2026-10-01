@@ -1,0 +1,34 @@
+{
+  "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "toad": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
+  "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+  "driver": "98a0eac445bf446ff4a33c65d0121cda836214d4",
+  "pid": 219865,
+  "argv": [
+    "script",
+    "-q",
+    "-e",
+    "-f",
+    "-T",
+    "/home/ts/wt/g458i/u01/terminal.timing",
+    "-c",
+    "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001/bin/python /home/ts/wt/g458i/continuous-with-menu-preflight-guarded.py",
+    "/home/ts/wt/g458i/u01/terminal.ansi"
+  ],
+  "activation_sha256": "e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94",
+  "private_fixture": "/home/ts/wt/g458i/u01/fixture",
+  "provider_budget": 5,
+  "paid_calls": 0,
+  "public_mutations": 0,
+  "old_u01_preserved": true,
+  "old_input_replay": false,
+  "launcher_correction_sha256": "06f5e1598099d1df85b1a1dd17009bb8a6f260e80d4da35a742ab84443501c0a",
+  "started_utc": "2026-10-01T01:13:15.584443+00:00",
+  "resource_preflight": {
+    "level": "warning",
+    "ram_available_gib": 16.5,
+    "home_free_gib": 9.4,
+    "swap_used_gib": 8.9,
+    "authorization": "one bounded actual gate alongside authorized separate BUS root; meaningful reviewed atomic page fix; all original failures retained"
+  }
+}

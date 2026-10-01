@@ -1,0 +1,287 @@
+[1790817201.305] incoming: {"jsonrpc": "2.0", "method": "initialize", "params": {"protocolVersion": 1, "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}, "terminal": true, "auth": {"terminal": true}}, "
+[1790817201.305] outgoing: {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": 1, "agentCapabilities": {"loadSession": true, "promptCapabilities": {"image": true}}, "authMethods": [{"id": "pi-login-openai-codex", "name": 
+[1790817201.327] incoming: {"jsonrpc": "2.0", "method": "session/load", "params": {"cwd": "/home/ts/wt/g458i/u01/fixture/application/project", "mcpServers": [], "sessionId": "beta", "_meta": {"agentCommsLoad": {"kind": "ensurin
+[1790817203.745] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "coordination_changed",
+[1790817203.769] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "transcript_snapshot", 
+[1790817203.771] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817203.772] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delivery_changed
+[1790817203.781] outgoing: {"jsonrpc": "2.0", "id": 2, "result": {"configOptions": [{"currentValue": "selected-offline/fixture", "options": [{"value": "selected-offline/fixture", "name": "selected-offline/fixture"}], "id": "mod
+[1790817204.734] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"_meta": {"agentComms": {"updates": [{"kind": "cursor_advanced", "envelope": {"scope": {"session_id": "beta", 
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817206.567] incoming: {"jsonrpc": "2.0", "method": "session/prompt", "params": {"prompt": [{"text": "FORK_PARENT_SEED", "type": "text"}], "sessionId": "beta", "_meta": {"agentComms": {"request": {"kind": "queue_prompt", "u
+[1790817206.678] prompt:start sender=beta mode=agent sent_seq=0
+[1790817206.691] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delivery_changed
+[1790817206.697] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_changed", "scope
+[1790817206.769] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817206.769] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delivery_changed
+[1790817206.806] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.409] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.444] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delivery_changed
+[1790817209.446] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_started", "input
+[1790817209.446] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_changed", "scope
+[1790817209.516] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.558] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.620] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.678] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.742] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.779] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.847] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.900] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817209.976] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.042] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.082] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update"}}}
+[1790817210.096] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.170] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.206] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update"}}}
+[1790817210.209] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "NATIVE_RESPONSE_1", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "text_
+[1790817210.215] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update"}}}
+[1790817210.230] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.280] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update"}}}
+[1790817210.294] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.358] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.469] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.498] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update"}}}
+[1790817210.508] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update"}}}
+[1790817210.520] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.572] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "transcript_changed", "
+[1790817210.600] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delivery_changed
+[1790817210.622] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790817210.622] prompt:returning
+[1790817210.623] outgoing: {"jsonrpc": "2.0", "id": 3, "result": {"stopReason": "end_turn"}}
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817222.271] incoming: {"jsonrpc": "2.0", "method": "initialize", "params": {"protocolVersion": 1, "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}, "terminal": true, "auth": {"terminal": true}}, "
+[1790817222.271] outgoing: {"jsonrpc": "2.0", "id": 4, "result": {"protocolVersion": 1, "agentCapabilities": {"loadSession": true, "promptCapabilities": {"image": true}}, "authMethods": [{"id": "pi-login-openai-codex", "name": 
+[1790817222.293] incoming: {"jsonrpc": "2.0", "method": "session/load", "params": {"cwd": "/home/ts/wt/g458i/u01/fixture/application/project", "mcpServers": [], "sessionId": "immediate-fork", "_meta": {"agentCommsLoad": {"kind"
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  acp.Connection.request: connection.py:188
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817229.367] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "coordination
+[1790817229.507] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "transcript_s
+[1790817229.507] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817229.562] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"_meta": {"agentComms": {"updates": [{"kind": "cursor_advanced", "envelope": {"scope": {"session_id"
+[1790817229.604] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"_meta": {"agentComms": {"updates": [{"kind": "goal_changed", "goal": null, "execution": null}]}}, "
+[1790817229.607] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "transcript_s
+[1790817229.616] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817229.616] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817229.624] outgoing: {"jsonrpc": "2.0", "id": 5, "result": {"configOptions": [{"currentValue": "selected-offline/fixture", "options": [{"value": "selected-offline/fixture", "name": "selected-offline/fixture"}], "id": "mod
+[1790817230.394] incoming: {"jsonrpc": "2.0", "method": "session/prompt", "params": {"prompt": [{"text": "FIRST_FORK_NEW_INPUT", "type": "text"}], "sessionId": "immediate-fork", "_meta": {"agentComms": {"request": {"kind": "que
+[1790817230.480] prompt:start sender=immediate-fork mode=agent sent_seq=0
+[1790817230.488] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817230.495] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_change
+[1790817230.544] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817230.544] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817231.706] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"_meta": {"agentComms": {"updates": [{"kind": "cursor_advanced", "envelope": {"scope": {"session_id"
+=== watchdog: 5 tasks ===
+  Task-3: runtime.py:453
+  acp.Connection.request: connection.py:188
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817234.731] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.270] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.293] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817236.295] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_starte
+[1790817236.296] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_change
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817236.339] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.479] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.544] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.595] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.630] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.671] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.717] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.748] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.781] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.811] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.843] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.867] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817236.882] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.934] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817236.935] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "NATIVE_RESPONSE_2", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kin
+[1790817236.943] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817236.958] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817236.982] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817237.008] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817237.083] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817237.117] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817237.186] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817237.197] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817237.209] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+=== watchdog: 5 tasks ===
+  Task-3: runtime.py:453
+  acp.Connection.request: connection.py:188
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817237.424] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "transcript_c
+[1790817237.428] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817237.444] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817237.444] prompt:returning
+[1790817237.445] outgoing: {"jsonrpc": "2.0", "id": 6, "result": {"stopReason": "end_turn"}}
+[1790817238.559] incoming: {"jsonrpc": "2.0", "method": "session/prompt", "params": {"prompt": [{"text": "VISIBILITY_BUSY_TURN", "type": "text"}], "sessionId": "immediate-fork", "_meta": {"agentComms": {"request": {"kind": "que
+[1790817238.663] prompt:start sender=immediate-fork mode=agent sent_seq=0
+[1790817238.670] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817238.671] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_change
+[1790817238.709] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817238.709] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817241.638] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+=== watchdog: 5 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  acp.Connection.request: connection.py:188
+  Task-1: acp.py:581
+[1790817243.166] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817243.199] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817243.202] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_starte
+[1790817243.203] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_change
+[1790817243.269] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817243.316] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817243.400] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817243.467] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 5 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  acp.Connection.request: connection.py:188
+  Task-1: acp.py:581
+[1790817249.809] incoming: {"jsonrpc": "2.0", "method": "session/prompt", "params": {"prompt": [{"text": "VISIBILITY_QUEUED_FOLLOWUP", "type": "text"}], "sessionId": "immediate-fork", "_meta": {"agentComms": {"request": {"kind"
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817251.826] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_change
+[1790817251.843] outgoing: {"jsonrpc": "2.0", "id": 8, "result": {"stopReason": "end_turn", "_meta": {"agentComms": {"updates": [{"kind": "input_delivery_changed", "input_id": "3001ec0aad5a4861968be8ff0ba48096"}]}}}}
+=== watchdog: 5 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  acp.Connection.request: connection.py:188
+  Task-1: acp.py:581
+[1790817255.073] incoming: {"jsonrpc": "2.0", "method": "session/prompt", "params": {"prompt": [{"type": "text", "text": " "}], "sessionId": "immediate-fork", "_meta": {"agentComms": {"request": {"kind": "send_now"}}}}, "id": 9
+[1790817255.082] outgoing: {"jsonrpc": "2.0", "id": 9, "result": {"stopReason": "end_turn"}}
+[1790817255.114] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.156] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.209] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.272] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.308] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.330] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817255.331] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_starte
+[1790817255.332] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_change
+[1790817255.369] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.426] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.455] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.479] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.526] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.625] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.713] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.759] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.790] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.814] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.843] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817255.855] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.906] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817255.969] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817255.969] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "NATIVE_RESPONSE_4", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kin
+[1790817255.975] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817255.986] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817256.050] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817256.064] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817256.220] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817256.333] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817256.393] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817256.399] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"used": 110, "size": 32768, "_meta": {"agentComms": {"updates": []}}, "sessionUpdate": "usage_update
+[1790817256.411] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817256.492] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "transcript_c
+[1790817256.520] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817256.540] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817256.543] prompt:returning
+[1790817256.544] outgoing: {"jsonrpc": "2.0", "id": 7, "result": {"stopReason": "end_turn"}}
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817257.725] incoming: {"jsonrpc": "2.0", "method": "session/prompt", "params": {"prompt": [{"text": "VISIBILITY_CANCEL_STARTED", "type": "text"}], "sessionId": "immediate-fork", "_meta": {"agentComms": {"request": {"kind":
+[1790817257.842] prompt:start sender=immediate-fork mode=agent sent_seq=0
+[1790817257.850] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817257.851] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_change
+[1790817257.903] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817257.903] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817260.777] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817262.258] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+=== watchdog: 5 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Connection.request: connection.py:188
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+[1790817262.288] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817262.290] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_starte
+[1790817262.291] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "queue_change
+[1790817262.304] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817262.346] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817262.389] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817262.429] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817264.366] incoming: {"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": "immediate-fork", "_meta": {}}}
+[1790817264.397] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817264.501] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "prompt_cance
+[1790817264.503] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delive
+[1790817264.513] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "immediate-fork", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed
+[1790817264.513] prompt:cancelled
+[1790817264.514] outgoing: {"jsonrpc": "2.0", "id": 10, "result": {"stopReason": "cancelled"}}
