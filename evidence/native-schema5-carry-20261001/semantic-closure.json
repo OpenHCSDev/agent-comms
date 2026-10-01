@@ -48,5 +48,11 @@
     ".artifacts/native-schema5-carry/target-declaration.json": "c437613f4508512d54336f6d08a0381405403b999248e8547dcf183053c88c9f",
     "tools/cutover/execute_retained_summary_foundation.py": "49c9a05298b68ccfd91dc75c9de8980e2a0a72e6b670e45d581ccac3ae6e3a19"
   },
-  "caller_closure": "Existing executor decodes the root RuntimeInstallation family; final control07 covers that root decode. CLI help now names the family rather than an obsolete two-member list."
+  "caller_closure": "Existing executor decodes the root RuntimeInstallation family; final control07 covers that root decode. CLI help now names the family rather than an obsolete two-member list.",
+  "latest_peer_source_review": {
+    "490_head": "c1df72eb8742cb2a510b0dfba88255358f118fb1",
+    "489_head": "dac8c1618b37feaec79bc3892b831fb719a4f92a",
+    "diff_receipt": "latest490-declaration-review.txt",
+    "analysis": "Since the installed f3 checkpoint, schema-meta constructor version becomes default Literal[5], fresh schema creation moves to its existing owner, and TRIAGE guard derives the same declared triage name. NativeInputExecution membership and PromptBinding fields are unchanged; reply projection now returns all published obligations. TypedTable derives SQL from annotation/Column metadata, not constructor defaults. No new target field migration is indicated by this source diff. Actual receiving target declarations still must be freshly attested; installed controls remain the pinned f3 checkpoint."
+  }
 }
