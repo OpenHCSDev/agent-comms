@@ -131,9 +131,11 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                 options["required"] = True
             if isinstance(options.get("default"), DeclaredFamily):
                 options["default"] = options["default"].declared_name
-            owner.add_argument(
-                *metadata["flags"], dest=metadata.get("wire_name", declared.name), **options
-            )
+            if any(flag.startswith("-") for flag in metadata["flags"]):
+                options["dest"] = metadata.get("wire_name", declared.name)
+            else:
+                options.pop("required", None)
+            owner.add_argument(*metadata["flags"], **options)
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
@@ -621,5 +623,39 @@ class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
             "attempts": [
                 {"operation_id": row.operation_id, "state": FieldCodec.encode(row.state)}
                 for row in journal.summaries.history(thread.session_file)
+            ],
+        }
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextCliCommand(CliCommand):
+    help = "Inspect original context contributors without sending an input"
+    thread: str = option("thread")
+
+    def apply(self, ctx: Comms) -> Any:
+        from .active_route import read_active_route
+        from .context_tokens import NativeTokenCounter
+        from .field_codec import FieldCodec
+        from .turn_context import TurnContext, GoalSegment, NextContextTurn
+
+        owner = ctx.registry.require(self.thread)
+        context = TurnContext.for_owner(owner, NextContextTurn(), "", ctx.views.thread_views())
+        if owner.active_goal is not None:
+            context = context.prepend(GoalSegment.capture(owner))
+        route = read_active_route()
+        counter = NativeTokenCounter(Path(route.native_package))
+        counts = counter.measure(tuple(segment.text() for segment in context.segments))
+        return {
+            "scope": "coordination-input-preview; native system/history and wire manifests pending",
+            "input_supplied": False,
+            "manifest": FieldCodec.encode(context.manifest(counts.counts, counter=counts.counter)),
+            "segments": [
+                dict(
+                    kind=segment.declared_name,
+                    provenance=FieldCodec.encode(segment.provenance),
+                    tokens=count,
+                    text=segment.text(),
+                )
+                for segment, count in zip(context.segments, counts.counts, strict=True)
             ],
         }
