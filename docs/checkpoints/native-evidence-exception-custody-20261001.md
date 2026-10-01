@@ -1,69 +1,83 @@
-# Native evidence resource exception ownership — 2026-10-01
+# Native evidence exception custody — Ready, 2026-10-01
 
-Owner Arendt. Receiving base main1f8bf0ef; urgent follow-up to merged493,
-independent of unfinished489 and pending494. No live input replay, restart,
-state clear or public mutation.
+Owner Arendt; PR498 receives main f16b2081 normally, including merged494/497.
+Functional source freeze: `59649992a2c4324cd8bf1512380fed7b38266885`. Parent owns merge and activation.
+Production diff against receiving main: **8 files, 180 added /119 deleted**.
 
-Six actual sequence319 diagnostics show successful native triage reaching the
-ignored-result cursor projection. Original nonblocking wire/bus lock acquisition
-raises BlockingIOError. ExitStack throws that consumer exception back through
-PrivateEvidenceRead.open, whose acquisition translation incorrectly spans yield.
-It becomes NativePiUnavailable, bypassing NativeSourceCursor.advance's existing
-bounded contention policy. This is not evidence of a model outage or a missing
-native file.
+## Source ownership and deletion
 
-Source ownership first: existing PrivateEvidenceRead owns file acquisition and
-file I/O errors; caller lock and settlement errors remain with their original
-owners. Acquired NativeEvidenceRead/Scope retains bytes only and must close while
-propagating a consumer exception unchanged. Inventory similar resource-yield
-translation scopes and close their consumer paths in the same source change.
-Do not add retry deadlines, proof/state copies or disable reader borrowing.
+PrivateEvidenceRead and NativeContextJournal translate only their own acquisition,
+file I/O, decode and observation failures. Existing ExitStack custody closes
+resources while preserving consumer exception identity. NativeTranscript.tail,
+PrivateEvidenceRead.rows and BusPageIndex.iterate likewise put translation around
+iterator advancement/decode, outside yielded consumer execution. Original prefix,
+inode, permission, schema, generation and mutation checks remain intact.
 
-Validation LAST: focused resource exception checks plus an installed continuous
-private journey with at least three actual native owners simultaneously finishing
-triage, cursor advancement and bus publication. Provider only may be controlled.
-No acceptance result claimed at this work-start checkpoint.
+The source census distinguishes legitimate operation owners: GoalHistory owns its
+private write/commit/fsync transaction; backend.run owns turn completion/failure.
+CompactionJournal, CoordinationSession and NativeCustody rollback/cleanup catches
+rethrow unchanged. No blanket removal of operation-level failure ownership.
 
-## Source closure
+StoreLockContention owns the existing **two-second physical POSIX lock wait
+resource** at _store_lock. One borrowed resource passes through original wire →
+bus → registry → coordinator SQL order. NativeSourceCursor advances once with one
+NativeEvidenceScope. The old whole-observation retry loop is deleted: decoding and
+consumer work cannot spend the wait resource. Only refused physical flock waits;
+source operations and provider inputs are never retried. SourceCoverage's original
+0.25s certified-acquisition guard excludes measured physical waiting only; no new
+addressed-page wall policy. _require_source keeps its original read signature.
+Existing certification and current root/process/admission/generation/prompt/SQL
+and monotonic-cursor fences remain with their original owners.
 
-Existing owners, no new type/store/policy: PrivateEvidenceRead now translates only
-its open/fstat/read/parse/snapshot operations. Its yielded rows and open resource
-propagate caller exceptions unchanged while closing. NativeContextJournal's
-indexed acquisition and post-observation inode check likewise own only their
-operations, retaining query-only/schema/private-file/inode checks. All public
-readers continue through NativeEntry/NativeEvidenceRead/Scope; their ExitStack
-closes descriptors but does not reinterpret consumer bus errors.
+This resource contains no session/input/cursor/proof/replay authority. Windows
+locking behavior remains unchanged; acceptance exercises private POSIX execution.
+Native, wire and storage formats are unchanged.
 
-Bounded authored source AST inventory found translating yield scopes also in
-NativeTranscript.tail and BusPageIndex.iterate: tolerant decode/index failure is
-now scoped to iterator advancement/decoding; yielded consumer exceptions stay
-consumer exceptions. Their original display tolerance and malformed-index refusal
-remain. GoalHistory._transaction deliberately owns its private write transaction
-and commit/fsync uncertainty (only internal goal SQL callers); backend.run owns
-turn-level completion/failure events. CompactionJournal/CoordinationSession and
-NativeCustody catch BaseException only for rollback/cleanup and rethrow unchanged.
-Those are legitimate operation/cleanup owners, not native-file classification.
+## Final installed qualification
 
-Unchanged NativeSourceCursor.advance already retries only BlockingIOError from
-its original auxiliary cursor transaction, bounded by its existing two-second
-policy. This change restores that declared behavior; no new retry/timeout,
-provider input replay, acquisition bypass, cursor mirror or fleet reduction.
-Storage/wire/native formats and current private-file/prefix proof checks unchanged.
+[Ready receipt](../../evidence/native-evidence-exception-custody-20261001/READY.json)
+and [provenance](../../evidence/native-evidence-exception-custody-20261001/installed-provenance.json)
+record all eight installed modules byte-equal to source, a normal wheel installation
+and unchanged reviewed native53b8. No editable import fallback.
 
-## Representative-history contention relation
+- Final focused resource/index controls: **25 passed in 1.18s**.
+- Ordinary private restart/automatic drain gate02: three real native owners, three
+  input-backed cursors, 21 ACP notifications, zero diagnostics; 22.73s, retired.
+- Representative retained gate12: **24.653549775s, all three input-backed cursors
+  proven, three localhost POSTs, 18 ACP notifications, zero diagnostics**; retired.
+  Three declared private copies of the original **42,924,939-byte** journal and
+  original input-proof ran through actual CommsAgent/TurnRunner/SelectedExecution,
+  native children, coverage, cursor and ACP publication. Original hashes unchanged.
+  Real wire contention lasted 1.708709740s with all three original source FDs open
+  after native IGNORE. The stack records physical StoreLockContention acquisition.
+  Original single cursor calls took 2732.30/2469.92/2617.69ms, preserving the lock
+  allowance despite source decoding. No state/protocol/UI implementation mocks.
 
-The first three-owner installed gate02 passed: three simultaneous real native
-triages and three input-backed cursors,21 ACP updates,0diagnostics,22.73seconds,
-all worker cleanup complete. This small-history result is scoped, not sufficient
-for large-history contention.
+Gate12 command: `.observations/runtime/bin/python tests/shared_bus_restart_native.py
+--stage /home/ts/wt/ac498-12 --owners 3 --history 120 --collective
+--saved-source /home/ts/.cache/agent-scratch/parent-authored474-stopped-saved-startup-20261001/session.jsonl
+--cursor-contention --package /home/ts/wt/comms-combined474-global491-native-20261001/stack/.pi-native-53b8c413d90aa6b1/node_modules/@earendil-works/pi-coding-agent`.
 
-Owner review identified that the original cursor clock began before potentially
-seconds-long initial decoding. Advance now acquires one existing NativeEvidenceScope,
-observes the original source, and starts its unchanged two-second contention budget
-only on the first original BlockingIOError. Retries borrow the same acquired reader;
-every observation still verifies original byte-prefix and original SQL proof/current
-owner/generation. No new timeout/cursor/proof permission, provider operation or
-input is retried. The first nonblocking probe without an original committed input
-still refuses. File/decode/mutation failures remain distinct and are never retried.
-Representative saved history plus real publication contention is the remaining
-installed acceptance; no live originals are used as inputs.
+## Explicit limits and protected originals
+
+This qualifies resource custody and contention with **declared private retained
+sources**, not ordinary ACP continuation of public saved sessions. Private drain
+currently omits captured saved-file selection; launch/attestation/admission/proof/
+recovery independently assume private location. Full continuation through existing
+NativeCustody, NativeSessionIdentity, attach_session and raw coverage remains
+**Arendt PR489**, coordinated with Einstein and Schrodinger. No weak factory patch.
+
+Gate01's original terminal assertion failure remains, alongside read-only corrected
+input-backed qualification. Retained08's two-of-three result, retained10's measured
+2.67–3.37s decode/deadline failure and retained11's unused-argument TypeError remain
+failures in committed evidence. Final12 closes this resource scope. Earlier broader
+fixture controls yielded 46 passes/11 obsolete-fixture failures; no green full-suite
+claim. No further tests or CI were run after the accepted final gate.
+
+Schrodinger's read-only incident classification found all six original triages
+terminal IGNORE with matching original proof and empty current pointers; no recovery
+mutation/replay required. Historical UNKNOWN dispositions remain untouched.
+Raw ac498-01..12 roots, original saved journal/proof, failed receipts and native
+journals remain protected. Owned .observations/runtime (~83MiB) and profiling files
+are retained. Git contains sanitized receipts/stacks/provenance only, no native
+bodies, credentials or registry preimages. Zero public mutations or paid calls.

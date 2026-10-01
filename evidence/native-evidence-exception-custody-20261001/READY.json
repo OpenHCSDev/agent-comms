@@ -1,0 +1,31 @@
+{
+  "status": "Ready: evidence resource and physical cursor contention scope",
+  "code_head": "59649992a2c4324cd8bf1512380fed7b38266885",
+  "receiving_main": "f16b2081",
+  "production_diff": {
+    "files": 8,
+    "added": 180,
+    "deleted": 119
+  },
+  "installed_retained_gate": {
+    "receipt": "installed-retained-12.json",
+    "seconds": 24.653549775015563,
+    "owners": 3,
+    "proven_input_cursors": 3,
+    "diagnostics": 0,
+    "source_bytes": 42924939,
+    "all_workers_retired": true
+  },
+  "source_hash_proof": "installed-provenance.json",
+  "focused_controls": {
+    "passed": 25,
+    "seconds": 1.18
+  },
+  "native": "53b8c413d90aa6b1",
+  "native_changes": 0,
+  "wire_or_storage_changes": 0,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "remaining_owner": "Arendt PR489: complete public saved-session NativeCustody/raw-coverage continuation; not qualified by this explicit private-source gate"
+}
