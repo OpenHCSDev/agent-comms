@@ -1,0 +1,27 @@
+{
+  "state": "QUEUE_HANDOFF_DRIVER_AUGMENTED_NOT_LAUNCHED",
+  "core_product": "4345bfc8aac0e4717450d4f79e6fe53e331f3ccf",
+  "toad_product": "25d8e60207c457cc480dff6ed1c5cf1e0fa77193",
+  "acceptance_budget_unchanged": {
+    "localhost_POSTs": 2,
+    "paid_calls": 0,
+    "fixture_timeout_seconds": 90,
+    "manual_compactions": 0
+  },
+  "affected_observations": [
+    "Original ACP controller submits the same held followup, durable reservation saved before assertion.",
+    "Existing mounted QueueSummary actual compositor region paints the exact followup while producer queued_inputs includes original submission ID.",
+    "Original durable followup has not started and native chat claim for submission ID is absent before provider gate release.",
+    "After original terminal reply, queue membership/caption clears and exact native-ID UserInput claim appears once; actual message region contains followup once.",
+    "Receiving case requires pre-delivery and queue-to-chat receipts in final two-POST summary."
+  ],
+  "existing_historical_premise": "Retained49 original queued receipt was BoundUnknownInput with original native ID; had not started. This is inspection only, not new painted queue acceptance.",
+  "driver_files": {
+    "/home/ts/wt/toad-s5-receiving-coherence-20261001/tests/retained_input_origin_observer.py": "60ebd565f8e0982298aa61f548d8fffd6fcead906e732bc8d7b42753b43fa418",
+    "tests/test_native_context_inspection.py": "b14ba8eba5eb32c11c4b52822684ca72b4c8e0b35d1f19ad3be13af558166f90"
+  },
+  "verification": "AST parsing and diff check only; installed gate pending exact Mendel package and parent grant.",
+  "visual_limit": "Real mounted Toad compositor region/text; headless/raw SVG is not physical pixel readiness.",
+  "package_source_boundary": "No src/native/lock change. Drivers read from persistent own source paths; do not rebuild package for driver-only commits.",
+  "pr270_source_boundary": "Mendel normal-integrates published accepted25d branch into metadata-owned270; oldremote270 producer must not become finalsource."
+}

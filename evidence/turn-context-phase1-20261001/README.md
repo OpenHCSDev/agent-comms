@@ -88,3 +88,60 @@ nested Core tool/native manifest journey, plus saved configured-provider proof
 and whole boundary/guidance/inspection closure. Source or SDK contracts do not
 claim whole installed readiness. Public defaults and original UNKNOWN are
 unchanged.
+
+## Actual installed full controlled journey39
+
+New immutable native0064 / installed Core43df and Toad89655 completed the continuous
+actual Toad → ACP → native → nested Core decision tool → same-turn followup → second
+authored input → CLI inspection journey in 48.995 seconds, with three localhost
+provider requests and zero paid/public calls. All three original native input IDs
+are unique and saved once. The decision is one original wire message; three silent
+context manifests do not perturb the message high-water. Historical turn/diff
+queries preserve the journal. Actual compositor reply frames are retained as SVG.
+Fixture closure returned and native children were asserted dead; the final exact
+fixture process census is empty.
+
+Original32–35 negatives remain intact, with no replay. The original joint-turn reply
+oracle and screenshot API were corrected in the existing UI driver, not production.
+Actual SDK38 additionally proves that replacing a valid PNG preserves the native
+input while dropping original-image attribution. Details and artifact hashes:
+`installed-context-toad-core-tool39-receipt.json`, `logical-image-sdk38-receipt.json`.
+
+This is installed controlled-provider acceptance, not configured-provider saved-state
+acceptance, full phase1 Ready, public activation or performance readiness.
+
+## Configured retained-source journey41
+
+The authentic original installed reader acquired NRA's current model/effort and
+process launch in RAM. One SDK fork of the actual 41,270,257-byte retained source
+then completed real installed Toad/ACP/native context acceptance in 51.415 seconds:
+`openai-codex/gpt-6.1-sol`, thinking off, one original human input, one native user
+and terminal reply, one text-free context manifest and read-only turn query. The
+actual compositor displayed the requested terminal token. Source SHA and original
+process/admission proof remained unchanged. Owner shutdown and the UI executor
+returned; the exact final fixture process census is empty. No public input or
+original retry occurred. Detailed receipt: `configured-context41-receipt.json`.
+
+The native terminal reports 92,432 input and 15 output tokens. This is SDK-reported
+usage, not independent billing or TLS request interception. Existing source byte
+comparisons and SDK38 prove render preservation; this configured journey proves
+retained-source behavior with the actual selected provider. First attempt40 only
+refused an existing fixture name, before capture/fork/provider, and remains logged.
+
+Both continuous installed journeys39/41 are accepted. Public/default activation
+and phase2 retained operations are separate.
+
+## Parent global foundation review correction43
+
+The39/41 installed journeys and SDK38 source/render comparison remain accepted.
+Phase1 merge readiness is pending independent S2 foundation acceptance or a proper
+PR stack with its owner Sch#475. The current473 diff to main includes S2's NEW
+`CommsDecisionTool`, `task_decisions`, `retained_task_facts` and `input_origin`. That
+tool catalog is a real provider-input change. The SDK render comparison measures
+observation versus the original SDK Context on the same combined43df cohort; it
+does not establish provider catalog equivalence to current main. Likewise, the
+logical-coordinate deletion/byte comparison baseline b9d953 is unmerged S2, not
+an independently accepted main foundation. Earlier full Ready framing is
+superseded by `phase1-foundation-review43.json`. No positive raw evidence is
+withdrawn, no whole475/general constraint/artifact/three-checkpoint completion is
+claimed, and no new paid call/replay/rebuild is needed for this scope correction.

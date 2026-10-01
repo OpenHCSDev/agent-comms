@@ -1,0 +1,20 @@
+{
+  "state": "SCOPED_ACCEPTANCE_PRESERVED_PARTIAL_FOUNDATION_PUBLICATION_REVIEW_PENDING",
+  "source_head": "19c14707032be625cf4ca7f0ad16cd0551f94819",
+  "named_foundation_head": "1a794a9e1baf369ca5d4c09938f9c5449786ccb8",
+  "foundation_production_source": "43df95f00f4e29f9086e2b5bb1e1f651ab5f67dc",
+  "phase1_production_native_delta_relative_foundation": [],
+  "parent_acceptance_received": false,
+  "stack_base_change": "Pending parent explicit named-foundation acceptance; current main baseline is not catalog-equivalent",
+  "foundation_scope": "Partial S2 foundation plus already integrated S5 source; full S2 remains open",
+  "source_render_scope": "Original SDK context/render equivalence on same accepted combined context; not unchanged tools from old main",
+  "installed_acceptance_receipts": [
+    "installed-context-toad-core-tool39-receipt.json",
+    "configured-context41-receipt.json",
+    "logical-image-sdk38-receipt.json"
+  ],
+  "source_map": "docs/checkpoints/s2-foundation-s5-source-20261001.md",
+  "new_provider_calls": 0,
+  "original_input_retries": 0,
+  "public_changes": []
+}

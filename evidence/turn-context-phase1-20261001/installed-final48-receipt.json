@@ -1,0 +1,40 @@
+{
+  "python": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/bin/python",
+  "core": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "fixture": "/home/ts/wt/s5final01",
+  "public_inputs": 0,
+  "paid_provider_calls": 0,
+  "state": "FAILED_NO_REPLAY",
+  "error": "AssertionError()",
+  "local_provider_posts": 4,
+  "original_provider_requests": "/home/ts/wt/s5final01/original-provider-requests.json",
+  "elapsed_seconds": 57.7093236100045,
+  "tooling_head": "6ce687f9",
+  "product_proof": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/staging-s2-s5-final-cohort-20261001/source-proof.json",
+  "classification": "fixture omitted original owner.load_session(C) before advertising live same-process receiver; RuntimeRequest.bind requires existing session binding",
+  "original_input_terminal_counts": {
+    "5346870b0fe8003a4ddc3cc8b62cc4f0": 1,
+    "4be098f0eea14d32347f13b5f3a277e3": 1,
+    "df51a57bdbc4883c3679ea4553cc5ad8": 1
+  },
+  "original_inputs_durably_unchanged": true,
+  "selected_receiver_manual_attempts": 0,
+  "receiver_summary_provider_requests": 0,
+  "receiver_native_path": "/home/ts/wt/s5final01/c-native-fork/sessions/--home-ts-wt-s5final01-sdk-source-project--/2026-10-01T11-52-24-578Z_01a0f74e-ff03-7772-9a47-d6cf8aae5336.jsonl",
+  "receiver_native_sha256": "56590325524a369290c4fc876e0eaf98454b9257c278db597330f60f3841adba",
+  "private_body_absent_at_failed_attachment": true,
+  "raw_receiver_acp": "/home/ts/wt/s5final01/context-journey/receiver/toad-ingress/state/toad/logs/Original_S2_S5_fixture_2026-10-01T07_53_17_169382.txt",
+  "later_goal_replacement_executed": false,
+  "tested": [
+    "A actual SDK/native/ACP/Toad originals and active followup",
+    "A original private decision native tool",
+    "public user supersession and native author correction",
+    "silent context manifests/CLI exactness"
+  ],
+  "not_tested": [
+    "C manual selected commit",
+    "C canonical certified summary/private-body exclusion",
+    "goal replacement/re-read after replacement"
+  ],
+  "next_fix": "use existing owner.load_session(project,C), retain no-replay original48; fresh controlled journey requires separate launch grant"
+}

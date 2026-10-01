@@ -1,0 +1,1207 @@
+{
+  "state": "SCOPED_SOURCE_AND_INSTALLED_RECEIVING_READY_FOR_PARENT_REVIEW",
+  "head": "7183002e0def2b4667f52689b90ab8fa4ee74408",
+  "pr": 473,
+  "foundation_pr": 475,
+  "production_and_native_delta_vs_foundation": {
+    "added": 0,
+    "deleted": 0
+  },
+  "installed_sources": [
+    {
+      "module": "agent_comms",
+      "head": "0ea6dccbd39b1f8656e2fc2ad983046244d9312d",
+      "location": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/agent_comms",
+      "files": 323,
+      "python_files": 305,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/agent-comms.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "0ea6dccbd39b1f8656e2fc2ad983046244d9312d",
+          "requested_revision": "0ea6dccbd39b1f8656e2fc2ad983046244d9312d"
+        }
+      },
+      "inventory_sha256": "6edbfc8d16aaf47a9d5132ab356184c7a3f3eba3d0263c204d1ba9bab16aa088"
+    },
+    {
+      "module": "toad",
+      "head": "a87de510fa1b4fd67113446a9ef698fc0865141d",
+      "location": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/toad",
+      "files": 305,
+      "python_files": 274,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/toad.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "a87de510fa1b4fd67113446a9ef698fc0865141d",
+          "requested_revision": "a87de510fa1b4fd67113446a9ef698fc0865141d"
+        }
+      },
+      "inventory_sha256": "1696749c2c4c4bec31648a29ba4f5d552ab2b7ca2bad509a92a1ef67e52fc44a"
+    },
+    {
+      "module": "textual",
+      "head": "4e9016c1a8f3592eb652efc39ada493a41ee9206",
+      "location": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/textual",
+      "files": 266,
+      "python_files": 249,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "4e9016c1a8f3592eb652efc39ada493a41ee9206",
+          "requested_revision": "4e9016c1a8f3592eb652efc39ada493a41ee9206"
+        }
+      },
+      "inventory_sha256": "9b4dfc0cfd889e36471dbc1f61e90d8aab5287ae3066f2f704e59e36b378cb90"
+    },
+    {
+      "module": "textual_diff_view",
+      "head": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+      "location": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/textual_diff_view",
+      "files": 3,
+      "python_files": 2,
+      "byte_equal": true,
+      "direct_url": {
+        "url": "https://github.com/OpenHCSDev/textual-diff-view.git",
+        "vcs_info": {
+          "vcs": "git",
+          "commit_id": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+          "requested_revision": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9"
+        }
+      },
+      "inventory_sha256": "c1ab2e4c7a7595de81eeb8fef14f9fa9e45b603f84e810dc7c08fa9145793679"
+    }
+  ],
+  "immutable_package_proof": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/staging-s2-s5-final-cohort-20261001/source-proof.json",
+  "immutable_package_proof_sha256": "c091f02cc302cc5e5a13db8b5f124d195669c5432a3e7069a019918c1fc9a434",
+  "actual_installed_native_acp_toad": {
+    "python": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/bin/python",
+    "core": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "fixture": "/home/ts/wt/s5final02",
+    "public_inputs": 0,
+    "paid_provider_calls": 0,
+    "state": "FAILED_NO_REPLAY",
+    "error": "ValueError('Owner goal authority requires goal creation or explicit resume.')",
+    "local_provider_posts": 5,
+    "original_provider_requests": "/home/ts/wt/s5final02/original-provider-requests.json",
+    "elapsed_seconds": 69.82082070899196,
+    "classification": "fixture passed creation/resume-only owner_store to later ClearGoalAction; canonical check_grant refused before apply",
+    "tooling": "e474d52f",
+    "original_native_counts": {
+      "45fecbfeab6be8ac9927908fdf9645b4": 1,
+      "e4264dc4c405d48cd3fc7323475b8945": 1,
+      "4d88c36e50c9b1969338cbd56d93165f": 1
+    },
+    "original_durable_rows_unchanged": true,
+    "selected_manual_commit": "9e59162dd9bd465da0b7358896e31438",
+    "selected_operation": "ee934c5c1f604f5693677d617cb60ec6",
+    "native_summary_entry": "becefa9b",
+    "receiver_native_file": "/home/ts/wt/s5final02/c-native-fork/sessions/--home-ts-wt-s5final02-sdk-source-project--/2026-10-01T12-01-24-911Z_01a0f757-3daf-74b2-8d5b-ed8dff1acd70.jsonl",
+    "receiver_native_sha256": "832f52b72c94cf2d3c417b08dc6016348ac263715e892901e6b94dfffa4e2924",
+    "source_sha256": "a0666b42587bf1ab802c20bdc8b4080e54041805e34ba34bd87bfdde5e1d8114",
+    "receiver_public_facts_neutral": true,
+    "private_original_absent_native_and_actual_summary_request": true,
+    "compaction_canonical_operation_committed": true,
+    "continuous_run_pass": false,
+    "scope_limit": "actual goal replacement and final CLI assertions not reached; separate authorized provider-free completion"
+  },
+  "authorized_provider_free_completion": {
+    "scope": "authorized post-terminal goal controls and recorded CLI; continuous49 remains FAILED",
+    "python": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/bin/python",
+    "core": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "root": "/home/ts/wt/s5final02",
+    "native_prompts": 0,
+    "provider_calls": 0,
+    "input_replays": 0,
+    "owner_restarts": 0,
+    "original_goal": {
+      "kind": "absent"
+    },
+    "standby_refused_without_active_dependency": "No declared dependency has an active turn (@context-peer). A running/ready process or queued input does not prove active work. Message or restart the responsible agent, inspect its status, then declare standby only while a target is actually working.",
+    "state": "SCOPED_POST_TERMINAL_CONTROLS_PASS",
+    "absent": {
+      "kind": "absent"
+    },
+    "replacement": {
+      "kind": "present",
+      "revision": {
+        "id": "46326a8aa1f44beeb996f751a3adbae2",
+        "revision": 1
+      }
+    },
+    "old_scope_inapplicable": true,
+    "original_inputs_durably_unchanged": true,
+    "retained_hashes": {
+      "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl": "f50898e850f403590cd7abca2113897afccdd6498ba3a47838328635c6942162",
+      "/home/ts/wt/s5final02/c-native-fork/sessions/--home-ts-wt-s5final02-sdk-source-project--/2026-10-01T12-01-24-911Z_01a0f757-3daf-74b2-8d5b-ed8dff1acd70.jsonl": "832f52b72c94cf2d3c417b08dc6016348ac263715e892901e6b94dfffa4e2924",
+      "/home/ts/wt/s5final02/original-provider-requests.json": "b51293c828159babd13d136ab3144c4af68819151e7a9b283e78f3f97f18baec",
+      "/home/ts/wt/s5final02/wire/input_dispositions.json": "69d72a5000445a8274c4b5f9a56aadab8cf9693432e349c7d54a4c4d9a251444"
+    },
+    "recorded_cli": {
+      "manifests": [
+        {
+          "thread": {
+            "name": "context-source",
+            "created_at": 1790856084.3609803
+          },
+          "turn": {
+            "kind": "recorded",
+            "identity": {
+              "value": "8f3cd9239bcc48549e91db6c9c2ad203"
+            },
+            "occurrence": {
+              "incarnation": {
+                "name": "context-source",
+                "created_at": 1790856084.3609803
+              },
+              "generation": 2
+            }
+          },
+          "segments": [
+            {
+              "kind": "system_layer",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 3,
+                  "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+                  "sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/s5final02/sdk-source/project/AGENTS.md",
+                  "sha256": "90228f4c39df9c8241de2afac341fdd31d5e40662547652761ab75d67577087e"
+                }
+              ],
+              "sha256": "00ef950ca89ea128d40fcb42a8fc032bceeb55b70bfb51b50158b451ffb38083",
+              "utf8_bytes": 2112,
+              "tokens": 519,
+              "contributors": []
+            },
+            {
+              "kind": "compaction_summary",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 3,
+                  "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "1cbdf1da"
+                  ]
+                }
+              ],
+              "sha256": "6753940bd6779780d5b2e901e129935b1c779a004ca3e35d5802356d1a875ecf",
+              "utf8_bytes": 216,
+              "tokens": 33,
+              "contributors": []
+            },
+            {
+              "kind": "transcript",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 3,
+                  "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "f5dcfc75"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "b579cc5a"
+                  ]
+                }
+              ],
+              "sha256": "7d32c874f56ab8339663438dd8ce9ca1901deee5d30702a87b81fc9e3ae22f04",
+              "utf8_bytes": 120288,
+              "tokens": 31207,
+              "contributors": []
+            },
+            {
+              "kind": "injection_message",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 3,
+                  "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "3def1ca6"
+                  ]
+                }
+              ],
+              "sha256": "a82a3d1645efc71f4c5c2a7e65c3de6813741f1515e34701a12d71fc4765f570",
+              "utf8_bytes": 107,
+              "tokens": 7,
+              "contributors": []
+            },
+            {
+              "kind": "transcript",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 3,
+                  "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "53b4c031"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "8a3d4033"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "9a17b615"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "0d62813d"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "eb3cca94"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "54dc6af0"
+                  ]
+                }
+              ],
+              "sha256": "4c5ef3f8bf15645c8451748439a5779f7d582c080b75cd1e17a5cf5f492abe6f",
+              "utf8_bytes": 5774,
+              "tokens": 2036,
+              "contributors": [
+                {
+                  "kind": "coordination",
+                  "provenance": [
+                    {
+                      "kind": "owner",
+                      "owner": {
+                        "name": "context-source",
+                        "created_at": 1790856084.3609803
+                      },
+                      "revision": "54e127a15d74cdc454b1d510652214800235b55b29913c35c46ca641ddfcf99f"
+                    },
+                    {
+                      "kind": "file",
+                      "path": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+                      "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+                    },
+                    {
+                      "kind": "native",
+                      "identity": {
+                        "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                        "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                      },
+                      "request_generation": 3,
+                      "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                    },
+                    {
+                      "kind": "journal",
+                      "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                      "entries": [
+                        "54dc6af0"
+                      ]
+                    }
+                  ],
+                  "sha256": "b13e23f19f01d1146f22478dbd84f98cb954e0ef5d686a0ecf97119f6090f67c",
+                  "utf8_bytes": 1169,
+                  "tokens": 277,
+                  "contributors": []
+                },
+                {
+                  "kind": "user_input",
+                  "provenance": [
+                    {
+                      "kind": "owner",
+                      "owner": {
+                        "name": "context-source",
+                        "created_at": 1790856084.3609803
+                      },
+                      "revision": "8f3cd9239bcc48549e91db6c9c2ad203"
+                    },
+                    {
+                      "kind": "input",
+                      "key": "acp:931c7750a0e0461498b254e2745dd85b",
+                      "origin": {
+                        "kind": "human",
+                        "root_id": "aca2bdeeb1594beeb0d42f293c59147e",
+                        "author": {
+                          "sender": "user",
+                          "created_at": 1790856091.457796,
+                          "worktree": "/home/ts/wt/s5final02/sdk-source/project"
+                        },
+                        "admission": {
+                          "incarnation": {
+                            "name": "context-source",
+                            "created_at": 1790856084.3609803
+                          },
+                          "admission_generation": 1
+                        },
+                        "project": "/home/ts/wt/s5final02/sdk-source/project",
+                        "goal": {
+                          "kind": "present",
+                          "revision": {
+                            "id": "a59753f6c6e64972ac0801e2e62b8be0",
+                            "revision": 2
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "kind": "native",
+                      "identity": {
+                        "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                        "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                      },
+                      "request_generation": 3,
+                      "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                    },
+                    {
+                      "kind": "journal",
+                      "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                      "entries": [
+                        "54dc6af0"
+                      ]
+                    }
+                  ],
+                  "sha256": "33f3713984eede6c8c6bb50fc2b6b5d01a348d674d846d520f882798728193f5",
+                  "utf8_bytes": 53,
+                  "tokens": 7,
+                  "contributors": []
+                },
+                {
+                  "kind": "unavailable_awareness",
+                  "provenance": [
+                    {
+                      "kind": "file",
+                      "path": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/agent_comms/instructions/awareness-unavailable.md",
+                      "sha256": "53d21f3bc5c10e28955cc1798d8420bd6a8d0c8c9da011aa509afc04bbb5b8c2"
+                    },
+                    {
+                      "kind": "native",
+                      "identity": {
+                        "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                        "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                      },
+                      "request_generation": 3,
+                      "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                    },
+                    {
+                      "kind": "journal",
+                      "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                      "entries": [
+                        "54dc6af0"
+                      ]
+                    }
+                  ],
+                  "sha256": "05dc99257b45688cb56017a5a39f8991fe2afe28dec4a3176c9adca056d3c6b9",
+                  "utf8_bytes": 100,
+                  "tokens": 18,
+                  "contributors": []
+                }
+              ]
+            },
+            {
+              "kind": "tool_catalog",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 3,
+                  "context_digest": "a064ddedae05bf098cc8aed5a6e8f4f14b0661e4767c96f1931f058d03328152"
+                }
+              ],
+              "sha256": "1ce0c73e2508d7d30a69e893111885017a3b33ac47da77f00d84c7136faf6fc3",
+              "utf8_bytes": 18049,
+              "tokens": 4513,
+              "contributors": []
+            }
+          ],
+          "counter": "pi.estimateTokens"
+        },
+        {
+          "thread": {
+            "name": "context-source",
+            "created_at": 1790856084.3609803
+          },
+          "turn": {
+            "kind": "recorded",
+            "identity": {
+              "value": "8f3cd9239bcc48549e91db6c9c2ad203"
+            },
+            "occurrence": {
+              "incarnation": {
+                "name": "context-source",
+                "created_at": 1790856084.3609803
+              },
+              "generation": 2
+            }
+          },
+          "segments": [
+            {
+              "kind": "system_layer",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 4,
+                  "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+                  "sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/s5final02/sdk-source/project/AGENTS.md",
+                  "sha256": "90228f4c39df9c8241de2afac341fdd31d5e40662547652761ab75d67577087e"
+                }
+              ],
+              "sha256": "00ef950ca89ea128d40fcb42a8fc032bceeb55b70bfb51b50158b451ffb38083",
+              "utf8_bytes": 2112,
+              "tokens": 519,
+              "contributors": []
+            },
+            {
+              "kind": "compaction_summary",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 4,
+                  "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "1cbdf1da"
+                  ]
+                }
+              ],
+              "sha256": "6753940bd6779780d5b2e901e129935b1c779a004ca3e35d5802356d1a875ecf",
+              "utf8_bytes": 216,
+              "tokens": 33,
+              "contributors": []
+            },
+            {
+              "kind": "transcript",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 4,
+                  "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "f5dcfc75"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "b579cc5a"
+                  ]
+                }
+              ],
+              "sha256": "7d32c874f56ab8339663438dd8ce9ca1901deee5d30702a87b81fc9e3ae22f04",
+              "utf8_bytes": 120288,
+              "tokens": 31207,
+              "contributors": []
+            },
+            {
+              "kind": "injection_message",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 4,
+                  "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "3def1ca6"
+                  ]
+                }
+              ],
+              "sha256": "a82a3d1645efc71f4c5c2a7e65c3de6813741f1515e34701a12d71fc4765f570",
+              "utf8_bytes": 107,
+              "tokens": 7,
+              "contributors": []
+            },
+            {
+              "kind": "transcript",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 4,
+                  "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "53b4c031"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "8a3d4033"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "9a17b615"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "0d62813d"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "eb3cca94"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "54dc6af0"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "7da85235"
+                  ]
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "a43b1fe0"
+                  ]
+                }
+              ],
+              "sha256": "9f0acde3f42bd11000cf82775e622e38ef4a5fdc326cd515b57ca233d874d0ae",
+              "utf8_bytes": 8075,
+              "tokens": 2290,
+              "contributors": []
+            },
+            {
+              "kind": "tool_catalog",
+              "provenance": [
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 4,
+                  "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+                }
+              ],
+              "sha256": "1ce0c73e2508d7d30a69e893111885017a3b33ac47da77f00d84c7136faf6fc3",
+              "utf8_bytes": 18049,
+              "tokens": 4513,
+              "contributors": []
+            }
+          ],
+          "counter": "pi.estimateTokens"
+        }
+      ],
+      "text_recorded": false
+    },
+    "context_diff": {
+      "previous_turn": {
+        "kind": "recorded",
+        "identity": {
+          "value": "3f45fcede38a44209c3c5bb45391f53d"
+        },
+        "occurrence": {
+          "incarnation": {
+            "name": "context-source",
+            "created_at": 1790856084.3609803
+          },
+          "generation": 1
+        }
+      },
+      "turn": {
+        "kind": "recorded",
+        "identity": {
+          "value": "8f3cd9239bcc48549e91db6c9c2ad203"
+        },
+        "occurrence": {
+          "incarnation": {
+            "name": "context-source",
+            "created_at": 1790856084.3609803
+          },
+          "generation": 2
+        }
+      },
+      "removed": [
+        {
+          "kind": "system_layer",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "bd24dfc57a4eb5119ab8a3b55b446a5286b4df7a65b5c16bf507f4b1b4646f3d"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+              "sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/s5final02/sdk-source/project/AGENTS.md",
+              "sha256": "90228f4c39df9c8241de2afac341fdd31d5e40662547652761ab75d67577087e"
+            }
+          ],
+          "sha256": "00ef950ca89ea128d40fcb42a8fc032bceeb55b70bfb51b50158b451ffb38083",
+          "utf8_bytes": 2112,
+          "tokens": 519,
+          "contributors": []
+        },
+        {
+          "kind": "compaction_summary",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "bd24dfc57a4eb5119ab8a3b55b446a5286b4df7a65b5c16bf507f4b1b4646f3d"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "1cbdf1da"
+              ]
+            }
+          ],
+          "sha256": "6753940bd6779780d5b2e901e129935b1c779a004ca3e35d5802356d1a875ecf",
+          "utf8_bytes": 216,
+          "tokens": 33,
+          "contributors": []
+        },
+        {
+          "kind": "transcript",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "bd24dfc57a4eb5119ab8a3b55b446a5286b4df7a65b5c16bf507f4b1b4646f3d"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "f5dcfc75"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "b579cc5a"
+              ]
+            }
+          ],
+          "sha256": "7d32c874f56ab8339663438dd8ce9ca1901deee5d30702a87b81fc9e3ae22f04",
+          "utf8_bytes": 120288,
+          "tokens": 31207,
+          "contributors": []
+        },
+        {
+          "kind": "injection_message",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "bd24dfc57a4eb5119ab8a3b55b446a5286b4df7a65b5c16bf507f4b1b4646f3d"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "3def1ca6"
+              ]
+            }
+          ],
+          "sha256": "a82a3d1645efc71f4c5c2a7e65c3de6813741f1515e34701a12d71fc4765f570",
+          "utf8_bytes": 107,
+          "tokens": 7,
+          "contributors": []
+        },
+        {
+          "kind": "transcript",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "bd24dfc57a4eb5119ab8a3b55b446a5286b4df7a65b5c16bf507f4b1b4646f3d"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "53b4c031"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "8a3d4033"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "9a17b615"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "0d62813d"
+              ]
+            }
+          ],
+          "sha256": "720e454a020c1d5b02240a72ec6e02480f5487d6314822f2d16b2f91978d16e8",
+          "utf8_bytes": 3894,
+          "tokens": 1727,
+          "contributors": [
+            {
+              "kind": "user_followup",
+              "provenance": [
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/lib/python3.14/site-packages/agent_comms/instructions/user-followup.md",
+                  "sha256": "bd715d99ec8688ced735029b969a4d5226a70c496d91517c003c8244cf6239e5"
+                },
+                {
+                  "kind": "input",
+                  "key": "acp:73ec288559a1490d9d0795cef6c9eced",
+                  "origin": {
+                    "kind": "human",
+                    "root_id": "aca2bdeeb1594beeb0d42f293c59147e",
+                    "author": {
+                      "sender": "user",
+                      "created_at": 1790856091.457796,
+                      "worktree": "/home/ts/wt/s5final02/sdk-source/project"
+                    },
+                    "admission": {
+                      "incarnation": {
+                        "name": "context-source",
+                        "created_at": 1790856084.3609803
+                      },
+                      "admission_generation": 1
+                    },
+                    "project": "/home/ts/wt/s5final02/sdk-source/project",
+                    "goal": {
+                      "kind": "present",
+                      "revision": {
+                        "id": "a59753f6c6e64972ac0801e2e62b8be0",
+                        "revision": 2
+                      }
+                    }
+                  }
+                },
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                    "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+                  },
+                  "request_generation": 2,
+                  "context_digest": "bd24dfc57a4eb5119ab8a3b55b446a5286b4df7a65b5c16bf507f4b1b4646f3d"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+                  "entries": [
+                    "0d62813d"
+                  ]
+                }
+              ],
+              "sha256": "3ef02f252709db38af5e1a91d648236add63d26d276b04e2586ee89b5d0e0cb2",
+              "utf8_bytes": 70,
+              "tokens": 11,
+              "contributors": []
+            }
+          ]
+        },
+        {
+          "kind": "tool_catalog",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "bd24dfc57a4eb5119ab8a3b55b446a5286b4df7a65b5c16bf507f4b1b4646f3d"
+            }
+          ],
+          "sha256": "1ce0c73e2508d7d30a69e893111885017a3b33ac47da77f00d84c7136faf6fc3",
+          "utf8_bytes": 18049,
+          "tokens": 4513,
+          "contributors": []
+        }
+      ],
+      "added": [
+        {
+          "kind": "system_layer",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 4,
+              "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+              "sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/s5final02/sdk-source/project/AGENTS.md",
+              "sha256": "90228f4c39df9c8241de2afac341fdd31d5e40662547652761ab75d67577087e"
+            }
+          ],
+          "sha256": "00ef950ca89ea128d40fcb42a8fc032bceeb55b70bfb51b50158b451ffb38083",
+          "utf8_bytes": 2112,
+          "tokens": 519,
+          "contributors": []
+        },
+        {
+          "kind": "compaction_summary",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 4,
+              "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "1cbdf1da"
+              ]
+            }
+          ],
+          "sha256": "6753940bd6779780d5b2e901e129935b1c779a004ca3e35d5802356d1a875ecf",
+          "utf8_bytes": 216,
+          "tokens": 33,
+          "contributors": []
+        },
+        {
+          "kind": "transcript",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 4,
+              "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "f5dcfc75"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "b579cc5a"
+              ]
+            }
+          ],
+          "sha256": "7d32c874f56ab8339663438dd8ce9ca1901deee5d30702a87b81fc9e3ae22f04",
+          "utf8_bytes": 120288,
+          "tokens": 31207,
+          "contributors": []
+        },
+        {
+          "kind": "injection_message",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 4,
+              "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "3def1ca6"
+              ]
+            }
+          ],
+          "sha256": "a82a3d1645efc71f4c5c2a7e65c3de6813741f1515e34701a12d71fc4765f570",
+          "utf8_bytes": 107,
+          "tokens": 7,
+          "contributors": []
+        },
+        {
+          "kind": "transcript",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 4,
+              "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "53b4c031"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "8a3d4033"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "9a17b615"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "0d62813d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "eb3cca94"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "54dc6af0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "7da85235"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl",
+              "entries": [
+                "a43b1fe0"
+              ]
+            }
+          ],
+          "sha256": "9f0acde3f42bd11000cf82775e622e38ef4a5fdc326cd515b57ca233d874d0ae",
+          "utf8_bytes": 8075,
+          "tokens": 2290,
+          "contributors": []
+        },
+        {
+          "kind": "tool_catalog",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0f757-3b3d-74fd-b404-2d09cc8da8ea",
+                "sessionFile": "/home/ts/wt/s5final02/sdk-source/sessions/2026-10-01T12-01-24-286Z_01a0f757-3b3d-74fd-b404-2d09cc8da8ea.jsonl"
+              },
+              "request_generation": 4,
+              "context_digest": "fb01a687927a52b2965b90b42139f61b4412d4d1fb95aaaaffe259da996038d8"
+            }
+          ],
+          "sha256": "1ce0c73e2508d7d30a69e893111885017a3b33ac47da77f00d84c7136faf6fc3",
+          "utf8_bytes": 18049,
+          "tokens": 4513,
+          "contributors": []
+        }
+      ]
+    },
+    "elapsed_seconds": 0.44700419501168653
+  },
+  "continuous_final49_pass": false,
+  "negative_attempts_preserved": [
+    48,
+    49,
+    50
+  ],
+  "configured_original41_scope": "historical configured Sol/off SDK fork; source and accepted native journal unchanged, not relabeled as final receiving cohort",
+  "native_manual_scope": "one C actual manual selected compaction, private body excluded/native prefix exact, original public facts neutral; not three S2 cycles",
+  "visual_scope": {
+    "compositor_text_assertion": true,
+    "raw_svg": "/home/ts/wt/comms-turn-context-phase1-20261001/evidence/turn-context-phase1-20261001/installed-final49-committed-summary.svg",
+    "raw_svg_pixels_readable": false,
+    "physical_public_summary_acceptance": false,
+    "reason": "Parent rasterized original export: default ANSI text exported black on black; source/native assertion does not establish readable pixels"
+  },
+  "remaining": [
+    "Full S2/three native compactions/S4 draft481",
+    "S5 retained resource capability phase2 draft474",
+    "Parent public quiet cutover and actual physical original saved-summary entrypoint",
+    "RegisterCLI(--pid) unbound live declaration can reach RuntimeRequest raw next; public canonical fork has no demonstrated counterexample, separate owner review"
+  ],
+  "public_inputs": 0,
+  "paid_provider_calls_in_final_controls": 0,
+  "public_defaults_changed": false
+}

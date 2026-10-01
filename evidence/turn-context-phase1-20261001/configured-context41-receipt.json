@@ -1,0 +1,171 @@
+{
+  "state": "SCOPED_CONFIGURED_SAVED_FORK_TOAD_ACP_NATIVE_CONTEXT_PASS",
+  "python": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-origin-context-0064-20261001/bin/python",
+  "core": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-origin-context-0064-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "fixture": "/home/ts/wt/s5cfg47301",
+  "public_inputs": 0,
+  "original_inputs_retried": 0,
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "off",
+  "source_file": "/home/ts/.pi/agent/sessions/--home-ts-.agent-comms--/2026-09-22T03-53-05-423Z_01a0c73e-ee8f-729a-b53b-1a999b6c2353.jsonl",
+  "source_bytes": 41270257,
+  "original_process": {
+    "pid": 465576,
+    "start_time": 30187842
+  },
+  "original_sha256": "888b79c4afea78a87c8e591928dbc015eeaaa3123e82477c56d40f3739bcf10c",
+  "original_inputs": [
+    {
+      "kind": "started",
+      "key": "acp:47b8e6fafb5c4a3b9e2081e2d5ca9948",
+      "sequence": null,
+      "owner": "configured-source",
+      "admission": 1,
+      "target": "configured-source",
+      "source_text": "Bounded acceptance only. Do not resume inherited work, use tools or change files. Reply exactly S5_CONFIGURED_RETAINED_ONCE_473.",
+      "origin": {
+        "kind": "human",
+        "root_id": "99a37bfbeaaf41e3b9335f3e88a8e874",
+        "author": {
+          "sender": "user",
+          "created_at": 1790850068.0805118,
+          "worktree": "/home/ts/wt/s5cfg47301/project"
+        },
+        "admission": {
+          "incarnation": {
+            "name": "configured-source",
+            "created_at": 1790850054.1493988
+          },
+          "admission_generation": 1
+        },
+        "project": "/home/ts/wt/s5cfg47301/project",
+        "goal": null
+      },
+      "turn_id": "fb565bca735b4bdbbb5ab574d720b8fc",
+      "native_id": "02c4ce68008515e0e0ecbf78d4b1fbaf",
+      "sent_text": "Coordination context: you are thread 'configured-source'; parent=None. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/wt/s5cfg47301/project'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: []\n\nBounded acceptance only. Do not resume inherited work, use tools or change files. Reply exactly S5_CONFIGURED_RETAINED_ONCE_473.\nChannel/source awareness unavailable; no delivery or read is implied.\n"
+    }
+  ],
+  "manifests": 1,
+  "source_unchanged": true,
+  "query_preserved_journal": true,
+  "original_native_user": "cc2be30b",
+  "original_native_reply": "df4c7ec1",
+  "original_dispositions": {
+    "rows": {
+      "acp:47b8e6fafb5c4a3b9e2081e2d5ca9948": {
+        "kind": "started",
+        "key": "acp:47b8e6fafb5c4a3b9e2081e2d5ca9948",
+        "sequence": null,
+        "owner": "configured-source",
+        "admission": 1,
+        "target": "configured-source",
+        "source_text": "Bounded acceptance only. Do not resume inherited work, use tools or change files. Reply exactly S5_CONFIGURED_RETAINED_ONCE_473.",
+        "origin": {
+          "kind": "human",
+          "root_id": "99a37bfbeaaf41e3b9335f3e88a8e874",
+          "author": {
+            "sender": "user",
+            "created_at": 1790850068.0805118,
+            "worktree": "/home/ts/wt/s5cfg47301/project"
+          },
+          "admission": {
+            "incarnation": {
+              "name": "configured-source",
+              "created_at": 1790850054.1493988
+            },
+            "admission_generation": 1
+          },
+          "project": "/home/ts/wt/s5cfg47301/project",
+          "goal": null
+        },
+        "turn_id": "fb565bca735b4bdbbb5ab574d720b8fc",
+        "native_id": "02c4ce68008515e0e0ecbf78d4b1fbaf",
+        "sent_text": "Coordination context: you are thread 'configured-source'; parent=None. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Reply with comms_send when a reply is useful; otherwise call comms_dismiss with the channel to end quietly. Do not echo acknowledgments. Your project directory is '/home/ts/wt/s5cfg47301/project'. Use comms_set_project(path) to change it persistently without creating another thread. After changing projects, end this turn; the runtime automatically resumes in the new project. When the user asks you to set or start a persistent goal, call comms_set_goal(text) so this same thread continues it autonomously. Peer state: []\n\nBounded acceptance only. Do not resume inherited work, use tools or change files. Reply exactly S5_CONFIGURED_RETAINED_ONCE_473.\nChannel/source awareness unavailable; no delivery or read is implied.\n"
+      }
+    },
+    "version": 1
+  },
+  "elapsed_seconds": 51.414617553004064,
+  "source_head": "6cf4834c9362e6a2bac6ca7073194d32f1b3d7a7",
+  "installed_core": "43df95f00f4e29f9086e2b5bb1e1f651ab5f67dc",
+  "installed_toad": "89655a17336da92eed0d4cd06443925af909e914",
+  "native_manifest": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "native_tree": "cc9e86f72ba7b2c285b209b3fc96a2e8dcc4f182a528941712a5dbd7e457a9d1",
+  "driver_helper": "27238c1fdded7c453e482a5b33af63d68209119185a",
+  "native_input_count": 1,
+  "cleanup": {
+    "owner_shutdown_returned": true,
+    "toad_executor_joined": true,
+    "matching_fixture_processes": []
+  },
+  "native_terminal_facts": {
+    "provider": "openai-codex",
+    "model": "gpt-6.1-sol",
+    "stopReason": "stop",
+    "usage": {
+      "input": 92432,
+      "output": 15,
+      "cacheRead": 0,
+      "cacheWrite": 0,
+      "reasoning": 0,
+      "totalTokens": 92447,
+      "cost": {
+        "input": 0.184864,
+        "output": 0.00015000000000000001,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "total": 0.185014
+      }
+    }
+  },
+  "artifacts": [
+    {
+      "path": "/home/ts/wt/s5cfg47301/terminal-receipt.json",
+      "bytes": 5485,
+      "sha256": "c0e0a8849e33b17ec09ab6fb1fde22e53fc5f4201c5d0ba0e819c799f9d8e2c6"
+    },
+    {
+      "path": "evidence/turn-context-phase1-20261001/configured-context40.log",
+      "bytes": 1366,
+      "sha256": "2e5fd7442d2fede9e40d51bb9e9a09297f887c8904fae09567ca9cbd22a79061"
+    },
+    {
+      "path": "evidence/turn-context-phase1-20261001/configured-context41.log",
+      "bytes": 4874,
+      "sha256": "04865b7b730059fdc0fb0ca1cc3bad651ec5139b7059c168038463aa1e329bb5"
+    },
+    {
+      "path": "/home/ts/wt/s5cfg47301/configured-context-journey/next-context.json",
+      "bytes": 1293246,
+      "sha256": "638e277acbca40c06b559adf536a11af808756eadd912615dae3cd1227c8cb2b"
+    },
+    {
+      "path": "/home/ts/wt/s5cfg47301/configured-context-journey/recorded-context.json",
+      "bytes": 37412,
+      "sha256": "6ab87074e58a0c02a47986dcf54ed82245a880a055cc89486caa6917ae3059e7"
+    },
+    {
+      "path": "/home/ts/wt/s5cfg47301/configured-context-journey/toad-ingress/actual-human-ingress.json",
+      "bytes": 8942,
+      "sha256": "03f3592858cd41087b7b4f5fcee4aa7ae89742ef64f2893bbd5826314a978b7c"
+    },
+    {
+      "path": "/home/ts/wt/s5cfg47301/configured-context-journey/toad-ingress/driver-resource-custody.json",
+      "bytes": 592,
+      "sha256": "e1e8e7b227c9ea400dd419d00f7c3af1957eb6443abc65f2c44a6c3696bc4a7e"
+    },
+    {
+      "path": "/home/ts/wt/s5cfg47301/configured-context-journey/toad-ingress/original-reply-1.svg",
+      "bytes": 55496,
+      "sha256": "56e7bac677ca3b9936bc7283d707ebe11f4d1e916868b2c6f85bc9ebfa9d5734"
+    }
+  ],
+  "not_claimed": [
+    "Public/default activation",
+    "Whole physical performance acceptance",
+    "TLS provider-payload interception/old-provider-output equality",
+    "Phase2 retained operations"
+  ],
+  "preflight40": "Existing fixture name refused before source capture/fork/provider; original root preserved."
+}

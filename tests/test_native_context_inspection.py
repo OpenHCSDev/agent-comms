@@ -66,7 +66,7 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
         assert fixture.saved_inputs() == []
 
 
-async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
+async def test_context_manifest_native_acp_and_cli_continuous(native_backend, receiving_only=False):
     """Actual Toad originals/followup, native Core tool and CLI on one source.
 
     The existing SDK source contract seeds real history/summary/image/resource
@@ -74,12 +74,20 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
     Run with the paired installed interpreter to establish installed acceptance.
     """
     fixture = native_backend
-    from retained_input_origin_observer import actual_s2_ingress
+    from retained_input_origin_observer import actual_s2_ingress, until
+    from agent_comms.input_origin import HumanInputOrigin
+    from agent_comms.goals import AbsentGoalCheckpoint, PresentGoalCheckpoint
+    from agent_comms.goal_actions import ClearGoalAction
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.task_decisions import CorrectionTaskChange, UserTaskSupersession
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.compaction_records import SelectedSummarySource
+    from agent_comms.compaction_states import ManualCommittedSummary
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     started = time.monotonic()
     seed = await asyncio.create_subprocess_exec(
         "node", str(Path(__file__).with_name("native_turn_context_contract.mjs")),
-        str(package), str(fixture.root.parent / "sdk-source"),
+        str(package), str(fixture.root.parent / "sdk-source"), '--retained-history',
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     out, err = await seed.communicate()
@@ -110,13 +118,20 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
                             if isinstance(fact, (InputFailedUpdate, RequestFailedUpdate)))
 
     owner.on_connect(View())
-    thread = Thread("context-source", frozenset(), str(project),
+    thread = Thread("context-source", frozenset({'team'}), str(project),
         process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=str(fixture.session), model="response-local/fixture", thinking_level="off")
     owner._comms.registry.declare(thread)
-    peer = Thread("context-peer", frozenset(), str(project),
+    peer = Thread("context-peer", frozenset({'team'}), str(project),
                   process_identity=ProcessIdentity.capture(os.getpid()))
     owner._comms.registry.declare(peer)
+    c_identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
+        str(fixture.session), str(project)), cwd=project,
+        env=dict(os.environ, PI_CODING_AGENT_DIR=str(fixture.root.parent / 'c-native-fork')))
+    receiver = Thread('context-receiver', frozenset({'team'}), str(project),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        session_file=c_identity.session_file, model='response-local/fixture', thinking_level='off')
+    owner._comms.registry.declare(receiver)
     peer_lease = owner._comms.agents.begin_turn(peer.name, "context-fixture-peer", "Independent context fixture")
     output = fixture.root.parent / "context-journey"
     output.mkdir(mode=0o700)
@@ -134,6 +149,10 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
     try:
         await owner._runtime.start()
         await owner.load_session(str(project), thread.name)
+        absent_origin = HumanInputOrigin.capture(owner._comms,
+            owner._comms.registry.snapshot().admission_identity(thread.name))
+        assert isinstance(absent_origin.goal, AbsentGoalCheckpoint)
+        assert FieldCodec.decode(HumanInputOrigin, FieldCodec.encode(absent_origin)) == absent_origin
         # Seed an authentic active-but-waiting goal through its declaration and
         # original grant/wait owners. A bare ActiveGoal without a READY grant is
         # correctly blocked by the live observer; never patch that scheduler.
@@ -155,9 +174,9 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         baseline_sequence = owner._comms.bus.log.latest_sequence()
         inputs = ("S5_CONTEXT_FIRST_ORIGINAL", "S5_CONTEXT_QUEUED_ORIGINAL", "S5_CONTEXT_SECOND_ORIGINAL")
         declaration = next(tool for tool in tool_catalog() if tool['name'] == 'comms_decision')
-        choice = 'Preserve the original context source'
+        choice = 'PRIVATE_ORIGINAL_CONTEXT_CHOICE'
         fixture.provider.tool_call = ('comms_decision', {
-            'chosen': choice, 'rejected': ['Reconstruct author from the native user role'],
+            'chosen': choice, 'rejected': ['PRIVATE_ORIGINAL_CONTEXT_ALTERNATIVE'],
             'to': peer.name, 'scope': FieldCodec.encode(CurrentTaskScopeSelection()),
             'change': FieldCodec.encode(OriginalTaskChange()),
         })
@@ -170,13 +189,26 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
             fixture.provider.response_gate.set()
 
         async with actual_s2_ingress(owner, thread, output) as observer:
-            for index, text in enumerate((inputs[0], inputs[2]), 1):
+            steps = (inputs[0],) if receiving_only else (inputs[0], inputs[2])
+            for index, text in enumerate(steps, 1):
+                if index == 2:
+                    private_choice, = owner._comms.bus.log.full_history()
+                    supersession = owner._comms.messaging.send_user_message('#team',
+                        'PUBLIC_USER_CORRECTION_WITHOUT_PRIVATE_BODY', worktree=str(project),
+                        task=UserTaskSupersession(CorrectionTaskChange(private_choice.reference)))
+                    fixture.provider.tool_call = ('comms_decision', {
+                        'chosen': 'PUBLIC_CORRECTED_CONTEXT_CHOICE',
+                        'rejected': ['PUBLIC_CONTEXT_ALTERNATIVE'], 'to': '#team',
+                        'scope': FieldCodec.encode(CurrentTaskScopeSelection()),
+                        'change': FieldCodec.encode(CorrectionTaskChange(private_choice.reference)),
+                    })
                 previous = owner._comms.bus.log.context_manifests(thread.incarnation)
                 image = {'mimeType': 'image/png',
                     'data': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='} if index == 1 else None
                 original = await observer.submit(text, image=image,
                     while_running=queue_during_original if index == 1 else None)
                 originals.append(original)
+                assert isinstance(original.origin.require_human().goal, PresentGoalCheckpoint)
                 assert not failures, failures
                 manifests = owner._comms.bus.log.context_manifests(thread.incarnation)
                 assert len(manifests) > len(previous)
@@ -201,7 +233,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
             stored = InputDispositions(owner._comms.root / InputDispositions.filename).read()
             terminals = tuple(stored.lookup(original.key) for original in originals)
             assert all(item.has_started for item in terminals)
-            assert len({item.native_id for item in terminals}) == 3
+            assert len({item.native_id for item in terminals}) == len(originals)
             for item in terminals:
                 item.origin.require_human()
                 assert any(item.context_provenance() in part.provenance for part in contributors)
@@ -211,14 +243,99 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
                 user, = [entry for entry in entries if entry.input_id == item.native_id]
                 assert user.message.user
             (output / 'original-inputs.json').write_text(json.dumps(FieldCodec.encode(terminals)))
+        if receiving_only:
+            assert len(terminals) == 2
+            assert len({item.native_id for item in terminals}) == 2
+            assert fixture.provider.posts == 2
+            assert fixture.session.read_bytes().startswith(original_source)
+            queued_receipt, = (item for item in observer.observer.receipts
+                if 'queued_original' in item)
+            assert queued_receipt['pre_delivery_queue_paint']['native_started'] is False
+            assert queued_receipt['queue_to_chat_handoff']['native_chat_claims'] == 1
+            print('S5_RECEIVING_INPUT_JOURNEY', json.dumps({
+                'elapsed_seconds': time.monotonic() - started,
+                'actual_toad_originals': 1, 'actual_controller_followups': 1,
+                'local_posts': fixture.provider.posts,
+                'original_inputs': FieldCodec.encode(terminals),
+                'original_scope_captured_by_queue_owner': True,
+                'source_render_bytes_identical': source['provider_bytes_identical'],
+                'pre_delivery_queue_paint': queued_receipt['pre_delivery_queue_paint'],
+                'queue_to_chat_handoff': queued_receipt['queue_to_chat_handoff'],
+                'manual_compactions': 0, 'public_inputs': 0,
+                'artifact_root': str(output), 'python': sys.executable,
+                'visual_limit': 'Compositor source and raw export only; readable physical pixels not claimed',
+            }), flush=True)
+            return
+        # C's independent real SDK source was forked before private publication.
+        # Drive the same production ACP manual selected writer through actual Toad.
+        c_output = output / 'receiver'
+        c_output.mkdir(mode=0o700)
+        journal = CompactionJournal(owner._comms.root / 'compaction-commits.sqlite3')
+        await owner.load_session(str(project), receiver.name)
+        async with actual_s2_ingress(owner, receiver, c_output) as observer:
+            async def compact_receiver():
+                app = observer.observer.app
+                view = app.selected_session.conversation
+                assert view.agent.session_id == receiver.name
+                await view.compact_context('Preserve the original certified public source only.').wait()
+                attempts = journal.summaries.history(receiver.session_file)
+                assert len(attempts) == 1
+                assert isinstance(attempts[0].state, ManualCommittedSummary)
+                def committed_frame():
+                    return 'Context compacted' in '\n'.join(
+                        strip.text for strip in app.screen._compositor.render_strips())
+                await until(observer.observer.pilot, committed_frame)
+                (c_output / 'actual-committed-summary.svg').write_text(app.export_screenshot())
+                return attempts[0]
+            attempt = await observer.run(compact_receiver())
+        captured = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
+        snapshot = owner._comms.registry.snapshot()
+        assert captured.retained.current_decisions(snapshot.threads[receiver.name], snapshot) == ()
+        assert {fact.source.reference for fact in captured.retained.facts} == {
+            supersession.reference, owner._comms.bus.log.full_history()[-1].reference}
+        with NativeEntry.open_evidence(Path(receiver.session_file)) as reader:
+            _, c_entries = reader.observe()
+        # Read the SDK external compaction record; never synthesize a witness/leaf.
+        c_records = [json.loads(line) for line in Path(receiver.session_file).read_text().splitlines()]
+        c_compactions = [row for row in c_records if row['type'] == 'compaction']
+        captured.retained.require_summary(c_compactions[-1]['summary'])
+        assert 'PRIVATE_ORIGINAL_CONTEXT_CHOICE' not in Path(receiver.session_file).read_text()
+        assert 'PRIVATE_ORIGINAL_CONTEXT_ALTERNATIVE' not in Path(receiver.session_file).read_text()
+        assert 'PRIVATE_ORIGINAL_CONTEXT_CHOICE' not in json.dumps(fixture.provider.requests[-1])
+        assert 'PRIVATE_ORIGINAL_CONTEXT_ALTERNATIVE' not in json.dumps(fixture.provider.requests[-1])
+        operation = journal.operations.get(attempt.state.commit_id)
+        assert operation.state.committed
+        (c_output / 'selected-commit.json').write_text(json.dumps({
+            'operation_id': attempt.operation_id, 'commit_id': attempt.state.commit_id,
+            'source': FieldCodec.encode(captured), 'native_entry': c_compactions[-1]['id'],
+            'private_body_absent': True, 'native_prepared_entry_count': len(c_entries),
+        }))
+        original_origin = originals[-1].origin.require_human()
+        owner._comms.goals.update_goal(thread.name, ClearGoalAction(
+            expect=GoalPrecondition(goal_id=goal.id)), actor=RuntimeInvocable)
+        replacement = owner._comms.goals.update_goal(thread.name, SetGoalAction(
+            text='Replacement acceptance scope', expect=GoalPrecondition(expected_owner=thread.require_process())),
+            actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())
+        owner._comms.goals.update_goal(thread.name, StandbyGoalAction(
+            wait_for=(peer.name,), expect=GoalPrecondition(goal_id=replacement.id)), actor=RuntimeInvocable)
+        assert replacement.id != goal.id
+        assert not original_origin.applies(owner._comms.registry.require(thread.name),
+            owner._comms.registry.snapshot())
+        assert InputDispositions(owner._comms.root / InputDispositions.filename).read().lookup(
+            originals[-1].key).origin == original_origin
+        (output / 'goal-boundaries.json').write_text(json.dumps({
+            'absent': FieldCodec.encode(absent_origin.goal), 'present': FieldCodec.encode(original_origin.goal),
+            'replacement': FieldCodec.encode(owner._comms.registry.require(thread.name).goal_checkpoint),
+            'historical_origin_unchanged': True, 'historical_scope_inapplicable': True,
+        }))
         difference = await cli("--diff")
         assert difference["turn"] != difference["previous_turn"]
         (output / "context-diff.json").write_text(json.dumps(difference))
         # Pi drains a queued followup after the tool result into the same next
         # synthesis request; one request serves both originals in this turn.
-        assert fixture.provider.posts == 3
-        assert owner._comms.bus.log.latest_sequence() == baseline_sequence + 1
-        decision, = owner._comms.bus.log.full_history()
+        assert fixture.provider.posts == 5
+        assert owner._comms.bus.log.latest_sequence() == baseline_sequence + 3
+        decision, user_correction, correction = owner._comms.bus.log.full_history()
         assert decision.task.chosen == choice
         assert decision.task.author == thread.incarnation
         first_request = fixture.provider.requests[0]
@@ -242,6 +359,9 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
             "manifests": len(manifests), "query_preserved_journal": True,
             "actual_toad_originals": 2, "actual_controller_followups": 1,
             "nested_core_tool": 'comms_decision', "original_decision": FieldCodec.encode(decision.reference),
+            'public_correction': FieldCodec.encode(correction.reference),
+            'selected_receiver_commit': attempt.state.commit_id,
+            'goal_absent_present_replaced': True, 'private_receiver_body_absent': True,
             "source_render_bytes_identical": source["provider_bytes_identical"],
             "public_changes": [], "failures": [], "artifact_root": str(output),
             "python": sys.executable}), flush=True)
