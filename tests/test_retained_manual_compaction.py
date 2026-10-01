@@ -18,6 +18,11 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goals import Goal
+from agent_comms.goal_states import PausedGoal
+from agent_comms.native_compaction_request import NativeIntent
+from agent_comms.retained_task_facts import RetainedTaskFacts
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
@@ -118,6 +123,9 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         root_id = comms.messaging.initialize_private_initial_protocol()
         monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
         monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
+        retained_text = os.environ.get("RETAINED_COMPACTION_EXACT_FACT", "")
+        goal = Goal(retained_text, "original-retained-coordinate", revision=1,
+                    state=PausedGoal()) if retained_text else None
         thread = Thread(
             "retained",
             frozenset(),
@@ -125,6 +133,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=str(session),
             model=model,
+            goal=goal,
         )
         comms.registry.register(thread)
         agent = CommsAgent(
@@ -174,7 +183,20 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
         if mode == "manual":
             assert isinstance(attempt.state, ManualCommittedSummary)
         assert attempt.state.commit_id
-        assert journal.operations.get(attempt.state.commit_id).state.committed
+        operation = journal.operations.get(attempt.state.commit_id)
+        assert operation.state.committed
+        envelope = attempt.envelope()
+        if retained_text:
+            assert envelope.retained.text.count(retained_text) == 1
+            assert len(attempt.source_json.encode()) > RetainedTaskFacts.journal_control_bytes
+            assert len(operation.intent_json.encode()) > RetainedTaskFacts.journal_control_bytes
+        # A fresh reader must accept the same original complete payload and links.
+        recovered = CompactionJournal(journal.path)
+        assert recovered.summaries.get(attempt.operation_id).envelope() == envelope
+        assert NativeIntent.read(recovered.operations.get(operation.commit_id)).witness == preparation.witness
+        recovered.operations.get(operation.commit_id).committed_outcome()
+        operation.require_summary_link(attempt, admit_original=True)
+
         persistent = agent.turns.persistent_backends["retained"]
         if mode == "manual":
             assert not persistent.available and persistent.custody.session_file == str(session)
@@ -207,6 +229,19 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
                 if row.get("type") == "compaction":
                     latest = row
         assert latest is not None
+        envelope.retained.require_summary(latest["summary"])
+        fresh_response = await build_agent_router(agent)(
+            "session/prompt",
+            {"sessionId": "retained", "prompt": [
+                {"type": "text", "text": f"FRESH_AFTER_{mode.upper()}_COMPACTION"}
+            ]}, False,
+        )
+        assert fresh_response.stop_reason == "end_turn"
+        with session.open() as stream:
+            user_entries_after = sum(
+                row.get("type") == "message" and row.get("message", {}).get("role") == "user"
+                for row in map(json.loads, stream)
+            )
         receipt = {
             "source_bytes": before_source.st_size,
             "tokens_before": preparation.tokens_before,
@@ -214,6 +249,12 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             "provider_calls": provider.posts,
             "transport": "loopback only",
             "native_commit": True,
+            "retained_payload_bytes": len(RetainedTaskFacts.canonical_journal_bytes(
+                FieldCodec.encode(envelope.retained))),
+            "reservation_bytes": len(attempt.source_json.encode()),
+            "intent_bytes": len(operation.intent_json.encode()),
+            "complete_retained_summary": True,
+            "fresh_queued_input_answered": fresh_response.stop_reason == "end_turn",
             "strict_reopen": identity == preparation.witness.session_id,
             "read_files": len(latest.get("details", {}).get("readFiles", [])),
             "modified_files": len(latest.get("details", {}).get("modifiedFiles", [])),
@@ -222,9 +263,9 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
                 InputDispositions(comms.root / InputDispositions.filename).read().rows
             ),
         }
-        assert receipt["new_user_inputs"] == (0 if mode == "manual" else 1)
+        assert receipt["new_user_inputs"] == (1 if mode == "manual" else 2)
         assert receipt["owner_idle"] and receipt["strict_reopen"]
-        assert user_entries_after == user_entries_before + (0 if mode == "manual" else 1)
+        assert user_entries_after == user_entries_before + (1 if mode == "manual" else 2)
         assert (source.stat().st_size, source.stat().st_mtime_ns) == (
             before_source.st_size,
             before_source.st_mtime_ns,

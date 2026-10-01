@@ -1,0 +1,32 @@
+{
+  "source_before_pins": "62adcde72c8b48509459d140f13dc9a89c745983",
+  "baseline_manifest": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "changes": [
+    {
+      "path": "dist/core/tools/agent-comms-file-artifact.js",
+      "before": null,
+      "after": "176621c0f4bcfb7f3d53bca5eaf9c5b7c57d829c0e1529844e8e3ee2100d5ab9"
+    },
+    {
+      "path": "dist/core/tools/edit.js",
+      "before": "ed04b10ad45834276cf09d4a061db4304b923b4a2016ae9a1685cca171742b83",
+      "after": "b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18"
+    },
+    {
+      "path": "dist/core/tools/native-file-artifact-schema.mjs",
+      "before": null,
+      "after": "233ab990ddbb3f54f19baa02ab11620da01588a664fd8da639ffe5fa268f3f0f"
+    },
+    {
+      "path": "dist/core/tools/write.js",
+      "before": "86bdd1c8a7cd7d4f381f6e94e79c42f5e5155df8a2b4b23fc0db6e67a802c285",
+      "after": "b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0"
+    }
+  ],
+  "tree": "abaa5bf07cd1d40b56d23e7201ae58bd0615892b79b728fad5e1e0b25a1c3e1c",
+  "new_manifest_sha256": "776cd99e55d6917b77209b85e071529f5959b622ab666e6acaa16de6ed9b6a92",
+  "import_manifest_changed": false,
+  "captured_file_count": 19190,
+  "provider_calls": 0,
+  "public_changes": []
+}

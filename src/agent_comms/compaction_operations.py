@@ -2,35 +2,36 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
 from .compaction_errors import CompactionJournalError
-from .compaction_identity import (
-    SelectedCommitReference,
-)
+from .compaction_identity import SelectedCommitReference
 from .compaction_journal_role import JournalRole
 from .compaction_records import CompactionOperation, CompactionPublication, SelectedSummaryAttempt
 from .compaction_states import (
-    CommittedNativeOutcome,
     IntentOperation,
-    OperationState,
+    NativeOutcome,
     PendingPublication,
 )
-from .field_codec import FieldCodec
+from .compaction_source import CompactionSource
 from .input_disposition import InputDocument
+from .native_compaction_request import NativeIntent
+from .owner_compaction_gate import OwnerCompactionAttestation
 
 
 class NativeOperations(JournalRole):
     def begin(
         self,
         session_file: str,
-        intent: dict,
+        intent: NativeIntent,
         *,
         inputs: InputDocument,
+        owner: OwnerCompactionAttestation,
+        source: CompactionSource,
+        selected: SelectedCommitReference | None = None,
         commit_id: str | None = None,
     ) -> str:
         """Durably reserve under the caller's retained input snapshot lock.
@@ -43,28 +44,25 @@ class NativeOperations(JournalRole):
         if not re.fullmatch(r"[0-9a-f]{32}", commit_id):
             raise ValueError("Expected exact compaction commit ID")
         canonical = str(Path(session_file).resolve(strict=True))
-        payload = json.dumps(intent, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        if len(payload.encode()) > 65536:
-            raise ValueError("Compaction intent exceeds bound")
+        intent.witness.require_session(canonical)
+        payload = intent.journal_json(owner, source, selected)
         try:
             with self.journal.transaction() as db:
-                selected = SelectedSummaryAttempt.blocking_in(db, canonical, inputs)
-                if selected:
-                    if len(selected) != 1:
+                attempts = SelectedSummaryAttempt.blocking_in(db, canonical, inputs)
+                if attempts:
+                    if len(attempts) != 1:
                         raise CompactionJournalError(
                             "Blocked selected summary; unrelated native commit forbidden"
                         )
-                    try:
-                        reference = SelectedCommitReference.from_intent(intent)
-                    except (TypeError, ValueError) as error:
-                        raise CompactionJournalError(
-                            "Blocked selected summary; unrelated native commit forbidden"
-                        ) from error
-                    if reference.identity(canonical) != selected[0].identity:
+                    if selected is None:
                         raise CompactionJournalError(
                             "Blocked selected summary; unrelated native commit forbidden"
                         )
-                    selected[0].state.require_commit_reservation()
+                    if selected.identity(canonical) != attempts[0].identity:
+                        raise CompactionJournalError(
+                            "Blocked selected summary; unrelated native commit forbidden"
+                        )
+                    attempts[0].state.require_commit_reservation()
                 CompactionOperation(commit_id, canonical, payload, IntentOperation(), None).insert(
                     db
                 )
@@ -89,36 +87,26 @@ class NativeOperations(JournalRole):
         return tuple(rows)
 
     def resolve(
-        self, commit_id: str, outcome: OperationState, evidence: dict, *, publication: bool = False
+        self, commit_id: str, outcome: NativeOutcome
     ) -> None:
         """Persist bridge-validated native evidence; this does not verify it.
 
         Unknown/intent remains blocking. A terminal outcome is immutable.
-        ``refused`` is only allowed directly after intent, for a proven
-        pre-write native refusal. Once UNKNOWN, only writer-fenced exact-ID
+        The observed NativeOutcome owns both its operation disposition and
+        publication metadata. Once UNKNOWN, only writer-fenced exact-ID
         reconciliation may establish committed or aborted-no-write.
         """
-        metadata = None
-        if publication:
-            outcome.require_committed(commit_id)
-            try:
-                metadata = FieldCodec.decode(CommittedNativeOutcome, evidence).publication_json(
-                    commit_id
-                )
-            except (ValueError, TypeError) as error:
-                raise CompactionJournalError("Exact committed native metadata required") from error
-        payload = json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        if len(payload.encode()) > 65536:
-            raise ValueError("Compaction outcome exceeds bound")
+        metadata = outcome.publication_json(commit_id)
+        payload = outcome.journal_json()
         with self.journal.transaction() as db:
             row = CompactionOperation.one(db, commit_id=commit_id)
-            if row is None or not row.state.may_become(outcome):
+            if row is None or not row.state.may_become(outcome.state):
                 raise CompactionJournalError("Compaction outcome transition forbidden")
             CompactionOperation.update(
                 db,
                 where="commit_id=?",
                 parameters=(commit_id,),
-                state=outcome,
+                state=outcome.state,
                 evidence_json=payload,
             )
             if metadata is not None:

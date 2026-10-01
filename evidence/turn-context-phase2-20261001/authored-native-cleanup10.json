@@ -1,0 +1,15 @@
+{
+  "scope": "One-shot readable same-UID process cwd/argv/private-root environment reference check",
+  "root": "/home/ts/wt/s5authored01",
+  "fixture_process_matches": [],
+  "checked_readable_candidates": 124,
+  "unreadable_pids": [
+    1786010,
+    1786012
+  ],
+  "allocated_fixture_bytes": 1257472,
+  "fixture_max_bytes": 67108864,
+  "fixture_within_budget": true,
+  "signals_sent": 0,
+  "retained_original_receipts": true
+}

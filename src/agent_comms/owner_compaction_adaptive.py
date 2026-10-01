@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .agent_events import AgentEvent
 from .backend import PersistentPiSession
-from .field_codec import FieldCodec
+from .compaction_records import SelectedSummarySource
 from .input_disposition import FutureInputQueue
 from .native_input_owner import RegistryOwner
 from .owner_compaction_commit import OwnerCompactionCommit
@@ -66,7 +66,6 @@ async def maybe_compact_owner_turn(
         raise PiSettingsEvidenceError("Selected native context must be prepared before input") from error
     owner_generation = snapshot.owner_generations[owner.name]
     context_window = selected.context_window
-    provider, model_id = selected.provider, selected.model_id
     if not persistent.available:
         raise PiSettingsEvidenceError("Selected native session must be prepared before input")
     if summary_strategy is None and (input_text is None or on_admission is None):
@@ -138,16 +137,10 @@ async def maybe_compact_owner_turn(
                 persistent,
                 bridge.journal,
                 prepared.witness,
-                {
-                    "retained": FieldCodec.encode(captured.retained),
-                    "source": FieldCodec.encode(identity.source),
-                    "selected": {
-                        "provider": provider,
-                        "modelId": model_id,
-                        "contextWindow": context_window,
-                    },
-                    "settings": FieldCodec.project(settings, "settings"),
-                },
+                SelectedSummarySource(
+                    source=identity.source, selected=selected,
+                    settings=settings.summary_settings(), retained=captured.retained,
+                ),
                 expected_package=package,
                 tokens_before=prepared.tokens_before,
                 future_queue=future_queue,

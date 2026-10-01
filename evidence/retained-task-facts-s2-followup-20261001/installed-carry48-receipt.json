@@ -1,0 +1,46 @@
+{
+  "state": "INSTALLED_ORIGINAL_TASK_CARRY_USER_SOURCE_PASS",
+  "target_python": "/home/ts/.cache/agent-scratch/s2-user-carry-installed-20261001/runtime/bin/python",
+  "original_python": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-final-cohort-20261001/bin/python",
+  "original_reference": {
+    "seq": 1,
+    "message_id": "e5639c5284e8"
+  },
+  "user_subject": {
+    "seq": 2,
+    "id": "d9a4e657d7c7",
+    "from": "user",
+    "to": "beta",
+    "ts": 1790868368.1895964,
+    "type": "info",
+    "text": "USER original \u03bc\nPreserve my exact multiline constraint.",
+    "sender_role": "user"
+  },
+  "carry": {
+    "state": "RETAINED_TASK_SOURCE_CARRY_INSTALLED",
+    "root_id": "e589900a0b6849d394e564f774a621f9",
+    "original_sha256": "7aaa27708bd22aa18636a24eaaac68f2880c8fadf0858463b739c8f1d45457b2",
+    "target_sha256": "075fd72c28c2870a02b1ffe55a808a1a52db6178ffe5af3f74673f922b7276e2",
+    "changed_references": [
+      {
+        "seq": 1,
+        "message_id": "e5639c5284e8"
+      }
+    ],
+    "through_seq": 1,
+    "original_lock_retained": true,
+    "retired_derived_indices": [
+      "wake_candidates.sqlite3"
+    ],
+    "native_writes": 0,
+    "input_replays": 0
+  },
+  "registry_and_opaque_fixture_bytes_unchanged": true,
+  "original_bus_preimage_preserved": true,
+  "repeat_refused_before_mutation": true,
+  "provider_calls": 0,
+  "native_launches": 0,
+  "input_replays": 0,
+  "full_native_ACP_UI_acceptance": false,
+  "public_changes": []
+}
