@@ -21,6 +21,7 @@ from agent_comms import coordinated_runtime as runtime
 from agent_comms import selected_turn
 from agent_comms.historical_native_inputs import FullHistoricalNativeInput, TriageHistoricalNativeInput
 from agent_comms.selected_triage import IgnoreSelectedTriage, FullSelectedTriage
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.assignment_states import (
     CompletedAssignment,
     FailedAssignment,
@@ -321,9 +322,9 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
             recipient_lookup=stable_thread_lookup(people[1].created_at),
             source_seq=initial.message.seq,
         )
-        assert len(ignored) == 1 and ignored[0].stage == "triage"
+        assert len(ignored) == 1 and isinstance(ignored[0], TriageHistoricalNativeInput)
         assert ignored[0].decision is IgnoreSelectedTriage
-        assert ignored[0].execution_id is None
+        assert ignored[0].execution == TriageNativeExecution()
         # Fake journal contract checks the join only, not native acceptance.
         assert ignored[0].expected_prompt_equality_established
     assert len(comms.views.channel_history("#team")) == 1
@@ -450,7 +451,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
             recipient_lookup=stable_thread_lookup(people[2].created_at),
             source_seq=initial.message.seq,
         )
-        assert len(one) == 1 and one[0].stage == "full"
+        assert len(one) == 1 and isinstance(one[0].execution, FullNativeExecution)
         assert isinstance(one[0], FullHistoricalNativeInput)
         assert one[0].input_id == outcome.input_id
     assert comms.bus.dm_history("sender", "beta")[-1].target == "sender"
@@ -875,12 +876,12 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             recipient_lookup=stable_thread_lookup(people[2].created_at),
             source_seq=initial.message.seq,
         )
-        assert [row.stage for row in rows] == ["triage", "full"]
+        assert [type(row.execution) for row in rows] == [TriageNativeExecution, FullNativeExecution]
         assert len({row.input_id for row in rows}) == 2
         assert rows[0].assignment_id == rows[1].assignment_id == result.assignment_id
-        assert rows[0].execution_id is None and rows[0].attempt_ordinal is None
+        assert rows[0].execution == TriageNativeExecution()
         assert rows[0].decision is FullSelectedTriage
-        assert rows[1].execution_id and rows[1].attempt_ordinal == 1
+        assert rows[1].execution.require_attempt().execution_id and rows[1].execution.require_attempt().attempt_ordinal == 1
         assert isinstance(rows[1], FullHistoricalNativeInput)
         assert rows[0].owner_lookup == rows[1].owner_lookup
         assert rows[0].owner_generation == rows[1].owner_generation == 1

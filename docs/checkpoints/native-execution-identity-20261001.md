@@ -115,3 +115,18 @@ optional decision bag. See evidence/native-execution-identity/CORRECTION-SQL4.md
 for full source/storage consumers and exact original-read receipts. Historical
 97fa acceptance remains preserved; fresh affected installed gate follows this
 working correction checkpoint.
+
+
+## Corrected installed acceptance and whole caller publication
+
+Production d4f86ced2c5e3e2fabd2c9efbc6470975b824e93 is frozen and freshly
+installed: one actual native/ACP saved-restart journey PASS34.80s,5 localhost
+requests,0 failures. Exact295 files/fulltrust593 and original SQL4 verified.
+112 production lines deleted/284 added across12 files relative to e191;
+required ratchet zero increases. Final test-consumer migration is source-neutral.
+Historical source controls pass3 with one independently reproduced original
+e191 channel-disposition fixture failure (empty later proof) retained unchanged.
+No extra production fix, test weakening, repeat native gate or public cutover.
+See evidence/native-execution-identity/CORRECTED-READY.md and JSON for exact
+facts, raw originals, limits and process custody. Prior schema5/reset language
+above is historical and explicitly superseded; no native reset is permitted.
