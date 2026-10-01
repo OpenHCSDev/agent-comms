@@ -20,7 +20,6 @@ from .messages import Message, MessageType
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
-from .task_decisions import Decision
 
 _LOG = logging.getLogger(__name__)
 
@@ -58,7 +57,6 @@ class Messaging:
         notice: bool = False,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
-        decision: Decision | None = None,
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
@@ -69,10 +67,7 @@ class Messaging:
                 raise RelationViolationError(
                     "Human messages require the explicit user-message operation."
                 )
-            message = Message(
-                sender=owner.name, target=target, body=body, type=type,
-                notice=notice, decision=decision,
-            )
+            message = Message(sender=owner.name, target=target, body=body, type=type, notice=notice)
             if claims or releases:
                 committed = self.bus.publisher.publish_claim_envelope(
                     message,

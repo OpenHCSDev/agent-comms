@@ -28,11 +28,6 @@ class DisplayMetricScope:
         return ({scope.channel: (0.0, 0.0) for scope in self.activity_scopes},
                 dict.fromkeys((scope.channel for scope in self.scopes), 0))
 
-    def observe_wire(self, record, metrics: DisplayMetrics) -> None:
-        from .wire_record import WireRecord
-        for message in WireRecord.public_from_wire(record).messages():
-            self.observe(message, metrics)
-
     def observe(self, message: Message, metrics: DisplayMetrics) -> None:
         clocks, unread = metrics
         for scope in self.activity_scopes:

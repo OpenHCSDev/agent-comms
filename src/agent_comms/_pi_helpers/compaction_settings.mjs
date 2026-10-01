@@ -1,8 +1,7 @@
-import {readFileSync as readHelperInput} from "node:fs";
 import {lstatSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const {package:root, cwd, context_tokens:contextTokens, context_window:contextWindow} = JSON.parse(readHelperInput(0, 'utf8'));
+const {package:root, cwd, context_tokens:contextTokens, context_window:contextWindow} = JSON.parse(process.argv[1]);
 const {CONFIG_DIR_NAME, getAgentDir} = await import(pathToFileURL(join(root, 'dist/config.js')));
 const {SettingsManager} = await import(
   pathToFileURL(join(root, 'dist/core/settings-manager.js')));

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import AsyncExitStack, ExitStack
 from dataclasses import replace
 from pathlib import Path
@@ -172,47 +173,57 @@ class OwnedTurn:
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
         )
         self.env_extra = self.runner.native_environment(self.thread, self.worktree)
-        from .turn_context import (
-            TurnContext,
-            GoalSegment,
-            AutomaticTitleSegment,
-            ReplyRouteSegment,
-            InstructionFile,
-            OwnerProvenance,
-            RecordedContextTurn,
-        )
-
-        self.context = TurnContext.for_owner(
-            self.thread,
-            RecordedContextTurn(TurnId(self.turn_id), self.turn_lease.identity),
-            self.task,
-            self.runner.comms.views.thread_views(),
-            tuple(origin.reference for origin in self.origins),
+        self.peers = [
+            {key: person[key] for key in ("name", "status", "activity", "activity_detail")}
+            for person in self.runner.comms.views.presence()
+            if person["name"] != self.thread_name
+        ][:50]
+        self.task = (
+            f"Coordination context: you are thread {self.thread_name!r}; "
+            f"parent={self.thread.parent!r}. "
+            "This identity overrides identities in inherited conversation history. "
+            "Use your own identity for comms tools. Incoming direct messages automatically "
+            "start a new turn when you are idle, or are delivered into your current turn. "
+            "End your turn when done; never sleep or poll waiting for messages. "
+            "Reply with comms_send when a reply is useful; otherwise call comms_dismiss "
+            "with the channel to end quietly. Do not echo acknowledgments. "
+            f"Your project directory is {self.thread.worktree!r}. Use comms_set_project(path) "
+            "to change it persistently without creating another thread. After changing "
+            "projects, end this turn; the runtime automatically resumes in the new project. "
+            "When the user asks you to set or start a persistent goal, call "
+            "comms_set_goal(text) so this same thread continues it autonomously. "
+            f"Peer state: {json.dumps(self.peers)}\n\n{self.task}"
         )
         if self.goal_permit is not None:
-            self.context = self.context.prepend(GoalSegment.capture(self.thread))
+            self.task = (
+                f"Persistent goal {self.thread.goal.id}: {self.thread.goal.text}\n"
+                f"Progress: {self.thread.goal.progress}\n"
+                "Work toward this goal while respecting follow-up instructions. "
+                "Use comms_goal with this goal_id to record useful progress. "
+                "Set status completed "
+                "only after verifying success, blocked when you need user input, or active "
+                "to continue useful work in another turn. When waiting for delegated work, "
+                "set status standby with explicit wait_for thread names "
+                "and explain what you need. "
+                "The goal stays active without polling; a direct message from a named "
+                "dependency "
+                "or an explicit user follow-up starts the next goal turn. "
+                "Do not return empty output "
+                "or repeatedly announce waiting. Do not wait or poll; "
+                "the owner schedules continuation.\n\n" + self.task
+            )
         if self.thread.auto_title_pending:
-            instruction = InstructionFile.read("automatic-title.md")
-            self.context = self.context.prepend(
-                AutomaticTitleSegment(
-                    provenance=(
-                        instruction.source,
-                        OwnerProvenance(self.thread.incarnation, self.turn_id),
-                    ),
-                    instruction=instruction,
-                )
+            self.task = (
+                "Give this new thread a concise topic title before doing the task: call "
+                "comms_rename_self with a meaningful 2-5-word hyphenated name (at most 48 "
+                "characters). Summarize the user's intent; do not copy their first message, "
+                "greeting, or request phrasing. This is automatic naming for a new thread.\n\n"
+                + self.task
             )
         if self.reply_targets:
-            instruction = InstructionFile.read("reply-route.md")
-            self.context = self.context.prepend(
-                ReplyRouteSegment(
-                    provenance=(
-                        instruction.source,
-                        OwnerProvenance(self.thread.incarnation, self.turn_id),
-                    ),
-                    instruction=instruction,
-                    targets=self.reply_targets,
-                )
+            self.task = (
+                f"Your final answer is delivered automatically to {', '.join(self.reply_targets)}. "
+                "Do not use comms_send to duplicate that answer.\n\n" + self.task
             )
 
     def open_stream(self, resources: AsyncExitStack, permits: ExitStack):
@@ -248,7 +259,7 @@ class OwnedTurn:
             keys=self.original_keys,
             accepted_id=self.accepted_input_id,
             goal_permission=permission,
-            prompt=self.context.render().text,
+            prompt=self.task,
             original_display=self.original_display,
             origins=self.origins,
             dependency=(
@@ -331,14 +342,7 @@ class OwnedTurn:
         # Existing local ACP owner session only. If delivery is uncertain,
         # the keyed metadata remains pending; never invent a bus recipient.
         await self.runner.effects.publish_pending_compaction(self.session_id, self.thread_name)
-        from .turn_context import InjectionSegment, OwnerProvenance
-
-        self.context = self.context.append(
-            InjectionSegment(
-                provenance=(OwnerProvenance(self.thread.incarnation, self.turn_id),),
-                content=self.runner.comms.bus.awareness_prompt(self.thread),
-            )
-        )
+        self.task += self.runner.comms.bus.awareness_prompt(self.thread)
         pending_key = self.original.compaction_key(self.thread.session_file)
         if self.runner.adaptive_compaction_enabled and pending_key is not None:
             from .owner_compaction_adaptive import maybe_compact_owner_turn
@@ -359,7 +363,7 @@ class OwnedTurn:
                         self.session_id, backend.PersistentPiSession()
                     ),
                     summary_strategy=self.runner.adaptive_summary_strategy,
-                    input_text=self.context.render().text,
+                    input_text=self.task,
                     on_admission=admit_original,
                     future_queue=self.runner.inputs,
                     on_event=self.progress.consume,
@@ -398,12 +402,12 @@ class OwnedTurn:
             turn=TurnId(self.turn_id),
             admission=self.turn_lease.admission_generation,
             goal_permit=self.goal_permit,
-            original=replace(self.original, prompt=self.context.render().text),
+            original=replace(self.original, prompt=self.task),
         )
         async for event in backend.stream_agent_events(
             self.runner.agent_bin,
             self.runner.native_arguments(self.thread),
-            self.context.render().text,
+            self.task,
             self.worktree,
             self.env_extra,
             **self.image_options,

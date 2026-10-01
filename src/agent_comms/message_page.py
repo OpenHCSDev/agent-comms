@@ -245,13 +245,13 @@ class MessagePageRequest:
         with log.path.open("rb") as stream:
             with closing(self.traversal.opposite_offsets(index, targets)) as rows:
                 for row in rows:
-                    (message, _), = log._public_page_records(*index.record(stream, row), marker)
+                    message, _ = log._public_page_record(*index.record(stream, row), marker)
                     if self.scope.includes(message):
                         opposite = True
                         break
             with closing(self.traversal.offsets(index, targets)) as rows:
                 for row in rows:
-                    (message, size), = log._public_page_records(*index.record(stream, row), marker)
+                    message, size = log._public_page_record(*index.record(stream, row), marker)
                     if not self.scope.includes(message):
                         continue
                     if window.full_with(size):

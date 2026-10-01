@@ -1,9 +1,0 @@
-..............                                                           [100%]
-=============================== warnings summary ===============================
-../../.cache/agent-scratch/s2-audit-env-20261001/lib/python3.14/site-packages/_pytest/config/__init__.py:1464
-  /home/ts/.cache/agent-scratch/s2-audit-env-20261001/lib/python3.14/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: asyncio_mode
-  
-    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-14 passed, 1 warning in 0.72s

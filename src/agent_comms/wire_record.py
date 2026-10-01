@@ -14,8 +14,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
-from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -26,6 +24,7 @@ if TYPE_CHECKING:
 
 class WireRecord(ABC):
     __slots__ = ()
+    message: Message
     receipt: KeyedResponseReceipt | None = None
 
     @classmethod
@@ -33,29 +32,10 @@ class WireRecord(ABC):
         from .bus_publication import CommittedDelivery, has_private_wire_fields
         from .messages import Message
 
-        if "observation" in value:
-            return FieldCodec.decode(ObservationWireRecord, value)
         message = Message.from_committed_wire(value)
         if has_private_wire_fields(value):
             return CommittedDelivery.attest(message, value, root_id)
         return PublicWireRecord(message)
-
-    @classmethod
-    def public_from_wire(cls, value: Mapping) -> WireRecord:
-        """Display decoding preserves public messages and validates silent rows."""
-        from .messages import Message
-        if "observation" in value:
-            return FieldCodec.decode(ObservationWireRecord, value)
-        return PublicWireRecord(Message.from_wire(value))
-
-    def messages(self) -> tuple[Message, ...]:
-        return ()
-
-    def context_manifests(self):
-        return ()
-
-    @abstractmethod
-    def sequence_after(self, previous: int) -> int: ...
 
     def deliveries(self) -> tuple[CommittedDelivery, ...]:
         return ()
@@ -71,59 +51,8 @@ class WireRecord(ABC):
     def checkpoint_rows(self, offset: int, length: int): ...
 
 
-class MessageWireRecord(WireRecord):
-    message: Message
-
-    def messages(self) -> tuple[Message, ...]:
-        return (self.message,)
-
-    def sequence_after(self, previous: int) -> int:
-        if self.message.seq <= previous:
-            raise ValueError("Bus sequence is not increasing.")
-        return self.message.seq
-
-
-class WireObservation(DeclaredFamily, affix="WireObservation"):
-    """A silent fact; it has no message, audience, receipt or sequence allocation."""
-
-    @abstractmethod
-    def context_manifests(self): ...
-
-
-@dataclass(frozen=True)
-class ContextManifestWireObservation(WireObservation):
-    manifest: "ContextManifest"
-
-    def __post_init__(self):
-        self.manifest.turn.require_recorded()
-
-    def context_manifests(self):
-        return (self.manifest,)
-
-
-@dataclass(frozen=True)
-class ObservationWireRecord(WireRecord):
-    observation: WireObservation
-
-    def context_manifests(self):
-        return self.observation.context_manifests()
-
-    def sequence_after(self, previous: int) -> int:
-        return previous
-
-    def require_admission(self, metadata: WireMetadata) -> None:
-        # Decoding validates the observation; it grants no delivery admission.
-        return None
-
-    def checkpoint_rows(self, offset: int, length: int):
-        return ()
-
-    def to_wire(self):
-        return FieldCodec.encode(self)
-
-
 @dataclass(frozen=True, slots=True)
-class PublicWireRecord(MessageWireRecord):
+class PublicWireRecord(WireRecord):
     message: Message
 
     def require_admission(self, metadata: WireMetadata) -> None:
@@ -154,16 +83,13 @@ class WireScan:
             if not isinstance(value, dict):
                 raise ValueError("Bus row is not an object.")
             record = WireRecord.from_wire(value, self.metadata.root_id)
+            if record.message.seq <= self.previous_sequence:
+                raise ValueError("Bus sequence is not increasing.")
             record.require_admission(self.metadata)
             record.record_key(self.seen_keys)
-            self.previous_sequence = record.sequence_after(self.previous_sequence)
+            self.previous_sequence = record.message.seq
             return record
         except (RelationViolationError, DuplicateWireKeyError):
             raise
         except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
             raise RelationViolationError("Malformed public bus row blocks publication.") from error
-
-
-from .turn_context import ContextManifest
-from .delivery_policy import KeyedResponseReceipt
-from .messages import Message

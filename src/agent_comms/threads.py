@@ -199,19 +199,6 @@ class Thread(ThreadProvenance):
         goal = self.goal
         return goal if goal is not None and goal.state.active else None
 
-    @property
-    def decision_scope(self):
-        from .task_decisions import GoalDecisionScope, TurnDecisionScope
-
-        goal = self.active_goal
-        return (GoalDecisionScope(project=self.worktree, goal=goal.checkpoint)
-                if goal is not None else TurnDecisionScope(project=self.worktree))
-
-    def retained_task_facts(self):
-        from .retained_task_facts import GoalTaskFact
-
-        return (GoalTaskFact(self.goal),) if self.goal is not None else ()
-
     def continuation_goal(self, original: Thread) -> Goal | None:
         """The current active goal still belongs to this captured project/goal."""
         if self.worktree != original.worktree:
@@ -311,12 +298,6 @@ class Thread(ThreadProvenance):
             turn_id=self.active_turn.id,
             admission_generation=self.active_turn.admission_generation,
         )
-
-    def require_turn_lease(self) -> TurnLeaseFence:
-        lease = self.turn_lease
-        if lease is None:
-            raise RelationViolationError("An admitted original turn is required")
-        return lease
 
     def observed_turn(self, admission: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""

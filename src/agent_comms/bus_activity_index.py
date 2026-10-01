@@ -41,7 +41,7 @@ class BusActivityIndex(BusAppendIndex):
         self._retained: ActivityCheckpoint | None = None
 
     def snapshot(self, revision: tuple[int, int, int, int] | None,
-                 parse: Callable[[Mapping[str, Any]], tuple[ActivityFields, ...]]) -> ActivitySnapshot:
+                 parse: Callable[[Mapping[str, Any]], ActivityFields]) -> ActivitySnapshot:
         if revision is None:
             return {}, {}
         source = BusFileRevision(*revision)
@@ -76,12 +76,12 @@ class BusActivityIndex(BusAppendIndex):
                 record = json.loads(raw)
                 if not isinstance(record, Mapping):
                     raise ValueError("JSONL bus row must be an object")
-                for sender, target, timestamp, is_user, is_sent in parse(record):
-                    last_message, last_user = channels.get(target, (0.0, 0.0))
-                    channels[target] = (max(last_message, timestamp),
-                                        max(last_user, timestamp) if is_user else last_user)
-                    if is_sent:
-                        sent[sender] = max(sent.get(sender, 0.0), timestamp)
+                sender, target, timestamp, is_user, is_sent = parse(record)
+                last_message, last_user = channels.get(target, (0.0, 0.0))
+                channels[target] = (max(last_message, timestamp),
+                                    max(last_user, timestamp) if is_user else last_user)
+                if is_sent:
+                    sent[sender] = max(sent.get(sender, 0.0), timestamp)
             projected = ActivityCheckpoint(source, source.size,
                         AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
             with suppress(OSError):

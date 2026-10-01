@@ -53,8 +53,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         command += ("--import", str(fence))
         payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
         outcome = await BoundedRun.run(
-            (*command, "--input-type=module", "--eval", cls.script.read_text()),
-            input=payload.encode(),
+            (*command, "--input-type=module", "--eval", cls.script.read_text(), payload),
             timeout=10,
             cwd=cwd,
             env=environment,

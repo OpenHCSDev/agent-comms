@@ -147,17 +147,13 @@ class DeliveryMessage:
     sender_lookup: str = ""
 
     @classmethod
-    def from_wire(cls, record: Mapping, root_id: str | None):
+    def from_wire(cls, record: Mapping, root_id: str | None) -> DeliveryMessage:
         from .wire_record import WireRecord
 
         verified = WireRecord.from_wire(record, root_id)
-        deliveries = verified.deliveries()
-        if deliveries:
-            for delivery in deliveries:
-                yield cls(delivery.message, delivery.audience.sender_lookup)
-        else:
-            for message in verified.messages():
-                yield cls(message)
+        for delivery in verified.deliveries():
+            return cls(delivery.message, delivery.audience.sender_lookup)
+        return cls(verified.message)
 
 
 

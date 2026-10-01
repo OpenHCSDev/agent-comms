@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .owner_compaction_prepare import NativeWitness
-from .retained_task_facts import RetainedTaskFacts
 
 if TYPE_CHECKING:
     from .compaction_boundary import HeldCompaction
@@ -26,7 +25,6 @@ class CompactionSource:
     goal_revision: int | None
     bus_revision: str
     input_revision: str
-    retained: RetainedTaskFacts
     pending_input_key: str | None = None
     settings_paths: tuple[str, ...] | None = None
     settings_revision: tuple[str, ...] | None = None

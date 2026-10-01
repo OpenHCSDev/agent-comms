@@ -93,7 +93,7 @@ class BusRouteCounts:
     def __exit__(self, *_error: object) -> None:
         self.connection.close()
 
-    def sync(self, decode: Callable[[Mapping], tuple[DeliveryMessage, ...]]) -> bool:
+    def sync(self, decode: Callable[[Mapping], DeliveryMessage]) -> bool:
         """Decode only appended rows; a replaced source rebuilds the projection."""
         try:
             source = self.bus_path.open("rb")
@@ -140,32 +140,32 @@ class BusRouteCounts:
                     for raw in source:
                         if not raw.strip():
                             continue
-                        for delivery in decode(json.loads(raw)):
-                            message = delivery.message
-                            row = RouteEntryRow(
-                                message.seq,
-                                message.target,
-                                message.sender,
-                                delivery.sender_lookup,
-                                message.timestamp,
+                        delivery = decode(json.loads(raw))
+                        message = delivery.message
+                        row = RouteEntryRow(
+                            message.seq,
+                            message.target,
+                            message.sender,
+                            delivery.sender_lookup,
+                            message.timestamp,
+                        )
+                        row.insert(self.connection)
+                        key = row.target, row.sender, row.sender_lookup
+                        if key not in totals:
+                            prior = RouteTotalRow.select(
+                                self.connection,
+                                where="target=? AND sender=? AND sender_lookup=?",
+                                parameters=key,
                             )
-                            row.insert(self.connection)
-                            key = row.target, row.sender, row.sender_lookup
-                            if key not in totals:
-                                prior = RouteTotalRow.select(
-                                    self.connection,
-                                    where="target=? AND sender=? AND sender_lookup=?",
-                                    parameters=key,
-                                )
-                                totals[key] = (
-                                    prior[0] if prior else RouteTotalRow(*key, 0, row.timestamp)
-                                )
-                            current = totals[key]
-                            totals[key] = replace(
-                                current,
-                                total=current.total + 1,
-                                oldest=min(current.oldest, row.timestamp),
+                            totals[key] = (
+                                prior[0] if prior else RouteTotalRow(*key, 0, row.timestamp)
                             )
+                        current = totals[key]
+                        totals[key] = replace(
+                            current,
+                            total=current.total + 1,
+                            oldest=min(current.oldest, row.timestamp),
+                        )
                 for key, total in totals.items():
                     self.connection.execute(
                         f'DELETE FROM "{RouteTotalRow.declared_name}" '

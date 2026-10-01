@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
-from .wire_record import MessageWireRecord
+from .wire_record import WireRecord
 from .field_codec import TextRepresentation
 
 if TYPE_CHECKING:
@@ -130,7 +130,7 @@ def decisions_digest(decisions: list[dict[str, str]]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class CommittedDelivery(MessageWireRecord):
+class CommittedDelivery(WireRecord):
     """Bus-reader delivery, for both an original and a keyed response."""
 
     wire_root_id: str

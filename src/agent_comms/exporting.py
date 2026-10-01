@@ -472,25 +472,22 @@ class WireTranscriptExporter:
     ) -> Iterable[WireExportRow]:
         previous_sequence = -1
         for envelope in envelopes:
-            for row in self._source_rows(envelope):
-                previous_sequence = self._validate_sequence(row.message, previous_sequence)
-                if row.message.seq > self.boundary.through_seq:
-                    return
-                stats.source_messages += 1
-                yield row
+            row = self._row(envelope)
+            previous_sequence = self._validate_sequence(row.message, previous_sequence)
+            if row.message.seq > self.boundary.through_seq:
+                break
+            stats.source_messages += 1
+            yield row
 
-    def _source_rows(self, envelope: Message | Mapping[str, object]):
-        from .wire_record import WireRecord
-
+    def _row(self, envelope: Message | Mapping[str, object]) -> WireExportRow:
         if isinstance(envelope, Message):
-            stored: Mapping[str, object] = envelope.to_wire()
-            messages = (envelope,)
+            message = envelope
+            stored: Mapping[str, object] = message.to_wire()
         else:
             reject_private_wire_fields(envelope)
             stored = envelope
-            messages = WireRecord.public_from_wire(stored).messages()
-        for message in messages:
-            yield WireExportRow(message, self.format.row(message, stored))
+            message = Message.from_wire(stored)
+        return WireExportRow(message, self.format.row(message, stored))
 
     @staticmethod
     def _validate_sequence(message: Message, previous: int) -> int:

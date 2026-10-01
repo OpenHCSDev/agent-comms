@@ -33,14 +33,14 @@ def test_warm_incoming_cursor_reads_only_selected_wire_rows(tmp_path, monkeypatc
     bus = retained_source(tmp_path, 3000)
     assert bus.incoming_page("b", after=2700, limit=10).newest_seq == 2730
     decoded = 0
-    original = bus.log._public_page_records
+    original = bus.log._public_page_record
 
     def count(record, size, metadata):
         nonlocal decoded
         decoded += 1
         return original(record, size, metadata)
 
-    monkeypatch.setattr(bus.log, "_public_page_records", count)
+    monkeypatch.setattr(bus.log, "_public_page_record", count)
     page = bus.incoming_page("b", after=2700, limit=10)
     assert [message.seq for message in page.messages] == list(range(2703, 2731, 3))
     assert page.has_older and page.has_newer

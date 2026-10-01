@@ -113,16 +113,15 @@ class MessageBus:
             return {name: ChannelActivity(*clocks) for name, clocks in channels.items()}
 
     @staticmethod
-    def _bus_activity_fields(record: Mapping[str, object]):
-        from .wire_record import WireRecord
-        for message in WireRecord.public_from_wire(record).messages():
-            yield (
-                message.sender,
-                message.target,
-                message.timestamp,
-                not message.sender_role.executable,
-                message.membership is None and not message.notice,
-            )
+    def _bus_activity_fields(record: Mapping[str, object]) -> tuple[str, str, float, bool, bool]:
+        message = Message.from_wire(record)
+        return (
+            message.sender,
+            message.target,
+            message.timestamp,
+            not message.sender_role.executable,
+            message.membership is None and not message.notice,
+        )
 
     def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None) -> DeliveryScope:
         snapshot = snapshot or self._registry.snapshot()
@@ -144,7 +143,7 @@ class MessageBus:
     def _iter_delivery_messages_unlocked(self) -> Iterator[DeliveryMessage]:
         decode = self._delivery_decoder()
         for record, _ in _iter_jsonl_records(self.log.path):
-            yield from decode(record)
+            yield decode(record)
 
     def inbox(self, name: str, target: str | None = None) -> Sequence[Message]:
         snapshot = self._registry.snapshot()

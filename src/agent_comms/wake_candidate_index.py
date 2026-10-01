@@ -230,10 +230,11 @@ class WakeCandidateIndex:
         from .wire_record import WireRecord
 
         verified = WireRecord.from_wire(record, root_id)
-        sequence = verified.sequence_after(last_seq)
+        message = verified.message
+        if message.seq <= last_seq:
+            raise ProjectionUnavailableError("candidate bus sequence is not increasing")
         rows: list[Candidate] = []
         for initial in verified.deliveries():
-            message = initial.message
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             ):
@@ -251,7 +252,7 @@ class WakeCandidateIndex:
                         else None,
                     )
                 )
-        return _ParsedRow(sequence, tuple(rows), verified.receipt)
+        return _ParsedRow(message.seq, tuple(rows), verified.receipt)
 
     @classmethod
     def _replay_prefix(
