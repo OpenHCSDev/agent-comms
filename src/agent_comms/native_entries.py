@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
+from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 from .pi_vocabulary import ThinkingLevel
@@ -196,6 +197,38 @@ class NativeEvidenceRead:
             raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
         self.entries = entries
         return entries[0], entries
+
+
+class NativeEvidenceScope(ExitStack):
+    """One acquired original source for a bounded corroboration operation.
+
+    Only the current descriptor and its decoded bytes are held. Switching
+    journals closes the previous reader; no proof, receipt or disposition is
+    retained. Every borrow still validates the original prefix on observation.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.readers: dict[Path, NativeEvidenceRead] = {}
+
+    def for_source(self, path: Path) -> NativeEvidenceRead:
+        path = Path(path).absolute()
+        if path not in self.readers:
+            self.close()
+            self.readers[path] = self.enter_context(NativeEntry.open_evidence(path))
+        return self.readers[path]
+
+    def close(self) -> None:
+        try:
+            super().close()
+        finally:
+            self.readers.clear()
+
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.readers.clear()
 
 
 @dataclass(frozen=True)
