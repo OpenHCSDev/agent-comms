@@ -37,7 +37,7 @@ def test_raw_marker_durable_checkpoint_retains_original_sqlite_custody(tmp_path)
         admitted.mark_unknown('a' * 32)
         with sqlite3.connect(journal.path, timeout=0) as concurrent:
             with pytest.raises(sqlite3.OperationalError) as refused:
-                concurrent.execute('SELECT * FROM private_raw_input').fetchall()
+                concurrent.execute(f'SELECT * FROM {PrivateRawInput.declared_name}').fetchall()
             assert refused.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
         admitted.require_marker('a' * 32)
     with journal.transaction() as db:
