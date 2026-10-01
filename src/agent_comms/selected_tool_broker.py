@@ -30,7 +30,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from .field_codec import FieldCodec
 from .native_runtime_input import NativeRuntimeInput
-from .native_input_record import NativeInputIdText, NativeInputIdentity
+from .native_input_record import NativeInputIdText, NativeInputIdentity, FullNativeExecution
 from .coordination_tables.participants import OwnerGenerations
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
@@ -287,9 +287,8 @@ def verify_sent_full_input(
         assert_native_runtime_schema(scoped.session._connection)
         row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
         expected = NativeInputIdentity(
-            input_id, admission.wake_assignment_id, "full",
+            input_id, admission.wake_assignment_id, FullNativeExecution(admission.execution_id, admission.attempt_ordinal),
             OwnerGenerations(owner_lookup=admission.recipient_lookup, owner_thread=owner_name, generation=admission.participant_generation),
-            admission.execution_id, admission.attempt_ordinal,
         )
         if row is None or row.identity != expected:
             raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")

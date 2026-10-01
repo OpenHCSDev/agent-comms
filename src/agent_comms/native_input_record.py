@@ -4,16 +4,20 @@ A row records coordinator ownership, never a process or historical incarnation.
 OwnerGenerations is the existing authority for that identity domain.
 """
 
-from abc import ABC
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields
 import re
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from .field_codec import FieldCodec, TextRepresentation
 from .declared_family import DeclaredFamily
 from .coordination_errors import IdentityConflict
+from .coordination_contracts import validate_execution_id
 
 from .coordination_tables.participants import OwnerGenerations
+from .typed_table import TextStorage
 
 
 class NativeInputIdText(TextRepresentation):
@@ -46,16 +50,116 @@ class NativeInputCommit:
         })
 
 
+class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
+    """Original triage or attempt identity, never a send/replay capability."""
+
+    @classmethod
+    def sql_constraint(cls, column: str) -> str:
+        """Preserve the original scalar SQL ABI from the execution declarations."""
+        names = tuple(member.declared_name for member in cls.members_with(cls))
+        return TextStorage.constraints(column, Literal[names])[0]
+
+    def require_attempt(self) -> FullNativeExecution:
+        raise IdentityConflict("Native triage input has no execution attempt")
+
+    def matches_execution(self, execution, owner_lookup: str) -> bool:
+        return False
+
+    def proves_full_source(self, proof) -> bool:
+        return False
+
+    @abstractmethod
+    def historical_proof(self, record, **source):
+        """Acquire the declared recorded-proof member from the original SQL row."""
+        raise NotImplementedError
+
+    @classmethod
+    @abstractmethod
+    def from_columns(cls, execution_id, attempt_ordinal) -> NativeInputExecution:
+        """Acquire the original durable binding's external SQL projection."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def binding_fields(self):
+        """Publish this member through the unchanged durable SQL contract."""
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class TriageNativeExecution(NativeInputExecution):
+    proof_order: ClassVar[int] = 0
+
+    @classmethod
+    def from_columns(cls, execution_id, attempt_ordinal) -> TriageNativeExecution:
+        FieldCodec.decode(type(None), execution_id)
+        FieldCodec.decode(type(None), attempt_ordinal)
+        return cls()
+
+    def binding_fields(self):
+        return {"execution_id": None, "attempt_ordinal": None}
+
+    def historical_proof(self, record, **source):
+        from .historical_native_inputs import TriageHistoricalNativeInput
+        from .selected_triage import SelectedTriage
+
+        # Original nullable SQL emission enters the required recorded-proof
+        # member here. No domain None or callback may fabricate a decision.
+        decision = FieldCodec.decode(type[SelectedTriage], FieldCodec.encode(record.verdict))
+        return TriageHistoricalNativeInput(execution=self, decision=decision, **source)
+
+
+@dataclass(frozen=True)
+class FullNativeExecution(NativeInputExecution):
+    proof_order: ClassVar[int] = 1
+
+    execution_id: str
+    attempt_ordinal: int
+
+    def __post_init__(self):
+        validate_execution_id(self.execution_id)
+        if FieldCodec.decode(int, self.attempt_ordinal) < 1:
+            raise IdentityConflict("Native full input requires an original attempt")
+
+    @classmethod
+    def from_columns(cls, execution_id, attempt_ordinal) -> FullNativeExecution:
+        return FieldCodec.decode(cls, {
+            cls.family_discriminator: cls.declared_name,
+            "execution_id": execution_id,
+            "attempt_ordinal": attempt_ordinal,
+        })
+
+    def binding_fields(self):
+        return FieldCodec.project(self, "binding")
+
+    def require_attempt(self) -> FullNativeExecution:
+        return self
+
+    def matches_execution(self, execution, owner_lookup: str) -> bool:
+        return (
+            execution.execution_id == self.execution_id
+            and execution.owner_lookup == owner_lookup
+            and execution.lifecycle.current_attempt_ordinal == self.attempt_ordinal
+        )
+
+    def historical_proof(self, record, **source):
+        from .historical_native_inputs import FullHistoricalNativeInput
+
+        FieldCodec.decode(type(None), record.verdict)
+        return FullHistoricalNativeInput(execution=self, **source)
+
+    def proves_full_source(self, proof) -> bool:
+        return proof.expected_prompt_equality_established
+
+
+
 @dataclass(frozen=True, slots=True)
 class NativeInputIdentity:
     """Original reservation identity, independent of registry allocation domains."""
 
     input_id: str
     assignment_id: str
-    stage: str
+    execution: NativeInputExecution
     owner: OwnerGenerations
-    execution_id: str | None
-    attempt_ordinal: int | None
 
 
 class NativeContextReference(DeclaredFamily, affix="Reference"):
@@ -76,7 +180,7 @@ class NativeInputReference(NativeContextReference):
 
     input_id: Annotated[str, NativeInputIdText]
     assignment_id: str
-    stage: Literal["triage", "full"]
+    stage: type[NativeInputExecution]
     session_id: str
     request_generation: int
 
@@ -84,10 +188,14 @@ class NativeInputReference(NativeContextReference):
     def acquire(cls, row) -> NativeInputReference:
         """Decode the complete original SQL reference, never a partial projection."""
         try:
-            result = FieldCodec.decode(cls, {
-                cls.family_discriminator: cls.declared_name,
-                **{item.name: getattr(row, item.name) for item in fields(cls)},
-            })
+            result = cls(
+                input_id=row.input_id,
+                assignment_id=row.assignment_id,
+                stage=row.reference_stage,
+                session_id=row.session_id,
+                request_generation=row.request_generation,
+            )
+            result = FieldCodec.decode(cls, FieldCodec.encode(result, cls))
             if not 0 < result.request_generation <= 2**53 - 1:
                 raise ValueError("Native reference generation is outside its native range")
             if not result.assignment_id or not result.session_id:
@@ -103,12 +211,14 @@ class NativeInputReference(NativeContextReference):
 class NativeInputRecord(ABC):
     input_id: str
     assignment_id: str
-    stage: str
+    execution: NativeInputExecution
     owner_lookup: str
     owner_thread: str
     owner_generation: int
-    execution_id: str | None
-    attempt_ordinal: int | None
+
+    @property
+    def reference_stage(self) -> type[NativeInputExecution]:
+        return type(self.execution)
 
     @property
     def owner_identity(self) -> OwnerGenerations:
@@ -130,8 +240,7 @@ class NativeInputRecord(ABC):
     @property
     def identity(self) -> NativeInputIdentity:
         return NativeInputIdentity(
-            self.input_id, self.assignment_id, self.stage, self.owner_identity,
-            self.execution_id, self.attempt_ordinal,
+            self.input_id, self.assignment_id, self.execution, self.owner_identity,
         )
 
 
@@ -140,9 +249,13 @@ class NativeInputContext:
 
     input_id: str | None
     assignment_id: str | None
-    stage: str | None
+    stage: type[NativeInputExecution] | None
     session_id: str | None
     request_generation: int | None
+
+    @property
+    def reference_stage(self) -> type[NativeInputExecution] | None:
+        return self.stage
 
     @property
     def reference(self) -> NativeContextReference:
@@ -161,7 +274,7 @@ class NativeInputContext:
             for item in fields(self):
                 annotation = item.metadata.get("native_context")
                 if annotation is not None:
-                    FieldCodec.decode(annotation, getattr(self, item.name))
+                    FieldCodec.decode(annotation, FieldCodec.encode(getattr(self, item.name), annotation))
         except (TypeError, ValueError) as error:
             raise IdentityConflict("Native recorded context group is partial") from error
         return NativeInputReference.acquire(self)

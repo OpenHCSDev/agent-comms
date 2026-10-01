@@ -67,7 +67,7 @@ def released_native_owner(directory, package, output, exit_allowed):
                         source.sent_owner_admission_generation, RecordedNativeAdmission
                     )
                     with Coordination(str(root / "coordination.sqlite3")) as store:
-                        snapshot = store.snapshots.get(source.execution_id)
+                        snapshot = store.snapshots.get(source.execution.require_attempt().execution_id)
                         assert snapshot.is_current and not snapshot.can_retry
                     calls = sum(reply.posts for reply in owned.received)
                     assert calls == 2
@@ -79,7 +79,7 @@ def released_native_owner(directory, package, output, exit_allowed):
             (
                 str(root),
                 root_id,
-                source.execution_id,
+                source.execution.require_attempt().execution_id,
                 source.input_id,
                 str(owned.session_file),
                 calls,

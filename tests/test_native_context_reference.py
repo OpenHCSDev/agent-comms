@@ -5,6 +5,8 @@ import sqlite3
 
 import pytest
 
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import NativeInputReference, UnrecordedNativeInputReference
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
@@ -15,16 +17,16 @@ def cursor():
     return CurrentNativeCursor(
         wire_root_id="a" * 32, recipient_lookup="b" * 32, owner_thread="owner",
         owner_generation=1, owner_admission_generation=2, covered_seq=1, injected_seq=1,
-        input_id="c" * 32, assignment_id="d" * 32, stage="full", session_id="original-session",
+        input_id="c" * 32, assignment_id="d" * 32, stage=FullNativeExecution, session_id="original-session",
         request_generation=1,
     )
 
 
 def reservation():
     return NativeRuntimeInput(
-        input_id="c" * 32, assignment_id="d" * 32, stage="triage",
+        input_id="c" * 32, assignment_id="d" * 32, stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
         owner_lookup="b" * 32, owner_thread="owner", owner_generation=1,
-        owner_token_digest="e" * 64, execution_id=None, attempt_ordinal=None,
+        owner_token_digest="e" * 64,
     )
 
 
@@ -66,8 +68,73 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
                        session_entry_id="original-entry", request_generation=1,
                        llm_context_digest="f" * 64)
     assert recorded.reference == NativeInputReference(
-        recorded.input_id, recorded.assignment_id, recorded.stage, recorded.session_id, 1
+        recorded.input_id, recorded.assignment_id, type(recorded.execution), recorded.session_id, 1
     )
     for name in ("session_file", "session_entry_id", "llm_context_digest"):
         with pytest.raises(IdentityConflict, match="partial"):
             _ = replace(recorded, **{name: None}).reference
+
+
+def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
+    from dataclasses import fields
+    from pathlib import Path
+    from agent_comms.historical_native_inputs import (
+        TriageHistoricalNativeInput, FullHistoricalNativeInput,
+    )
+    from agent_comms.native_pi import NativeContextProof
+    from agent_comms.selected_triage import FullSelectedTriage
+
+    recorded = replace(
+        reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2),
+        session_id="original-session", session_file="/original/session.jsonl",
+        session_entry_id="original-entry", request_generation=1, llm_context_digest="f" * 64,
+    )
+    source = dict(
+        wire_root_id="a" * 32, source_seq=1, source_message_id="original-message",
+        assignment_id=recorded.assignment_id, input_id=recorded.input_id,
+        owner_lookup=recorded.owner_lookup, owner_thread=recorded.owner_thread,
+        owner_generation=recorded.owner_generation,
+        context=NativeContextProof(recorded.input_id, recorded.session_id,
+            recorded.session_entry_id, 1, "f" * 64, Path(recorded.session_file)),
+        expected_prompt_equality_established=True,
+    )
+    with sqlite3.connect(":memory:") as db:
+        NativeRuntimeInput.create(db)
+        recorded.insert(db)
+        # SQL NULL describes an original input without a recorded decision;
+        # it cannot acquire a recorded triage proof.
+        missing = NativeRuntimeInput.one(db, input_id=recorded.input_id)
+        with pytest.raises((TypeError, ValueError)):
+            missing.execution.historical_proof(missing, **source)
+        for identity, decision in (("9", IgnoreSelectedTriage), ("8", FullSelectedTriage)):
+            original = replace(recorded, input_id=identity * 32,
+                               assignment_id=identity * 32, verdict=decision)
+            original.insert(db)
+            assert db.execute("SELECT verdict FROM native_runtime_input WHERE input_id=?",
+                              (original.input_id,)).fetchone() == (decision.declared_name.lower(),)
+            actual = NativeRuntimeInput.one(db, input_id=original.input_id)
+            proof_source = {**source, "input_id": original.input_id,
+                            "assignment_id": original.assignment_id,
+                            "context": replace(source["context"], input_id=original.input_id)}
+            proof = actual.execution.historical_proof(actual, **proof_source)
+            assert isinstance(proof, TriageHistoricalNativeInput)
+            assert proof.decision is decision
+            assert proof.proves_triage_source((proof,)) == (decision is IgnoreSelectedTriage)
+            with pytest.raises(sqlite3.IntegrityError, match="frozen"):
+                NativeRuntimeInput.update(db, where="input_id=?", parameters=(original.input_id,),
+                                          verdict=None)
+        full = replace(recorded, input_id="7" * 32, assignment_id="6" * 32,
+                       stage=FullNativeExecution, execution_id="5" * 32,
+                       attempt_ordinal=1, verdict=None)
+        full.insert(db)
+        actual = NativeRuntimeInput.one(db, input_id=full.input_id)
+        proof = actual.execution.historical_proof(actual, **{**source, "input_id": full.input_id})
+        assert isinstance(proof, FullHistoricalNativeInput)
+        assert "decision" not in {item.name for item in fields(proof)}
+        assert not proof.proves_triage_source((proof,))
+        with pytest.raises((TypeError, ValueError)):
+            replace(actual, verdict=IgnoreSelectedTriage).execution.historical_proof(
+                replace(actual, verdict=IgnoreSelectedTriage), **source,
+            )
+        with pytest.raises(TypeError):
+            TriageHistoricalNativeInput(execution=TriageNativeExecution(), **source)

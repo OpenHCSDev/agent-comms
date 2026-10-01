@@ -123,7 +123,7 @@ class NativeSourceCursor:
             injected_seq=coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
             input_id=proof.input_id if proof else None,
             assignment_id=proof.assignment_id if proof else None,
-            stage=proof.stage if proof else None,
+            stage=type(proof.execution) if proof else None,
             session_id=proof.context.session_id if proof else None,
             request_generation=proof.context.request_generation if proof else None,
         )

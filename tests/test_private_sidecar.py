@@ -10,7 +10,10 @@ import sys
 import pytest
 
 from agent_comms import private_sidecar as sidecar
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.native_prompt_binding import PromptBinding
 
 
@@ -36,7 +39,7 @@ def _connection(path):
 def _insert(db, key="1"):
     return PromptBinding(
         input_id=key * 32,
-        stage="triage",
+        stage=TriageNativeExecution,
         assignment_id="claim",
         execution_id=None,
         attempt_ordinal=None,
@@ -270,6 +273,7 @@ _WORKER = r"""
 import os, signal, sys
 from pathlib import Path
 from agent_comms import private_sidecar as s
+from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.native_prompt_binding import PromptBinding
 p = Path(sys.argv[1])
 print('READY', flush=True)
@@ -286,7 +290,7 @@ if len(sys.argv) > 2:
             os.kill(os.getpid(), signal.SIGKILL)
     s.os.fsync = crash
     with s.sidecar_connection(p, PromptBinding) as db:
-        PromptBinding(input_id='1'*32,stage='triage',assignment_id='claim',
+        PromptBinding(input_id='1'*32,stage=TriageNativeExecution,assignment_id='claim',
             execution_id=None,attempt_ordinal=None,owner_lookup='2'*32,
             owner_thread='owner',owner_generation=1,wire_root_id='3'*32,
             source_seq=1,message_id='message',expected_prompt_digest='a'*64,

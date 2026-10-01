@@ -17,6 +17,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.native_pi import read_tracked_input_digest
 from agent_comms.native_prompt_binding import read_expected_prompt_binding
 from agent_comms.native_source_cursor import NativeSourceCursor
@@ -241,9 +242,9 @@ async def test_native_full_four_tools_publish_and_release(
                 source_seq=initial.message.seq,
             )
             assert len(proofs) == 1 + triage
-            assert {proof.stage for proof in proofs} == ({"triage", "full"} if triage else {"full"})
+            assert {type(proof.execution) for proof in proofs} == ({TriageNativeExecution, FullNativeExecution} if triage else {FullNativeExecution})
             assert (
-                next(proof for proof in proofs if proof.stage == "full").input_id
+                next(proof for proof in proofs if isinstance(proof.execution, FullNativeExecution)).input_id
                 == outcome.input_id
             )
             for proof in proofs:

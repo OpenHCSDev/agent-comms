@@ -7,7 +7,6 @@ import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 from .assignment_states import DeferredAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -22,7 +21,7 @@ from .native_admission_rules import (
     NativeReservationCheck,
 )
 from .native_input_owner import ParticipantOwner
-from .native_input_record import NativeInputIdentity
+from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
 from .native_pi import NativeContextProof
 from .native_prompt_binding import (
     PromptBinding,
@@ -42,15 +41,7 @@ class NativeSendStage(ABC):
 
     @property
     @abstractmethod
-    def stage(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def execution_id(self) -> str | None: ...
-
-    @property
-    @abstractmethod
-    def attempt_ordinal(self) -> int | None: ...
+    def execution(self) -> NativeInputExecution: ...
 
     @abstractmethod
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None: ...
@@ -74,10 +65,9 @@ class NativeSendStage(ABC):
             self.reserve_claim(store, db)
             NativeRuntimeInput(
                 input_id=input_id,
-                stage=self.stage,
+                stage=type(self.execution),
+                **self.execution.binding_fields(),
                 assignment_id=self.assignment.assignment_id,
-                execution_id=self.execution_id,
-                attempt_ordinal=self.attempt_ordinal,
                 owner_lookup=self.assignment.recipient_lookup,
                 owner_thread=owner.thread.name,
                 owner_generation=owner.generation,
@@ -87,8 +77,7 @@ class NativeSendStage(ABC):
 
     def identity(self, input_id: str, owner) -> NativeInputIdentity:
         return NativeInputIdentity(
-            input_id, self.assignment.assignment_id, self.stage, owner,
-            self.execution_id, self.attempt_ordinal,
+            input_id, self.assignment.assignment_id, self.execution, owner,
         )
 
     def pending_input(
@@ -199,9 +188,9 @@ class NativeSendStage(ABC):
 
 
 class TriageNativeSend(NativeSendStage):
-    stage: ClassVar[str] = "triage"
-    execution_id: ClassVar[None] = None
-    attempt_ordinal: ClassVar[None] = None
+    @property
+    def execution(self) -> TriageNativeExecution:
+        return TriageNativeExecution()
 
     def fail_terminal(self) -> None:
         # Reservation already deferred the triage assignment. A terminal failure
@@ -243,7 +232,7 @@ class TriageNativeSend(NativeSendStage):
             row = self.pending_input(store, input_id, owner, token_digest)
             current = store.assignments.get(self.assignment.assignment_id)
             self.require_phase(store, current)
-            row.commit_context(db, context, verdict=decision.declared_name.lower())
+            row.commit_context(db, context, verdict=type(decision))
             decision.settle(store, db, current)
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
@@ -265,15 +254,9 @@ class FullNativeSend(NativeSendStage):
         # capture a second fence which goes stale while tools/model events run.
         return self.progress.fence
 
-    stage: ClassVar[str] = "full"
-
     @property
-    def execution_id(self) -> str:
-        return self.fence.execution_id
-
-    @property
-    def attempt_ordinal(self) -> int:
-        return self.fence.attempt_ordinal
+    def execution(self) -> FullNativeExecution:
+        return FullNativeExecution(self.fence.execution_id, self.fence.attempt_ordinal)
 
     def fail_terminal(self) -> None:
         self.progress.fail_terminal()
@@ -293,7 +276,7 @@ class FullNativeSend(NativeSendStage):
         if NativeRuntimeInput.select(
             db,
             where="execution_id=?",
-            parameters=(self.execution_id,),
+            parameters=(self.execution.execution_id,),
         ):
             raise IdentityConflict("a full-turn input already exists; no automatic replay")
 

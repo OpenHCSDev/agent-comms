@@ -23,7 +23,7 @@ from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_admission_rules import NativeIdentityCheck
 from .native_input_owner import ParticipantOwner
-from .native_input_record import NativeInputRecord, NativeInputIdText
+from .native_input_record import NativeInputRecord, NativeInputIdText, NativeInputExecution
 from .message_reference import MessageReference
 from .field_codec import FieldCodec
 from .native_pi import NativePiUnavailable, read_tracked_input_digest
@@ -59,7 +59,7 @@ class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):
             )
         }
     )
-    stage: str
+    stage: type[NativeInputExecution]
     assignment_id: str
     execution_id: str | None
     attempt_ordinal: int | None
@@ -71,6 +71,17 @@ class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     message_id: str
     expected_prompt_digest: str
     bound_at_ms: int = field(metadata={"sql": Column(check="bound_at_ms>0")})
+
+    def __post_init__(self):
+        # Original durable SQL is validated on acquisition, not at each caller.
+        self.execution
+
+    @property
+    def execution(self) -> NativeInputExecution:
+        try:
+            return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
+        except (TypeError, ValueError) as error:
+            raise IdentityConflict("Prompt binding execution columns conflict with their stage") from error
 
     @property
     def source(self) -> MessageReference:
@@ -169,10 +180,9 @@ def bind_expected_prompt(
                 raise IdentityConflict("this input already has a prelaunch prompt binding")
             expected = PromptBinding(
                 input_id=input_id,
-                stage=stage.stage,
+                stage=type(stage.execution),
                 assignment_id=assignment.assignment_id,
-                execution_id=stage.execution_id,
-                attempt_ordinal=stage.attempt_ordinal,
+                **stage.execution.binding_fields(),
                 owner_lookup=assignment.recipient_lookup,
                 owner_thread=owner.name,
                 owner_generation=generation,

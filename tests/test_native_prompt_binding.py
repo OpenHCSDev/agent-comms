@@ -19,6 +19,8 @@ from native_proof_cases import read_proof_rows, write_proof_rows
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -256,12 +258,12 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
             recipient_lookup=stable_thread_lookup(people[1].created_at),
             source_seq=initial.message.seq,
         )
-        assert len(evidence) == 1 and evidence[0].stage == "triage"
+        assert len(evidence) == 1 and isinstance(evidence[0].execution, TriageNativeExecution)
         binding = read_expected_prompt_binding(store, evidence[0].input_id)
         assert binding is not None
         assert binding.source_seq == initial.message.seq
         assert binding.message_id == initial.message.message_id
-        assert binding.stage == "triage" and binding.assignment_id == evidence[0].assignment_id
+        assert binding.stage is TriageNativeExecution and binding.assignment_id == evidence[0].assignment_id
         assert binding.owner_thread == "alpha" and binding.wire_root_id == root_id
         # The binding digest is the pinned NATIVE request digest of the exact
         # prompt bytes sent to Pi (not the bare text hash).
@@ -575,15 +577,15 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
             recipient_lookup=stable_thread_lookup(people[1].created_at),
             source_seq=initial.message.seq,
         )
-        assert [row.stage for row in evidence] == ["triage", "full"]
+        assert [type(row.execution) for row in evidence] == [TriageNativeExecution, FullNativeExecution]
         for row in evidence:
             assert row.expected_prompt_equality_established is True
             binding = read_expected_prompt_binding(store, row.input_id)
-            assert binding is not None and binding.stage == row.stage
+            assert binding is not None and binding.execution == row.execution
             assert binding.expected_prompt_digest == row.expected_prompt_digest
         full = evidence[1]
-        assert full.execution_id is not None and full.attempt_ordinal == 1
-        assert read_expected_prompt_binding(store, full.input_id).execution_id == full.execution_id
+        assert full.execution.require_attempt().attempt_ordinal == 1
+        assert read_expected_prompt_binding(store, full.input_id).execution == full.execution
 
 
 async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypatch):
@@ -651,7 +653,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
             recipient_lookup=stable_thread_lookup(people[1].created_at),
             source_seq=initial.message.seq,
         )
-        assert [row.stage for row in evidence] == ["triage"]
+        assert [type(row.execution) for row in evidence] == [TriageNativeExecution]
         assert evidence[0].expected_prompt_equality_established
         rows = store.session._connection.execute(
             "SELECT stage,session_id FROM native_runtime_input ORDER BY stage"
@@ -720,7 +722,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
             recipient_lookup=stable_thread_lookup(people[1].created_at),
             source_seq=initial.message.seq,
         )
-        assert [row.stage for row in evidence] == ([] if stage == "triage" else ["triage"])
+        assert [type(row.execution) for row in evidence] == ([] if stage == "triage" else [TriageNativeExecution])
         assert (
             store.session._connection.execute(
                 "SELECT COUNT(*) FROM native_runtime_input WHERE stage=? AND session_id IS NULL",
@@ -813,7 +815,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
     with Coordination(str(root / "coordination.sqlite3")) as store:
         all_bindings = _all_bindings(store)
         assert len(all_bindings) == 1
-        assert all_bindings[0].stage == "triage"
+        assert all_bindings[0].stage is TriageNativeExecution
 
 
 def _all_bindings(store):

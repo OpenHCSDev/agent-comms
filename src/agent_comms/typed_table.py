@@ -268,8 +268,9 @@ class _Field:
 
     def encode(self, value: object) -> object:
         # Validate before SQLite can coerce a wrong Python value into its affinity.
-        FieldCodec.decode(self.annotation, FieldCodec.encode(value, self.annotation))
-        return None if value is None else self.storage.to_sql(value)
+        encoded = FieldCodec.encode(value, self.annotation)
+        FieldCodec.decode(self.annotation, encoded)
+        return None if encoded is None else self.storage.to_sql(encoded)
 
     def decode(self, value: object) -> object:
         return FieldCodec.decode(

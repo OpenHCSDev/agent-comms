@@ -6,6 +6,9 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import native_admission_rules as rules
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.native_input_record import TriageNativeExecution
+from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordinator import Coordination
@@ -97,7 +100,7 @@ async def test_durable_private_admission_names_each_changed_authority(
                 reservation, row=replace(row, session_id="returned")
             ),
             rules.NativeAlreadyDecidedRule: replace(
-                reservation, row=replace(row, verdict="ignore")
+                reservation, row=replace(row, verdict=IgnoreSelectedTriage)
             ),
             rules.NativeBindingRootRule: replace(bound, wire_root_id="0" * 32),
             rules.NativeBindingSourceRule: replace(
@@ -144,11 +147,19 @@ async def test_durable_private_admission_names_each_changed_authority(
         # The shared owner/attempt rules also apply to the independent prelaunch row.
         for changes, refusal in (
             ({"owner_generation": expected.generation + 1}, rules.NativeInputIdentityRule),
-            ({"attempt_ordinal": 99}, rules.NativeInputIdentityRule),
         ):
             with pytest.raises(ReservationViolationError) as caught:
                 replace(bound, row=replace(binding, **changes)).require_valid()
             assert type(caught.value.rule) is refusal
+        try:
+            changed_attempt = replace(binding, attempt_ordinal=99)
+        except IdentityConflict:
+            # Triage has no execution: reject partial original SQL at acquisition.
+            assert isinstance(binding.execution, TriageNativeExecution)
+        else:
+            with pytest.raises(ReservationViolationError) as caught:
+                replace(bound, row=changed_attempt).require_valid()
+            assert type(caught.value.rule) is rules.NativeInputIdentityRule
         observed.append(True)
         raise InspectedError
 
