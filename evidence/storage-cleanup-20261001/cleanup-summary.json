@@ -1,12 +1,13 @@
 {
   "status": "owner-scoped-cleanup-completed",
-  "allocated_reclaimed_bytes_total": 693161984,
+  "allocated_reclaimed_bytes_total": 842596352,
   "actual_df_deltas_bytes": {
     "generated_envs": 532959232,
     "flat_243_worktree": 75546624,
-    "retired_ui_prefixes": 85041152
+    "retired_ui_prefixes": 85041152,
+    "terminal_capture_archival": 148504576
   },
-  "home_available_after_last_removal": 11930861568,
+  "home_available_after_last_removal": 26596446208,
   "removed_paths": [
     "/home/ts/.cache/agent-scratch/comms-presentation-subscription-20260930/installed",
     "/home/ts/.cache/agent-scratch/comms-native-compaction-latency-20260929/installed",
@@ -30,7 +31,26 @@
     "/home/ts/wt/toad-provider-login-action-modal-20260930",
     "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930",
     "/home/ts/.local/share/agent-comms/runtime-viewport-buffer-20260930",
-    "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930"
+    "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930",
+    "/home/ts/.cache/agent-scratch/comms-default-all-merged-startup-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-actual",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-click",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-context",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-corrected",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-cursor",
+    "/home/ts/.cache/agent-scratch/comms-default-cursor-entrypoint-20260930/capture-final",
+    "/home/ts/.cache/agent-scratch/comms-default-goal-observation-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-managed-tool-bus-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-native-budget-progress-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-owner-cli-config-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-private-launch-caller-startup-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-sidebar-native-custody-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-viewport-buffer-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-viewport-native-cost-20260930/capture",
+    "/home/ts/.cache/agent-scratch/comms-default-viewport-native-residency-20260930/capture",
+    "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930/capture",
+    "/home/ts/.cache/agent-scratch/toad-provider-login-physical-20260930-02/capture"
   ],
   "remaining_owned_protected_paths": {
     "/home/ts/wt/comms-c1-terminal-data-20260930": "current functional/native proof owner; unreviewed source/raw traces retained",
@@ -45,5 +65,12 @@
   "no_biological_content_read": true,
   "flat_removed_worktree_has_gitlinks_or_gitmodules": false,
   "submodule_worktree_removals": "stopped; none performed by this owner",
-  "next_native_gate": "Not started because parent withdrew frozen259 after new canonical publication counterexample; standby meaningful fixed pair; no original replay."
+  "next_native_gate": "Not started because parent withdrew frozen259 after new canonical publication counterexample; standby meaningful fixed pair; no original replay.",
+  "terminal_capture_archive": {
+    "path": "/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/storage-cleanup-20261001/retired-terminal-captures.tar.gz",
+    "sha256": "077a153940c5a4236c2b4c6a7b74b1c66b41de8335f9a5a51c6c3801665c7b48",
+    "entries": 764,
+    "manifest": "/home/ts/wt/comms-c1-terminal-data-20260930/.artifacts/storage-cleanup-20261001/terminal-capture-manifest.json",
+    "mode": "0600"
+  }
 }
