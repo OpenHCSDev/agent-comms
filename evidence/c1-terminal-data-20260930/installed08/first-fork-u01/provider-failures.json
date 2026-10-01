@@ -1,0 +1,15 @@
+{
+  "errors": [],
+  "requests": [
+    {
+      "model": "fixture",
+      "max_tokens": null,
+      "messages_characters": 3800
+    },
+    {
+      "model": "fixture",
+      "max_tokens": null,
+      "messages_characters": 4940
+    }
+  ]
+}

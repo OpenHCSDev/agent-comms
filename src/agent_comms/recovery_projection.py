@@ -150,6 +150,7 @@ class RecoverySelection(TypedRow):
     current_attempt_ordinal: int | None
     attempt_ordinal: int | None
     phase: type[AttemptState] | None
+    lease_expires_at_ms: int | None
     backend_done: bool | None
     process_dead: bool | None
     state: type[ResponseState] | None
@@ -239,7 +240,7 @@ def _read_in_transaction(
     rows = RecoverySelection.read(
         connection.execute(
             "SELECT e.execution_id, e.origin, e.status, e.current_attempt_ordinal, "
-            "a.attempt_ordinal, a.phase, a.backend_done, a.process_dead, "
+            "a.attempt_ordinal, a.phase, a.lease_expires_at_ms, a.backend_done, a.process_dead, "
             "o.state, (SELECT count(*) FROM publication_receipts r "
             "WHERE r.execution_id = e.execution_id) AS receipts, "
             "(SELECT authorized FROM retry_disposition_basis b "
@@ -268,6 +269,11 @@ def _read_in_transaction(
             is_current and not status.active
         ):
             return UnavailableRecoveryProjection("invalid_store")
+        observed_attempt = (
+            selected.phase.load(selected.lease_expires_at_ms, selected.backend_done, selected.process_dead)
+            if selected.phase is not None else None
+        )
+        lifecycle = selected.status.load(selected.current_attempt_ordinal)
         attempt = (
             ProjectedAttempt(
                 selected.attempt_ordinal,
@@ -292,13 +298,11 @@ def _read_in_transaction(
             origin,
             is_current,
             attempt,
-            selected.retry_authorized
-            and status.retry
-            and attempt is not None
-            and attempt.phase.failed
-            and attempt.backend_done
-            and attempt.backend_process_exited
-            and not is_current,
+            lifecycle.can_retry(
+                authorized=selected.retry_authorized,
+                attempt=observed_attempt,
+                is_current=is_current,
+            ),
             publication,
         )
         audits = ProjectedRecovery.read(

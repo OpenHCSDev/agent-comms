@@ -1,0 +1,1939 @@
+{
+  "typed_turn_callbacks": 44,
+  "measured_model_wait_callbacks": 30,
+  "native_stages": [
+    "callback",
+    "callback_end",
+    "dispatch",
+    "finished",
+    "first_delta_consumed",
+    "first_event",
+    "headers",
+    "preparing",
+    "stream_end"
+  ],
+  "fresh_protocol_errors": [],
+  "protocols": [
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "request_methods": [
+        "initialize",
+        "session/load",
+        "session/prompt"
+      ],
+      "replied_methods": [
+        "initialize",
+        "session/load",
+        "session/prompt"
+      ]
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "request_methods": [
+        "initialize",
+        "session/load",
+        "session/prompt"
+      ],
+      "replied_methods": [
+        "initialize",
+        "session/load",
+        "session/prompt"
+      ]
+    }
+  ],
+  "actual_typed_native_progress": [
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134835,
+                "monotonicNs": "272774012507720",
+                "elapsedMs": 0.054914,
+                "callbackMs": 0,
+                "callbackCount": 0,
+                "callbackMaxMs": 0,
+                "stage": "preparing",
+                "detail": "Preparing model request",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134835,
+        "monotonicNs": "272774012507720",
+        "elapsedMs": 0.054914,
+        "callbackMs": 0,
+        "callbackCount": 0,
+        "callbackMaxMs": 0,
+        "stage": "preparing",
+        "detail": "Preparing model request",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134964,
+                "monotonicNs": "272774141828975",
+                "elapsedMs": 129.376169,
+                "callbackMs": 0,
+                "callbackCount": 0,
+                "callbackMaxMs": 0,
+                "stage": "callback",
+                "detail": "Preparing model request",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "before_provider_request"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134964,
+        "monotonicNs": "272774141828975",
+        "elapsedMs": 129.376169,
+        "callbackMs": 0,
+        "callbackCount": 0,
+        "callbackMaxMs": 0,
+        "stage": "callback",
+        "detail": "Preparing model request",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "before_provider_request"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134964,
+                "monotonicNs": "272774141963991",
+                "elapsedMs": 129.511185,
+                "callbackMs": 0.136408,
+                "callbackCount": 1,
+                "callbackMaxMs": 0.136408,
+                "stage": "callback_end",
+                "detail": "Waiting for model progress",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "before_provider_request"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134964,
+        "monotonicNs": "272774141963991",
+        "elapsedMs": 129.511185,
+        "callbackMs": 0.136408,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.136408,
+        "stage": "callback_end",
+        "detail": "Waiting for model progress",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "before_provider_request"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134965,
+                "monotonicNs": "272774142480669",
+                "elapsedMs": 130.027863,
+                "callbackMs": 0.136408,
+                "callbackCount": 1,
+                "callbackMaxMs": 0.136408,
+                "stage": "dispatch",
+                "detail": "Waiting for provider response",
+                "transport": "http",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134965,
+        "monotonicNs": "272774142480669",
+        "elapsedMs": 130.027863,
+        "callbackMs": 0.136408,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.136408,
+        "stage": "dispatch",
+        "detail": "Waiting for provider response",
+        "transport": "http",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134992,
+                "monotonicNs": "272774169995921",
+                "elapsedMs": 157.543115,
+                "callbackMs": 0.136408,
+                "callbackCount": 1,
+                "callbackMaxMs": 0.136408,
+                "stage": "headers",
+                "detail": "Provider responded; waiting for stream",
+                "transport": "http",
+                "attempt": 0,
+                "status": 200,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134992,
+        "monotonicNs": "272774169995921",
+        "elapsedMs": 157.543115,
+        "callbackMs": 0.136408,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.136408,
+        "stage": "headers",
+        "detail": "Provider responded; waiting for stream",
+        "transport": "http",
+        "attempt": 0,
+        "status": 200,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134993,
+                "monotonicNs": "272774170175040",
+                "elapsedMs": 157.722234,
+                "callbackMs": 0.136408,
+                "callbackCount": 1,
+                "callbackMaxMs": 0.136408,
+                "stage": "callback",
+                "detail": "Reading provider response",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "after_provider_response"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134993,
+        "monotonicNs": "272774170175040",
+        "elapsedMs": 157.722234,
+        "callbackMs": 0.136408,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.136408,
+        "stage": "callback",
+        "detail": "Reading provider response",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "after_provider_response"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134993,
+                "monotonicNs": "272774170328039",
+                "elapsedMs": 157.875233,
+                "callbackMs": 0.293014,
+                "callbackCount": 2,
+                "callbackMaxMs": 0.156606,
+                "stage": "callback_end",
+                "detail": "Waiting for model progress",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "after_provider_response"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134993,
+        "monotonicNs": "272774170328039",
+        "elapsedMs": 157.875233,
+        "callbackMs": 0.293014,
+        "callbackCount": 2,
+        "callbackMaxMs": 0.156606,
+        "stage": "callback_end",
+        "detail": "Waiting for model progress",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "after_provider_response"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134994,
+                "monotonicNs": "272774171627630",
+                "elapsedMs": 159.174824,
+                "callbackMs": 0.293014,
+                "callbackCount": 2,
+                "callbackMaxMs": 0.156606,
+                "stage": "callback",
+                "detail": "Publishing model response",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "message_start"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134994,
+        "monotonicNs": "272774171627630",
+        "elapsedMs": 159.174824,
+        "callbackMs": 0.293014,
+        "callbackCount": 2,
+        "callbackMaxMs": 0.156606,
+        "stage": "callback",
+        "detail": "Publishing model response",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "message_start"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134994,
+                "monotonicNs": "272774171908342",
+                "elapsedMs": 159.455536,
+                "callbackMs": 0.574507,
+                "callbackCount": 3,
+                "callbackMaxMs": 0.281493,
+                "stage": "callback_end",
+                "detail": "Waiting for model progress",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "message_start"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134994,
+        "monotonicNs": "272774171908342",
+        "elapsedMs": 159.455536,
+        "callbackMs": 0.574507,
+        "callbackCount": 3,
+        "callbackMaxMs": 0.281493,
+        "stage": "callback_end",
+        "detail": "Waiting for model progress",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "message_start"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134998,
+                "monotonicNs": "272774175035934",
+                "elapsedMs": 162.583128,
+                "callbackMs": 0.574507,
+                "callbackCount": 3,
+                "callbackMaxMs": 0.281493,
+                "stage": "first_event",
+                "detail": "Provider stream started",
+                "transport": "http",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134998,
+        "monotonicNs": "272774175035934",
+        "elapsedMs": 162.583128,
+        "callbackMs": 0.574507,
+        "callbackCount": 3,
+        "callbackMaxMs": 0.281493,
+        "stage": "first_event",
+        "detail": "Provider stream started",
+        "transport": "http",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797134999,
+                "monotonicNs": "272774176343600",
+                "elapsedMs": 163.890794,
+                "callbackMs": 0.574507,
+                "callbackCount": 3,
+                "callbackMaxMs": 0.281493,
+                "stage": "stream_end",
+                "detail": "Provider stream closed",
+                "transport": "http",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797134999,
+        "monotonicNs": "272774176343600",
+        "elapsedMs": 163.890794,
+        "callbackMs": 0.574507,
+        "callbackCount": 3,
+        "callbackMaxMs": 0.281493,
+        "stage": "stream_end",
+        "detail": "Provider stream closed",
+        "transport": "http",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797135000,
+                "monotonicNs": "272774177248373",
+                "elapsedMs": 164.795567,
+                "callbackMs": 2.117088,
+                "callbackCount": 4,
+                "callbackMaxMs": 1.542581,
+                "stage": "first_delta_consumed",
+                "detail": "Receiving model response",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797135000,
+        "monotonicNs": "272774177248373",
+        "elapsedMs": 164.795567,
+        "callbackMs": 2.117088,
+        "callbackCount": 4,
+        "callbackMaxMs": 1.542581,
+        "stage": "first_delta_consumed",
+        "detail": "Receiving model response",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797135000,
+                "monotonicNs": "272774177531179",
+                "elapsedMs": 165.078373,
+                "callbackMs": 2.33419,
+                "callbackCount": 6,
+                "callbackMaxMs": 1.542581,
+                "stage": "callback",
+                "detail": "Publishing model response",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "message_end"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797135000,
+        "monotonicNs": "272774177531179",
+        "elapsedMs": 165.078373,
+        "callbackMs": 2.33419,
+        "callbackCount": 6,
+        "callbackMaxMs": 1.542581,
+        "stage": "callback",
+        "detail": "Publishing model response",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "message_end"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797135004,
+                "monotonicNs": "272774181797587",
+                "elapsedMs": 169.344781,
+                "callbackMs": 6.593716,
+                "callbackCount": 7,
+                "callbackMaxMs": 4.259526,
+                "stage": "callback_end",
+                "detail": "Waiting for model progress",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "message_end"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797135004,
+        "monotonicNs": "272774181797587",
+        "elapsedMs": 169.344781,
+        "callbackMs": 6.593716,
+        "callbackCount": 7,
+        "callbackMaxMs": 4.259526,
+        "stage": "callback_end",
+        "detail": "Waiting for model progress",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "message_end"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_38_44_534753.txt",
+      "session_id": "beta",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "c6ef2dde8973426f98e020c716952521",
+            "owner_pid": 3861340,
+            "started_at": 1790797131.9020793,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 3,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+                "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+                "inputId": "c3deb2691542bc016fae370386ad5cff",
+                "startedAtMs": 1790797134835,
+                "observedAtMs": 1790797135004,
+                "monotonicNs": "272774181871918",
+                "elapsedMs": 169.419112,
+                "callbackMs": 6.593716,
+                "callbackCount": 7,
+                "callbackMaxMs": 4.259526,
+                "stage": "finished",
+                "detail": "Model request finished",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "7f67b00d-5c7f-498f-a6e5-af5a1c052e24",
+        "sessionId": "01a0f3d3-bb7c-7554-ab59-9fdaf9184179",
+        "inputId": "c3deb2691542bc016fae370386ad5cff",
+        "startedAtMs": 1790797134835,
+        "observedAtMs": 1790797135004,
+        "monotonicNs": "272774181871918",
+        "elapsedMs": 169.419112,
+        "callbackMs": 6.593716,
+        "callbackCount": 7,
+        "callbackMaxMs": 4.259526,
+        "stage": "finished",
+        "detail": "Model request finished",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797161975,
+                "monotonicNs": "272801152401222",
+                "elapsedMs": 0.048892,
+                "callbackMs": 0,
+                "callbackCount": 0,
+                "callbackMaxMs": 0,
+                "stage": "preparing",
+                "detail": "Preparing model request",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797161975,
+        "monotonicNs": "272801152401222",
+        "elapsedMs": 0.048892,
+        "callbackMs": 0,
+        "callbackCount": 0,
+        "callbackMaxMs": 0,
+        "stage": "preparing",
+        "detail": "Preparing model request",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162143,
+                "monotonicNs": "272801320089167",
+                "elapsedMs": 167.736837,
+                "callbackMs": 0,
+                "callbackCount": 0,
+                "callbackMaxMs": 0,
+                "stage": "callback",
+                "detail": "Preparing model request",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "before_provider_request"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162143,
+        "monotonicNs": "272801320089167",
+        "elapsedMs": 167.736837,
+        "callbackMs": 0,
+        "callbackCount": 0,
+        "callbackMaxMs": 0,
+        "stage": "callback",
+        "detail": "Preparing model request",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "before_provider_request"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162143,
+                "monotonicNs": "272801320181371",
+                "elapsedMs": 167.829041,
+                "callbackMs": 0.095671,
+                "callbackCount": 1,
+                "callbackMaxMs": 0.095671,
+                "stage": "callback_end",
+                "detail": "Waiting for model progress",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "before_provider_request"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162143,
+        "monotonicNs": "272801320181371",
+        "elapsedMs": 167.829041,
+        "callbackMs": 0.095671,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.095671,
+        "stage": "callback_end",
+        "detail": "Waiting for model progress",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "before_provider_request"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162143,
+                "monotonicNs": "272801320637665",
+                "elapsedMs": 168.285335,
+                "callbackMs": 0.095671,
+                "callbackCount": 1,
+                "callbackMaxMs": 0.095671,
+                "stage": "dispatch",
+                "detail": "Waiting for provider response",
+                "transport": "http",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162143,
+        "monotonicNs": "272801320637665",
+        "elapsedMs": 168.285335,
+        "callbackMs": 0.095671,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.095671,
+        "stage": "dispatch",
+        "detail": "Waiting for provider response",
+        "transport": "http",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162169,
+                "monotonicNs": "272801346555863",
+                "elapsedMs": 194.203533,
+                "callbackMs": 0.095671,
+                "callbackCount": 1,
+                "callbackMaxMs": 0.095671,
+                "stage": "headers",
+                "detail": "Provider responded; waiting for stream",
+                "transport": "http",
+                "attempt": 0,
+                "status": 200,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162169,
+        "monotonicNs": "272801346555863",
+        "elapsedMs": 194.203533,
+        "callbackMs": 0.095671,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.095671,
+        "stage": "headers",
+        "detail": "Provider responded; waiting for stream",
+        "transport": "http",
+        "attempt": 0,
+        "status": 200,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162169,
+                "monotonicNs": "272801346674768",
+                "elapsedMs": 194.322438,
+                "callbackMs": 0.095671,
+                "callbackCount": 1,
+                "callbackMaxMs": 0.095671,
+                "stage": "callback",
+                "detail": "Reading provider response",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "after_provider_response"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162169,
+        "monotonicNs": "272801346674768",
+        "elapsedMs": 194.322438,
+        "callbackMs": 0.095671,
+        "callbackCount": 1,
+        "callbackMaxMs": 0.095671,
+        "stage": "callback",
+        "detail": "Reading provider response",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "after_provider_response"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162169,
+                "monotonicNs": "272801346792160",
+                "elapsedMs": 194.43983,
+                "callbackMs": 0.215639,
+                "callbackCount": 2,
+                "callbackMaxMs": 0.119968,
+                "stage": "callback_end",
+                "detail": "Waiting for model progress",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "after_provider_response"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162169,
+        "monotonicNs": "272801346792160",
+        "elapsedMs": 194.43983,
+        "callbackMs": 0.215639,
+        "callbackCount": 2,
+        "callbackMaxMs": 0.119968,
+        "stage": "callback_end",
+        "detail": "Waiting for model progress",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "after_provider_response"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162170,
+                "monotonicNs": "272801347592335",
+                "elapsedMs": 195.240005,
+                "callbackMs": 0.215639,
+                "callbackCount": 2,
+                "callbackMaxMs": 0.119968,
+                "stage": "callback",
+                "detail": "Publishing model response",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "message_start"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162170,
+        "monotonicNs": "272801347592335",
+        "elapsedMs": 195.240005,
+        "callbackMs": 0.215639,
+        "callbackCount": 2,
+        "callbackMaxMs": 0.119968,
+        "stage": "callback",
+        "detail": "Publishing model response",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "message_start"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162170,
+                "monotonicNs": "272801347734254",
+                "elapsedMs": 195.381924,
+                "callbackMs": 0.357958,
+                "callbackCount": 3,
+                "callbackMaxMs": 0.142319,
+                "stage": "callback_end",
+                "detail": "Waiting for model progress",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "message_start"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162170,
+        "monotonicNs": "272801347734254",
+        "elapsedMs": 195.381924,
+        "callbackMs": 0.357958,
+        "callbackCount": 3,
+        "callbackMaxMs": 0.142319,
+        "stage": "callback_end",
+        "detail": "Waiting for model progress",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "message_start"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162172,
+                "monotonicNs": "272801349821707",
+                "elapsedMs": 197.469377,
+                "callbackMs": 0.357958,
+                "callbackCount": 3,
+                "callbackMaxMs": 0.142319,
+                "stage": "first_event",
+                "detail": "Provider stream started",
+                "transport": "http",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162172,
+        "monotonicNs": "272801349821707",
+        "elapsedMs": 197.469377,
+        "callbackMs": 0.357958,
+        "callbackCount": 3,
+        "callbackMaxMs": 0.142319,
+        "stage": "first_event",
+        "detail": "Provider stream started",
+        "transport": "http",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162173,
+                "monotonicNs": "272801350925356",
+                "elapsedMs": 198.573026,
+                "callbackMs": 0.357958,
+                "callbackCount": 3,
+                "callbackMaxMs": 0.142319,
+                "stage": "stream_end",
+                "detail": "Provider stream closed",
+                "transport": "http",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162173,
+        "monotonicNs": "272801350925356",
+        "elapsedMs": 198.573026,
+        "callbackMs": 0.357958,
+        "callbackCount": 3,
+        "callbackMaxMs": 0.142319,
+        "stage": "stream_end",
+        "detail": "Provider stream closed",
+        "transport": "http",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162174,
+                "monotonicNs": "272801351554889",
+                "elapsedMs": 199.202559,
+                "callbackMs": 1.506813,
+                "callbackCount": 4,
+                "callbackMaxMs": 1.148855,
+                "stage": "first_delta_consumed",
+                "detail": "Receiving model response",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162174,
+        "monotonicNs": "272801351554889",
+        "elapsedMs": 199.202559,
+        "callbackMs": 1.506813,
+        "callbackCount": 4,
+        "callbackMaxMs": 1.148855,
+        "stage": "first_delta_consumed",
+        "detail": "Receiving model response",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162174,
+                "monotonicNs": "272801351754777",
+                "elapsedMs": 199.402447,
+                "callbackMs": 1.660824,
+                "callbackCount": 6,
+                "callbackMaxMs": 1.148855,
+                "stage": "callback",
+                "detail": "Publishing model response",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "message_end"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162174,
+        "monotonicNs": "272801351754777",
+        "elapsedMs": 199.402447,
+        "callbackMs": 1.660824,
+        "callbackCount": 6,
+        "callbackMaxMs": 1.148855,
+        "stage": "callback",
+        "detail": "Publishing model response",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "message_end"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162177,
+                "monotonicNs": "272801354567703",
+                "elapsedMs": 202.215373,
+                "callbackMs": 4.467498,
+                "callbackCount": 7,
+                "callbackMaxMs": 2.806674,
+                "stage": "callback_end",
+                "detail": "Waiting for model progress",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": "message_end"
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162177,
+        "monotonicNs": "272801354567703",
+        "elapsedMs": 202.215373,
+        "callbackMs": 4.467498,
+        "callbackCount": 7,
+        "callbackMaxMs": 2.806674,
+        "stage": "callback_end",
+        "detail": "Waiting for model progress",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": "message_end"
+      }
+    },
+    {
+      "path": "/home/ts/wt/g458e/u01/fixture/application/state/toad/logs/Native_fixture_2026-09-30T15_39_05_282621.txt",
+      "session_id": "immediate-fork",
+      "fact": {
+        "kind": "turn_changed",
+        "state": {
+          "active": {
+            "id": "3f9f970fd2a7414e9ed695bee0c2c721",
+            "owner_pid": 3861840,
+            "started_at": 1790797155.8878958,
+            "routing": {
+              "requests": [],
+              "reply": null
+            },
+            "admission_generation": 5,
+            "turn_generation": 1,
+            "phase": {
+              "kind": "model_wait",
+              "detail": "",
+              "source": {
+                "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+                "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+                "inputId": "f34d578b03343ad02c0f502c2322eddb",
+                "startedAtMs": 1790797161975,
+                "observedAtMs": 1790797162177,
+                "monotonicNs": "272801354621826",
+                "elapsedMs": 202.269496,
+                "callbackMs": 4.467498,
+                "callbackCount": 7,
+                "callbackMaxMs": 2.806674,
+                "stage": "finished",
+                "detail": "Model request finished",
+                "transport": "",
+                "attempt": 0,
+                "status": null,
+                "responseId": null,
+                "callback": ""
+              }
+            }
+          },
+          "finished_turn_id": null
+        }
+      },
+      "native_progress": {
+        "requestId": "97107be0-2770-4979-a906-08e6daa11692",
+        "sessionId": "01a0f3d3-dbba-703c-9055-d9a919c3f309",
+        "inputId": "f34d578b03343ad02c0f502c2322eddb",
+        "startedAtMs": 1790797161975,
+        "observedAtMs": 1790797162177,
+        "monotonicNs": "272801354621826",
+        "elapsedMs": 202.269496,
+        "callbackMs": 4.467498,
+        "callbackCount": 7,
+        "callbackMaxMs": 2.806674,
+        "stage": "finished",
+        "detail": "Model request finished",
+        "transport": "",
+        "attempt": 0,
+        "status": null,
+        "responseId": null,
+        "callback": ""
+      }
+    }
+  ],
+  "idle_observed": true,
+  "clock_semantics": "Native elapsed/source values only; no subtraction between process clocks",
+  "scope": "Existing native first-fork UI journey; no real-provider dwell or queue timing claim"
+}

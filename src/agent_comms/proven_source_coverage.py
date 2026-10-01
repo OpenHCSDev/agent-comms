@@ -10,6 +10,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from typing import Annotated
+
+from .bus_source_page import CoveragePage
+from .bus_publication import StableLookupText
+from .field_codec import FieldCodec
+from .wire_metadata import WireRootIdText
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
@@ -23,7 +29,6 @@ from .historical_native_inputs import HistoricalNativeInput, read_historical_nat
 from .message_bus import MessageBus
 from .private_bus_checkpoint import (
     PrefixWitness,
-    certified_delivery_page_unlocked,
     verify_private_bus_checkpoint_unlocked,
 )
 from .wake import NoWakeDecision, WakeDecision
@@ -55,19 +60,11 @@ class SourceCoverage:
     def __init__(
         self, bus: MessageBus, store: Coordination, *, wire_root_id: str, recipient_lookup: str
     ):
-        if (
-            type(bus) is not MessageBus
-            or type(store) is not Coordination
-            or any(
-                type(value) is not str
-                or len(value) != 32
-                or any(ch not in "0123456789abcdef" for ch in value)
-                for value in (wire_root_id, recipient_lookup)
-            )
-        ):
-            raise ValueError("source coverage needs exact private identities and bounded scan")
+        if type(bus) is not MessageBus or type(store) is not Coordination:
+            raise ValueError("Source coverage needs the original bus and coordinator")
         self.bus, self.store = bus, store
-        self.wire_root_id, self.recipient_lookup = wire_root_id, recipient_lookup
+        self.wire_root_id = FieldCodec.decode(Annotated[str, WireRootIdText], wire_root_id)
+        self.recipient_lookup = FieldCodec.decode(Annotated[str, StableLookupText], recipient_lookup)
 
     def witness_unlocked(self) -> PrefixWitness:
         return verify_private_bus_checkpoint_unlocked(
@@ -87,18 +84,11 @@ class SourceCoverage:
         exhausted page uses certified latest initial, not global bus high-water.
         Filesystem fsync/locks are not a hard wall-clock deadline.
         """
-        if (
-            type(limit) is not int
-            or not 0 < limit <= 100
-            or type(after_seq) is not int
-            or after_seq < 0
-            or type(partial) is not bool
-            or (after_seq != 0 and not partial)
-        ):
-            raise ValueError("source coverage needs exact private identities and bounded scan")
+        request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
+                                       after_seq=after_seq, partial=partial)
         if self.store.session._connection.in_transaction:
             raise IdentityConflict("source coverage requires a committed coordinator snapshot")
-        witness, initials, more = self._page(limit, after_seq, partial)
+        witness, initials, more = self._page(request)
         horizon = initials[-1].message.seq if more else witness.latest_source_seq
         covered, injected, no_wake, blocked = after_seq if partial else 0, [], [], None
         for initial in initials:
@@ -143,23 +133,17 @@ class SourceCoverage:
             source_witness=witness,
         )
 
-    def _page(
-        self, limit: int, after_seq: int, partial: bool
-    ) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
+    def _page(self, request: CoveragePage) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
         deadline = time.monotonic() + _MAX_SCAN_SECONDS
-        with self.bus.log.locked(blocking=False):
+        with self.bus.log.certified_read(blocking=False) as source:
             if time.monotonic() > deadline:
                 raise IdentityConflict("source coverage exceeded its scan deadline")
-            marker = self.bus.log._private_marker_unlocked()
-            if marker.root_id != self.wire_root_id:
+            if source.marker.root_id != self.wire_root_id:
                 raise IdentityConflict("source coverage private wire root changed")
-            witness, initials, more = certified_delivery_page_unlocked(
-                self.bus.log, marker, self.recipient_lookup, after=after_seq, limit=limit
-            )
-            if after_seq > max(witness.latest_source_seq, marker.admission_after_seq):
+            witness, initials, more = source.addressed_page(self.bus.log, request)
+            if request.after_seq > max(witness.latest_source_seq, source.marker.admission_after_seq):
                 raise IdentityConflict("source coverage prefix exceeds certified initials")
-            if more and not partial:
-                raise IdentityConflict("source coverage exceeded its bounded private initial scan")
+            request.require_exhausted(more)
             return witness, initials, more
 
     def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:

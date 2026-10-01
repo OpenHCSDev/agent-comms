@@ -1,0 +1,44 @@
+                                                                                                                                                                
+  ☰     <──    ──>   ✓ beta ×  ✓ immediate-fork (1) ×                                                                                                          
+                                ━━━━━━━━━━━━━━━━━━━━                                                                                                            
+▼ Channels                                           Name ▾    │                                                                                                
++ New Session                                                  │                                                                                                
+▾ #any                                       Date created ▾    │                                                                                                
+  (1) ✓ immediate-fork                                         │                                                                                                
+    Ready                                                      │                                                                                                
+  ✓ beta                                                       │                                                                                                
+    Ready                                                      │                                                                                                
+▸ #none                                      Date created ▾    │                                                                                                
+▸ #all                                       Date created ▾    │                                                                                                
+▾ #fork-added                                Date created ▾    │                                                                                                
+  (1) ✓ immediate-fork                                         │                                                                                                
+    Ready                                                      │                                                                                                
+▸ #team                                      Date created ▾    │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                               │                                                                                                
+                                                             < │                                                                                              < 
+                                                               │ ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔      
+                                                               │▌  ▶ Agent coordination context                                                                 
+                                                               │▌                                                                                               
+                                                               │▌                                                                                               
+                                                               │▌─────────────────────────────────── User · 17:10:27 ────────────────────────────────────       
+                                                               │▌▊❯ FORK_PARENT_SEED                                                                            
+                                                               │▌                                                                                               
+                                                               │▌                                                                                               
+                                                               │▌─────────────────────────────────── Agent · 17:10:27 ───────────────────────────────────       
+                                                               │▌NATIVE_RESPONSE_1                                                                              
+                                                               │▌                                                                                               
+                                                               │                                  Native fixture connected                                      
+                                                               │ ▶ Session details · Needs attention · FIRST_FORK_NEW_INPUT · Saved history available · Bus i   
+                                                               │━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   
+                                                               │                                                                                                
+                                                               │Queued (1): FIRST_FORK_NEW_INPUT                                                                
+                                                               │▊▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▎   
+                                                               │▊ ❯                                                                                         ▎   
+40% ───────────────────────────────────────●────────────────   │▊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▎   
+  ──>   Float                                                  │  selected-offline/fixture · off  … Context unavailable · Native owner has not reported cont    
+⏎ Send ⇧+⏎ Line ^c Interrupt ^g IRC view ^s Channels                                                                                                ▏^p palette 

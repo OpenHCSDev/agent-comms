@@ -56,8 +56,8 @@ async def compact_context(
             await runner.effects._emit_event(session_id, events.CompactionStart(reason="manual"))
             from .owner_compaction_manual import compact_manual_owner
 
-            info = await runner.prepare_selected_session(session_id, thread)
-            result = await compact_manual_owner(runner, session_id, thread_name, info, instructions)
+            prepared = await runner.prepare_selected_session(session_id, thread)
+            result = await compact_manual_owner(runner, session_id, thread_name, prepared, instructions)
             # Attempt terminal delivery once; an uncertain delivery cannot emit an abort.
             terminal_attempted = True
             await runner.effects._emit_event(session_id, result.terminal_event())

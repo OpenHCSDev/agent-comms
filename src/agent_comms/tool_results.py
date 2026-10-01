@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
-
-if TYPE_CHECKING:
-    from .pi_payloads import PiToolResult
+from typing import Any, Literal
 from urllib.parse import quote
 
 
@@ -16,23 +13,6 @@ class ToolDiff:
 
     text: str
     format: Literal["unified", "numbered"] = "unified"
-
-    @classmethod
-    def from_result(cls, name: str, result: PiToolResult | None, ok: bool) -> ToolDiff | None:
-        if name != "edit" or not ok or result is None:
-            return None
-        details = result.details
-        if not isinstance(details, dict):
-            return None
-        patch = details.get("patch")
-        if isinstance(patch, str) and patch.strip():
-            return cls(patch)
-        # Older Pi versions persisted a numbered display diff, not a patch.
-        diff = details.get("diff")
-        if isinstance(diff, str) and diff.strip():
-            return cls(diff, "numbered")
-        return None
-
 
 def tool_result_content(
     tool_call_id: str, output: str, diff: ToolDiff | None = None

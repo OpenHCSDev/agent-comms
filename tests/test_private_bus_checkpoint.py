@@ -16,8 +16,8 @@ from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import Message, MessageType
+from agent_comms.bus_source_page import AddressedPage
 from agent_comms.private_bus_checkpoint import (
-    certified_delivery_page_unlocked,
     install_private_bus_checkpoint,
 )
 from agent_comms.store_files import _store_lock
@@ -48,14 +48,10 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
 
 
 def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
-    with _store_lock(comms.bus.log.path):
-        return certified_delivery_page_unlocked(
-            comms.bus.log,
-            comms.bus.log._private_marker_unlocked(),
-            lookup,
-            after=after,
-            limit=limit,
-        )
+    request = AddressedPage.capture(lookup=lookup, after_seq=after, limit=limit)
+    with comms.bus.log.certified_read() as source:
+        return source.addressed_page(comms.bus.log, request)
+
 
 
 def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
@@ -280,20 +276,25 @@ def test_sql_index_change_plus_complete_bus_suffix_still_denies(
 
 def test_sql_index_change_during_page_is_not_exhaustiveness(tmp_path: Path, monkeypatch) -> None:
     import agent_comms.private_bus_checkpoint as checkpoint
+    import shutil
 
     comms, _ = _root(tmp_path)
     comms.messaging.send_initial_cohort("sender", "Alice", "source")
     path = comms.root / "private_bus_checkpoint.sqlite3"
-    real_connect = checkpoint._connect
+    read_rows = checkpoint.DeliverySources.read
 
-    def mutate_before_read(candidate, *, readonly=False):
-        if readonly:
-            with sqlite3.connect(path) as db:
-                db.execute("DELETE FROM addressed")
-        return real_connect(candidate, readonly=readonly)
+    def mutate_after_original_read(cursor):
+        rows = read_rows(cursor)
+        replacement = path.with_name("unsealed-replacement.sqlite3")
+        shutil.copyfile(path, replacement)
+        with sqlite3.connect(replacement) as db:
+            db.execute("DELETE FROM addressed")
+        replacement.replace(path)
+        return rows
 
-    monkeypatch.setattr(checkpoint, "_connect", mutate_before_read)
-    with pytest.raises(RelationViolationError, match="changed during its read fence"):
+    # Mutate after original row resolution, without assuming a second connection.
+    monkeypatch.setattr(checkpoint.DeliverySources, "read", mutate_after_original_read)
+    with pytest.raises(RelationViolationError, match="index seal changed"):
         _page(comms, stable_thread_lookup(17002.0))
 
 

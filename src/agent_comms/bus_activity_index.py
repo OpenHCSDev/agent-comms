@@ -1,139 +1,76 @@
-"""Disposable append checkpoint for channel and sender activity clocks.
-
-The bus JSONL remains authoritative. A replaced or rewritten bus rebuilds this
-projection; ordinary appends decode only the new rows.
-"""
-
+"""Disposable activity projection of the original complete bus boundary."""
 from __future__ import annotations
 
-import hashlib
 import json
-import os
-import tempfile
 from collections.abc import Callable, Mapping
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
+
+from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision
+from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .channels import Channel
     from .messages import Message
 
-
 ActivityFields = tuple[str, str, float, bool, bool]
 ActivitySnapshot = tuple[dict[str, tuple[float, float]], dict[str, float]]
 
 
-class BusActivityIndex:
+@dataclass(frozen=True)
+class ActivityCheckpoint(AppendCheckpoint):
+    channels: dict[str, tuple[float, float]]
+    sent: dict[str, float]
+    schema: Literal[3] = field(default=3, kw_only=True)
+
+    @property
+    def snapshot(self) -> ActivitySnapshot:
+        return self.channels, self.sent
+
+    def current_for(self, revision: BusFileRevision) -> bool:
+        return (self.source, self.offset) == (revision, revision.size)
+
+
+class BusActivityIndex(BusAppendIndex):
+    record_type = ActivityCheckpoint
+
     def __init__(self, bus_path: Path):
-        self.bus_path = bus_path
-        self.path = bus_path.with_name("bus_activity_latest.json")
+        super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
+        self._retained: ActivityCheckpoint | None = None
 
-    @staticmethod
-    def _tail(stream: Any, offset: int) -> str:
-        start = max(0, offset - 4096)
-        stream.seek(start)
-        return hashlib.sha256(stream.read(offset - start)).hexdigest()
-
-    @staticmethod
-    def _digest(record: Mapping[str, Any]) -> str:
-        payload = {key: value for key, value in record.items() if key != "integrity"}
-        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-    def _checkpoint(
-        self, revision: tuple[int, int, int, int], stream: Any
-    ) -> tuple[ActivitySnapshot, int] | None:
-        try:
-            saved = json.loads(self.path.read_text())
-            if saved.get("integrity") != self._digest(saved):
-                return None
-            source = saved["source"]
-            offset = saved["offset"]
-            if (
-                saved.get("schema") != 2
-                or not isinstance(source, list)
-                or len(source) != 4
-                or type(offset) is not int
-                or offset < 0
-                or source[0] != revision[0]
-                or offset > revision[1]
-                or (offset == revision[1] and source[2:] != list(revision[2:]))
-                or saved["tail"] != self._tail(stream, offset)
-            ):
-                return None
-            channels = {
-                name: (float(values[0]), float(values[1]))
-                for name, values in saved["channels"].items()
-                if isinstance(name, str) and isinstance(values, list) and len(values) == 2
-            }
-            sent = {
-                name: float(value) for name, value in saved["sent"].items() if isinstance(name, str)
-            }
-            if len(channels) != len(saved["channels"]) or len(sent) != len(saved["sent"]):
-                return None
-            return (channels, sent), offset
-        except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError):
-            return None
-
-    def _write(
-        self,
-        revision: tuple[int, int, int, int],
-        stream: Any,
-        offset: int,
-        snapshot: ActivitySnapshot,
-    ) -> None:
-        channels, sent = snapshot
-        record = {
-            "schema": 2,
-            "source": list(revision),
-            "offset": offset,
-            "tail": self._tail(stream, offset),
-            "channels": channels,
-            "sent": sent,
-        }
-        record["integrity"] = self._digest(record)
-        fd, temporary = tempfile.mkstemp(prefix=".bus-activity-", dir=self.path.parent)
-        try:
-            with os.fdopen(fd, "w") as output:
-                json.dump(record, output)
-                output.flush()
-                os.fsync(output.fileno())
-            os.replace(temporary, self.path)
-            directory = os.open(self.path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
-
-    def snapshot(
-        self,
-        revision: tuple[int, int, int, int] | None,
-        parse: Callable[[Mapping[str, Any]], ActivityFields],
-    ) -> ActivitySnapshot | None:
+    def snapshot(self, revision: tuple[int, int, int, int] | None,
+                 parse: Callable[[Mapping[str, Any]], ActivityFields]) -> ActivitySnapshot:
         if revision is None:
             return {}, {}
+        source = BusFileRevision(*revision)
+        retained = self._retained
+        if retained is not None and retained.current_for(source):
+            return retained.snapshot
         with self.bus_path.open("rb") as stream:
-            if revision[1]:
-                stream.seek(-1, os.SEEK_END)
+            if not source.opened_by(stream):
+                raise RelationViolationError("Activity source changed before its captured read")
+            if source.size:
+                stream.seek(source.size - 1)
                 if stream.read(1) != b"\n":
-                    return None
-            checkpoint = self._checkpoint(revision, stream)
+                    raise RelationViolationError("Activity source has an incomplete original row")
+            checkpoint = self.checkpoint(stream, source)
             if checkpoint is None:
-                channels: dict[str, tuple[float, float]] = {}
-                sent: dict[str, float] = {}
-                offset = 0
+                channels, sent, offset = {}, {}, 0
             else:
-                (channels, sent), offset = checkpoint
-            if offset == revision[1]:
-                return channels, sent
+                channels, sent = dict(checkpoint.channels), dict(checkpoint.sent)
+                offset = checkpoint.offset
+            if offset == source.size:
+                self._retained = checkpoint or ActivityCheckpoint(
+                    source, source.size, AppendCheckpoint.fingerprint(stream, source.size),
+                    channels, sent)
+                return self._retained.snapshot
             stream.seek(offset)
-            while raw := stream.readline():
+            while stream.tell() < source.size:
+                raw = stream.readline(source.size - stream.tell())
                 if not raw.endswith(b"\n"):
-                    return None
+                    raise RelationViolationError("Activity source has an incomplete original row")
                 if not raw.strip():
                     continue
                 record = json.loads(raw)
@@ -141,16 +78,16 @@ class BusActivityIndex:
                     raise ValueError("JSONL bus row must be an object")
                 sender, target, timestamp, is_user, is_sent = parse(record)
                 last_message, last_user = channels.get(target, (0.0, 0.0))
-                channels[target] = (
-                    max(last_message, timestamp),
-                    max(last_user, timestamp) if is_user else last_user,
-                )
+                channels[target] = (max(last_message, timestamp),
+                                    max(last_user, timestamp) if is_user else last_user)
                 if is_sent:
                     sent[sender] = max(sent.get(sender, 0.0), timestamp)
-            # A failed disposable checkpoint affects speed, not the wire result.
+            projected = ActivityCheckpoint(source, source.size,
+                        AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
             with suppress(OSError):
-                self._write(revision, stream, revision[1], (channels, sent))
-            return channels, sent
+                self.write(projected, fsync_parent=True)
+            self._retained = projected
+            return projected.snapshot
 
 
 @dataclass(frozen=True, slots=True)

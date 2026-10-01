@@ -1,0 +1,59 @@
+{
+  "source_head": "a6779f31a5aa38e05b078133b3c4d4936ae4fe13",
+  "production_tree": "f027fd82f021098ad05c27a72c6bd7a96b2be92d",
+  "production_identical_to": "c01dab4d831e0e8f561d9b4129bcb1af6fe956b5",
+  "normal_merged_owners": {
+    "C1": "original458 working source",
+    "459": "bc53a073a725366ae837c4d2bfcd37eacca36ed9",
+    "456": "ab5ba4aef50388510f90d64fe5bb2203269ff584",
+    "457": "7f64d7ac0b72a8a2a7be373cf1ddb045a86dcaad",
+    "460": "e498188d6a47371d6c27ab55482c4e994f185567"
+  },
+  "source_focus": {
+    "passed": 45,
+    "seconds": 3.15,
+    "log": "coherent-source-focus09.log",
+    "installed_acceptance": false
+  },
+  "native_abi": "native593b unchanged; existing external native formats unchanged",
+  "required_ui_consumers": [
+    "Kepler251 original PromptRequest.input_id and native-user publication",
+    "Heisenberg252 saved/live answer custody closure"
+  ],
+  "changed_runtime_serialization": [
+    {
+      "path": "bus_activity_latest.json",
+      "kind": "disposable bus projection",
+      "current_schema": 3,
+      "owner": "BusActivityIndex",
+      "action": "original strict current record or source rebuild; no legacy decoder"
+    },
+    {
+      "path": "bus_display_<digest>.json",
+      "kind": "disposable viewer projection",
+      "current_schema": 2,
+      "owner": "BusDisplayIndex",
+      "action": "original strict current record or source rebuild; no legacy decoder"
+    },
+    {
+      "boundary": "PromptRequest.input_id",
+      "kind": "ACP request field",
+      "owner": "existing PromptRequest/ACPInputIdText",
+      "action": "same original request ID emitted by paired251; distinct from native input ID"
+    }
+  ],
+  "preserved_authoritative_sources": [
+    "registry and original native journals",
+    "UNKNOWN/input dispositions",
+    "goals/todos SQL DDL and original coordination rows",
+    "private bus checkpoint seals and prefix witness format",
+    "summary native operation and retained budget records"
+  ],
+  "not_claimed": [
+    "new installed pair ready",
+    "UI duplicate fixed",
+    "public activation",
+    "new native ABI",
+    "latency gain"
+  ]
+}

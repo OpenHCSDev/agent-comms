@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field, replace
 from typing import Literal
 from abc import abstractmethod
@@ -87,8 +86,7 @@ class ResolvedMentionBinding(GoalMentionBinding):
 
     def __post_init__(self):
         super().__post_init__()
-        if not self.peer_name or not math.isfinite(self.peer_created_at):
-            raise ValueError("Resolved goal mention requires a stable peer incarnation")
+        ThreadIncarnation(self.peer_name, self.peer_created_at)
 
     @property
     def peer(self) -> ThreadIncarnation:
@@ -135,27 +133,32 @@ class GoalMentionSource:
     bindings: tuple[GoalMentionBinding, ...]
 
     def __post_init__(self) -> None:
-        if (
-            not self.goal_id
-            or type(self.text_revision) is not int
-            or not 0 <= self.text_revision < 1 << 63
-            or type(self.text_digest) is not str
-            or len(self.text_digest) != 64
-            or not self.owner_name
-            or type(self.owner_created_at) not in {float, int}
-            or not math.isfinite(self.owner_created_at)
-        ):
-            raise ValueError("Invalid goal mention source.")
+        from .text_digest import TextDigest
+
+        GoalRevision(self.goal_id, self.text_revision)
+        TextDigest(self.text_digest)
+        ThreadIncarnation(self.owner_name, self.owner_created_at)
+
+    @property
+    def checkpoint(self) -> GoalRevision:
+        return GoalRevision(self.goal_id, self.text_revision)
+
+    @property
+    def digest(self):
+        from .text_digest import TextDigest
+
+        return TextDigest(self.text_digest)
+
+    @property
+    def incarnation(self) -> ThreadIncarnation:
+        return ThreadIncarnation(self.owner_name, self.owner_created_at)
 
     def matches(self, goal, owner, registry) -> bool:
         if self.goal_id != goal.id or self.text_revision > goal.revision:
             return False
-        from .text_digest import TextDigest
-
-        incarnation = ThreadIncarnation(self.owner_name, self.owner_created_at)
         return (
-            self.text_digest == TextDigest.of(goal.text).value
-            and incarnation.resolved(registry) == owner.incarnation
+            self.digest.matches(goal.text)
+            and self.incarnation.resolved(registry) == owner.incarnation
         )
 
 
@@ -167,8 +170,11 @@ class GoalRevision:
     revision: int
 
     def __post_init__(self) -> None:
-        if not self.id or self.revision < 0:
-            raise ValueError("Goal revision requires identity and nonnegative revision")
+        if not FieldCodec.decode(str, self.id):
+            raise ValueError("Goal revision requires identity")
+        revision = FieldCodec.decode(int, self.revision)
+        if not 0 <= revision < 1 << 63:
+            raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
 
 
 @dataclass(frozen=True)
@@ -203,8 +209,7 @@ class Goal:
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
-        if type(self.revision) is not int or not 0 <= self.revision < 1 << 63:
-            raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
+        GoalRevision(self.id, self.revision)
         if self.reported_turn is not None and not isinstance(self.reported_turn, str):
             raise ValueError("Goal reported turn must be a string or null.")
 

@@ -1,0 +1,131 @@
+{
+  "head": "096292e8249d2e25112970e67e4eeb5cc455d92b",
+  "base": "3b216396",
+  "scope": "11 assigned native/lifecycle paths; peer/shared owner paths excluded",
+  "production_lines_deleted": 460,
+  "production_lines_added": 322,
+  "files": [
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "original_six_term_leads": [
+        {
+          "line": 103,
+          "terms": 9
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "original_six_term_leads": [
+        {
+          "line": 71,
+          "terms": 9
+        },
+        {
+          "line": 142,
+          "terms": 10
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "original_six_term_leads": [
+        {
+          "line": 837,
+          "terms": 10
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "original_six_term_leads": [
+        {
+          "line": 132,
+          "terms": 9
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "original_six_term_leads": [
+        {
+          "line": 49,
+          "terms": 6
+        },
+        {
+          "line": 225,
+          "terms": 7
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "original_six_term_leads": [
+        {
+          "line": 63,
+          "terms": 9
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "original_six_term_leads": [
+        {
+          "line": 117,
+          "terms": 6
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "original_six_term_leads": [
+        {
+          "line": 272,
+          "terms": 6
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "original_six_term_leads": [
+        {
+          "line": 211,
+          "terms": 10
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/recovery_gateway_client.py",
+      "original_six_term_leads": [
+        {
+          "line": 74,
+          "terms": 6
+        }
+      ],
+      "current_six_term_leads": []
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "original_six_term_leads": [
+        {
+          "line": 295,
+          "terms": 7
+        }
+      ],
+      "current_six_term_leads": []
+    }
+  ],
+  "notes": [
+    "Syntax screening only; declaration and caller review remains required.",
+    "This bounded scan does not claim global36site cleanup or installed readiness."
+  ]
+}

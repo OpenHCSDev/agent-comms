@@ -21,7 +21,6 @@ from .message_bus import MessageBus
 from .mro_dispatch import MroDispatch, handles
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
-from .wake import WakeDecision
 from .turn_phase import PreparingPhase, TurnPhase
 from .diagnostics import record_request_progress
 
@@ -147,23 +146,7 @@ class SelectedParticipant(MroDispatch):
             raise IdentityConflict("selected source differs from its sealed receipt")
         if not any(row.assignment_id == assignment.assignment_id for row in receipt.assignments):
             raise IdentityConflict("selected assignment is absent from its sealed receipt")
-        # Compare existing recipient and wake declarations as complete values.
-        from .audience_manifest import FrozenRecipient
-
-        expected_recipient = FrozenRecipient(
-            recipient_lookup=assignment.recipient_lookup, canonical_thread=assignment.recipient
-        )
-        expected_decision = WakeDecision(
-            assignment.recipient_lookup, assignment.audience, assignment.lifecycle.mode
-        )
-        matches = sum(
-            recipient == expected_recipient and decision == expected_decision
-            for recipient, decision in zip(
-                initial.audience.recipients, initial.decisions, strict=True
-            )
-        )
-        if matches != 1:
-            raise IdentityConflict("pending claim is not an original selected bus recipient")
+        assignment.require_selected_source(initial, identity.thread)
         with store.session.read():
             identity.require(store, assignment.recipient_lookup)
         return initial

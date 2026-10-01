@@ -49,12 +49,11 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
             thread = agent._comms.registry.require(name)
             before = time.time()
             prepared = await agent.turns.prepare_selected_session(name, thread)
-            assert before <= prepared.timestamp <= time.time()
-            assert prepared.model == "response-local/fixture"
+            assert prepared.model.display_name == "response-local/fixture"
             child = agent.turns.persistent_backends[name].custody.child.proc
             assert child.alive()
             before = time.time()
-            agent._comms.agents.set_agent_info(name, model=prepared.model, context_size=prepared.context_size)
+            agent._comms.agents.set_agent_info(name, model=prepared.model.display_name, context_size=prepared.model.context_window)
             captured = agent._comms.agents.agent_info_of(name)
             assert before <= captured.timestamp <= time.time()
             store = agent._comms.agents.runtime_info

@@ -1,0 +1,13 @@
+{
+  "root": "/home/ts/wt/g458e/meta/wire",
+  "root_id": "49652d62e7a24d048d725efc9a4f629f",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "python": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/bin/python",
+  "core_pin": "6fabde90aca7166fe599efba8cd1aa6d84b17e11",
+  "production_origin": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "purpose": "Fresh owned canonical initialize_private_initial_protocol producer for integrated C1 native metadata gate",
+  "owner_starts": 0,
+  "provider_calls": 0,
+  "public_mutations": 0,
+  "native_inputs": 0
+}

@@ -90,11 +90,17 @@ class PendingAttestation(NativeAttestation):
             raise AttestationError(
                 failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
             )
-        if event.data is None or event.data.native_input_proof_capability != CAPABILITY:
+        try:
+            data = event.data.require_payload()
+        except ValueError as error:
+            raise AttestationError(
+                failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
+            ) from error
+        if data.native_input_proof_capability != CAPABILITY:
             raise AttestationError(
                 failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
             )
-        observed = self.observe(event.data)
+        observed = self.observe(data)
         if self.expected is not None and observed.identity != self.expected:
             raise IdentityAttestationError(
                 failures.IdentityUncertain("Pi session identity changed during this turn.")
