@@ -78,7 +78,7 @@ class Provider(LoopbackProvider):
 
 
 async def main():
-    started=time.perf_counter_ns();base=Path(tempfile.mkdtemp(prefix='arendt-cause-489-fixed-',dir='/var/tmp'))
+    started=time.perf_counter_ns();base=Path(tempfile.mkdtemp(prefix='arendt-cause-489-fixed-',dir=os.environ.get('NATIVE_EVIDENCE_FIXTURE_PARENT', '/home/ts/wt')))
     base.chmod(0o700);root=base/'wire';root.mkdir(mode=0o700)
     source_hash=hashlib.sha256(SOURCE.read_bytes()).hexdigest()
     report={'installed_python':sys.executable,'core_module':native_package.__file__,
