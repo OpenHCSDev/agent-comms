@@ -12,9 +12,11 @@ Coree191bcf4 / Toad187f380e / Textual6b5895fa / SDK0.12.1 / native593b978a.
 Parent reviewed and published the five matched CLI links; no root, native,
 owner or data change. This prefix and its owning worktree must not be cleaned.
 The old runtime-native-applied-cohort-20261001 remains protected as original
-accepted evidence. Fresh ordinary-default acceptance of the newly published
-links is assigned to Kepler and pending; actual installed candidate acceptance
-is already reviewed. Toad254 merged as a5f372ed with the same production and
+accepted evidence. Kepler's fresh ordinary-default run passed21.712s without
+runtime/ACP overrides; parent reviewed its actual frame, selected installed
+modules and unchanged original authorities. No keys or provider inputs were
+sent. This proves publication, with the full installed scrolling journey
+remaining separate original evidence. Toad254 merged as a5f372ed with the same production and
 metadata as the tested187 prefix. Core472 is merged but not installed publicly.
 Core469 adds documents only.
 
@@ -48,7 +50,7 @@ exact audit and private preimages retained. No original input replay.
 | Full warm-history/scroll/CPU/resources and T4 | Heisenberg264 after merged254; Kepler contribution |254 merged as a5f372ed: 30 production lines deleted/66 added across four files. Actual installed ordinary-wrapper run completed90.645s, all16 native checks; parent personally reviewed down and A-return images. Original history, PIDs, input proofs and wire remained unchanged. Prepared resources, reader, draft and undo survived return. Moving CPU87–93%/idle21.6% includes observers; encoder255 preserved. Scoped geometry/demand acceptance, not smoothness/50ms/backend-health acceptance. Matched default links published; Kepler owns fresh ordinary-default verification. Draft264 carries all remaining CPU/layout/resource/TC1/T9/T4/Strip/focus/growingEnd scope, active in a separate main-based worktree. |
 | S14 native triage/full execution identity | Mendel472; parent integration | Corrected e0/d4f merged after whole-source review:112 deleted/284 added across12 files, original SQL4/proofs unchanged. Actual installed saved-restart channel/native/ACP passes34.80s;69 controls/6 guards. Public installation pending next backend cohort. Mendel owns unchanged baseline mock-fixture later-source gap, coordinated with476. |
 | S5 phase1 turn-context ownership | Einstein473 | Working source checkpoint8efe3426 pushed,60 production lines deleted. First real NRA coordination preview6078 bytes/~1520 native-estimated tokens; declared instruction provenance. Eight recorded cases byte-identical. Full native context, --turn/--diff and silent wire manifests pending. Silent observations preserve original message sequence/proofs; compare renderers against identical recorded determining state. Coordinate original wire builder with476/475. |
-| S2 exact retained facts and Decision | Schrodinger475 |475 draft opened frome191 with S2 receiving ownership;428 was planning only. Implement original source projections/retained classes/Decision/native packing; coordinate directly with Einstein. No authoritative memory replica. |
+| S2 exact retained facts and Decision | Schrodinger475 |Working source checkpoint f6a0e9bf pushed,41 old lines deleted initially. Original user/Decision/claim/Goal/Input snapshots project through canonical CompactionSource traversal, replacing a raw ingress scan.43 source controls plus14 declarations pass; ratchet has no increases. Native exact packing/commit, effective corrections/artifact provenance and installed acceptance remain incomplete. Coordinate directly with Einstein; no authoritative memory replica. |
 | S5 phase2 retained context operations | Einstein474 | Draft stacked on473; named dependency S2 retained classes. Add RetainedSegment and authored pin/supersede/drop/export with original source lineage and real compaction/export journeys. |
 | Quiet release closure and one-use retirement | Arendt469; parent executor | Final783a1471 reviewed and merged, zero product changes. Exact audit/private preimages protected. Completed, no new public restart or cutover. |
 | Integration/checklist and storage | Parent432 | Normal whole-source imports, final live proof/current owners; reviewed cleanup2795712f imports943.01MiB cumulative. Keep original scope/deletion closure, then merge tested remaining source normally. |

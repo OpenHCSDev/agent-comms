@@ -1,0 +1,53 @@
+{
+  "state": "published-ordinary-default-verified",
+  "pins": {
+    "agent-comms": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+    "toad": "187f380ee1fa6358f16020ace38fa42e11f01670",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "merged_toad": "a5f372edc782ece8f8446ba21346525162142cbf",
+  "default": "/home/ts/wt/toad-foreground-readiness-remainder-20260930/.artifacts/runtime-reader-geometry-254-20261001",
+  "protected_worktree": "/home/ts/wt/toad-foreground-readiness-remainder-20260930",
+  "publication_receipt": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/ui-254-20261001/default-publication.json",
+  "verification": {
+    "receipt": "/home/ts/.cache/agent-scratch/viewport-preparation-263-20261001-default01/capture/receipt.json",
+    "sha256": "afdf1040bc7597f1b9d9212012c72b79520b08fbb9ae22c817f9b5f2b1b96e91",
+    "duration_seconds": 21.711523608013522,
+    "actual_ordinary_default": true,
+    "runtime_override": false,
+    "parent_reviewed_frame": "/home/ts/.cache/agent-scratch/viewport-preparation-263-20261001-default01/capture/after.png",
+    "original_authorities_unchanged": true,
+    "provider_inputs": 0,
+    "backend_inbox_fix_included": false
+  },
+  "scope": "Default launcher selection and saved startup; installed01 is the separate original full scrolling/tab-return proof",
+  "cleanup_errors": [],
+  "encoder_returncode": 255,
+  "video": {
+    "duration_seconds": 22,
+    "frames": 1320,
+    "metadata_valid": true
+  },
+  "pending": [
+    "Core476 recipient admission/drains",
+    "Core477 historical provenance",
+    "Core472 public installation",
+    "Toad264 remaining full performance",
+    "S2/S5 retained context"
+  ],
+  "installed_video_verification": {
+    "path": "/home/ts/.cache/agent-scratch/viewport-preparation-263-20261001-installed01/capture/terminal.mp4",
+    "sha256": "36d8ad8d0f086dd2071e68e2bce546b1f8fd0315e06651285e2166cffefdbf0c",
+    "duration_seconds": 91.05,
+    "frames": 5463,
+    "codec": "h264",
+    "dimensions": [
+      1280,
+      900
+    ],
+    "complete_ffmpeg_decode_exit": 0,
+    "command": "ffmpeg -v error -threads 2 -i <original installed01 terminal.mp4> -f null -",
+    "raw_capture_returncode": 255,
+    "scope": "Media integrity; not a claim of smooth UI or final performance"
+  }
+}
