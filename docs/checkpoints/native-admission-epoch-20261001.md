@@ -74,3 +74,34 @@ No table/version/store/runtime reset or public change is required. Source proof
 is recorded in `evidence/native-admission-epoch/source-checkpoint.json`.
 The changed original producer/recovery installed native journey remains pending;
 this source checkpoint is not installed or live readiness. CI remains deferred.
+
+
+## Installed original send/release/recovery journey
+
+The noneditable Core wheel at production94059caf and actual copied native593b
+passed the continuous saved-session native journey in10.66s. Only localhost
+HTTP responses and owned native child termination are controlled. The original
+registry, admission writer, durable native reservation, voluntary owner release,
+exact ProcessIdentity, release observer and recovery monitor are real.
+
+Two real native requests seed saved history and leave a new input UNKNOWN after
+provider dispatch/EOF. Recovery refuses while the exact released owner is alive;
+after its real OS exit, the original monitor closes the attempt without changing
+input/cursor rows, wire, native journal or input-proof bytes. A successor owner
+cannot replay the old input; a genuinely new independent input completes through
+one native request and publishes its reply. Total3localhostPOSTs, no paid/public
+calls or public effects. Native children and the fixture owner exit normally.
+
+The first gate completed original native work, then failed because its assertion
+read the absent UNKNOWN terminal session field. That private UNKNOWN/journal/proof
+is retained. The corrected fixture uses the original successful seed's acquired
+saved-session path and runs a fresh independent private root; it never replays the
+failed attempt. Both private roots remain protected under .observations/native-epoch01
+and native-epoch02. Their registry/auth/proof contents are not git-published.
+
+The installed wheel imports from .observations/installed without PYTHONPATH or
+source fallback; all installed Python source bytes equal production94059caf.
+Python3.14.7/system dependencies and ACP SDK0.12.1 are scoped to the small17MiB
+owned environment. This establishes the affected native/backend path, not Toad UI,
+the full immutable paired runtime, public installation or whole-suite health.
+Evidence: evidence/native-admission-epoch/installed-native-checkpoint.json.

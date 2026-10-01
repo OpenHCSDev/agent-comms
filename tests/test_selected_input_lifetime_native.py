@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 from collections import deque
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
 
@@ -89,20 +90,10 @@ class SelectedNativeJourney:
         return row
 
 
-@pytest.fixture
-async def journey(tmp_path, monkeypatch, direct):
-    package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
-    if not package:
-        pytest.skip("Use the existing immutable native package; never call an external provider")
-    root, root_id, comms, _initial, _people = _root(tmp_path, direct=direct)
-    comms.registry.register(
-        replace(
-            comms.registry.require("beta"), model="selected-offline/fixture", thinking_level="off"
-        )
-    )
-    owned = SelectedNativeJourney(root, root_id, comms, Path(package), direct)
+@asynccontextmanager
+async def configured_native_journey(owned, config, monkeypatch):
+    """Acquire the same real native/provider resources for saved-owner journeys."""
     server = await asyncio.start_server(owned.serve, "127.0.0.1", 0)
-    config = tmp_path / "local-config"
     config.mkdir(mode=0o700)
     (config / "models.json").write_text(
         json.dumps(
@@ -156,6 +147,22 @@ async def journey(tmp_path, monkeypatch, direct):
             task.cancel()
         await asyncio.gather(*owned.connections, return_exceptions=True)
         assert all(not child.alive() for child in owned.children)
+
+
+@pytest.fixture
+async def journey(tmp_path, monkeypatch, direct):
+    package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
+    if not package:
+        pytest.skip("Use the existing immutable native package; never call an external provider")
+    root, root_id, comms, _initial, _people = _root(tmp_path, direct=direct)
+    comms.registry.register(
+        replace(
+            comms.registry.require("beta"), model="selected-offline/fixture", thinking_level="off"
+        )
+    )
+    owned = SelectedNativeJourney(root, root_id, comms, Path(package), direct)
+    async with configured_native_journey(owned, tmp_path / "local-config", monkeypatch):
+        yield owned
 
 
 @pytest.mark.parametrize("direct,triage_pass", [(True, False), (False, False), (False, True)])
