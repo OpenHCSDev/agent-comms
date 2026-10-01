@@ -1,11 +1,16 @@
 """Current selected-summary source records; journals reset at installation."""
 
+from __future__ import annotations
+
 from abc import abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessIdentity
+from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
+from .private_path import FileRevision
 from .text_digest import TextDigest
 from .thread_identity import ThreadIncarnation, TurnId
 
@@ -13,7 +18,100 @@ if TYPE_CHECKING:
     from .input_disposition import InputDocument
     from .reservation_rules import ReservationCheck
 
-SessionRevision = tuple[tuple[int, int, int, int, int], tuple[int, int, int, int, int] | None]
+class SessionRevisionUnavailable(ValueError):
+    """The selected filesystem observation cannot supply a revision."""
+
+
+class InputProofRevision(DeclaredFamily, affix="ProofRevision"):
+    """Observation of the original proof journal, never proof of an input."""
+
+
+@dataclass(frozen=True, slots=True)
+class MissingInputProofRevision(InputProofRevision):
+    """The sidecar path is absent; no input-history or replay fact is inferred."""
+
+
+@dataclass(frozen=True, slots=True)
+class PresentInputProofRevision(InputProofRevision):
+    revision: FileRevision
+
+
+class SessionObservation(DeclaredFamily, affix="Observation"):
+    def matches(self, reserved: SessionRevision) -> bool:
+        return False
+
+    @abstractmethod
+    def require_available(self) -> SessionRevision: ...
+
+
+@dataclass(frozen=True)
+class UnavailableSessionObservation(SessionObservation):
+    error: Exception
+
+    def require_available(self) -> SessionRevision:
+        raise SessionRevisionUnavailable(str(self.error)) from self.error
+
+
+@dataclass(frozen=True, slots=True)
+class SessionRevision(SessionObservation):
+    """One native-file revision and its separately observed input-proof resource.
+
+    Equality fences the whole reserved source. Outcome placement deliberately
+    permits append on the same native inode; native compaction must preserve the
+    proof observation. None of these observations acquires native custody.
+    """
+
+    native: FileRevision
+    input_proof: InputProofRevision
+
+    @classmethod
+    def observe(cls, session_file: str | None) -> SessionObservation:
+        if not isinstance(session_file, str) or not session_file:
+            return UnavailableSessionObservation(ValueError("No selected native session"))
+        try:
+            native = FileRevision.from_stat(Path(session_file).stat())
+            try:
+                proof = PresentInputProofRevision(
+                    FileRevision.from_stat(Path(session_file + ".input-proof").stat())
+                )
+            except FileNotFoundError:
+                proof = MissingInputProofRevision()
+            return cls(native, proof)
+        except OSError as error:
+            # Unreadable proof is not a missing proof. Deny source acquisition.
+            return UnavailableSessionObservation(error)
+
+    def require_available(self) -> SessionRevision:
+        return self
+
+    def matches(self, reserved: SessionRevision) -> bool:
+        return self == reserved
+
+    def current(self, session_file: str | None) -> bool:
+        return self.observe(session_file).matches(self)
+
+    @property
+    def native_stamp(self) -> str:
+        """Pi's external five-field colon ABI; the sidecar is not in that ABI."""
+        native = self.native
+        return (
+            f"{native.identity.device}:{native.identity.inode}:{native.size}:"
+            f"{native.mtime_ns}:{native.ctime_ns}"
+        )
+
+    def same_input_proof(self, reserved: SessionRevision) -> bool:
+        """Compare sidecar observations, not committed native-input evidence."""
+        return self.input_proof == reserved.input_proof
+
+    def require_native_cut(self, session_file: str, through_offset: int) -> None:
+        try:
+            observed = self.observe(session_file).require_available()
+        except SessionRevisionUnavailable as error:
+            raise StaleRevision("Compaction outcome native source unavailable") from error
+        if observed.native.identity != self.native.identity:
+            raise StaleRevision("Compaction outcome native inode changed")
+        if not self.native.size <= through_offset <= observed.native.size:
+            raise StaleRevision("Compaction outcome native cut was truncated or not captured")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -42,7 +140,7 @@ class SelectedSource(DeclaredFamily, affix="Source"):
 
     @abstractmethod
     def reservation_check(
-        self, revision: SessionRevision | None, inputs: InputDocument
+        self, revision: SessionObservation, inputs: InputDocument
     ) -> ReservationCheck: ...
 
 

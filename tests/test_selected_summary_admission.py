@@ -369,7 +369,6 @@ def test_process_death_before_or_after_fake_send_cannot_recreate_ack(tmp_path, s
     script = """
 import hashlib,json,os,sys
 from pathlib import Path
-from agent_comms import backend
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.store_files import _store_lock
 from agent_comms.reservation_rules import ReservationViolationError
@@ -382,7 +381,7 @@ from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
 root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
-from agent_comms.selected_source import SelectedAdmissionSource
+from agent_comms.selected_source import SelectedAdmissionSource, SessionRevision
 from agent_comms.thread_identity import ThreadIncarnation, TurnId
 from agent_comms.text_digest import TextDigest
 digest=TextDigest.of(text)
@@ -391,8 +390,8 @@ identity=SelectedAdmissionIdentity(SelectedAdmissionSource(
     turn=TurnId('turn'), ingress_key=key, admission_generation=1,
     correction_witness=f'1:{digest.value}',
     input_digest=digest, original_digest=digest,
-    reserved_revision=backend._session_revision(session)),
-    backend._session_revision(session))
+    reserved_revision=SessionRevision.observe(session).require_available()),
+    SessionRevision.observe(session).require_available())
 source={'source':FieldCodec.encode(identity.source),
     'selected':{'provider':'fake','modelId':'fake','contextWindow':1000},'settings':{'reserveTokens':100,'keepRecentTokens':100}}
 j=CompactionJournal(root/'compaction-commits.sqlite3')

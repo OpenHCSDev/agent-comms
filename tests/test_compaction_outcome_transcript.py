@@ -1,5 +1,6 @@
 """Original journal outcomes advance source evidence without rewriting native history."""
 
+
 import json
 import os
 import subprocess
@@ -8,7 +9,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.backend import _session_revision
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
@@ -18,7 +18,7 @@ from agent_comms.coordination_errors import StaleRevision
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.pi_summary_payloads import SelectedModel
-from agent_comms.selected_source import ManualSource
+from agent_comms.selected_source import ManualSource, SessionRevision
 from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 
@@ -49,7 +49,9 @@ def test_late_original_outcome_invalidates_source_and_pages_once(tmp_path):
     native = tmp_path / "session.jsonl"
     native.write_text("".join(json.dumps({
         "type": "message", "id": f"native-{index}",
-        "message": {"role": "assistant", "content": "equal original bodies"},
+        "message": {"role": "assistant", "content": [
+            {"type": "text", "text": "equal original bodies"}
+        ]},
     }) + "\n" for index in range(3)))
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(native)))
     captured = comms.transcripts.capture_page_read("worker")
@@ -59,7 +61,7 @@ def test_late_original_outcome_invalidates_source_and_pages_once(tmp_path):
     source = SelectedSummarySource(
         ManualSource(owner=ProcessIdentity.capture(os.getpid()),
                      incarnation=comms.registry.require("worker").incarnation,
-                     turn=TurnId("original-manual-turn"), reserved_revision=_session_revision(str(native))),
+                     turn=TurnId("original-manual-turn"), reserved_revision=SessionRevision.observe(str(native)).require_available()),
         SelectedModel("controlled", "fixture", 272000), PiCompactionSettings(16384, 20000),
     )
     original = SelectedSummaryAttempt("a" * 32, str(native),

@@ -48,6 +48,7 @@ from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
+from .selected_source import SessionRevision, SessionRevisionUnavailable
 from .store_files import _store_lock
 from .turn_admission import UnwrittenPrompt
 from .turn_inputs import InputForwarding
@@ -78,28 +79,6 @@ RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
 PROMPT_START_TIMEOUT_SECONDS = 180.0
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
-
-
-_FileRevision = tuple[int, int, int, int, int]
-
-
-def _file_revision(path: Path) -> _FileRevision | None:
-    try:
-        stat = path.stat()
-    except OSError:
-        return None
-    return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
-
-
-def _session_revision(
-    session_file: str | None,
-) -> tuple[_FileRevision, _FileRevision | None] | None:
-    if not isinstance(session_file, str) or not session_file:
-        return None
-    session = _file_revision(Path(session_file))
-    if session is None:
-        return None
-    return session, _file_revision(Path(session_file + ".input-proof"))
 
 
 class PersistentPiSession:
@@ -133,8 +112,11 @@ class PersistentPiSession:
         return child
 
     def retain(self, child: PiSessionChild, identity: NativeSessionIdentity) -> bool:
-        revision = _session_revision(identity.session_file)
-        if revision is None or not child.proc.alive():
+        if not child.proc.alive():
+            return False
+        try:
+            revision = SessionRevision.observe(identity.session_file).require_available()
+        except SessionRevisionUnavailable:
             return False
         self.custody = RetainedNative(child, identity, revision)
         return True

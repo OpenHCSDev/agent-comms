@@ -38,7 +38,7 @@ class SelectedCompactionOutcome:
 
     @property
     def native_offset(self) -> int:
-        return self.source_revision[0][2]
+        return self.source_revision.native.size
 
     @property
     def source_revision(self) -> SessionRevision:
@@ -47,15 +47,9 @@ class SelectedCompactionOutcome:
 
     def require_native_source(self, path: Path | str, through_offset: int) -> None:
         """Placement requires the original native inode and a complete captured cut."""
-        from .backend import _session_revision
-
         if str(path) != self.identity.session_file:
             raise StaleRevision("Compaction outcome belongs to another native source")
-        observed = _session_revision(str(path))
-        if observed is None or observed[0][:2] != self.source_revision[0][:2]:
-            raise StaleRevision("Compaction outcome native inode changed")
-        if not self.native_offset <= through_offset <= observed[0][2]:
-            raise StaleRevision("Compaction outcome native cut was truncated or not captured")
+        self.source_revision.require_native_cut(str(path), through_offset)
 
     @property
     def text(self) -> str:
@@ -73,7 +67,7 @@ class CompactionOutcomeSnapshot:
     @property
     def revision(self) -> TextDigest:
         """Late changes below the last row still change this scoped source epoch."""
-        projection = [(row.sequence, row.source_revision, FieldCodec.encode(row.event()))
+        projection = [(row.sequence, FieldCodec.encode(row.source_revision), FieldCodec.encode(row.event()))
                       for row in self.outcomes]
         return TextDigest.of(json.dumps(projection, sort_keys=True, separators=(",", ":")))
 

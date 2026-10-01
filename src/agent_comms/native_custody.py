@@ -16,7 +16,7 @@ from .native_session_reopen import NativeSessionIdentity, validate_native_reopen
 from .pi_rpc import PiRpcChannel
 
 if TYPE_CHECKING:
-    from .backend import _FileRevision
+    from .selected_source import SessionRevision
 
 
 @dataclass
@@ -195,16 +195,12 @@ class RetainedNative(NativeCustody):
     retained = True
     child: PiSessionChild
     identity: NativeSessionIdentity
-    revision: tuple[_FileRevision, _FileRevision | None]
+    revision: SessionRevision
     available = True
 
     @property
     def current(self) -> bool:
-        from .backend import _session_revision
-
-        return self.child.proc.alive() and self.revision == _session_revision(
-            self.identity.session_file
-        )
+        return self.child.proc.alive() and self.revision.current(self.identity.session_file)
 
     def idle(self):
         if not self.current:

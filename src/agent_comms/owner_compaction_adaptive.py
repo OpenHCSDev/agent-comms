@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from .agent_events import AgentEvent
-from .backend import PersistentPiSession, _session_revision
+from .backend import PersistentPiSession
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue
 from .native_input_owner import RegistryOwner
@@ -26,7 +26,7 @@ from .pi_payloads import StateData
 from .registration import Registration
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
-from .selected_source import SelectedAdmissionSource
+from .selected_source import SelectedAdmissionSource, SessionRevision, SessionRevisionUnavailable
 from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
 from .text_digest import TextDigest
 from .thread_identity import TurnId
@@ -109,9 +109,12 @@ async def maybe_compact_owner_turn(
     )
     if summary_strategy is None:
         assert input_text is not None and on_admission is not None
-        revision = _session_revision(session_file)
+        try:
+            revision = SessionRevision.observe(session_file).require_available()
+        except SessionRevisionUnavailable as error:
+            raise PiSettingsEvidenceError("Selected saved source is unavailable") from error
         original = bridge.inputs.read().rows.get(original_input_key)
-        if revision is None or original is None:
+        if original is None:
             raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
         digest = TextDigest.of(input_text)
         identity = SelectedAdmissionIdentity(

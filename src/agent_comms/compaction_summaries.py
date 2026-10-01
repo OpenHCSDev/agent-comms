@@ -109,7 +109,7 @@ class SelectedSummaries(JournalRole):
         )
         if len(payload.encode()) > 65536:
             raise ValueError("Selected summary source exceeds bound")
-        from .backend import _session_revision
+        from .selected_source import SessionRevision
 
         try:
             with _store_lock(self.journal.path.parent / "wire"):
@@ -126,7 +126,7 @@ class SelectedSummaries(JournalRole):
                     self.journal.transaction() as db,
                 ):
                     envelope.source.reservation_check(
-                        _session_revision(canonical), inputs
+                        SessionRevision.observe(canonical), inputs
                     ).require_valid()
                     covered_inputs = (
                         future_queue.compaction_inputs(envelope.source, owner, inputs)

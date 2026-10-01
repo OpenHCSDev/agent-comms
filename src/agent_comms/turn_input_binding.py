@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .backend import _session_revision
+from .selected_source import SessionRevision, SessionRevisionUnavailable
 from .compaction_send_admission import native_input_admitted
 from .errors import RelationViolationError
 from .selected_source import SelectedAdmissionSource
@@ -106,8 +106,12 @@ class SelectedOriginalBinding(TurnInputBinding):
         if (
             len(keys) != 1
             or already_bound
-            or (revision := _session_revision(current.session_file)) is None
         ):
+            self.invalidate()
+            return False
+        try:
+            revision = SessionRevision.observe(current.session_file).require_available()
+        except SessionRevisionUnavailable:
             self.invalidate()
             return False
         original = self.dispositions.read().lookup(keys[0])
@@ -125,7 +129,7 @@ class SelectedOriginalBinding(TurnInputBinding):
                 correction_witness=f"{admission}:{digest.value}",
                 input_digest=digest,
                 original_digest=original.digest,
-                reserved_revision=self.selected._identity.source.reserved_revision,
+                reserved_revision=self.selected.original_source.reserved_revision,
             ),
             session_revision=revision,
         )
