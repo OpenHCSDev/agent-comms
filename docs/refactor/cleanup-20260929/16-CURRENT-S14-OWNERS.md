@@ -223,3 +223,42 @@ SDK0.12.1, full native451 trust and pip dependency closure pass. Einstein has th
 exact prefix for the existing continuous two-input native/ACP/CLI driver.
 Source/native trust is not that pending user-journey acceptance. The64MB private
 prefix stays protected until the owner finishes its gate; public593 unchanged.
+
+## Accepted checkpoint merges and continuous context evidence
+
+Core477 is merged cac7bdf3 and Toad268 is merged1cef2a46. Parent reviewed the
+complete source relation, all seven UI files, exact installed297/274 source
+hashes/native trust, physical Saved sessions/Select/original41MB tool+code/End/
+Escape frames and decoded the full video. The36.426s capture and36.55s video
+remain distinct clocks. Original111 declarations/nine aliases and archive/native
+hashes are preserved; private inputs/bindings remain zero, cleanup empty.
+Core source86 lines deleted/156 added; Toad source32 deleted/59 added. Neither
+is public yet. Parent owns the reviewed quiet source/index carry, never a legacy
+reader or original-wire/UNKNOWN reset.
+
+270 native/ACP/CLI gate now passes26.408s against original installed3f4456c5:
+authentic SDK system/history/compaction/custom/image/instruction sources, original
+SetGoal/Standby, two fresh localhost inputs, two text-free wire manifests, actual
+CLI preview/--turn/--diff and unchanged original sequence/source prefix. Original
+17 DTO and18 orphan-goal failures were retained with zero prompt inputs, then the
+fixture was corrected to real SDK/grant owners. This is scoped installed full
+boundary evidence, not all logical attribution/configured-provider or full S5
+completion. Separate installed selected-native retention passes9.59s: exact
+original USER/Decision/Goal/Input survives native commit and once-only admission;
+full three-checkpoint/general constraints/artifact provenance remain active.
+
+Kepler independently closed originalToad50 current-installed browser scope:
+ordinary254/Coree191/Text6b/native593, unchanged real Chromium/ACP browser pilot,
+authentication before children, actual keyboard/settings, startup, two ports and
+150k Textual/download boundary, cleanup empty, zero provider/public input. No
+product defect or competing server implementation;149 evidence lines are normal
+merged into270. This does not claim future477/268 activation or a model turn.
+
+Arendt267 f76f2f25 is committed: original Ready/Coordination publication requests
+one bounded activity read through the existing resource. The inferred native
+session-state Ready label is deleted; no semantic status authority is added.
+Parent source review accepted16 deleted/33 added across three production files.
+Actual original physical receiver gate remains necessary before activation.
+Heisenberg269 sourcef39a38b4 is pushed, byte-identical receipt43687234; historical
+retention reuses original viewport admission,16 added/2 deleted. Kepler's single
+actual original41MB physical/profile gate is running; no CPU/live claim yet.
