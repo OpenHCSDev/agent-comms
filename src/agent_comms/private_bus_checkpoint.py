@@ -702,7 +702,7 @@ def append_private_bus_checkpoint_unlocked(
         raise RelationViolationError("Private bus checkpoint append outcome UNKNOWN.") from error
 
 
-def source_references_unlocked(source: CertifiedSourceRead, references):
+def delivery_references_unlocked(source: CertifiedSourceRead, references):
     """Resolve a bounded window's original seq/id pairs in one certified read."""
     source.require_current()
     db, stream, saved = source.connection, source.stream, source.witness
@@ -711,15 +711,15 @@ def source_references_unlocked(source: CertifiedSourceRead, references):
         db, where=f"seq IN ({marks})", parameters=tuple(ref.seq for ref in references)
     )
     originals = tuple(row.delivery(stream, saved.root_id) for row in rows)
-    messages = []
+    deliveries = []
     for reference in references:
         original = next(
             (item for item in originals if item.message.reference == reference), None
         )
         if original is None:
             raise RelationViolationError("Notification reference is not its original source")
-        messages.append(original.message)
-    return tuple(messages)
+        deliveries.append(original)
+    return tuple(deliveries)
 
 
 def conversation_sources_unlocked(

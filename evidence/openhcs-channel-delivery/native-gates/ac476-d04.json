@@ -1,0 +1,38 @@
+{
+  "elapsed_seconds": 40.11152835999383,
+  "owners": 3,
+  "history_rows": 220,
+  "bus_bytes": 711834,
+  "localhost_provider_posts": 3,
+  "native_originals": [
+    {
+      "session": "wire/native-sessions/98af14b2d0038e286893f26347b2cd98/2026-10-01T05-05-20-099Z_01a0f5da-4ee2-7346-93c2-d9c24828b23d.jsonl",
+      "entry_id": "136338be"
+    },
+    {
+      "session": "wire/native-sessions/43559400a5cf09b0bcee277f0da035ee/2026-10-01T05-05-07-005Z_01a0f5da-1bbc-7752-9937-1321b540899a.jsonl",
+      "entry_id": "973495b1"
+    },
+    {
+      "session": "wire/native-sessions/e98484d092b4fefe6dea079201fb0397/2026-10-01T05-05-07-196Z_01a0f5da-1c7a-77e5-963f-660ab11e90f7.jsonl",
+      "entry_id": "3a617830"
+    }
+  ],
+  "failure": "AssertionError: ",
+  "all_owned_workers_retired": true,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "installed_interpreter": "/home/ts/wt/comms-openhcs-channel-delivery-20261001/.observations/candidate/bin/python",
+  "acp_notification_count": 0,
+  "contention": [
+    {
+      "held_seconds": 12.000106166000478,
+      "original_reserved_input": "774cdd9deac03953391fd45c194dea4d"
+    }
+  ],
+  "all_native_turns_active_before_provider_release": false,
+  "acp_fact_counts": {},
+  "original_receipt_path": "/home/ts/wt/ac476-d04/receipt.json",
+  "original_receipt_sha256": "eccd60fc2e47e7061ecde1f4f4dffa872ea26a1c225b1cf9b540b718b3a073c1"
+}

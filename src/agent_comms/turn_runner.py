@@ -339,9 +339,10 @@ class TurnRunner:
                 await self.transition_turn(session_id, lease, CancellingPhase())
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-        thread_name = self.sessions.bindings.get(session_id)
-        if thread_name:
-            self.comms.messaging.acknowledge(thread_name)
+        # Selected handling may be the original inbox task. Retire only that
+        # cancelled turn, then let the same drain owner select independent work.
+        # Neither cancellation nor unbound input proves the whole inbox handled.
+        self.inputs.ensure_live_drain(session_id)
 
     async def extension_ui_permission(
         self,

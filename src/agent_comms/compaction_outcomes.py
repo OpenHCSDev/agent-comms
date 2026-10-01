@@ -13,7 +13,7 @@ from .compaction_states import SummaryOutcome
 from .field_codec import FieldCodec
 from .text_digest import TextDigest
 from .thread_identity import ThreadIncarnation
-from .registry_document import RegistrySnapshot
+from .registry_provenance import RegistryProvenance
 from .selected_source import SessionRevision
 from .coordination_errors import StaleRevision
 from . import transcript_events
@@ -73,7 +73,7 @@ class CompactionOutcomeSnapshot:
 
     @classmethod
     def read(cls, db: sqlite3.Connection, session_file: str,
-             incarnation: ThreadIncarnation, registry: RegistrySnapshot) -> CompactionOutcomeSnapshot:
+             incarnation: ThreadIncarnation, registry: RegistryProvenance) -> CompactionOutcomeSnapshot:
         rows = SelectedSummaryAttempt.joined(db.execute(
             f"SELECT rowid AS journal_rowid,* FROM {SelectedSummaryAttempt.declared_name} "
             "WHERE session_file=? ORDER BY rowid", (session_file,)), JournalRowPosition)

@@ -1,0 +1,414 @@
+{
+  "strength": "readonly original receipts; historical lock holder not recorded",
+  "core": "e191bcf44c292dfedc5b8b62b2b503f06de3ae7b",
+  "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+  "cohorts": [
+    {
+      "seq": 262,
+      "message_id": "7b8ade935c6f",
+      "sender": "user",
+      "target": "#openhcs",
+      "timestamp": 1790828311.6026504,
+      "audience": {
+        "wire_seq": 262,
+        "message_id": "7b8ade935c6f",
+        "exact_target": "#openhcs",
+        "sender_lookup": "8586857b4a75afd55aca77b66942d6f1",
+        "sender_name": "user",
+        "source_revision": "82b95e8cb6bd39c2f5f500702fce38dd3003ed0dba7895a964c3b59bc04edc18",
+        "recipients": [
+          {
+            "recipient_lookup": "216bd7ba128247380fc0b13d0de8b583",
+            "canonical_thread": "openhcs-helper2"
+          },
+          {
+            "recipient_lookup": "39e58aa7061c0dbf1ae9ae519a031fb0",
+            "canonical_thread": "openhcs-architecture-memory"
+          },
+          {
+            "recipient_lookup": "7d9368806fd7ca2a924251391577e503",
+            "canonical_thread": "openhcs-headless-bootstrap-worker"
+          },
+          {
+            "recipient_lookup": "a3bbc1471d219185bac3cc36155c21c4",
+            "canonical_thread": "openhcs-pr159-viewer-bind-owner"
+          },
+          {
+            "recipient_lookup": "c3abd48325c7127c27d27cb2cc93606f",
+            "canonical_thread": "openhcs-helper"
+          },
+          {
+            "recipient_lookup": "dd693de433092d8a7f16a88992690431",
+            "canonical_thread": "Linnaeus"
+          }
+        ],
+        "wire_envelope_digest": "16dfff3b6ba9f1a50d4afce6745e03e6a965b28c0ebc9f7d4b0c7696cfc5063e",
+        "digest": "cea6a02cdeb260c563a5db9692c78541f6500d4cc1e3b6ca851f2fdc44f02270",
+        "version": 1
+      },
+      "decisions": [
+        {
+          "recipient": "216bd7ba128247380fc0b13d0de8b583",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "39e58aa7061c0dbf1ae9ae519a031fb0",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "7d9368806fd7ca2a924251391577e503",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "a3bbc1471d219185bac3cc36155c21c4",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "c3abd48325c7127c27d27cb2cc93606f",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "dd693de433092d8a7f16a88992690431",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        }
+      ]
+    },
+    {
+      "seq": 266,
+      "message_id": "1a76688ce443",
+      "sender": "user",
+      "target": "#openhcs",
+      "timestamp": 1790828356.859493,
+      "audience": {
+        "wire_seq": 266,
+        "message_id": "1a76688ce443",
+        "exact_target": "#openhcs",
+        "sender_lookup": "8586857b4a75afd55aca77b66942d6f1",
+        "sender_name": "user",
+        "source_revision": "2c2ded7f7e46f482ddecdf24a89b3e469d45af2337dfc8136ae85c9da498f43a",
+        "recipients": [
+          {
+            "recipient_lookup": "216bd7ba128247380fc0b13d0de8b583",
+            "canonical_thread": "openhcs-helper2"
+          },
+          {
+            "recipient_lookup": "39e58aa7061c0dbf1ae9ae519a031fb0",
+            "canonical_thread": "openhcs-architecture-memory"
+          },
+          {
+            "recipient_lookup": "7d9368806fd7ca2a924251391577e503",
+            "canonical_thread": "openhcs-headless-bootstrap-worker"
+          },
+          {
+            "recipient_lookup": "a3bbc1471d219185bac3cc36155c21c4",
+            "canonical_thread": "openhcs-pr159-viewer-bind-owner"
+          },
+          {
+            "recipient_lookup": "c3abd48325c7127c27d27cb2cc93606f",
+            "canonical_thread": "openhcs-helper"
+          },
+          {
+            "recipient_lookup": "dd693de433092d8a7f16a88992690431",
+            "canonical_thread": "Linnaeus"
+          }
+        ],
+        "wire_envelope_digest": "4162e3ae4741248ea7ef1b9c34123914e5c05d1d7a63442c3b1707fbafa7ebb3",
+        "digest": "25b0dfacf34c7f0027ee41bc44a3717c2a378670ca075a400ce92d4071289b8b",
+        "version": 1
+      },
+      "decisions": [
+        {
+          "recipient": "216bd7ba128247380fc0b13d0de8b583",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "39e58aa7061c0dbf1ae9ae519a031fb0",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "7d9368806fd7ca2a924251391577e503",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "a3bbc1471d219185bac3cc36155c21c4",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "c3abd48325c7127c27d27cb2cc93606f",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "dd693de433092d8a7f16a88992690431",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        }
+      ]
+    }
+  ],
+  "accepted": [
+    {
+      "seq": 262,
+      "recipient": "openhcs-helper2",
+      "assignment": "cohort-v1:4fd2570ab9bddc4205e6ff1075f68b29c62308582dab4bca7b861d32014c8d37",
+      "revision": 4,
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "native": [
+        {
+          "input_id": "4299599e53dae3c3d92e811efda15e40",
+          "stage": "triage",
+          "reference": {
+            "kind": "native_input",
+            "input_id": "4299599e53dae3c3d92e811efda15e40",
+            "assignment_id": "cohort-v1:4fd2570ab9bddc4205e6ff1075f68b29c62308582dab4bca7b861d32014c8d37",
+            "stage": "triage",
+            "session_id": "01a0f5af-88df-70ed-9b5b-b3b5d070e1e0",
+            "request_generation": 1
+          },
+          "verdict": "ignore"
+        }
+      ]
+    },
+    {
+      "seq": 262,
+      "recipient": "openhcs-architecture-memory",
+      "assignment": "cohort-v1:6ae5206baac26aab28998a3dc9daf603b25ebcaea9ac9273255f8791a5bb5453",
+      "revision": 2,
+      "lifecycle": {
+        "kind": "deferred",
+        "decision": {
+          "mode": {
+            "kind": "bounded_triage"
+          }
+        }
+      },
+      "native": [
+        {
+          "input_id": "cf3c25ea2ef4eeaa789f0156ea95efd4",
+          "stage": "triage",
+          "reference": {
+            "kind": "unrecorded_native_input"
+          },
+          "verdict": null
+        }
+      ]
+    },
+    {
+      "seq": 262,
+      "recipient": "openhcs-headless-bootstrap-worker",
+      "assignment": "cohort-v1:b92f4ce96d6acc5b6041776fab570189968a2c4ce46eb5fdd5c100133a41decd",
+      "revision": 1,
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "native": []
+    },
+    {
+      "seq": 262,
+      "recipient": "openhcs-pr159-viewer-bind-owner",
+      "assignment": "cohort-v1:6403c490c662091d61ca6280f8aebbc51d8c48a3133f03dd3c22bd8584939b17",
+      "revision": 2,
+      "lifecycle": {
+        "kind": "deferred",
+        "decision": {
+          "mode": {
+            "kind": "bounded_triage"
+          }
+        }
+      },
+      "native": [
+        {
+          "input_id": "89741936b9843717207fcb9cf84e86a9",
+          "stage": "triage",
+          "reference": {
+            "kind": "unrecorded_native_input"
+          },
+          "verdict": null
+        }
+      ]
+    },
+    {
+      "seq": 262,
+      "recipient": "openhcs-helper",
+      "assignment": "cohort-v1:8475229dae5cf873dedca1d3c7b366a32fe2490f080202a7f4a852264369b6fa",
+      "revision": 2,
+      "lifecycle": {
+        "kind": "deferred",
+        "decision": {
+          "mode": {
+            "kind": "bounded_triage"
+          }
+        }
+      },
+      "native": [
+        {
+          "input_id": "2c92067dc74837a50f9818c39e59d14c",
+          "stage": "triage",
+          "reference": {
+            "kind": "unrecorded_native_input"
+          },
+          "verdict": null
+        }
+      ]
+    },
+    {
+      "seq": 262,
+      "recipient": "Linnaeus",
+      "assignment": "cohort-v1:6d9e8d65886e35ebe3b17ec3a324942b359941b145aa29dc387846c2cd14a750",
+      "revision": 1,
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "native": []
+    },
+    {
+      "seq": 266,
+      "recipient": "openhcs-helper2",
+      "assignment": "cohort-v1:e090ce97406779d5a2eb33e961f6eb9ec30d5cc732762898f74be8a087b2eba3",
+      "revision": 4,
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "native": [
+        {
+          "input_id": "35da7f88be84f054e580959998e7c680",
+          "stage": "triage",
+          "reference": {
+            "kind": "native_input",
+            "input_id": "35da7f88be84f054e580959998e7c680",
+            "assignment_id": "cohort-v1:e090ce97406779d5a2eb33e961f6eb9ec30d5cc732762898f74be8a087b2eba3",
+            "stage": "triage",
+            "session_id": "01a0f5b0-34e5-72e1-9172-dd9e893c3513",
+            "request_generation": 1
+          },
+          "verdict": "ignore"
+        }
+      ]
+    },
+    {
+      "seq": 266,
+      "recipient": "openhcs-architecture-memory",
+      "assignment": "cohort-v1:815131e8faaa55e6d092e9b2dd84629235c6b60695b54bf9e7cc8bac799aed0d",
+      "revision": 1,
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "native": []
+    },
+    {
+      "seq": 266,
+      "recipient": "openhcs-headless-bootstrap-worker",
+      "assignment": "cohort-v1:35dd45f52ca40177efe789d72ac4f4fcdf4b41716e446fee6034b3802472f241",
+      "revision": 1,
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "native": []
+    },
+    {
+      "seq": 266,
+      "recipient": "openhcs-pr159-viewer-bind-owner",
+      "assignment": "cohort-v1:a5a75166c3a96037ff407a91d20b4fb0a4fb19248539dd80508264c1b0e2da40",
+      "revision": 1,
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "native": []
+    },
+    {
+      "seq": 266,
+      "recipient": "openhcs-helper",
+      "assignment": "cohort-v1:614cc0e612b24a8b2f1d36963532d9b77da75ad6174894e66bf206e945fc9957",
+      "revision": 1,
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "native": []
+    },
+    {
+      "seq": 266,
+      "recipient": "Linnaeus",
+      "assignment": "cohort-v1:9a426368545895bd97513de88bb93d904bde3597cd0919443534e0cc9b419d2c",
+      "revision": 1,
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "native": []
+    }
+  ],
+  "failures": [
+    {
+      "diagnostic_id": "2c92067dc74837a50f9818c39e59d14c",
+      "diagnostic_sha256": "bf4af40f2b1e6c2032dd3e0990db3b7a0238433d95b9ce7d05f1fcb0e9f0334b",
+      "thread": "openhcs-helper",
+      "sequences": [
+        262
+      ],
+      "reason": "backend_failed",
+      "wire_admission_failure": ".wire.lock nonblocking flock errno11 -> PromptAdmissionBusy -> PromptSendUnknown beforebytes",
+      "outcome": "failed; inputs must not be replayed automatically"
+    },
+    {
+      "diagnostic_id": "89741936b9843717207fcb9cf84e86a9",
+      "diagnostic_sha256": "90c80ff99f3b267d0d43ee81b1b0c8394888d10e555ee26b92d27f234e42bba0",
+      "thread": "openhcs-pr159-viewer-bind-owner",
+      "sequences": [
+        262
+      ],
+      "reason": "backend_failed",
+      "wire_admission_failure": ".wire.lock nonblocking flock errno11 -> PromptAdmissionBusy -> PromptSendUnknown beforebytes",
+      "outcome": "failed; inputs must not be replayed automatically"
+    },
+    {
+      "diagnostic_id": "cf3c25ea2ef4eeaa789f0156ea95efd4",
+      "diagnostic_sha256": "7b6856b0bc9587dfb62219e8901c451d04bfa26d5652b01f655c3ec71d7a331e",
+      "thread": "openhcs-architecture-memory",
+      "sequences": [
+        262
+      ],
+      "reason": "backend_failed",
+      "wire_admission_failure": ".wire.lock nonblocking flock errno11 -> PromptAdmissionBusy -> PromptSendUnknown beforebytes",
+      "outcome": "failed; inputs must not be replayed automatically"
+    }
+  ],
+  "public_mutations": 0,
+  "original_replays": 0,
+  "provider_calls": 0,
+  "archived_history": "Both immutable attached registry snapshots retain removed last_goal_report_turn; Mendel sole followup owner."
+}

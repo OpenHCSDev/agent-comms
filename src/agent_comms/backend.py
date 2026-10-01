@@ -506,7 +506,7 @@ class TurnSession:
                 if self.native.proc.stdin is not None:
                     try:
                         if not self.require_input_id:
-                            self.admission = self.admission.dispatch()
+                            self.grant_prompt()
                         self.native.proc.stdin.write(self.stdin_payload)
                         await self.native.proc.stdin.drain()
                     except (BrokenPipeError, ConnectionResetError):
@@ -606,8 +606,12 @@ class TurnSession:
                 return
             raise
 
-    async def input_ready(self) -> None:
+    def grant_prompt(self) -> None:
+        """Original granted write starts both admission and its input-start clock."""
+        self.admission = self.admission.dispatch()
         self.watchdog.await_input()
+
+    async def input_ready(self) -> None:
         assert self.native.proc.stdin is not None
         try:
             self.boundary_context = _maintenance_send_boundary(
@@ -623,7 +627,7 @@ class TurnSession:
             )
             with self.boundary_context as self.authorized:
                 if self.authorized:
-                    self.admission = self.admission.dispatch()
+                    self.grant_prompt()
                     self.native.proc.stdin.write(self.prompt_payload)
             if not self.authorized:
                 self.output.record_failure(
@@ -705,7 +709,7 @@ class TurnSession:
                 id=self.prompt_id, input_id=self.original_input_id, message=self.task
             ),
         )
-        self.watchdog.reading(self.require_input_id)
+        self.watchdog.reading()
         self.active_tools: set[str] = set()
         self.started_during_abort: list[str | None] = []
         if False:

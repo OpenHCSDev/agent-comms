@@ -24,7 +24,10 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original pri
     api:'openai-completions',provider:'source-only',model:'source-only',timestamp:2,
     stopReason:'stop',usage:{input:1,output:1,cacheRead:0,cacheWrite:0,totalTokens:2,
     cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
-const kept=manager.appendMessage({role:'user',content:'Original kept question',timestamp:3});
+const kept=manager.appendMessage({role:'user',content:[
+    {type:'text',text:'Original kept question'},
+    {type:'image',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',mimeType:'image/png'},
+],timestamp:3});
 manager.appendCompaction('Original source summary.',kept,100);
 manager.appendCustomMessageEntry('source-contract','Original injected delivery',true);
 const {session}=await pi.createAgentSession({cwd,agentDir,modelRuntime:runtime,
@@ -48,5 +51,5 @@ try {
     assert.deepEqual((await TurnContext.next(session)).render(),provider);
     console.log(JSON.stringify({scope:'actual-sdk-source-contract',provider_calls:0,
         provider_bytes_identical:true,journal_bytes_unchanged:true,
-        kinds:full.segments.map(s=>s.kind),full}));
+        kinds:full.segments.map(s=>s.kind),session_file:manager.getSessionFile(),full}));
 } finally {session.dispose();}

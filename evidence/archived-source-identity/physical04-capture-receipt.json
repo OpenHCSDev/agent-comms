@@ -1,0 +1,1332 @@
+{
+  "owner": "Mendel477/268",
+  "purpose": "installed TUI physical interaction video review",
+  "output": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04",
+  "command": [
+    "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+    "acp",
+    "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp",
+    "/home/ts/.cache/agent-scratch/g477/p01/project",
+    "--title",
+    "Archive review",
+    "--session",
+    "archive-review"
+  ],
+  "terminal_command": [
+    "st",
+    "-e",
+    "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+    "acp",
+    "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp",
+    "/home/ts/.cache/agent-scratch/g477/p01/project",
+    "--title",
+    "Archive review",
+    "--session",
+    "archive-review"
+  ],
+  "fps": 60,
+  "screen": [
+    1280,
+    900
+  ],
+  "profiling_requested": false,
+  "state_capture_requested": true,
+  "private_root": "/home/ts/.cache/agent-scratch/g477/p01/wire",
+  "capture_target": "private",
+  "physical_journey": "archive",
+  "original_owner_before": {
+    "root": "/home/ts/.cache/agent-scratch/g477/p01/wire",
+    "mode": "private"
+  },
+  "recorder_argv": [
+    "/home/ts/wt/toad-archived-history-open-20261001/tests/tools/record_installed_tui.py",
+    "--owner",
+    "Mendel477/268",
+    "--journey",
+    "archive",
+    "--archive-index",
+    "2",
+    "--capture-state",
+    "--private-root",
+    "/home/ts/.cache/agent-scratch/g477/p01/wire",
+    "--output",
+    "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04",
+    "--fit-window",
+    "--width",
+    "1280",
+    "--height",
+    "900",
+    "--startup-wait",
+    "10",
+    "--max-duration",
+    "45",
+    "--review-timing",
+    "deferred",
+    "--",
+    "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+    "acp",
+    "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp",
+    "/home/ts/.cache/agent-scratch/g477/p01/project",
+    "--title",
+    "Archive review",
+    "--session",
+    "archive-review"
+  ],
+  "recorder_source_sha256": "105c2f3f794c67f30c920c921e85bd232cf7e6dd2011aa35ebe66cc7f8bf0567",
+  "started_utc": "2026-10-01T07:00:19.429700+00:00",
+  "assessment": "unreviewed",
+  "capture_completed": true,
+  "completed": true,
+  "review_timing": "deferred",
+  "review": {
+    "start_seconds": 0,
+    "seconds": 3,
+    "fps": 8,
+    "frames_limit": 24,
+    "slowdown": 8,
+    "timestamp_basis": "source video seconds"
+  },
+  "runtime_before": {
+    "selection": "AGENT_COMMS_RUNTIME_ROOT",
+    "bin_directory": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin",
+    "launcher": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+    "launcher_sha256": "38ce1121234003014e8385e50a88b8e4aef6a37ce050655dec24d397c13c9999",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+        "resolved_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+        "sha256": "38ce1121234003014e8385e50a88b8e4aef6a37ce050655dec24d397c13c9999"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/agent-comms-acp",
+        "sha256": "38f9ef20d4637011df16b677b4fbdd9903cf95d4efa6bd3acee2ebfcdceeb159"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+        "sha256": "38ce1121234003014e8385e50a88b8e4aef6a37ce050655dec24d397c13c9999"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/agent-comms-acp",
+        "sha256": "38f9ef20d4637011df16b677b4fbdd9903cf95d4efa6bd3acee2ebfcdceeb159"
+      }
+    },
+    "activation_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/activation.json",
+    "activation_sha256": "aaf153a7da8866cb006ea054878962c8b491f01c7c601811d426d3a877b965a6",
+    "activation": {
+      "stage": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04",
+      "pins": {
+        "agent-comms": "52c0db494c671610c9957ec3092c3826a84969a3",
+        "batrachian-toad": "a20ebf880ce180d762a903e451e12c17732cc0c7",
+        "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+      },
+      "sdk": "0.12.1",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+      "state": "verified-immutable-cohort",
+      "staging_receipt_sha256": "26b0175b120876555b90d2eada0088665cc3e1386cb5dcc2e2ee53c9753970d7"
+    },
+    "observed": {
+      "python": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python",
+      "prefix": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "51f461785f5072317a162ace15f06d94b0ad2f62304d497ad62fc026408d8deb",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "file:///home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/toad-wheels04/batrachian_toad-0.6.20-py3-none-any.whl",
+            "archive_info": {}
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "74d7ca0a6760e18c8de6733f6264af85ece6c496680bd6fffe51d3da4ce65dd8",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+              "requested_revision": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "33bd489fcb681e483b6d91b223a88509b9956062277a492acd086b6eb71d5423",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "file:///home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/wheels04/agent_comms-0.1.0-py3-none-any.whl",
+            "archive_info": {}
+          }
+        }
+      },
+      "route": {
+        "root": "/home/ts/.cache/agent-scratch/g477/p01/wire",
+        "wire_root_id": "914c8285ac9047ebbed48be01424ce1b",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "display": ":4136",
+  "ui_identity": {
+    "pid": 823285,
+    "start_ticks": 31365952
+  },
+  "window": "2097158",
+  "capture_launch_monotonic": 313659.828456981,
+  "terminal_pid": 823280,
+  "state_captures": {
+    "before": {
+      "started_seconds": 10.228623498987872,
+      "manifest": {
+        "pid": 823285,
+        "created": 1790838019.52,
+        "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+        "rss_before": 157233152,
+        "started_ns": 1790838030968914336,
+        "profile_seconds": 0,
+        "gil_only": false,
+        "native": false,
+        "receipts": {
+          "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/before-state": "complete",
+          "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/before-screen": "complete"
+        },
+        "finished_ns": 1790838031101494150
+      },
+      "finished_seconds": 10.57903401798103
+    },
+    "after": {
+      "started_seconds": 36.105396306025796,
+      "manifest": {
+        "pid": 823285,
+        "created": 1790838019.52,
+        "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+        "rss_before": 184860672,
+        "started_ns": 1790838056818315520,
+        "profile_seconds": 0,
+        "gil_only": false,
+        "native": false,
+        "receipts": {
+          "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/after-state": "complete",
+          "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/after-screen": "complete"
+        },
+        "finished_ns": 1790838056950962150
+      },
+      "finished_seconds": 36.4264412340126
+    }
+  },
+  "terminal_processes": {
+    "823280": {
+      "start_ticks": 31365946,
+      "command": "st -e /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad acp /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp /home/ts/.cache/agent-scratch/g477/p01/project --title Archive review --session archive-review "
+    },
+    "823285": {
+      "start_ticks": 31365952,
+      "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+    },
+    "823296": {
+      "start_ticks": 31366018,
+      "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+    },
+    "823360": {
+      "start_ticks": 31366184,
+      "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+    },
+    "823515": {
+      "start_ticks": 31366507,
+      "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+    }
+  },
+  "driver_started_seconds": 10.612115748983342,
+  "driver_finished_seconds": 33.8511579289916,
+  "duration_seconds": 36.42644907900831,
+  "capture_returncode": 255,
+  "runtime_after": {
+    "selection": "AGENT_COMMS_RUNTIME_ROOT",
+    "bin_directory": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin",
+    "launcher": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+    "launcher_sha256": "38ce1121234003014e8385e50a88b8e4aef6a37ce050655dec24d397c13c9999",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+        "resolved_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+        "sha256": "38ce1121234003014e8385e50a88b8e4aef6a37ce050655dec24d397c13c9999"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/agent-comms-acp",
+        "sha256": "38f9ef20d4637011df16b677b4fbdd9903cf95d4efa6bd3acee2ebfcdceeb159"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad",
+        "sha256": "38ce1121234003014e8385e50a88b8e4aef6a37ce050655dec24d397c13c9999"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/agent-comms-acp",
+        "sha256": "38f9ef20d4637011df16b677b4fbdd9903cf95d4efa6bd3acee2ebfcdceeb159"
+      }
+    },
+    "activation_path": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/activation.json",
+    "activation_sha256": "aaf153a7da8866cb006ea054878962c8b491f01c7c601811d426d3a877b965a6",
+    "activation": {
+      "stage": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04",
+      "pins": {
+        "agent-comms": "52c0db494c671610c9957ec3092c3826a84969a3",
+        "batrachian-toad": "a20ebf880ce180d762a903e451e12c17732cc0c7",
+        "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+      },
+      "sdk": "0.12.1",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+      "state": "verified-immutable-cohort",
+      "staging_receipt_sha256": "26b0175b120876555b90d2eada0088665cc3e1386cb5dcc2e2ee53c9753970d7"
+    },
+    "observed": {
+      "python": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python",
+      "prefix": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "51f461785f5072317a162ace15f06d94b0ad2f62304d497ad62fc026408d8deb",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "file:///home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/toad-wheels04/batrachian_toad-0.6.20-py3-none-any.whl",
+            "archive_info": {}
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "74d7ca0a6760e18c8de6733f6264af85ece6c496680bd6fffe51d3da4ce65dd8",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+              "requested_revision": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "33bd489fcb681e483b6d91b223a88509b9956062277a492acd086b6eb71d5423",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "file:///home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/wheels04/agent_comms-0.1.0-py3-none-any.whl",
+            "archive_info": {}
+          }
+        }
+      },
+      "route": {
+        "root": "/home/ts/.cache/agent-scratch/g477/p01/wire",
+        "wire_root_id": "914c8285ac9047ebbed48be01424ce1b",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "runtime_unchanged": true,
+  "video": {
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+        "profile": "Constrained Baseline",
+        "codec_type": "video",
+        "codec_tag_string": "avc1",
+        "codec_tag": "0x31637661",
+        "mime_codec_string": "avc1.42c02a",
+        "width": 1280,
+        "height": 900,
+        "coded_width": 1280,
+        "coded_height": 900,
+        "has_b_frames": 0,
+        "pix_fmt": "yuv420p",
+        "level": 42,
+        "chroma_location": "left",
+        "field_order": "progressive",
+        "is_avc": "true",
+        "nal_length_size": "4",
+        "id": "0x1",
+        "r_frame_rate": "60/1",
+        "avg_frame_rate": "60/1",
+        "time_base": "1/15360",
+        "start_pts": 0,
+        "start_time": "0.000000",
+        "duration_ts": 561408,
+        "duration": "36.550000",
+        "bit_rate": "277795",
+        "bits_per_raw_sample": "8",
+        "nb_frames": "2193",
+        "extradata_size": 38,
+        "disposition": {
+          "default": 1,
+          "dub": 0,
+          "original": 0,
+          "comment": 0,
+          "lyrics": 0,
+          "karaoke": 0,
+          "forced": 0,
+          "hearing_impaired": 0,
+          "visual_impaired": 0,
+          "clean_effects": 0,
+          "attached_pic": 0,
+          "timed_thumbnails": 0,
+          "non_diegetic": 0,
+          "captions": 0,
+          "descriptions": 0,
+          "metadata": 0,
+          "dependent": 0,
+          "still_image": 0,
+          "multilayer": 0
+        },
+        "tags": {
+          "language": "und",
+          "handler_name": "VideoHandler",
+          "encoder": "Lavc63.1.102 libx264"
+        }
+      }
+    ],
+    "format": {
+      "filename": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/terminal.mp4",
+      "nb_streams": 1,
+      "nb_programs": 0,
+      "nb_stream_groups": 0,
+      "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+      "format_long_name": "QuickTime / MOV",
+      "start_time": "0.000000",
+      "duration": "36.550000",
+      "size": "1278830",
+      "bit_rate": "279908",
+      "probe_score": 100,
+      "tags": {
+        "major_brand": "isom",
+        "minor_version": "512",
+        "compatible_brands": "isomiso2avc1mp41",
+        "encoder": "Lavf63.1.102"
+      }
+    }
+  },
+  "events": [
+    {
+      "label": "archive-feed",
+      "utc": "2026-10-01T07:00:33.968780+00:00",
+      "seconds_since_capture_launch": 13.31738653301727,
+      "cpu": {
+        "823280": {
+          "start_ticks": 31365946,
+          "cpu_seconds": 0.12,
+          "command": "st -e /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad acp /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp /home/ts/.cache/agent-scratch/g477/p01/project --title Archive review --session archive-review "
+        },
+        "823296": {
+          "start_ticks": 31366018,
+          "cpu_seconds": 0.02,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "823360": {
+          "start_ticks": 31366184,
+          "cpu_seconds": 0.62,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "823285": {
+          "start_ticks": 31365952,
+          "cpu_seconds": 6.02,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+        },
+        "823383": {
+          "start_ticks": 31366323,
+          "cpu_seconds": 1.74,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp "
+        },
+        "823515": {
+          "start_ticks": 31366507,
+          "cpu_seconds": 1.06,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-archive-feed.png",
+      "state_capture": {
+        "started_seconds": 13.594691378995776,
+        "manifest": {
+          "pid": 823285,
+          "created": 1790838019.52,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 170164224,
+          "started_ns": 1790838034313385853,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/phase-archive-feed-state": "complete"
+          },
+          "finished_ns": 1790838034445901405
+        },
+        "finished_seconds": 13.91681260598125
+      }
+    },
+    {
+      "label": "archive-modal",
+      "utc": "2026-10-01T07:00:37.360662+00:00",
+      "seconds_since_capture_launch": 16.709277121000923,
+      "cpu": {
+        "823280": {
+          "start_ticks": 31365946,
+          "cpu_seconds": 0.31,
+          "command": "st -e /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad acp /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp /home/ts/.cache/agent-scratch/g477/p01/project --title Archive review --session archive-review "
+        },
+        "823296": {
+          "start_ticks": 31366018,
+          "cpu_seconds": 0.02,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "823360": {
+          "start_ticks": 31366184,
+          "cpu_seconds": 0.62,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "823285": {
+          "start_ticks": 31365952,
+          "cpu_seconds": 7.98,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+        },
+        "823383": {
+          "start_ticks": 31366323,
+          "cpu_seconds": 1.74,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp "
+        },
+        "823515": {
+          "start_ticks": 31366507,
+          "cpu_seconds": 1.06,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-archive-modal.png",
+      "state_capture": {
+        "started_seconds": 16.998835680016782,
+        "manifest": {
+          "pid": 823285,
+          "created": 1790838019.52,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 175247360,
+          "started_ns": 1790838037709806944,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/phase-archive-modal-state": "complete"
+          },
+          "finished_ns": 1790838037842289332
+        },
+        "finished_seconds": 17.313303918985184
+      }
+    },
+    {
+      "label": "archive-selector",
+      "utc": "2026-10-01T07:00:40.738066+00:00",
+      "seconds_since_capture_launch": 20.086682166031096,
+      "cpu": {
+        "823280": {
+          "start_ticks": 31365946,
+          "cpu_seconds": 0.72,
+          "command": "st -e /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad acp /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp /home/ts/.cache/agent-scratch/g477/p01/project --title Archive review --session archive-review "
+        },
+        "823296": {
+          "start_ticks": 31366018,
+          "cpu_seconds": 0.02,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "823360": {
+          "start_ticks": 31366184,
+          "cpu_seconds": 0.62,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "823285": {
+          "start_ticks": 31365952,
+          "cpu_seconds": 10.33,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+        },
+        "823383": {
+          "start_ticks": 31366323,
+          "cpu_seconds": 1.74,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp "
+        },
+        "823515": {
+          "start_ticks": 31366507,
+          "cpu_seconds": 1.06,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-archive-selector.png",
+      "state_capture": {
+        "started_seconds": 20.37023171101464,
+        "manifest": {
+          "pid": 823285,
+          "created": 1790838019.52,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 178618368,
+          "started_ns": 1790838041092910804,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/phase-archive-selector-state": "complete"
+          },
+          "finished_ns": 1790838041157251062
+        },
+        "finished_seconds": 20.62256863701623
+      }
+    },
+    {
+      "label": "archive-native",
+      "utc": "2026-10-01T07:00:45.706386+00:00",
+      "seconds_since_capture_launch": 25.054994414036628,
+      "cpu": {
+        "823296": {
+          "start_ticks": 31366018,
+          "cpu_seconds": 0.02,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "823360": {
+          "start_ticks": 31366184,
+          "cpu_seconds": 0.62,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "824032": {
+          "start_ticks": 31368149,
+          "cpu_seconds": 0.91,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=26) --multiprocessing-fork "
+        },
+        "823280": {
+          "start_ticks": 31365946,
+          "cpu_seconds": 1.13,
+          "command": "st -e /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad acp /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp /home/ts/.cache/agent-scratch/g477/p01/project --title Archive review --session archive-review "
+        },
+        "823285": {
+          "start_ticks": 31365952,
+          "cpu_seconds": 14.39,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+        },
+        "823383": {
+          "start_ticks": 31366323,
+          "cpu_seconds": 1.74,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp "
+        },
+        "823515": {
+          "start_ticks": 31366507,
+          "cpu_seconds": 1.7,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-archive-native.png",
+      "state_capture": {
+        "started_seconds": 25.332880982023198,
+        "manifest": {
+          "pid": 823285,
+          "created": 1790838019.52,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 184586240,
+          "started_ns": 1790838046051778240,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/phase-archive-native-state": "complete"
+          },
+          "finished_ns": 1790838046184211826
+        },
+        "finished_seconds": 25.636368717998266
+      }
+    },
+    {
+      "label": "archive-focused",
+      "utc": "2026-10-01T07:00:48.342252+00:00",
+      "seconds_since_capture_launch": 27.690859830006957,
+      "cpu": {
+        "823296": {
+          "start_ticks": 31366018,
+          "cpu_seconds": 0.02,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "823360": {
+          "start_ticks": 31366184,
+          "cpu_seconds": 0.62,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "824032": {
+          "start_ticks": 31368149,
+          "cpu_seconds": 0.91,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=26) --multiprocessing-fork "
+        },
+        "823280": {
+          "start_ticks": 31365946,
+          "cpu_seconds": 1.47,
+          "command": "st -e /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad acp /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp /home/ts/.cache/agent-scratch/g477/p01/project --title Archive review --session archive-review "
+        },
+        "823285": {
+          "start_ticks": 31365952,
+          "cpu_seconds": 16.54,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+        },
+        "823383": {
+          "start_ticks": 31366323,
+          "cpu_seconds": 1.74,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp "
+        },
+        "823515": {
+          "start_ticks": 31366507,
+          "cpu_seconds": 1.7,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-archive-focused.png",
+      "state_capture": {
+        "started_seconds": 27.983405648032203,
+        "manifest": {
+          "pid": 823285,
+          "created": 1790838019.52,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 184614912,
+          "started_ns": 1790838048695228535,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/phase-archive-focused-state": "complete"
+          },
+          "finished_ns": 1790838048827791045
+        },
+        "finished_seconds": 28.303434170025866
+      }
+    },
+    {
+      "label": "archive-end",
+      "utc": "2026-10-01T07:00:51.005262+00:00",
+      "seconds_since_capture_launch": 30.353881430986803,
+      "cpu": {
+        "823296": {
+          "start_ticks": 31366018,
+          "cpu_seconds": 0.02,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "823360": {
+          "start_ticks": 31366184,
+          "cpu_seconds": 0.62,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "824032": {
+          "start_ticks": 31368149,
+          "cpu_seconds": 0.91,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=26) --multiprocessing-fork "
+        },
+        "823280": {
+          "start_ticks": 31365946,
+          "cpu_seconds": 1.8,
+          "command": "st -e /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad acp /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp /home/ts/.cache/agent-scratch/g477/p01/project --title Archive review --session archive-review "
+        },
+        "823285": {
+          "start_ticks": 31365952,
+          "cpu_seconds": 18.65,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+        },
+        "823383": {
+          "start_ticks": 31366323,
+          "cpu_seconds": 1.74,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp "
+        },
+        "823515": {
+          "start_ticks": 31366507,
+          "cpu_seconds": 1.71,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-archive-end.png",
+      "state_capture": {
+        "started_seconds": 30.625185127020814,
+        "manifest": {
+          "pid": 823285,
+          "created": 1790838019.52,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 184672256,
+          "started_ns": 1790838051352950526,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/phase-archive-end-state": "complete"
+          },
+          "finished_ns": 1790838051485676025
+        },
+        "finished_seconds": 30.92565862298943
+      }
+    },
+    {
+      "label": "archive-return",
+      "utc": "2026-10-01T07:00:53.593109+00:00",
+      "seconds_since_capture_launch": 32.94171462202212,
+      "cpu": {
+        "823296": {
+          "start_ticks": 31366018,
+          "cpu_seconds": 0.02,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.resource_tracker import main;main(5) "
+        },
+        "823360": {
+          "start_ticks": 31366184,
+          "cpu_seconds": 0.62,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=14) --multiprocessing-fork "
+        },
+        "824032": {
+          "start_ticks": 31368149,
+          "cpu_seconds": 0.91,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=26) --multiprocessing-fork "
+        },
+        "823280": {
+          "start_ticks": 31365946,
+          "cpu_seconds": 1.92,
+          "command": "st -e /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/toad acp /home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp /home/ts/.cache/agent-scratch/g477/p01/project --title Archive review --session archive-review "
+        },
+        "823285": {
+          "start_ticks": 31365952,
+          "cpu_seconds": 20.19,
+          "command": "toad                                                                                                                                                                                                                                                                                                                                                                                           "
+        },
+        "823383": {
+          "start_ticks": 31366323,
+          "cpu_seconds": 1.74,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -m agent_comms.acp "
+        },
+        "823515": {
+          "start_ticks": 31366507,
+          "cpu_seconds": 1.71,
+          "command": "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/installed04/bin/python -c from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=6, pipe_handle=23) --multiprocessing-fork "
+        }
+      },
+      "screenshot": "phase-archive-return.png",
+      "state_capture": {
+        "started_seconds": 33.22326192399487,
+        "manifest": {
+          "pid": 823285,
+          "created": 1790838019.52,
+          "executable": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14",
+          "rss_before": 184766464,
+          "started_ns": 1790838053936545207,
+          "profile_seconds": 0,
+          "gil_only": false,
+          "native": false,
+          "receipts": {
+            "/home/ts/.cache/agent-scratch/mendel-archived-source-477-20261001/physical04/phase-archive-return-state": "complete"
+          },
+          "finished_ns": 1790838054069043736
+        },
+        "finished_seconds": 33.550213501031976
+      }
+    }
+  ],
+  "journey_review": null,
+  "review_intervals": [
+    {
+      "label": "main",
+      "start": 0,
+      "seconds": 3
+    }
+  ],
+  "artifacts": {
+    "terminal.mp4": {
+      "bytes": 1278830,
+      "sha256": "4ca8236bc16d4652d31e353af5631e37568df7a2149034bd1191db7161b21e3c"
+    },
+    "before.png": {
+      "bytes": 29259,
+      "sha256": "ece1fee52a0572397f578ae613af6d195c86149e0927045debe4437add7d225a"
+    },
+    "after.png": {
+      "bytes": 95744,
+      "sha256": "b659ee18f2b79ee84fac2b65cf16ffa04d754f6e3230bbe550bcbee744f90928"
+    },
+    "before-state.json": {
+      "bytes": 341851,
+      "sha256": "8b9f9d3a05d4dc245416bf3451f69275cd8d25c13d0f84e22676ce363a48fe56"
+    },
+    "before-state.pickle": {
+      "bytes": 49714,
+      "sha256": "b310eb82257e8dd167f4aed024b347870cc79649eeb4f6c05972cda79594f03a"
+    },
+    "before-screen.svg": {
+      "bytes": 37450,
+      "sha256": "06b93b736a52df530efabbfe990ba2c1ebeece3622c60a541502389d172878dc"
+    },
+    "before-remote.py": {
+      "bytes": 873,
+      "sha256": "b9b9905c3344c40728d230aba9900e3d9d81a97dd7300d3ddcf7f8269df05f74"
+    },
+    "before-state-metadata.json": {
+      "bytes": 341825,
+      "sha256": "87a451d35b4af6c65b6004514d446de1d6fc52a6971bfb5df564b4005ba5c94b"
+    },
+    "before-manifest.json": {
+      "bytes": 550,
+      "sha256": "f51a7b20ea8af85e46810caf9af3434f74e1cee492ad49436e59c4d3ead7e28b"
+    },
+    "before-screen.json": {
+      "bytes": 165,
+      "sha256": "5f09e654ae8d444dd46e18db86c675bc81d0b68cb2e1af478aa8eb074bb80f8e"
+    },
+    "before-capture.log": {
+      "bytes": 98,
+      "sha256": "4c842f6a303b42da78a147e530cdbe238618bace9fc955b6d4e53242667a3b36"
+    },
+    "after-screen.svg": {
+      "bytes": 57298,
+      "sha256": "2f3c12806f0460b2614d868f7cccddf5759e0ea1bd3bf2784809ab9cb40cd889"
+    },
+    "after-state-metadata.json": {
+      "bytes": 338936,
+      "sha256": "9ad467b35e32bd7c4c0d35114da2cc6234be8987856c90d8f545d96500768f24"
+    },
+    "after-remote.py": {
+      "bytes": 871,
+      "sha256": "48b60a4ff9a76c27627feace9862792fad24b49afbd03606431084ab3138855a"
+    },
+    "after-manifest.json": {
+      "bytes": 548,
+      "sha256": "443fa0f5e4488220d760192775a905631a933527d759c7823c5020525d5d5def"
+    },
+    "after-capture.log": {
+      "bytes": 97,
+      "sha256": "95068c938820fb9200c8afa9fad1ba1dd430619dbc09f3d8890ed6a39d6162db"
+    },
+    "after-state.json": {
+      "bytes": 338962,
+      "sha256": "8ba2eb7a28a1a8f310fc048301162f4db8806f8171b31340a92e25c98d9bdd9a"
+    },
+    "after-state.pickle": {
+      "bytes": 55116,
+      "sha256": "ada2749fde3314293a2072518aaf3adaa7a2d88350ea3ac5b86f6d843c6ae550"
+    },
+    "after-screen.json": {
+      "bytes": 164,
+      "sha256": "b00b90316615fcae58d38afce01cbb665eeb4a35304a0a13df7f69a5483e2aa5"
+    },
+    "phase-archive-focused-state.pickle": {
+      "bytes": 50666,
+      "sha256": "530c31cbc8f1b62c6a92cac8ac7d66133aa1178c0b1df72c8d8cb3b3eeecda87"
+    },
+    "phase-archive-end-capture.log": {
+      "bytes": 109,
+      "sha256": "1f2d0aa8b2d5c41e60c6f496408d4cfbd3b392e5938cec2b3ed7b9d41a5c890d"
+    },
+    "phase-archive-modal-state.pickle": {
+      "bytes": 16942,
+      "sha256": "80417c3faae934a4e1ce63383d9dd2b16942f3f041c8fdcac9287853b58970f7"
+    },
+    "phase-archive-selector.png": {
+      "bytes": 49965,
+      "sha256": "2c394b9415422aa5c2759a204b5ad83a883f475c03546861f91d41a33d291795"
+    },
+    "phase-archive-return-state-metadata.json": {
+      "bytes": 338730,
+      "sha256": "95b404ac14181bc53941f6c2da5d224e69d24eafcf26a5a615e0869c16410a92"
+    },
+    "phase-archive-modal.png": {
+      "bytes": 8802,
+      "sha256": "1b994a65ad5b2dde8e7a4895cdbcc38a93f742ccea8f8c40d6bb189f9b3254c6"
+    },
+    "phase-archive-modal-manifest.json": {
+      "bytes": 453,
+      "sha256": "db109ee4e6f1a1fa8868df7198c9b09663db1d22e0cb3d3c336ecf805fbf30ec"
+    },
+    "phase-archive-selector-remote.py": {
+      "bytes": 507,
+      "sha256": "40ffb902eed1dd2e89e9547a3cadc5b784ce7cef780728767cfd953647fc7830"
+    },
+    "phase-archive-selector-state-metadata.json": {
+      "bytes": 48310,
+      "sha256": "c954adb749f65da28489ad91b98fbd07668d05e2a1b40ac4f41403a205954b0b"
+    },
+    "phase-archive-focused.png": {
+      "bytes": 72561,
+      "sha256": "f6ee4106370b9b617d78c4c0ffd5b6da551a500fcc7b14a03e0b890d47792c9d"
+    },
+    "phase-archive-native-state-metadata.json": {
+      "bytes": 316176,
+      "sha256": "eb544e10b7d1728963683634ec633630877fb4642ccbc0eb1114b700375d40b0"
+    },
+    "phase-archive-end-state.pickle": {
+      "bytes": 48087,
+      "sha256": "fc7621a721bb2d057016039e86d73adb1dd48104177577f38ce2ad3c181894ec"
+    },
+    "phase-archive-native-capture.log": {
+      "bytes": 112,
+      "sha256": "199190865f949d55ce96e31fdbd6df19daa65b1b68dfab7aa1d86abf0dc7f68f"
+    },
+    "phase-archive-feed-state.pickle": {
+      "bytes": 55893,
+      "sha256": "536afefc8bd17f9ee452eb909d0bf05fa3310297b492afff18f19035f07c4e71"
+    },
+    "phase-archive-return-remote.py": {
+      "bytes": 505,
+      "sha256": "f31786e910a4eb02d516ce073ce6ec1564909209eb17862af4f0a91aaf2ea3e7"
+    },
+    "phase-archive-end-manifest.json": {
+      "bytes": 451,
+      "sha256": "3aecaedaa3459f1b51c1c97ead9d3e0ca43c2d10516c9c214f4ad563cff65f66"
+    },
+    "phase-archive-feed-manifest.json": {
+      "bytes": 452,
+      "sha256": "02ac0cb5925714dbae18562b93cf416026f145a7a70ba5e13219499da1ea77e0"
+    },
+    "phase-archive-modal-state.json": {
+      "bytes": 31847,
+      "sha256": "6292d80de922ea9191c1d2df99c694c57c3b3d11ae29a8cf0e1140ff9847645b"
+    },
+    "phase-archive-native-state.json": {
+      "bytes": 316202,
+      "sha256": "4dabda56f4eb856d178d8b23bdfe60f47d558292df55624a5c2e2149b90e337a"
+    },
+    "phase-archive-feed-remote.py": {
+      "bytes": 503,
+      "sha256": "36533f17d85461a19ef9e212414cd4cda6f24c9df867d4a917686bcb3a2488b4"
+    },
+    "phase-archive-end-remote.py": {
+      "bytes": 502,
+      "sha256": "01bc72fd1026fe3454b85b92d2ed2711e9cbd9ef63c56ca378323f82ca9de5ef"
+    },
+    "phase-archive-selector-manifest.json": {
+      "bytes": 456,
+      "sha256": "0d45adb50a2a8f2efb5d7aae2c4b17e730bb5f34ce32bf8012c85cef4d2a8cbb"
+    },
+    "phase-archive-focused-state-metadata.json": {
+      "bytes": 315977,
+      "sha256": "24e6f70ab7bf918448a91acdef493f35dd3c4d1c3b4bc0c1d3022dae3ad5857d"
+    },
+    "phase-archive-native.png": {
+      "bytes": 72567,
+      "sha256": "8ba504194cc8c78bb33a71946df96b7092d8cb0d2fbbc9ecda42f177e55247af"
+    },
+    "phase-archive-end-state-metadata.json": {
+      "bytes": 293101,
+      "sha256": "1ae3786e7290368ed0158347c885782f7e3dfc3aebc67982ab7993da62ff6c65"
+    },
+    "phase-archive-focused-capture.log": {
+      "bytes": 113,
+      "sha256": "61759b16e4c4b427c50099f36422fdbb4a4799b4a931dc99678804c330559c0f"
+    },
+    "phase-archive-feed-state-metadata.json": {
+      "bytes": 344070,
+      "sha256": "395ee5078c639b3f8644c9381155d040f589d6b508dff84664e44d4be683bc48"
+    },
+    "phase-archive-feed.png": {
+      "bytes": 95914,
+      "sha256": "6d0bb58d9fb66921b96854c909b3cfa4e751b928b31fcbf67e78621b565a7374"
+    },
+    "phase-archive-selector-state.pickle": {
+      "bytes": 19038,
+      "sha256": "01b32cbf853f4a6328b4a7b3ac61f383f457d4df3117fa303d06e4be1215a36e"
+    },
+    "phase-archive-feed-capture.log": {
+      "bytes": 110,
+      "sha256": "09cd2f3df09bb9d3fcaba12ff605b7eef34a1b65b16fd29c145c2ad24cda8531"
+    },
+    "phase-archive-return-capture.log": {
+      "bytes": 112,
+      "sha256": "92a114b79611645b079cd0a4105286441113a8065388966960e40731b547d8ac"
+    },
+    "phase-archive-return-manifest.json": {
+      "bytes": 454,
+      "sha256": "aea67f64ecb36af11a6faee67407b7e6fbecf0a3afc12b4aa5181671dda768b1"
+    },
+    "phase-archive-native-state.pickle": {
+      "bytes": 50708,
+      "sha256": "157fa535398424f0422071c9d00efd5ff99b630dd0a4b26ecec2f8280a552d88"
+    },
+    "phase-archive-modal-remote.py": {
+      "bytes": 504,
+      "sha256": "c687477a3f434db68b6bf9f27352b89df71a9e2e00826cf7ef6b57616e69c662"
+    },
+    "phase-archive-modal-capture.log": {
+      "bytes": 111,
+      "sha256": "55daa7c50a6f729b001bd8442b88b490dd5472f9f0f4efd68f7599087ed86fde"
+    },
+    "phase-archive-end-state.json": {
+      "bytes": 293127,
+      "sha256": "ad362af59c456e04519fe963cc620552a4b632f6787308aab9fd2a8a0a87028a"
+    },
+    "phase-archive-focused-remote.py": {
+      "bytes": 506,
+      "sha256": "bd2ba6b1e9ea5bb537c0ee3c78dcdb3b5256ff033d2334c41d8309b117a72347"
+    },
+    "phase-archive-focused-state.json": {
+      "bytes": 316003,
+      "sha256": "1f537ec4181070f71994c5079af21427734dc0211dcc0d623588afe897308c5a"
+    },
+    "phase-archive-selector-state.json": {
+      "bytes": 48336,
+      "sha256": "a003b0883993bd159c745a80836fb4c1d0d0ef7aec1b9c8bd297981c16f2152c"
+    },
+    "phase-archive-end.png": {
+      "bytes": 59224,
+      "sha256": "fab997619d44debeffedda521ca523083e02234d1456faee6782017f80a75bd1"
+    },
+    "phase-archive-return.png": {
+      "bytes": 95744,
+      "sha256": "b659ee18f2b79ee84fac2b65cf16ffa04d754f6e3230bbe550bcbee744f90928"
+    },
+    "phase-archive-native-manifest.json": {
+      "bytes": 454,
+      "sha256": "c5541dac47005c47ad9c2c20a1914a6b0213aac57ff450b4eef7f7eeaf03fe09"
+    },
+    "phase-archive-selector-capture.log": {
+      "bytes": 114,
+      "sha256": "eea4eacfd2c57b31a5e52e7437468c1e7022359c673ff582085861dddefbe506"
+    },
+    "phase-archive-native-remote.py": {
+      "bytes": 505,
+      "sha256": "77d21db2b84b42af3f385da05750b1f6de5cc4f5253a7fb01a6baf4d727b18af"
+    },
+    "phase-archive-return-state.json": {
+      "bytes": 338756,
+      "sha256": "ca59adb7bc0adb2cec2bac961be033ea1c77174a1b71f3eab2e221325f4c6d56"
+    },
+    "phase-archive-focused-manifest.json": {
+      "bytes": 455,
+      "sha256": "c960bcb14010266fa328f911b555e9e0d86e4ed6712ae172c0b8b7b10776c541"
+    },
+    "phase-archive-modal-state-metadata.json": {
+      "bytes": 31821,
+      "sha256": "859f89f14cad0c2082411f5124d94f1ebcceb039d9db763db2744ca67c5637bd"
+    },
+    "phase-archive-return-state.pickle": {
+      "bytes": 55054,
+      "sha256": "9cffc9270fa3535da39fe23297fff9ae250d30585910238e0301084c481084a5"
+    },
+    "phase-archive-feed-state.json": {
+      "bytes": 344096,
+      "sha256": "50ee3045eefdd41136635c1228bd419e287a79e4225df5ead664fb5a385033fd"
+    },
+    "widget-click-target.json": {
+      "bytes": 501,
+      "sha256": "42308acac94257ad8f969fe22242324ead8aa43ffaa7480c94dfc4fc40f8195a"
+    }
+  },
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 823259,
+        "start_ticks": 31365861,
+        "returncode": 0
+      },
+      {
+        "pid": 823262,
+        "start_ticks": 31365938,
+        "returncode": 0
+      },
+      {
+        "pid": 823280,
+        "start_ticks": 31365946,
+        "returncode": 0
+      },
+      {
+        "pid": 823285,
+        "start_ticks": 31365952,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 823286,
+        "start_ticks": 31365953,
+        "returncode": 0
+      },
+      {
+        "pid": 823287,
+        "start_ticks": 31365963,
+        "returncode": 0
+      },
+      {
+        "pid": 823289,
+        "start_ticks": 31365971,
+        "returncode": 0
+      },
+      {
+        "pid": 823290,
+        "start_ticks": 31365981,
+        "returncode": 255
+      },
+      {
+        "pid": 823624,
+        "start_ticks": 31366982,
+        "returncode": 0
+      },
+      {
+        "pid": 823630,
+        "start_ticks": 31367005,
+        "returncode": 0
+      },
+      {
+        "pid": 823635,
+        "start_ticks": 31367044,
+        "returncode": 0
+      },
+      {
+        "pid": 823636,
+        "start_ticks": 31367056,
+        "returncode": 0
+      },
+      {
+        "pid": 823651,
+        "start_ticks": 31367269,
+        "returncode": 0
+      },
+      {
+        "pid": 823675,
+        "start_ticks": 31367406,
+        "returncode": 0
+      },
+      {
+        "pid": 823748,
+        "start_ticks": 31367494,
+        "returncode": 0
+      },
+      {
+        "pid": 823829,
+        "start_ticks": 31367607,
+        "returncode": 0
+      },
+      {
+        "pid": 823899,
+        "start_ticks": 31367748,
+        "returncode": 0
+      },
+      {
+        "pid": 823905,
+        "start_ticks": 31367834,
+        "returncode": 0
+      },
+      {
+        "pid": 823915,
+        "start_ticks": 31367945,
+        "returncode": 0
+      },
+      {
+        "pid": 824015,
+        "start_ticks": 31368081,
+        "returncode": 0
+      },
+      {
+        "pid": 824016,
+        "start_ticks": 31368093,
+        "returncode": 0
+      },
+      {
+        "pid": 824028,
+        "start_ticks": 31368105,
+        "returncode": 0
+      },
+      {
+        "pid": 824029,
+        "start_ticks": 31368115,
+        "returncode": 0
+      },
+      {
+        "pid": 824031,
+        "start_ticks": 31368127,
+        "returncode": 0
+      },
+      {
+        "pid": 824130,
+        "start_ticks": 31368440,
+        "returncode": 0
+      },
+      {
+        "pid": 824280,
+        "start_ticks": 31368584,
+        "returncode": 0
+      },
+      {
+        "pid": 824297,
+        "start_ticks": 31368670,
+        "returncode": 0
+      },
+      {
+        "pid": 824298,
+        "start_ticks": 31368700,
+        "returncode": 0
+      },
+      {
+        "pid": 824340,
+        "start_ticks": 31368847,
+        "returncode": 0
+      },
+      {
+        "pid": 824341,
+        "start_ticks": 31368860,
+        "returncode": 0
+      },
+      {
+        "pid": 824352,
+        "start_ticks": 31368970,
+        "returncode": 0
+      },
+      {
+        "pid": 824378,
+        "start_ticks": 31369110,
+        "returncode": 0
+      },
+      {
+        "pid": 824379,
+        "start_ticks": 31369120,
+        "returncode": 0
+      },
+      {
+        "pid": 824381,
+        "start_ticks": 31369231,
+        "returncode": 0
+      },
+      {
+        "pid": 824501,
+        "start_ticks": 31369568,
+        "returncode": 0
+      },
+      {
+        "pid": 824574,
+        "start_ticks": 31369593,
+        "returncode": 0
+      },
+      {
+        "pid": 824590,
+        "start_ticks": 31369651,
+        "returncode": 0
+      },
+      {
+        "pid": 824592,
+        "start_ticks": 31369725,
+        "returncode": 0
+      },
+      {
+        "pid": 824597,
+        "start_ticks": 31369931,
+        "returncode": 0
+      }
+    ]
+  },
+  "original_owner_after": {
+    "root": "/home/ts/.cache/agent-scratch/g477/p01/wire",
+    "mode": "private"
+  }
+}

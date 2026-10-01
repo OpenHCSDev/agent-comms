@@ -48,7 +48,7 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     comms.messaging.acknowledge("alpha", "#team")
     ledger = comms.bus.reads.path.read_bytes()
     source = comms.bus.log.path.read_bytes()
-    frame = comms.bus.awareness_prompt(observer)
+    frame = "".join(segment.text() for segment in comms.bus.awareness_segments(observer))
     pointers = json.loads(frame.splitlines()[-1])["sources"]
     assert len(pointers) == 4
     assert pointers[-1]["seq"] == message.seq
@@ -60,12 +60,12 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     assert comms.bus.reads.path.read_bytes() == ledger
     assert comms.bus.log.path.read_bytes() == source
     assert not (root / "acp_passive_channel_awareness.json").exists()
-    assert comms.bus.awareness_prompt(replace(observer, created_at=observer.created_at + 1)) == ""
+    assert comms.bus.awareness_segments(replace(observer, created_at=observer.created_at + 1)) == ()
     with comms.bus.log.locked():
         marker = comms.bus.log._private_marker_unlocked()
         marker.admission_after_seq = marker.last_seq
         comms.bus.log.write_metadata_unlocked(marker)
-    assert comms.bus.awareness_prompt(observer) == ""
+    assert comms.bus.awareness_segments(observer) == ()
 
 
 def test_awareness_refuses_changed_checkpoint_without_rebuild(tmp_path):  # noqa: F811
@@ -74,7 +74,7 @@ def test_awareness_refuses_changed_checkpoint_without_rebuild(tmp_path):  # noqa
     path = root / "private_bus_checkpoint.sqlite3"
     path.touch()  # Same content, but the durable index seal must refuse its new revision.
     before = path.stat()
-    frame = comms.bus.awareness_prompt(observer)
+    frame = "".join(segment.text() for segment in comms.bus.awareness_segments(observer))
     assert "awareness unavailable" in frame
     assert path.stat() == before
 

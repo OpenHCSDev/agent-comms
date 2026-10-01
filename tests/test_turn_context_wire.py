@@ -29,7 +29,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     raw=comms.bus.log.path.read_bytes()
     activity=comms.bus.channel_activity()
     pending=comms.bus.pending_counts_all(['Alice','Bob'])
-    awareness=comms.bus.awareness_prompt(comms.registry.require('Alice'))
+    awareness=comms.bus.awareness_segments(comms.registry.require('Alice'))
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
     assert comms.bus.log.path.read_bytes().startswith(raw)
     assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
@@ -39,7 +39,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert _page(comms,lookup)[1:]==prior[1:]
     assert comms.bus.channel_activity()==activity
     assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
-    assert comms.bus.awareness_prompt(comms.registry.require('Alice'))==awareness
+    assert comms.bus.awareness_segments(comms.registry.require('Alice'))==awareness
     assert comms.bus.log.full_history()==[first]
     with comms.bus.log.full_history_snapshot() as (_, messages):
         assert list(messages)==[first]

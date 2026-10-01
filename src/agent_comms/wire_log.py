@@ -377,13 +377,16 @@ class WireLog:
             return next((message for message in messages if message.message_id == message_id), None)
 
     def messages_for_references(self, references):
+        return tuple(source.message for source in self.deliveries_for_references(references))
+
+    def deliveries_for_references(self, references):
         """One canonical lock/certificate lifetime for a visible source window."""
-        from .private_bus_checkpoint import source_references_unlocked
+        from .private_bus_checkpoint import delivery_references_unlocked
 
         if not references:
             return ()
         with self.certified_read() as source:
-            return source_references_unlocked(source, references)
+            return delivery_references_unlocked(source, references)
 
     def total_messages(self) -> int:
         with _store_lock(self.path):
