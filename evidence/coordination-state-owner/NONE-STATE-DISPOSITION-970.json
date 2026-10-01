@@ -1,0 +1,941 @@
+{
+  "owner": "Mendel",
+  "pr": 457,
+  "review_kind": "item5 final integrated source disposition; no new tests, providers, source edits or SessionRevision implementation",
+  "integrated_head": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "original_base": "6feb634ba184d94d763028406152fff07027cccc",
+  "accepted_source": "e1f2d732bb9c8f447da12b5fbc0b31519860cdc0",
+  "existing_review_source": "#462 evidence/goal-wait-certified-reply/NONE-REVIEW.md and none-site-census.json",
+  "own_production_commit_churn": {
+    "added": 749,
+    "deleted": 449,
+    "note": "sum of original own commit deltas; includes repeated edits; excludes peer commits",
+    "commits": [
+      {
+        "commit": "51631c9b06515cea4a85307851e204c445a11b5e",
+        "added": 285,
+        "deleted": 244
+      },
+      {
+        "commit": "82713f9bf549f369ef51561ff151ac4e1ac4993d",
+        "added": 12,
+        "deleted": 9
+      },
+      {
+        "commit": "84a76b1883029c6490c3068a94ba8f6443b0ef25",
+        "added": 359,
+        "deleted": 169
+      },
+      {
+        "commit": "7f64d7ac0b72a8a2a7be373cf1ddb045a86dcaad",
+        "added": 93,
+        "deleted": 27
+      }
+    ]
+  },
+  "integrated_scope_diff": {
+    "added": 756,
+    "deleted": 459,
+    "note": "final970 minus originalbase on owned files, includes peer intersections; not personal attribution",
+    "files": [
+      {
+        "path": "src/agent_comms/acp.py",
+        "added": 1,
+        "deleted": 1,
+        "final_blob": "560de8e4670ff838376bc6af1e7bdb1107983ef1"
+      },
+      {
+        "path": "src/agent_comms/acp_extension.py",
+        "added": 10,
+        "deleted": 10,
+        "final_blob": "9680daf0daddcbeace44f4aa2446a070be0a26fc"
+      },
+      {
+        "path": "src/agent_comms/assignment_states.py",
+        "added": 49,
+        "deleted": 6,
+        "final_blob": "353f9795c87067693eb43138baf10f71e5090b81"
+      },
+      {
+        "path": "src/agent_comms/assignment_store.py",
+        "added": 4,
+        "deleted": 43,
+        "final_blob": "ae72e584088e3a9ba58e95f481a0f246717c46a0"
+      },
+      {
+        "path": "src/agent_comms/attempt_states.py",
+        "added": 6,
+        "deleted": 0,
+        "final_blob": "c0c1cad7a4cb9a2663865324a087f19afe6f8fc0"
+      },
+      {
+        "path": "src/agent_comms/coordination_snapshot.py",
+        "added": 7,
+        "deleted": 36,
+        "final_blob": "4723a21afa8c439741005ba9cf98aad202c4264d"
+      },
+      {
+        "path": "src/agent_comms/coordination_tables/assignments.py",
+        "added": 63,
+        "deleted": 3,
+        "final_blob": "4c5c0e29f332c88a41cdfbe5e992fcf07e16c120"
+      },
+      {
+        "path": "src/agent_comms/coordination_tables/attempts.py",
+        "added": 4,
+        "deleted": 0,
+        "final_blob": "de72b8bff2b49614cf176d6c5dd4078b21481f60"
+      },
+      {
+        "path": "src/agent_comms/coordination_tables/executions.py",
+        "added": 13,
+        "deleted": 1,
+        "final_blob": "966a25341cea207a6f0d47db524aee3c51301483"
+      },
+      {
+        "path": "src/agent_comms/envelope_claim_transitions.py",
+        "added": 54,
+        "deleted": 40,
+        "final_blob": "ccc97154746802e0ce36a91165c78506e2bcc85f"
+      },
+      {
+        "path": "src/agent_comms/execution_states.py",
+        "added": 13,
+        "deleted": 0,
+        "final_blob": "2d67f4abbb179e2d5c58d85d3947b0873fa999f2"
+      },
+      {
+        "path": "src/agent_comms/goals.py",
+        "added": 28,
+        "deleted": 23,
+        "final_blob": "6dc796dc2364b45bad1b11f88afce8590f274d84"
+      },
+      {
+        "path": "src/agent_comms/input_attempt.py",
+        "added": 69,
+        "deleted": 25,
+        "final_blob": "26eccc66b6dc1cc035ab9ab9afc42b97f27a3a65"
+      },
+      {
+        "path": "src/agent_comms/input_drain.py",
+        "added": 32,
+        "deleted": 12,
+        "final_blob": "9635b852ed07f16d08a9340e961311d06a1c7bec"
+      },
+      {
+        "path": "src/agent_comms/queued_input.py",
+        "added": 25,
+        "deleted": 17,
+        "final_blob": "99dc306d01efeb1b47145891c645aa93900c0672"
+      },
+      {
+        "path": "src/agent_comms/selected_participant.py",
+        "added": 5,
+        "deleted": 18,
+        "final_blob": "4e46748ae8394e23827f6b132c2d106767c4377a"
+      },
+      {
+        "path": "src/agent_comms/selected_turn.py",
+        "added": 1,
+        "deleted": 2,
+        "final_blob": "49f365a0dcf6af0bf25d854361f59ee878e04217"
+      },
+      {
+        "path": "src/agent_comms/thread_identity.py",
+        "added": 19,
+        "deleted": 0,
+        "final_blob": "bceb8a140e7ce7caa37209bead4d3fb91f06a992"
+      },
+      {
+        "path": "src/agent_comms/todos.py",
+        "added": 340,
+        "deleted": 158,
+        "final_blob": "1925c0bb7ef1175efd43d0b08e7f81c65f6b7bd1"
+      },
+      {
+        "path": "src/agent_comms/turn_runner.py",
+        "added": 9,
+        "deleted": 12,
+        "final_blob": "059719f66f5854807e7ff0f51d1b47523c19fb2e"
+      },
+      {
+        "path": "src/agent_comms/wake_injection.py",
+        "added": 4,
+        "deleted": 52,
+        "final_blob": "e0953db491ab8d7e0de937232f9b70d9937c3cad"
+      }
+    ]
+  },
+  "changes_since_accepted_source_on_owned_files": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "added": 2,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "added": 1,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "added": 8,
+      "deleted": 13
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "added": 1,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/thread_identity.py",
+      "added": 4,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "added": 4,
+      "deleted": 10
+    }
+  ],
+  "own_added_none_text_sites": [
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/assignment_states.py",
+      "line_at_commit": 191,
+      "added_text": "        if obligation is not None:",
+      "final_text_occurrences": [
+        192
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/assignment_states.py",
+      "line_at_commit": 311,
+      "added_text": "        if obligation is None:",
+      "final_text_occurrences": [
+        312
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_snapshot.py",
+      "line_at_commit": 248,
+      "added_text": "            attempt=self.attempt.lifecycle if self.attempt is not None else None,",
+      "final_text_occurrences": [
+        248
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line_at_commit": 45,
+      "added_text": "    def require_selected_source(self, initial, owner) -> None:",
+      "final_text_occurrences": [
+        45
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line_at_commit": 67,
+      "added_text": "    def require_initial_decision(self) -> None:",
+      "final_text_occurrences": [
+        67
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line_at_commit": 83,
+      "added_text": "    def require_same_acceptance(self, candidate: WakeAssignment) -> None:",
+      "final_text_occurrences": [
+        83
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 123,
+      "added_text": "    def retry_authorized(self, replay: ReplayAssessments | None, obligation) -> bool:",
+      "final_text_occurrences": [
+        123
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 126,
+      "added_text": "        if replay is None or not replay.allows_retry:",
+      "final_text_occurrences": [],
+      "disposition": "rewritten within ExecutionRecord.retry_authorized; final lines124-131 retain deny-without-replay and wire-obligation requirement"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 129,
+      "added_text": "            obligation is not None and obligation.lifecycle.retryable",
+      "final_text_occurrences": [],
+      "disposition": "rewritten within ExecutionRecord.retry_authorized; final lines124-131 retain deny-without-replay and wire-obligation requirement"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line_at_commit": 134,
+      "added_text": "    def __post_init__(self) -> None:",
+      "final_text_occurrences": [
+        44,
+        134,
+        179,
+        218,
+        238,
+        275,
+        294
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line_at_commit": 274,
+      "added_text": "    def __post_init__(self) -> None:",
+      "final_text_occurrences": [
+        44,
+        134,
+        179,
+        218,
+        238,
+        275,
+        294
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line_at_commit": 282,
+      "added_text": "        if self.admission is not None and type(self.admission) is not WakeAdmission:",
+      "final_text_occurrences": [
+        283
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/execution_states.py",
+      "line_at_commit": 59,
+      "added_text": "        return ordinal is not None and ordinal < maximum",
+      "final_text_occurrences": [
+        59
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/execution_states.py",
+      "line_at_commit": 206,
+      "added_text": "        if self.ordinal is None or attempt is None:",
+      "final_text_occurrences": [
+        206
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_attempt.py",
+      "line_at_commit": 285,
+      "added_text": "            else None",
+      "final_text_occurrences": [
+        282,
+        317
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "51631c9b",
+      "owner": "Mendel",
+      "path": "src/agent_comms/thread_identity.py",
+      "line_at_commit": 26,
+      "added_text": "    def __post_init__(self) -> None:",
+      "final_text_occurrences": [
+        26,
+        75,
+        113
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/assignment_states.py",
+      "line_at_commit": 163,
+      "added_text": "            return cls.build(mode, None, None)",
+      "final_text_occurrences": [
+        163
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/assignment_states.py",
+      "line_at_commit": 167,
+      "added_text": "        if self.execution_id is not None or disposition not in self.successors():",
+      "final_text_occurrences": [
+        167
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 124,
+      "added_text": "        if replay is None:",
+      "final_text_occurrences": [
+        124
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line_at_commit": 131,
+      "added_text": "                or (obligation is not None and obligation.lifecycle.retryable)",
+      "final_text_occurrences": [
+        131
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/thread_identity.py",
+      "line_at_commit": 34,
+      "added_text": "    def require_recorded(self) -> None:",
+      "final_text_occurrences": [
+        34
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 83,
+      "added_text": "    def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:",
+      "final_text_occurrences": [
+        83
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 86,
+      "added_text": "    def require_successor(self, proposed: Assignment, current: Todo) -> None:",
+      "final_text_occurrences": [
+        86
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 108,
+      "added_text": "            assignment=None,",
+      "final_text_occurrences": [
+        108,
+        119,
+        477
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 119,
+      "added_text": "                assignment=None,",
+      "final_text_occurrences": [
+        108,
+        119,
+        477
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 143,
+      "added_text": "        current.require_assignment(None)",
+      "final_text_occurrences": [
+        143
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 189,
+      "added_text": "        if current.assignment is None:",
+      "final_text_occurrences": [
+        189
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 193,
+      "added_text": "        return replace(current, state=cls, assignment=None, revision=current.revision + 1)",
+      "final_text_occurrences": [
+        193
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 200,
+      "added_text": "    def __post_init__(self) -> None:",
+      "final_text_occurrences": [
+        44,
+        65,
+        200,
+        224
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 224,
+      "added_text": "    def __post_init__(self) -> None:",
+      "final_text_occurrences": [
+        44,
+        65,
+        200,
+        224
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 259,
+      "added_text": "    generation: str | None",
+      "final_text_occurrences": [
+        259
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 290,
+      "added_text": "    last_transition: type[AssignmentChange] | None = field(",
+      "final_text_occurrences": [
+        290
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 291,
+      "added_text": "        default=None,",
+      "final_text_occurrences": [
+        291
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 311,
+      "added_text": "    def require_result(self, result: Todo) -> None:",
+      "final_text_occurrences": [
+        311
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 315,
+      "added_text": "    def require_revision(self, expected: int) -> None:",
+      "final_text_occurrences": [
+        315
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 319,
+      "added_text": "    def require_assignment(self, expected: Assignment | None) -> None:",
+      "final_text_occurrences": [
+        319
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 323,
+      "added_text": "    def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:",
+      "final_text_occurrences": [
+        323
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 324,
+      "added_text": "        if self.assignment is None or not self.assignment.owned_by(actor, generation):",
+      "final_text_occurrences": [
+        324
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 327,
+      "added_text": "    def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:",
+      "final_text_occurrences": [
+        327
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 331,
+      "added_text": "    def require_same_creation(self, proposed: Todo) -> None:",
+      "final_text_occurrences": [
+        331
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "84a76b18",
+      "owner": "Mendel",
+      "path": "src/agent_comms/todos.py",
+      "line_at_commit": 477,
+      "added_text": "            assignment=None,",
+      "final_text_occurrences": [
+        108,
+        119,
+        477
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 98,
+      "added_text": "                if (retained := item.after_clear()) is not None",
+      "final_text_occurrences": [
+        98
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 447,
+      "added_text": "        if input_id is None and original.notice_keys:",
+      "final_text_occurrences": [
+        443,
+        446
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 450,
+      "added_text": "        text = item.text if item else original.notice_text if input_id == row.public_id else None",
+      "final_text_occurrences": [
+        449
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 458,
+      "added_text": "        self.queued_inputs.get(session_id, {}).pop(input_id or \"\", None)",
+      "final_text_occurrences": [
+        457
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 505,
+      "added_text": "                    if (restored := item.restore_after_turn()) is not None",
+      "final_text_occurrences": [
+        504
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/input_drain.py",
+      "line_at_commit": 518,
+      "added_text": "        input_id: str | None = None,",
+      "final_text_occurrences": [
+        156,
+        517
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 99,
+      "added_text": "        input_id: str | None = None,",
+      "final_text_occurrences": [
+        97
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 114,
+      "added_text": "            ACPInputIdText.new() if input_id is None else ACPInputIdText.decode(input_id),",
+      "final_text_occurrences": [
+        111
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 206,
+      "added_text": "    def after_clear(self) -> QueuedInput | None:",
+      "final_text_occurrences": [
+        201
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 207,
+      "added_text": "        return None",
+      "final_text_occurrences": [
+        199,
+        202,
+        221,
+        242,
+        245
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 209,
+      "added_text": "    def restore_after_turn(self) -> QueuedInput | None:",
+      "final_text_occurrences": [
+        204
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 210,
+      "added_text": "        return self.immediate() if self.echo else None",
+      "final_text_occurrences": [
+        205
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 221,
+      "added_text": "    def restore_after_turn(self) -> None:",
+      "final_text_occurrences": [
+        216
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/queued_input.py",
+      "line_at_commit": 222,
+      "added_text": "        return None  # Its original terminal disposition owns cancellation/UNKNOWN.",
+      "final_text_occurrences": [
+        217
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_runner.py",
+      "line_at_commit": 208,
+      "added_text": "        self, session_id: str, prompt: list[Any], *, display_text: str | None = None,",
+      "final_text_occurrences": [
+        202
+      ],
+      "disposition": "retained; rationale in receipt"
+    },
+    {
+      "pr": 457,
+      "commit": "7f64d7ac",
+      "owner": "Mendel",
+      "path": "src/agent_comms/turn_runner.py",
+      "line_at_commit": 209,
+      "added_text": "        input_id: str | None = None,",
+      "final_text_occurrences": [
+        203
+      ],
+      "disposition": "retained; rationale in receipt"
+    }
+  ],
+  "own_new_none_as_domain_state": "none found in traced contributions; per-site retained resource/dependency/operation-result contract in receipt; preexisting nullable domain relations are not blanket external",
+  "shared_incomplete_native_reference": {
+    "original_witness": "#462 evidence/goal-wait-certified-reply/none-context-shape-probe.json",
+    "fix_commit": "f997cc8586c1dd7551d85d0cbd7334fd215dabca",
+    "in_integrated_head": true,
+    "final_paths": [
+      "src/agent_comms/native_input_record.py:84",
+      "src/agent_comms/native_input_record.py:148",
+      "src/agent_comms/native_runtime_input.py:189",
+      "src/agent_comms/native_runtime_input.py:296",
+      "src/agent_comms/cursor_owner.py:76",
+      "src/agent_comms/native_source_cursor.py:215"
+    ],
+    "disposition": "partial SQL context rejected at existing boundary; complete/unrecorded declaration consumed instead of None-reference state"
+  },
+  "limits": [
+    "Not whole historic native-nullable closure",
+    "No fresh installed970 acceptance claimed; Einstein owns current paired gate",
+    "SessionRevision deferred; runtime compaction-journal reset remains declared operator scope; protected native/input-proof/UNKNOWN/wire/goals unchanged"
+  ]
+}

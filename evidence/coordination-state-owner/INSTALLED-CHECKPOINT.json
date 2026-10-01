@@ -1,0 +1,159 @@
+{
+  "source_head": "7f64d7ac",
+  "status": "installed backend checkpoint passed; paired Toad251 continuous UI acceptance pending",
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "provider": "controlled localhost only",
+  "native_mutation": false,
+  "public_mutation": false,
+  "scratch_owner": "Mendel",
+  "scratch": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930",
+  "runs": {
+    "native02": {
+      "test": "tests/test_selected_execution_native.py::test_native_full_four_tools_publish_and_release[False-False-True]",
+      "pytest_seconds": 11.737706439,
+      "native_call_seconds": 11.280618590011727,
+      "installed_module": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/installed/lib/python3.14/site-packages/agent_comms",
+      "installed_hash_receipt": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/native02/installed-selected-gate.json",
+      "retained_original": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/native02/native-selected-original",
+      "result": null,
+      "evidence": {
+        "native_processes": [
+          {
+            "pid": 3893254,
+            "start_time": 27397623,
+            "alive": false
+          },
+          {
+            "pid": 3893287,
+            "start_time": 27397861,
+            "alive": false
+          }
+        ],
+        "tool_results": [
+          {
+            "name": "read",
+            "is_error": false
+          },
+          {
+            "name": "edit",
+            "is_error": false
+          },
+          {
+            "name": "write",
+            "is_error": false
+          },
+          {
+            "name": "bash",
+            "is_error": false
+          }
+        ],
+        "native_users": [
+          {
+            "entry": "2f2c5007",
+            "native_id": "7cfcc30fbcec4f17639d228b67f80446"
+          },
+          {
+            "entry": "a29d779c",
+            "native_id": "64111bae180372f33465eaf9f01829a1"
+          }
+        ],
+        "context_proof_rows": {
+          "wire/native-sessions/d9ae5e86dc7f3682a0ff9f1d4c9c6f9d/2026-09-30T19-58-57-824Z_01a0f3e6-171f-7206-97d7-8b0a8e0b7558.jsonl.input-proof": 5
+        },
+        "canonical_tool_phase_and_installed_cli": true,
+        "input_dispositions": {}
+      }
+    },
+    "queue-native01": {
+      "test": "tests/test_input_drain_native.py::test_actual_acp_queued_during_summary_runs_once_after_original[False]",
+      "pytest_seconds": 11.608201748,
+      "native_call_seconds": 10.718533327977639,
+      "installed_module": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/installed/lib/python3.14/site-packages/agent_comms",
+      "installed_hash_receipt": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/queue-native01/installed-selected-gate.json",
+      "retained_original": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/queue-native01/native-selected-original",
+      "result": null,
+      "evidence": {
+        "native_processes": [
+          {
+            "pid": 3894686,
+            "start_time": 27402843,
+            "alive": false
+          }
+        ],
+        "tool_results": [],
+        "native_users": [
+          {
+            "entry": "38930d27",
+            "native_id": "bbfdb141da919e4f71eae31859fa5e7c"
+          },
+          {
+            "entry": "fc52dfb5",
+            "native_id": "20d4c1ddc29294b5799c3b1005808086"
+          }
+        ],
+        "context_proof_rows": {
+          "sessions/2026-09-30T19-59-40-559Z_01a0f3e6-be0e-7449-a1cf-2f898ef3d7a1.jsonl.input-proof": 3
+        },
+        "canonical_tool_phase_and_installed_cli": false,
+        "input_dispositions": {
+          "input_dispositions.json": [
+            {
+              "input_id": "original",
+              "state": "reserved",
+              "native_id": null
+            }
+          ],
+          "acp-wire/input_dispositions.json": [
+            {
+              "input_id": "129fb4ce4cab409e8670c8bfc9285292",
+              "state": "started",
+              "native_id": "20d4c1ddc29294b5799c3b1005808086"
+            },
+            {
+              "input_id": "5585ec2e6204458689444735b172741b",
+              "state": "started",
+              "native_id": "bbfdb141da919e4f71eae31859fa5e7c"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "todo": {
+    "baseline": "6feb634ba184d94d763028406152fff07027cccc",
+    "candidate": "7f64d7ac",
+    "database": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/todo-retained/todos.sqlite3",
+    "elapsed_seconds": 0.020668748999014497,
+    "ddl_unchanged": true,
+    "initial_read_and_exact_retry_row_unchanged": true,
+    "conflicting_new_operations": 2,
+    "final_revision": 7,
+    "original_goal_preserved": true,
+    "steps": [
+      "cold old-format reopen",
+      "original exact transfer reply recovery",
+      "new generation rejected",
+      "new same-name incarnation rejected",
+      "block",
+      "unblock",
+      "release",
+      "original exact release reply recovery",
+      "cold reopen",
+      "complete"
+    ],
+    "worker_spawned": false,
+    "public_mutation": false
+  },
+  "deletion_counts": {
+    "todo_84a76b18": {
+      "deleted": 158,
+      "added": 340,
+      "file": "src/agent_comms/todos.py"
+    },
+    "queue_checkpoint_7f64d7ac": {
+      "deleted": 27,
+      "added": 93,
+      "scope": "seven production files, including stable-lookup consumer correction"
+    }
+  }
+}
