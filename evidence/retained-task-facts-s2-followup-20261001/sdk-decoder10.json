@@ -1,0 +1,38 @@
+{
+  "state": "ACTUAL_SDK_EMITTED_RECEIPT_DECLARED_DECODER_PASS",
+  "producer_receipt_sha256": "fa503eb88cbc3ad532fcea1258259e339da4dac4f3624602f0c724ccee3ac6a0",
+  "observed_original_receipts": [
+    {
+      "original_operation": "original_write",
+      "artifact": {
+        "kind": "utf8_file_write",
+        "operation_path": "/home/ts/.cache/agent-scratch/s2-sdk-file-artifact-semantic-20261001-01/original-local-effects/artifact.py",
+        "digest": {
+          "value": "b72d0c1597536826c9303f95aa6232497f556faf8979e4165eb0b2e6a074ef18"
+        },
+        "byte_count": 17
+      },
+      "wire_roundtrip_exact": true,
+      "edit_diff": false
+    },
+    {
+      "original_operation": "original_edit",
+      "artifact": {
+        "kind": "utf8_file_write",
+        "operation_path": "/home/ts/.cache/agent-scratch/s2-sdk-file-artifact-semantic-20261001-01/original-local-effects/artifact.py",
+        "digest": {
+          "value": "80cf8b26cdc6f4d1238d3c28e240c85f90633f79fe7016fc06be4cfad7dfb8c4"
+        },
+        "byte_count": 22
+      },
+      "wire_roundtrip_exact": true,
+      "edit_diff": true
+    }
+  ],
+  "cancelled_original_effects_preserved": true,
+  "new_operations": 0,
+  "paid_calls": 0,
+  "native_processes": 0,
+  "source_copy_retired_with_manifest": true,
+  "runner07_exit_status": "not separately retained; SDK PASS marker and outputs retained"
+}

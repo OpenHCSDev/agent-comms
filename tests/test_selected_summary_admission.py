@@ -30,17 +30,14 @@ from agent_comms.selected_summary_admission import (
 from agent_comms.store_files import _store_lock
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation, TurnId
-from selected_summary_cases import admission_identity
+from agent_comms.pi_summary_payloads import SelectedModel
+from selected_summary_cases import admission_identity, summary_source
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX journal and native input bind")
 
 
 def _source(identity):
-    return {
-        "source": FieldCodec.encode(identity.source),
-        "selected": {"provider": "fake", "modelId": "fake", "contextWindow": 1000},
-        "settings": {"reserveTokens": 100, "keepRecentTokens": 100},
-    }
+    return summary_source(identity.source, selected=SelectedModel("fake", "fake", 1000))
 
 
 @pytest.fixture
@@ -379,21 +376,11 @@ from agent_comms.thread_identity import ThreadIncarnation, TurnId
 from agent_comms.text_digest import TextDigest
 from agent_comms.selected_summary_admission import SelectedAdmissionIdentity
 root=Path(sys.argv[1]); session=sys.argv[2]; op=sys.argv[3]; key=sys.argv[4]; text=sys.argv[5]
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec
-from agent_comms.selected_source import SelectedAdmissionSource, SessionRevision
-from agent_comms.thread_identity import ThreadIncarnation, TurnId
-from agent_comms.text_digest import TextDigest
-digest=TextDigest.of(text)
-identity=SelectedAdmissionIdentity(SelectedAdmissionSource(
-    incarnation=ThreadIncarnation('project',1.0), owner=ProcessIdentity.capture(os.getpid()),
-    turn=TurnId('turn'), ingress_key=key, admission_generation=1,
-    correction_witness=f'1:{digest.value}',
-    input_digest=digest, original_digest=digest,
-    reserved_revision=SessionRevision.observe(session).require_available()),
-    SessionRevision.observe(session).require_available())
-source={'source':FieldCodec.encode(identity.source),
-    'selected':{'provider':'fake','modelId':'fake','contextWindow':1000},'settings':{'reserveTokens':100,'keepRecentTokens':100}}
+sys.path.insert(0,sys.argv[8])
+from selected_summary_cases import admission_identity, summary_source
+from agent_comms.pi_summary_payloads import SelectedModel
+identity=admission_identity(session,text=text,key=key,turn='turn')
+source=summary_source(identity.source,selected=SelectedModel('fake','fake',1000))
 j=CompactionJournal(root/'compaction-commits.sqlite3')
 d=InputDispositions(root / InputDispositions.filename)
 assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
@@ -419,6 +406,7 @@ os._exit(17)
             text,
             "1" if send else "0",
             str(marker),
+            str(Path(__file__).parent),
         ],
         check=False,
         timeout=10,

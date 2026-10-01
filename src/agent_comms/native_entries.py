@@ -27,16 +27,36 @@ class TranscriptProjection:
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
-    wire_tag = "type"
-    opaque: ClassVar[bool] = False
+class NativeEntryCoordinates(PiPayload):
+    """Original external ancestry fields; opaque entries project this same owner."""
     id: str | None = None
     parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
+
+    @property
+    def original_id(self):
+        if not self.id:
+            raise ValueError("Native publication requires an original entry ID")
+        return self.id
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
+    wire_tag = "type"
+    opaque: ClassVar[bool] = False
     timestamp: str | None = None
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     input_boundary: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
+
+    def retained_tool_calls(self):
+        return ()
+
+    def retained_tool_facts(self, session, originals):
+        return ()
+
+    def require_artifact_request(self, request):
+        raise ValueError("Native entry is not a completed file operation")
 
     @classmethod
     def wire_member(cls, value):
@@ -114,9 +134,11 @@ class NativeEntry(PiPayload, DeclaredFamily, affix="Entry"):
         return None
 
     def require_entry_id(self) -> str:
-        if not self.id:
-            raise ValueError("Native publication requires an original entry ID")
-        return self.id
+        return self.source_coordinates.original_id
+
+    @property
+    def source_coordinates(self):
+        return self
 
     def require_tracked_user(self) -> MessageEntry:
         tracked = self.tracked_user
@@ -219,6 +241,46 @@ class NativeEvidenceRead:
         self.entries = entries
         return entries[0], entries
 
+    def retained_task_facts(self, witness):
+        """Project only the witnessed branch of this original acquired resource.
+
+        Lookup maps are confined to this captured read. They have no persistent
+        storage, refresh lifecycle, publication or semantic authority.
+        """
+        from .native_session_reopen import NativeSessionIdentity
+
+        witness.require_session(str(self.source.path))
+        witness.require_current_file(self.source.path)
+        header, entries = self.observe()
+        if header.id != witness.session_id:
+            raise ValueError("Native retained facts belong to another session")
+        originals = {}
+        for entry in entries:
+            coordinates = entry.source_coordinates
+            originals[coordinates.original_id] = (entry, coordinates.parent_id)
+        if len(originals) != len(entries):
+            raise ValueError("Native source has ambiguous original entry identities")
+        branch = []
+        identity = witness.leaf_id
+        while identity is not None:
+            try:
+                entry, parent = originals.pop(identity)
+            except KeyError as error:
+                raise ValueError("Native retained branch is missing or cyclic") from error
+            branch.append(entry)
+            identity = parent
+        calls = {}
+        facts = []
+        session = NativeSessionIdentity(header.id, str(self.source.path))
+        for entry in reversed(branch):
+            for call in entry.retained_tool_calls():
+                if call.id in calls:
+                    raise ValueError("Native retained SDK call identity was repeated")
+                calls[call.id] = entry
+            facts.extend(entry.retained_tool_facts(session, calls))
+        witness.require_current_file(self.source.path)
+        return tuple(facts)
+
 
 class NativeEvidenceScope(ExitStack):
     """One acquired original source for a bounded corroboration operation.
@@ -298,6 +360,15 @@ class MessageEntry(NativeEntry):
     message: PiMessage
     is_message = True
 
+    def retained_tool_calls(self):
+        return self.message.retained_tool_calls()
+
+    def retained_tool_facts(self, session, originals):
+        return self.message.retained_tool_facts(session, self, originals)
+
+    def require_artifact_request(self, request):
+        return self.message.require_artifact_request(request)
+
     @property
     def input_boundary(self):
         return self.message.user
@@ -357,6 +428,12 @@ class CompactionEntry(NativeEntry):
 class UnknownEntry(NativeEntry):
     payload: dict[str, Any]
     opaque = True
+
+    @property
+    def source_coordinates(self):
+        # Decode once for this source read. No parallel current identity fields
+        # are populated on an opaque extension record.
+        return NativeEntryCoordinates.from_wire(self.payload)
 
 
 @dataclass(frozen=True, kw_only=True)

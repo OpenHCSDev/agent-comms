@@ -1,0 +1,14 @@
+{
+  "state": "CANONICAL_NATIVE_FULL_TRUST_AND_PACKAGED_SDK_DECODER_PASS",
+  "cli": "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/stack/.pi-native-776cd99e55d6917b/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "package": "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/stack/.pi-native-776cd99e55d6917b/node_modules/@earendil-works/pi-coding-agent",
+  "manifest": "776cd99e55d6917b77209b85e071529f5959b622ab666e6acaa16de6ed9b6a92",
+  "tree": "abaa5bf07cd1d40b56d23e7201ae58bd0615892b79b728fad5e1e0b25a1c3e1c",
+  "actual_sdk_terminal_exit": 0,
+  "actual_write_edit_roundtrips": 2,
+  "source_production": "62adcde72c8b48509459d140f13dc9a89c745983",
+  "provider_calls": 0,
+  "public_changes": [],
+  "installed_wheel_acceptance": false,
+  "S2_complete": false
+}

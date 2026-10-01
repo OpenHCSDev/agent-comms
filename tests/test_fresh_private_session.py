@@ -13,7 +13,9 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_pi import NativePiUnavailable, _read_private_file, _trusted_package
 from agent_comms.thread_identity import ThreadIncarnation
-from selected_summary_cases import manual_source
+from agent_comms.owner_compaction_settings import PiCompactionSettings
+from agent_comms.pi_summary_payloads import SelectedModel
+from selected_summary_cases import manual_summary_source
 
 
 def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> None:
@@ -321,15 +323,10 @@ def test_uncertain_parent_fsync_does_not_return_enrollment(
 
 
 def _private_source(session) -> dict:
-    return {
-        "source": manual_source(session, "alice"),
-        "selected": {
-            "provider": "openrouter",
-            "modelId": "z-ai/glm-5.3-flash",
-            "contextWindow": 1000,
-        },
-        "settings": {"reserveTokens": 100, "keepRecentTokens": 2000},
-    }
+    return manual_summary_source(
+        session, "alice", selected=SelectedModel("openrouter", "z-ai/glm-5.3-flash", 1000),
+        settings=PiCompactionSettings(100, 2000),
+    )
 
 
 def test_returned_enrollment_admits_only_exact_fresh_owner_without_raw_history(

@@ -1,0 +1,32 @@
+{
+  "state": "DEPENDENT_SOURCE_INTEGRATED_NOT_INSTALLED",
+  "consumer_source": "efd0a43b34b880c5174021b5f56d249e4a1d437c",
+  "s2_api_source": "5b1bf294a05650308aa89b4f5de29d9e005d5881",
+  "parent_production_cohort_unchanged": "Core4345/Toad25d/native0064 for receiving61; this dependent474 branch is outside that package.",
+  "merge_resolution": "Kept original expanded S5 workflow/private rejected marker and receiving-only driver; updated original task_sources, task= and current_authored_sources consumer names. No compatibility reader/alias added.",
+  "original_source_seams": {
+    "fact_applicability": "RetainedTaskFacts.current_authored_sources at the original source cut",
+    "recipient_source_reader": "WireLog.compaction_messages_unlocked(original ThreadIncarnation)",
+    "context_family": "ContextSegment/TurnContext existing provenance/render/manifest",
+    "file_publication": "WireTranscriptExporter.export existing private atomic artifact writer",
+    "export_transaction": "HistoryViews.export_wire original wire lock + full_history_snapshot"
+  },
+  "owned_scope": "474 original CLI/RetainedSegment/export consumers; Sch481 owns generic TaskAttachment/Message/sourcepacking plus human pin admission.",
+  "pending_source_work": "Extend export through original fixed wire source/author/applicability, and RetainedSegment through source-owned text/provenance. Human pin/drop member is named Sch481 dependency, not an agent lease substitute.",
+  "checks": [
+    "Normal source merges, no force/reset",
+    "Production changes from S2 kept intact",
+    "Owned expanded test AST parses",
+    "Owned production/test diff check passes"
+  ],
+  "raw_evidence": "Inherited source15/original-artifact01/structural08 proof logs contain original whitespace; preserved unchanged rather than rewriting proof bytes.",
+  "new_provider_calls": 0,
+  "new_native_builds": 0,
+  "new_fixture_runs": 0,
+  "patterns": [
+    "BOUND-2 original source reader",
+    "IDEN-5 no retention ledger",
+    "TIME-9 no parallel exporter",
+    "IMPL-4 member-owned applicability"
+  ]
+}

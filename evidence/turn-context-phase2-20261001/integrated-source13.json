@@ -1,0 +1,211 @@
+{
+  "state": "NORMAL_MAIN_SOURCE_INTEGRATED_NATIVE_BUILD_AND_INSTALLED_JOURNEY_PENDING",
+  "source": "1d73b0748d7017bdee007d2420e0d3d46e0bcc86",
+  "main": "1304d0657975020c148a83f40d3b1550d6e70355",
+  "producer": "79d3aae28b2524a80cc97ed881fc6dcedcf02e09",
+  "author": "8bb259ce33e4567b7dd13695eb9f9a4d3a1c28a6",
+  "production_deletions": 444,
+  "production_additions": 1235,
+  "changed_paths": [
+    {
+      "added": 1,
+      "deleted": 1,
+      "path": "src/agent_comms/bus_publication.py"
+    },
+    {
+      "added": 85,
+      "deleted": 2,
+      "path": "src/agent_comms/cli_commands.py"
+    },
+    {
+      "added": 22,
+      "deleted": 18,
+      "path": "src/agent_comms/compaction_boundary.py"
+    },
+    {
+      "added": 17,
+      "deleted": 2,
+      "path": "src/agent_comms/exporting.py"
+    },
+    {
+      "added": 11,
+      "deleted": 10,
+      "path": "src/agent_comms/messages.py"
+    },
+    {
+      "added": 34,
+      "deleted": 10,
+      "path": "src/agent_comms/messaging.py"
+    },
+    {
+      "added": 83,
+      "deleted": 6,
+      "path": "src/agent_comms/native_entries.py"
+    },
+    {
+      "added": 23,
+      "deleted": 0,
+      "path": "src/agent_comms/native_file_artifact.py"
+    },
+    {
+      "added": 24,
+      "deleted": 0,
+      "path": "src/agent_comms/native_revision_text.py"
+    },
+    {
+      "added": 12,
+      "deleted": 2,
+      "path": "src/agent_comms/native_tools.py"
+    },
+    {
+      "added": 18,
+      "deleted": 10,
+      "path": "src/agent_comms/owner_compaction_prepare.py"
+    },
+    {
+      "added": 133,
+      "deleted": 14,
+      "path": "src/agent_comms/pi_payloads.py"
+    },
+    {
+      "added": 64,
+      "deleted": 0,
+      "path": "src/agent_comms/retained_context.py"
+    },
+    {
+      "added": 118,
+      "deleted": 31,
+      "path": "src/agent_comms/retained_task_facts.py"
+    },
+    {
+      "added": 2,
+      "deleted": 5,
+      "path": "src/agent_comms/selected_source.py"
+    },
+    {
+      "added": 0,
+      "deleted": 301,
+      "path": "src/agent_comms/task_decisions.py"
+    },
+    {
+      "added": 508,
+      "deleted": 0,
+      "path": "src/agent_comms/task_sources.py"
+    },
+    {
+      "added": 5,
+      "deleted": 5,
+      "path": "src/agent_comms/threads.py"
+    },
+    {
+      "added": 59,
+      "deleted": 27,
+      "path": "src/agent_comms/tools.py"
+    },
+    {
+      "added": 16,
+      "deleted": 0,
+      "path": "src/agent_comms/wire_log.py"
+    },
+    {
+      "added": 2,
+      "deleted": 0,
+      "path": "stack/bin/prepare-pi-native"
+    },
+    {
+      "added": 7,
+      "deleted": 0,
+      "path": "stack/native-file-artifact-schema.mjs"
+    },
+    {
+      "added": 26,
+      "deleted": 0,
+      "path": "stack/native-file-artifact.mjs"
+    },
+    {
+      "added": 39,
+      "deleted": 0,
+      "path": "stack/patch-native-file-artifact.py"
+    },
+    {
+      "added": 4,
+      "deleted": 0,
+      "path": "stack/pi-native.sha256"
+    }
+  ],
+  "protected_current_main_bytes": [
+    {
+      "path": "extensions/pi-project-sync/index.ts",
+      "sha256": "1cceb41fe65f2d58d1f9838f9314e800906a0959173beee2a21892caf2e33d69",
+      "equal_main": true
+    },
+    {
+      "path": "stack/native-import-manifest.json",
+      "sha256": "be2f8b2219ad3ec79190f8d83f65a5a8d161db1b818300e6ebd98d86c3fc7a44",
+      "equal_main": true
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "sha256": "469e3973ccde1ee734972c67706f90f40882300934a293c164dc7f9fa81942b7",
+      "equal_main": true
+    },
+    {
+      "path": "src/agent_comms/runtime_requests.py",
+      "sha256": "b411623b1aa112705afc93bf52ac7431fe43e84ca68ba3f130db67b1843d095e",
+      "equal_main": true
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "sha256": "ee34cbb3d1e53eca5faec4aa0af2563904a9a25b921cae387995f6e824e99924",
+      "equal_main": true
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "sha256": "d4ecedb47c06c7783f79e9e6dfe0ffe8a5633599cd25b9b6a05b6f7954a67a82",
+      "equal_main": true
+    },
+    {
+      "path": "src/agent_comms/selected_result.py",
+      "sha256": "3bd8c6540b579c1ca8410fac7f638d70d64bfcdf23f191e89f3f87e6f5ac4e57",
+      "equal_main": true
+    },
+    {
+      "path": "src/agent_comms/thread_execution.py",
+      "sha256": "cba9f765cb62800b319389ef7760ce99d93255ca2754d84be8615b061783b10d",
+      "equal_main": true
+    },
+    {
+      "path": "src/agent_comms/thread_presentation.py",
+      "sha256": "f89eb8fb910fcc6839001b942c2bcb9124c077f581f405845f2129a91072ecf1",
+      "equal_main": true
+    }
+  ],
+  "old_authorities_remaining": "",
+  "retired_definition": "src/agent_comms/task_decisions.py",
+  "runtime_stores_added": 0,
+  "pin_wording_source": "Message.body through certified original MessageReference; HumanConstraintPin contains no copied wording or agent lease",
+  "native": {
+    "state": "BUILD_PENDING",
+    "owner": "Sch481",
+    "default_native": "17d6e8f97d17832e4f399ccb700033f90c6c024ecb0914ab859409391defe3b5",
+    "resolution": "Retained all main rows/tree and four approved producer artifact rows; Sch generates combined native whole-tree seal. Not a full-trust accepted artifact yet.",
+    "request": "https://github.com/OpenHCSDev/agent-comms/pull/481#issuecomment-5938480559"
+  },
+  "continuous_next": {
+    "driver": "tests/turn_context_installed_journey.py --authored-operations-only",
+    "fresh_fixture": "/home/ts/wt/s5integrated01",
+    "local_posts": 2,
+    "paid_public_inputs": 0,
+    "replays": 0,
+    "max_bytes": 67108864,
+    "configured_model": "controlled localhost response-local/fixture, unchanged prior author acceptance",
+    "installed_only": true
+  },
+  "default_links": {
+    "agent-comms-acp": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/bin/agent-comms-acp",
+    "agent-comms": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/bin/agent-comms",
+    "agent-comms-agent": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/bin/agent-comms-agent",
+    "pi-comms-native": "/home/ts/.local/bin/pi-comms-native",
+    "toad": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/bin/toad"
+  }
+}
