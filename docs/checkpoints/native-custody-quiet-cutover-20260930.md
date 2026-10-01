@@ -42,6 +42,14 @@ Fresh quiet preflight must recapture current configurations, identities,
 interpreters, count and clients. Changed observations receive routine review;
 this dated observation is neither a reservation nor a quiet schedule.
 
+Read-only follow-up at00:12:46 UTC classified all four original candidates:
+Toad4091704/birth28109492 remains alive under shell4091211; its three exact
+ACP children4091743/4095946/4096144 each explicitly bind AGENT_COMMS_ROOT to
+the original public root and run body-readiness Python. The sanitized original
+process/root/parent observations are in `original-client-classification.json`.
+They require parent-owned graceful client retirement at cutover; the no-client
+guard remains unchanged. No signal was sent and no UI draft disposition inferred.
+
 ## Existing acquired custody
 
 The same outside-src `PublishNativeCustody(StoppedOwnerInstallation)` member is
