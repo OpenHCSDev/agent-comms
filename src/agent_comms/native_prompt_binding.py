@@ -28,6 +28,7 @@ from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeInputRecord, NativeInputIdText, NativeInputExecution
 from .field_codec import FieldCodec
 from .native_pi import NativePiUnavailable, read_tracked_input_digest
+from .native_entries import NativeEvidenceRead
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
@@ -232,13 +233,15 @@ def expected_prompt_binding(
         yield PromptBinding.one(db, input_id=input_id)
 
 
-def expected_prompt_matches_journal(session_file: Path, binding: PromptBinding) -> bool:
+def expected_prompt_matches_journal(
+    session_file: Path, binding: PromptBinding, *, evidence: NativeEvidenceRead | None = None
+) -> bool:
     """Join the durable journal digest to the prelaunch binding digest.
 
     A mismatch, absence, or malformed journal is NOT equality: fail closed.
     """
     try:
-        observed = read_tracked_input_digest(session_file, binding.input_id)
+        observed = read_tracked_input_digest(session_file, binding.input_id, evidence=evidence)
     except (OSError, ValueError, NativePiUnavailable):
         return False
     return observed == binding.expected_prompt_digest

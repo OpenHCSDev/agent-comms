@@ -322,7 +322,9 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
 class NativeContextProof(NativeContextRecord):
     session_file: Path
 
-    def corroborates_input(self, input_id: str, session_dir: Path) -> bool:
+    def corroborates_input(
+        self, input_id: str, session_dir: Path, *, evidence: NativeEvidenceRead | None = None
+    ) -> bool:
         """Check an already-observed live event against its isolated saved proof.
 
         This grants neither replay nor recovery authority. History IO occurs
@@ -330,7 +332,7 @@ class NativeContextProof(NativeContextRecord):
         """
         if self.input_id != input_id or self.session_file.parent != session_dir:
             return False
-        return self.read_evidence(self.session_file, input_id) == self
+        return self.read_evidence(self.session_file, input_id, evidence=evidence) == self
 
     @classmethod
     def read_evidence(
@@ -892,10 +894,17 @@ def _session_location(directory: Path, candidate: str) -> Path:
     return path
 
 
-def read_tracked_input_digest(session_file: Path, input_id: str) -> str:
+def read_tracked_input_digest(
+    session_file: Path, input_id: str, *, evidence: NativeEvidenceRead | None = None
+) -> str:
     """Corroborating digest only; this cannot authorize recovery or input replay."""
     NativeInputIdText.decode(input_id)
-    _header, entries = NativeEntry.read_evidence(Path(session_file).absolute())
+    session_file = Path(session_file).absolute()
+    if evidence is None:
+        with NativeEntry.open_evidence(session_file) as acquired:
+            return read_tracked_input_digest(session_file, input_id, evidence=acquired)
+    evidence.require_path(session_file)
+    _header, entries = evidence.observe()
     users = NativeEntry.tracked_users(entries)
     if input_id not in users:
         raise NativePiUnavailable("The specified input was never durably committed")
