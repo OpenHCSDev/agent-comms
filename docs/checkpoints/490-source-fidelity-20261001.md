@@ -176,3 +176,22 @@ it is not counted as an additional pass. No installed native/ACP/tool multi-rout
 acceptance is claimed. Final consumer migration, preserved carry, coherent staged
 pair and actual configured continuous journey remain required before Ready.
 No public mutation, original replay or new provider call occurred.
+
+### Published checkpoint and final shared-receipt sanity
+
+Production checkpoint: 369b10be7c5c7a35124556686a1ce80b2bf56ccb. After the
+receipt-owner closure, one retained final run passed 3 controls (12 deselected)
+in 1.54s. Exact output: `.artifacts/plural-builder-369b10be/receipt-owner-controls.log`.
+This final run is counted; the earlier lost output remains unclaimed above.
+
+Frozen source-derived DDL/digest receipt for Singer495:
+`docs/checkpoints/490-plural-source-ddl-369b10be.json`. Full generated definitions
+are preserved in `.artifacts/plural-builder-369b10be/{coordinator.sql,response.json,native.json}`.
+This is declaration-source evidence, not migration execution or installed proof.
+
+Remaining private-bus admission-verifier and optional-awareness producers now
+pass original SelectedSource witnesses to create(sources=), rather than supplying
+copied assignment IDs/targets. The existing actual-native coding-provider
+fixture now emits the single canonical Message-array grammar through FieldCodec;
+it was not executed and is not a native acceptance claim. These are 3 test files,
+14 added / 12 deleted; production source/DDL is unchanged from369b10be.
