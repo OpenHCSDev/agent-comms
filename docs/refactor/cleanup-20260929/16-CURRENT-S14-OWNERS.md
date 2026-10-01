@@ -479,3 +479,46 @@ original files remained byte-identical. Original diagnostics all identify262
 and the outer admission-lock failure. ToAd519107 remains live on old254;
 publication.json is absent. Frozen479 execution still requires normal client
 closure and fresh original guards; no uncertain input was replayed.
+
+## Published source checkpoints and next installed checks
+
+Text18 source7246be6e deletes41 production lines and adds246 across the original
+compositor, layout and Widget. Parent read the complete diff and original native
+closure06: PageDown0 to20 retains the same resource with zero body arrangements;
+nine scene comparisons cover nested scrolling, fixed children, End, repeated
+bottom PageDown, resizing, mutation, screen constraints and overlays. This is
+source-native acceptance, not installed Toad or foreground CPU acceptance.
+The existing bounded geometry cache now owns intrinsic versus placed resources;
+untruncated declared clip ancestry permits reprojection. Kepler identified a
+concrete remaining inherited-complete arrangement key issue and gave it directly
+to Heisenberg, the sole source owner. The previous cold-B failure stays open.
+
+Schrodinger published481 source92096124 with proof5b1bf294. Generic TaskAttachment
+and ScopedTaskDeclaration replace the choice-only family across original wire,
+publication, tools, retained facts and applicability. Constraint wording remains
+solely in Message.body; there is no parallel constraint ledger. This continuation
+deletes161 production lines and adds267 across seven files. Parent read the
+declarations and affected consumers. The original SDK file-evidence correction
+d1e6c4bb is also published: the publisher discriminator derives from its declared
+family and NativeRevisionText owns the external revision encoding. General human
+pin admission and the external once-only durable carry remain open, as do full
+repeated-compaction/S4 and new-native installed acceptance. None is live-ready.
+
+Mendel removed six explicitly reviewed unused downloaded Git copies, reclaiming
+667,435,008 exclusive bytes while retaining376,832 unique Git-object bytes and
+all original sources, installed prefixes, sessions and receipts. Additional
+authorized owner retirement reports320,864,256 exclusive bytes; parent cleared
+the exact19 pristine historical download copies in the published proposal only
+after fresh zero actual path references and preservation of unique Git objects.
+This is cache retirement, not worktree/source/history deletion.
+
+Tristan reported a separate viewer-only qualification using existing C++ outputs,
+two small wheels, one CPU and at most512MiB disposable scratch. The receiving61
+budget reserves that concurrent allowance: fresh9.125GiB minimum, aiming9.5GiB,
+for the448MiB normal package stage,64MiB receiving fixture and128MiB host reserve
+above the8GiB critical home floor. The first conditional stage grant did not
+launch because its fresh prewrite measurement fell below the previous budget.
+Queue receiving remains frozen4345bfc8/25d8e602/Text4e9016c1/Diff8fa7d4d0/native0064;
+new Text work does not block it or silently replace those pins. Einstein owns
+the continuous two-request installed receiving check, including the original
+mounted queue-to-chat visibility assertion before claiming that UI behavior.
