@@ -11,6 +11,7 @@ from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .thread_provenance import ThreadProvenance
+from .thread_execution import ThreadExecution, NativeThreadExecution
 from .pi_vocabulary import ThinkingLevel
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
@@ -69,6 +70,8 @@ class Thread(ThreadProvenance):
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     role: ThreadRole = ThreadRole.AGENT
+    execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
+                                            metadata={"wire_omit_default": True})
     active_turn: ActiveTurn | None = None
     channel_scope_generation: int = 0
     turn_generation: int = 0
@@ -202,12 +205,12 @@ class Thread(ThreadProvenance):
         return goal if goal is not None and goal.state.active else None
 
     @property
-    def decision_scope(self):
-        from .task_decisions import GoalDecisionScope, TurnDecisionScope
+    def task_scope(self):
+        from .task_sources import GoalTaskScope, TurnTaskScope
 
         goal = self.active_goal
-        return (GoalDecisionScope(project=self.worktree, goal=goal.checkpoint)
-                if goal is not None else TurnDecisionScope(project=self.worktree))
+        return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
+                if goal is not None else TurnTaskScope(project=self.worktree))
 
     def context_goal_segments(self):
         """Project this declaration's active goal without a second goal state."""
@@ -251,7 +254,8 @@ class Thread(ThreadProvenance):
     @property
     def publication_identity(self) -> ThreadPublicationIdentity:
         return ThreadPublicationIdentity(
-            self.incarnation, self.process_identity, self.role, self.session_file, self.worktree
+            self.incarnation, self.process_identity, self.role, self.session_file, self.worktree,
+            self.execution,
         )
 
     def without_turn_admission(self) -> Thread:
@@ -328,7 +332,7 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("An admitted original turn is required")
         return lease
 
-    def has_decision_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+    def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         lease = self.turn_lease
         return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 

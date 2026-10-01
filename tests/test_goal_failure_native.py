@@ -13,13 +13,17 @@ from agent_comms.comms import Comms
 from agent_comms.acp_extension import (
     CompactionChangedUpdate,
     CompactionPublishedUpdate,
+    InputDeliveryChangedUpdate,
+    QueuePromptRequest,
     decode_updates,
+    encode_request,
 )
 from agent_comms.agent_events import CompactionStart, CompactionEnd
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import SelectedSummaryAttempt
 from agent_comms.compaction_states import LinkedSummary, CommittedOperation
 from agent_comms.acp_failure import PromptFailureReceipt
+from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 from agent_comms.goal_failure_observation import read_failed_turn_projection
@@ -29,8 +33,9 @@ from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend as native_backend
 
 
+@pytest.mark.parametrize("queue_during_prepare", [False, True])
 async def test_saved_native_autonomous_goal_compacts_before_original_input(
-    native_backend, monkeypatch
+    native_backend, monkeypatch, queue_during_prepare
 ):
     """Cold saved history -> ordinary scheduler -> selected journal -> one real input.
 
@@ -122,13 +127,36 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             unknown = agent.inputs.dispositions.read().lookup(preserved)
             before_posts = native.provider.posts
             native.provider.text = "Journaled local summary and successful goal continuation."
+            queued_ids = []
+            if queue_during_prepare:
+                from agent_comms.turn_runner import TurnRunner
+
+                prepare = TurnRunner.prepare_selected_session
+
+                async def queue_before_prepare(runner, session_id, thread):
+                    if not queued_ids and session_id == sid:
+                        response = await route("session/prompt", {
+                            "sessionId": sid,
+                            "prompt": [{"type": "text", "text": "Fresh queued input during scheduled preparation"}],
+                            **encode_request(QueuePromptRequest(
+                                user_text="Fresh queued input during scheduled preparation",
+                                defer_display=True,
+                            )),
+                        }, False)
+                        queued_ids.append(next(
+                            update.input_id for update in decode_updates(response.field_meta)
+                            if isinstance(update, InputDeliveryChangedUpdate)
+                        ))
+                    return await prepare(runner, session_id, thread)
+
+                monkeypatch.setattr(TurnRunner, "prepare_selected_session", queue_before_prepare)
             agent.inputs.auto_wake = True
             agent.turns.goals.schedule_goal(sid)
             await agent.inputs.wake_tasks[sid]
             agent.inputs.auto_wake = False
             assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
-            assert len(native.saved_inputs()) == 3
-            assert native.saved_inputs()[-1]["content"][0]["text"].endswith(
+            assert len(native.saved_inputs()) == 3 + len(queued_ids)
+            assert native.saved_inputs()[2]["content"][0]["text"].endswith(
                 "Continue working toward the active goal."
             )
             # Summary generation may use several budgeted chunks. Only the
@@ -140,6 +168,10 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             assert len(originals) == 1 and originals[0].has_started
             assert originals[0].source_text == originals[0].sent_text
             assert rows.lookup(preserved) == unknown
+            for input_id in queued_ids:
+                queued = rows.lookup("acp:" + input_id)
+                assert queued.has_started and queued.has_native_binding
+                assert queued.native_id != originals[0].native_id
             entries = [json.loads(line) for line in native.session.read_text().splitlines()]
             compact = [index for index, row in enumerate(entries) if row["type"] == "compaction"]
             assert len(compact) == 1
@@ -169,7 +201,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             )
             assert any(isinstance(update, CompactionPublishedUpdate) for update in decoded)
             print(
-                f"autonomous_goal_originals=1 journaled_compactions=1 provider_posts={native.provider.posts-before_posts} original_after_commit=yes"
+                f"autonomous_goal_originals=1 queued_originals={len(queued_ids)} journaled_compactions=1 provider_posts={native.provider.posts-before_posts} original_after_commit=yes"
             )
     finally:
         await agent.shutdown()
@@ -249,6 +281,11 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert agent.inputs.dispositions.read().rows[key] == unknown
             registry = comms.registry.snapshot()
             owner = registry.threads[sid]
+            assert owner.active_turn is None
+            assert any(
+                json.loads(path.read_text()).get("reason") == FailureReason.MODEL_REQUEST_FAILED
+                for path in (comms.root / "diagnostics").glob("*.json")
+            )
             before = store.path.read_bytes()
             projected = read_failed_turn_projection(
                 store.path, owner=owner, owner_status=registry.statuses[sid],

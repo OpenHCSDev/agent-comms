@@ -29,7 +29,7 @@ d2cee72e8e69b5dc8f8d0c84944c1a341e85ed7aa283b94463bafa5b4107ea1c  dist/core/nati
 29a53e609b7a28e0976af49efb3ec0bd2334cd18f23fe8b2f2ad1b5456b51763  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
 f9224adad46d6bc83e7ebe6fe1daeb8b1f79dde278dab11ee705574ff10e8c45  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js
 bfcdccbbceac26cd561ead2009d645bd41d2e2b6608d2506babc73c1ff689d87  agent-comms-extensions/global-agent-comms/index.mjs
-aec2f02b51690af1e1555fdf64241976155f4daac7e87a8e436784b719a408c3  dist/agent-comms-imports.json
+77559b1b0b2b808e2b9b01435093760eebe4d2df2bcffb180fd98dac470bb3b1  dist/agent-comms-imports.json
 9e9c9ea5eb3e33c301c25d86bae866cc41a8ff21266badc458fcdff766d464a9  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
 c275d4a0f33742607136ec6fbeac785e301d1a8f7eb0c268f9d80f527b301150  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
 e87b99fc294377e78a6bc6019a6b21816d9ba27012f109fb2626105e0c3f1ceb  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js
@@ -47,4 +47,8 @@ d2cdfd5d0daf4c0df0f52af14773b338045d0c67ae7b564b681c34d3fab013f1  node_modules/@
 20c0e1d062855f805bad7193f781123ae79a56cabb682a87a402116f66774178  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-request-input.js
 247561c7f0dde1dd14734b03f1fc1a864895cbe93970e38f8af215d40fe4768c  dist/core/turn-context.js
 df2ebb8371c88bff73253bad57fb485965360fb959187d84a7267e2d41b618b9  dist/core/turn-context.d.ts
-# agent-comms-native-tree-v1 cc9e86f72ba7b2c285b209b3fc96a2e8dcc4f182a528941712a5dbd7e457a9d1
+176621c0f4bcfb7f3d53bca5eaf9c5b7c57d829c0e1529844e8e3ee2100d5ab9  dist/core/tools/agent-comms-file-artifact.js
+b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tools/edit.js
+233ab990ddbb3f54f19baa02ab11620da01588a664fd8da639ffe5fa268f3f0f  dist/core/tools/native-file-artifact-schema.mjs
+b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0  dist/core/tools/write.js
+# agent-comms-native-tree-v1 5a023e9f2713c1902db3cc947543f8fad191532b849e1d12899a0489184e8ce3

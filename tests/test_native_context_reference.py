@@ -11,6 +11,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import NativeInputReference, UnrecordedNativeInputReference
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.native_admission_epoch import RecordedNativeAdmission
+from agent_comms.assignment_states import TriagePendingAssignment
 
 
 def cursor():
@@ -105,7 +106,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
         # it cannot acquire a recorded triage proof.
         missing = NativeRuntimeInput.one(db, input_id=recorded.input_id)
         with pytest.raises((TypeError, ValueError)):
-            missing.execution.historical_proof(missing, **source)
+            missing.execution.historical_proof(missing, lifecycle=TriagePendingAssignment(), **source)
         for identity, decision in (("9", IgnoreSelectedTriage), ("8", FullSelectedTriage)):
             original = replace(recorded, input_id=identity * 32,
                                assignment_id=identity * 32, verdict=decision)
@@ -116,7 +117,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
             proof_source = {**source, "input_id": original.input_id,
                             "assignment_id": original.assignment_id,
                             "context": replace(source["context"], input_id=original.input_id)}
-            proof = actual.execution.historical_proof(actual, **proof_source)
+            proof = actual.execution.historical_proof(actual, lifecycle=TriagePendingAssignment(), **proof_source)
             assert isinstance(proof, TriageHistoricalNativeInput)
             assert proof.decision is decision
             assert proof.proves_triage_source((proof,)) == (decision is IgnoreSelectedTriage)
@@ -128,13 +129,14 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
                        attempt_ordinal=1, verdict=None)
         full.insert(db)
         actual = NativeRuntimeInput.one(db, input_id=full.input_id)
-        proof = actual.execution.historical_proof(actual, **{**source, "input_id": full.input_id})
+        proof = actual.execution.historical_proof(actual, lifecycle=TriagePendingAssignment(),
+                                                 **{**source, "input_id": full.input_id})
         assert isinstance(proof, FullHistoricalNativeInput)
         assert "decision" not in {item.name for item in fields(proof)}
         assert not proof.proves_triage_source((proof,))
         with pytest.raises((TypeError, ValueError)):
             replace(actual, verdict=IgnoreSelectedTriage).execution.historical_proof(
-                replace(actual, verdict=IgnoreSelectedTriage), **source,
+                replace(actual, verdict=IgnoreSelectedTriage), lifecycle=TriagePendingAssignment(), **source,
             )
         with pytest.raises(TypeError):
             TriageHistoricalNativeInput(execution=TriageNativeExecution(), **source)

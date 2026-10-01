@@ -27,9 +27,9 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal
 from .messages import MessageType
-from .task_decisions import (
-    CurrentDecisionScopeSelection, Decision, DecisionChange,
-    DecisionScopeSelection, OriginalDecisionChange,
+from .task_sources import (
+    CurrentTaskScopeSelection, Constraint, Decision, TaskChange,
+    TaskScopeSelection, OriginalTaskChange,
 )
 from .thread_identity import TurnId
 from .relationships import RelationshipEdit
@@ -98,6 +98,9 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
     def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
         return True
 
+    @classmethod
+    def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
+        return cls.available_for(status, owner_pid=thread.pid)
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
         return {
@@ -202,6 +205,12 @@ def _bounded_inbox_response(
     return bounded
 
 
+class NativeOwnerCommand:
+    @classmethod
+    def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
+        return thread.execution.native_command_available(cls, status, owner_pid=thread.pid)
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsPinChannelTool(ToolRequest):
     label = "Pin Channel"
@@ -238,7 +247,7 @@ class CommsPinThreadTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsModelTool(ToolRequest):
+class CommsModelTool(NativeOwnerCommand, ToolRequest):
     label = "Change Thread Model"
     description = (
         "Change this thread's model, or another thread's model, for its future turns. "
@@ -650,36 +659,68 @@ class CommsSendTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsDecisionTool(ToolRequest):
+class CommsAuthoredTaskTool(ToolRequest):
+    """One original admitted publication path for authored task declarations."""
+    target: str = tool_field("Thread or channel receiving the original declaration", wire_name="to")
+    scope: TaskScopeSelection = tool_field(
+        "Current project/goal or explicit scope", default=CurrentTaskScopeSelection())
+    change: TaskChange = tool_field(
+        "Original declaration or correction naming its original reference",
+        default=OriginalTaskChange())
+
+    @abstractmethod
+    def declaration(self, owner): ...
+
+    @abstractmethod
+    def original_body(self, declaration): ...
+
+    def apply(self, comms):
+        owner = comms.registry.require(_executing_thread())
+        declaration = self.declaration(owner)
+        message = comms.messaging.send_message(
+            owner.name, self.target, self.original_body(declaration),
+            notice=True, task=declaration)
+        return {"reference": FieldCodec.encode(message.reference),
+                "task": FieldCodec.encode(message.task)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsDecisionTool(CommsAuthoredTaskTool):
     label = "Record Decision"
     description = (
-        "Record a chosen alternative and its valid rejected alternatives on one original "
+        "Record a chosen alternative and valid rejected alternatives on its original "
         "wire message. Author and source turn come from your admitted execution. "
-        "Defaults to the current project and active goal revision, or current turn. "
-        "A correction must name the original message reference; recording grants no execution."
-    )
+        "Defaults to current project/goal revision or current turn; corrections name "
+        "the original reference and grant no execution.")
     chosen: str = tool_field("Chosen alternative, preserving exact wording")
     rejected: tuple[str, ...] = tool_field("Nonempty unique valid rejected alternatives")
-    target: str = tool_field("Thread or channel receiving the original declaration", wire_name="to")
-    scope: DecisionScopeSelection = tool_field(
-        "Current project/goal or explicit scope", default=CurrentDecisionScopeSelection())
-    change: DecisionChange = tool_field(
-        "Original declaration or correction naming its original reference",
-        default=OriginalDecisionChange())
 
-    def apply(self, comms: Comms) -> JsonObject:
-        owner = comms.registry.require(_executing_thread())
-        lease = owner.require_turn_lease()
-        declaration = Decision(
-            chosen=self.chosen, rejected=self.rejected,
-            scope=self.scope.select(owner),
-            source_turn=lease.identity, source_turn_id=TurnId(lease.turn_id),
-            change=self.change,
-        )
-        message = comms.messaging.send_message(
-            owner.name, self.target, declaration.text, notice=True, decision=declaration
-        )
-        return {"reference": FieldCodec.encode(message.reference), "decision": FieldCodec.encode(message.decision)}
+    def declaration(self, owner):
+        return Decision.from_admission(owner, self.scope, self.change,
+                                       chosen=self.chosen, rejected=self.rejected)
+
+    def original_body(self, declaration):
+        return declaration.text
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsConstraintTool(CommsAuthoredTaskTool):
+    label = "Record Constraint"
+    description = (
+        "Declare an exact authored restriction on its original wire message; wording "
+        "is retained verbatim. This records your admitted authorship, not inferred "
+        "human authority. Defaults to current project/goal revision or current turn. "
+        "Corrections name the original constraint reference; no execution or replay "
+        "is authorized.")
+    text: str = tool_field("Exact authored restriction, never a paraphrase of another source")
+
+    def declaration(self, owner):
+        return Constraint.from_admission(owner, self.scope, self.change)
+
+    def original_body(self, declaration):
+        if not self.text.strip():
+            raise ValueError("An authored constraint requires exact nonempty wording")
+        return self.text
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -732,7 +773,7 @@ class CommsInboxTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsForkTool(ToolRequest):
+class CommsForkTool(NativeOwnerCommand, ToolRequest):
     label = "Comms Fork"
     description = "Fork a child agent thread from a registered parent's persistent session."
     context = "thread"
@@ -770,7 +811,7 @@ class OwnerLifecycleControl:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStopTool(OwnerLifecycleControl, ToolRequest):
+class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     label = "Stop Comms Thread"
     description = "Stop a thread after verifying that its process owns the registered identity."
     context = "thread"
@@ -783,7 +824,7 @@ class CommsStopTool(OwnerLifecycleControl, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStartTool(OwnerLifecycleControl, ToolRequest):
+class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     label = "Start Comms Thread"
     description = (
         "Start a stopped agent thread with its saved conversation and configuration. "
@@ -804,7 +845,7 @@ class CommsStartTool(OwnerLifecycleControl, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsQueueRestartTool(OwnerLifecycleControl, ToolRequest):
+class CommsQueueRestartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     label = "Queue Idle Owner Restart"
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "

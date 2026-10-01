@@ -95,12 +95,12 @@ class NativePiPromptRejected(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
-    from .private_nk_entrypoint import private_nk_from_environment
+    from .private_nk_entrypoint import PrivateNkLaunch
 
-    launch = private_nk_from_environment()
+    launch = PrivateNkLaunch.current()
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
-    cli = _trusted_package(launch.native_package)
+    cli = launch.validate()
     environment = dict(os.environ)
     # Global extensions invoke this installation's console tools. Services
     # need not inherit an activated virtualenv or an interactive shell PATH.
@@ -438,15 +438,16 @@ class NativePiRpcLaunch:
         import hashlib
 
         from .native_package import MANIFEST
-        from .private_nk_entrypoint import private_nk_from_environment
+        from .private_nk_entrypoint import PrivateNkLaunch
 
         stack_launcher = MANIFEST.parent / "bin" / "pi-native"
         executable = (
             Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
         )
-        route = private_nk_from_environment()
+        route = PrivateNkLaunch.current()
         if route is not None:
             package = route.native_package
+            route.validate()
         elif executable is not None and executable == stack_launcher.resolve():
             build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
             package = (
@@ -454,6 +455,7 @@ class NativePiRpcLaunch:
                 / f".pi-native-{build}"
                 / "node_modules/@earendil-works/pi-coding-agent"
             )
+            _trusted_package(package)
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
@@ -463,7 +465,6 @@ class NativePiRpcLaunch:
         )
         if executable is not None and executable not in allowed:
             raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
-        _trusted_package(package)
         return package
 
     @classmethod

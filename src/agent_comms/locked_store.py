@@ -72,9 +72,9 @@ class LockedStore(ABC, Generic[T]):
             yield lock.descriptor
 
     @contextmanager
-    def reading(self) -> Iterator[T]:
+    def reading(self, *, blocking: bool = True) -> Iterator[T]:
         """Keep a shared lock through a dependent projection or source check."""
-        with self.locked(shared=True):
+        with self.locked(shared=True, blocking=blocking):
             yield self._read_unlocked()
 
     def read(self) -> T:

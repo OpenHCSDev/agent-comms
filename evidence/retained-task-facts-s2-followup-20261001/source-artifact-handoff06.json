@@ -1,0 +1,81 @@
+{
+  "state": "SOURCE_PRODUCER_AND_RETAINED_CUT_CHECKPOINT_NOT_PACKAGE_READY",
+  "head": "28c08fc435f25ad328cd45599b4cccebceff21a5",
+  "foundation_main": "91db3971",
+  "production_sha256": {
+    "src/agent_comms/compaction_boundary.py": "2e9b8ce11ba617308bfb7a0b7d595df9bbfc350745fd50a42448e5bfb84187bf",
+    "src/agent_comms/native_entries.py": "27a6397415e3e8210d7ae4aba553610e274893b25564248e00ddfcdf1d49689c",
+    "src/agent_comms/native_file_artifact.py": "eba385f741888040dba90b5e455a69193c72b04ee8a1f6d4345334fa78986c32",
+    "src/agent_comms/native_tools.py": "cd90b8025336f294f761dd0b29ffae24086be8ef0fbb7ccd718434a5adf32ba3",
+    "src/agent_comms/owner_compaction_prepare.py": "002bf934507f69a5d16005ffb2bfb544eaa07e5f6ac414dc0048b4b4098267ea",
+    "src/agent_comms/pi_payloads.py": "36998720349eb2675d0172bb88b645c42ba5aa56bc471e64bd2c2f4bcc933833",
+    "src/agent_comms/retained_task_facts.py": "2c73b92854c539c0ede0739ae21574ed2d1bb0474724fb109891e86fd870a62d",
+    "stack/bin/prepare-pi-native": "50dd8ead9b2cb356a65c0f697140ad15948700aed9b407c43305d6d921876e48",
+    "stack/native-file-artifact.mjs": "dde3e1a7ec4662238bf5c4fdb188aaa8092f72d9a541bba6e201b9b8bdcce227",
+    "stack/patch-native-file-artifact.py": "c4be9e03e434b73630f42216c1d5017fb3ea21ed69a4a56e2d27089df63fa534"
+  },
+  "source_controls": [
+    {
+      "receipt": "original-artifact01.txt",
+      "result": "6pass/2fail: missing fixture protocol marker and valid external array details not normalized; originals preserved"
+    },
+    {
+      "receipt": "original-artifact02.txt",
+      "result": "8pass0.87s: local original producer, seeded native source, held cut, opaque ancestry, distinct pairs, failed/off-branch exclusion, later file change, stale source and edit external formats"
+    },
+    {
+      "receipt": "original-artifact03.txt",
+      "result": "changed read-before-bus-lock/source-coordinate lifetime case1pass0.30s"
+    },
+    {
+      "receipt": "sdk-recipe04/receipt.json",
+      "result": "exact copied SDK write/edit source patch seams+3JS syntax checks only; no packaged SDK execution"
+    }
+  ],
+  "debt_ratchet": {
+    "receipt": "artifact-ratchet05.json",
+    "exit_code": 0,
+    "positive_numeric_delta": {}
+  },
+  "determining_producer": "CompletedFileMutation.write original buffer and successful default local fsWriteFile under SDK mutation queue",
+  "original_owner_relation": "same ToolResult metadata -> one NativeToolDetails FieldCodec decode -> declared Write/Edit capability -> witnessed original native branch call/result -> existing JournalProvenance pair -> immutable exact fact -> existing retained packing/commit",
+  "lock_relation": "original native writer fence encloses source decode before bus/registry/input locks; HeldCompaction rechecks exact native revision",
+  "not_claimed": [
+    "packaged SDK tool execution",
+    "new native module/import/tree pin verification",
+    "installed/native selected checkpoint",
+    "current inode/repository revision/symbol identity",
+    "three compactions",
+    "S4 recall",
+    "full S2 readiness"
+  ],
+  "current_frozen_native": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "frozen_manifest_changed": false,
+  "new_native_build": false,
+  "native_builder_recipe_changed_pending_new_pins": true,
+  "new_paid_provider_calls": 0,
+  "replayed_original_inputs": 0,
+  "public_changes": [],
+  "resource_readout": {
+    "home_free_gib": 8.4,
+    "ram_available_gib": 19.8,
+    "swap_used_gib": 13.6,
+    "level": "warning",
+    "expensive_build_or_gate": "await reviewed resource grant"
+  },
+  "remaining": [
+    "normal new artifact/pins after grant",
+    "actual SDK/native/ACP source and selected retention gate",
+    "general constraints",
+    "repository/symbol/rename/delete determining producers",
+    "automatic exact backstop/recent window/tool pair custody",
+    "three native checkpoints",
+    "separate S4"
+  ],
+  "patterns": [
+    "IDEN-5",
+    "BOUND-2",
+    "MEMB-1",
+    "TIME-6"
+  ]
+}

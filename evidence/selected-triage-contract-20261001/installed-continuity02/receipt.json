@@ -1,0 +1,13 @@
+{
+  "original_root": "/var/tmp/ac-sealed-test-nunsquwp",
+  "wire_root_id": "d1a63be3214d47ed832b440b3d1a836a",
+  "native_package": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent",
+  "saved_restart": false,
+  "contended_cursor": false,
+  "rejected_triage_continuity": true,
+  "localhost_posts": 4,
+  "provider_failures": [],
+  "owners_stopped": true,
+  "server_thread_alive": false,
+  "wire_sha256": "383288889bd25c25d2de5fdbac6e6a28367461ae70d17ce21e78214cf455b786"
+}

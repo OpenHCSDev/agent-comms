@@ -75,6 +75,7 @@ class RegistryOwner:
             raise StaleFence("registry owner has no active turn")
         try:
             self.thread.role.require_executable()
+            self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("registry owner is not executable") from error
         if not turn.owned_by(self.thread.pid, self.admission_generation):
@@ -152,5 +153,6 @@ class ParticipantOwner:
             raise StaleFence("cohort recipient is not this live registered owner generation")
         try:
             self.thread.role.require_executable()
+            self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("cohort participant is not executable") from error

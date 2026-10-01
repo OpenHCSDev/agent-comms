@@ -38,12 +38,23 @@ def main():
     tool_cli.chmod(0o700)
     environment = dict(os.environ, PI_CODING_AGENT_DIR=str(agent), PI_WORKTREE=str(project),
                        AGENT_COMMS_MANAGED="1", AGENT_COMMS_ROOT=str(root / "wire"),
-                       PYTHONPATH=str(repo / "src"), PI_OFFLINE="1",
+                       PI_OFFLINE="1",
                        NODE_DISABLE_COMPILE_CACHE="1", PATH=f"{commands}:{os.environ['PATH']}")
     for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE", "PI_PARENT_ID", "PI_AGENT_ID",
-                 "AGENT_COMMS_THREAD"):
+                 "AGENT_COMMS_THREAD", "PYTHONPATH", "AGENT_COMMS_PRIVATE_NK_ROOT_ID", "AGENT_COMMS_PRIVATE_NK_PACKAGE"):
         environment.pop(name, None)
     environment["AGENT_COMMS_THREAD"] = "native-startup-fixture"
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.comms import Comms
+    from agent_comms.runtime_requests import ProjectRuntimeRequest
+    from agent_comms.threads import Thread
+
+    comms = Comms(root / "wire")
+    thread = Thread("native-startup-fixture", frozenset(), str(project),
+                    process_identity=ProcessIdentity.capture(os.getpid()))
+    comms.registry.declare(thread)
+    environment.update(ProjectRuntimeRequest.for_native(comms.registry.snapshot(), thread)
+                       .environment(comms.root))
     spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/test-native-import-rpc.py")
     isolation = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(isolation)
@@ -86,7 +97,7 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
             "cwd":str(project)}) + "\n")
         session.chmod(0o600)
     child = subprocess.Popen(prefix + ["--import", str(package / "dist/agent-comms-project-bootstrap.mjs"),
-        str(package / "dist/cli.js"), "--offline", "--mode", "rpc", "--session", str(session)],
+        str(package / "dist/cli.js"), "--offline", "--mode", "rpc", "--session-dir", str(root), "--session", str(session)],
         cwd=project, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, text=True, preexec_fn=deny)
     reply = None
