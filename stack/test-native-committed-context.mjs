@@ -82,7 +82,7 @@ try {
         assert.ok(bytes<=policy.inputBytes(model,actualSettings.reserveTokens));
         const session={getContextUsage:AgentSession.prototype.getContextUsage,sessionManager:reopened,model,settingsManager:{getCompactionSettings:()=>actualSettings},agent:{state:{messages:[]}}};
         SessionContext.restore(session);
-        assert.equal(session.storedContext.requiresCompaction(),false,'actual restored context must be admitted');
+        session.storedContext.requireReady();
         const last=reopened.entryStore.latest(reopened.getLeafId(),'compaction');
         assert.deepEqual(last.details.readFiles,paths.sort());
         reopened.entryStore.close();
