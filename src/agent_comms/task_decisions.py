@@ -98,8 +98,8 @@ class DecisionChange(DeclaredFamily, affix="DecisionChange"):
                             original_source: CertifiedSourceRead | None) -> None: ...
 
     @abstractmethod
-    def root_reference(self, reference: MessageReference,
-                       originals: dict[MessageReference, MessageReference]) -> MessageReference: ...
+    def root_source(self, message: Message,
+                    originals: dict[MessageReference, Message]) -> Message: ...
 
 
 @dataclass(frozen=True)
@@ -107,15 +107,15 @@ class OriginalDecisionChange(DecisionChange, declared_name="original"):
     def require_publication(self, decision, registry, original_source) -> None:
         pass
 
-    def root_reference(self, reference, originals):
-        return reference
+    def root_source(self, message, originals):
+        return message
 
 
 @dataclass(frozen=True)
 class CorrectionDecisionChange(DecisionChange, declared_name="correction"):
     original: MessageReference
 
-    def require_publication(self, decision, registry, original_source) -> None:
+    def require_original(self, original_source: CertifiedSourceRead | None) -> Message:
         if original_source is None:
             raise RelationViolationError("Decision correction requires the original publication read")
         from .private_bus_checkpoint import source_references_unlocked
@@ -123,9 +123,13 @@ class CorrectionDecisionChange(DecisionChange, declared_name="correction"):
         original, = source_references_unlocked(original_source, (self.original,))
         if original.reference != self.original:
             raise RelationViolationError("Decision correction requires its original wire reference")
+        return original
+
+    def require_publication(self, decision, registry, original_source) -> None:
+        original = self.require_original(original_source)
         decision.require_correction(original, registry)
 
-    def root_reference(self, reference, originals):
+    def root_source(self, message, originals):
         try:
             return originals[self.original]
         except KeyError as error:
@@ -136,9 +140,19 @@ class DecisionAttachment(DeclaredFamily, affix="DecisionAttachment"):
     """Absent attachments have no publication, fact or author effects."""
 
     retains_authored_choice = False
+    permits_agent_revision = False
 
     def require_decision(self) -> Decision:
         raise RelationViolationError("Original wire message has no declared decision")
+
+    def require_user_supersession(self) -> UserDecisionSupersession:
+        raise RelationViolationError("Original wire message has no declared user supersession")
+
+    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+        raise RelationViolationError("Ordinary message is not a decision lineage event")
+
+    def revises_after(self, previous: Message) -> bool:
+        raise RelationViolationError("Ordinary message cannot revise a declared choice")
 
     def require_sender(self, sender: str) -> None:
         pass
@@ -149,10 +163,44 @@ class DecisionAttachment(DeclaredFamily, affix="DecisionAttachment"):
     def retained_task_facts(self, message: Message):
         return ()
 
+    def user_task_facts(self, message: Message):
+        from .retained_task_facts import UserSourceTaskFact
+
+        return (UserSourceTaskFact(message),)
+
 
 @dataclass(frozen=True)
 class NoDecision(DecisionAttachment, declared_name="absent"):
     pass
+
+
+@dataclass(frozen=True)
+class UserDecisionSupersession(DecisionAttachment, declared_name="user_supersession"):
+    """The human's exact correction stays on its original enclosing Message.
+
+    This event retires a declared choice; it does not infer replacement valid
+    alternatives, mint a model turn, or rewrite the original author's record.
+    """
+
+    change: CorrectionDecisionChange
+
+    def require_user_supersession(self) -> UserDecisionSupersession:
+        return self
+
+    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+        return self.change.root_source(message, originals)
+
+    def revises_after(self, previous: Message) -> bool:
+        return True
+
+    def require_publication(self, sender, registry, original_source) -> None:
+        registry.require(sender).role.require_user()
+        self.change.require_original(original_source).require_decision()
+
+    def user_task_facts(self, message: Message):
+        from .retained_task_facts import UserDecisionCorrectionTaskFact
+
+        return (UserDecisionCorrectionTaskFact(message),)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -165,9 +213,16 @@ class Decision(DecisionAttachment, declared_name="choice"):
     change: DecisionChange = field(default_factory=OriginalDecisionChange,
                                    metadata={"wire_omit_default": True})
     retains_authored_choice = True
+    permits_agent_revision = True
 
     def require_decision(self) -> Decision:
         return self
+
+    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+        return self.change.root_source(message, originals)
+
+    def revises_after(self, previous: Message) -> bool:
+        return previous.decision.permits_agent_revision
 
     def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool:
         return (self.author.current(registry)

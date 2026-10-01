@@ -65,6 +65,27 @@ class CurrentDecisionTaskFact(DecisionTaskFact, declared_name="current_decision"
 
 
 @dataclass(frozen=True)
+class UserDecisionCorrectionTaskFact(UserSourceTaskFact, declared_name="historical_user_correction"):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.source.decision.require_user_supersession()
+
+    def choices(self) -> tuple[Message, ...]:
+        return (self.source,)
+
+    def for_decisions(self, current: frozenset[MessageReference]) -> ExactTaskFact:
+        if self.source.reference in current:
+            return CurrentUserDecisionCorrectionTaskFact(self.source)
+        return UserDecisionCorrectionTaskFact(self.source)
+
+
+@dataclass(frozen=True)
+class CurrentUserDecisionCorrectionTaskFact(UserDecisionCorrectionTaskFact,
+                                            declared_name="current_user_correction"):
+    """The exact human correction selected through its original decision scope."""
+
+
+@dataclass(frozen=True)
 class ClaimTaskFact(ExactTaskFact):
     source: Message
 
@@ -94,16 +115,17 @@ class RetainedTaskFacts:
         These local maps live only for this read and have no update lifecycle.
         All original records remain present in the immutable source evidence.
         """
-        originals: dict[MessageReference, MessageReference] = {}
-        effective: dict[MessageReference, Message] = {}
+        originals: dict[MessageReference, Message] = {}
+        effective: dict[MessageReference, tuple[Message, Message]] = {}
         for fact in self.facts:
             for message in fact.choices():
-                decision = message.require_decision()
-                root = decision.change.root_reference(message.reference, originals)
+                root = message.decision.root_source(message, originals)
                 originals[message.reference] = root
-                effective[root] = message
-        return tuple(message for message in effective.values()
-                     if message.require_decision().applies(owner, registry))
+                _, previous = effective.get(root.reference, (root, root))
+                if message.decision.revises_after(previous):
+                    effective[root.reference] = (root, message)
+        return tuple(message for root, message in effective.values()
+                     if root.require_decision().applies(owner, registry))
 
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""

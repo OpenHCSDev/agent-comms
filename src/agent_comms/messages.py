@@ -117,11 +117,11 @@ class Message:
 
     def retained_task_facts(self):
         from .retained_task_facts import (
-            ClaimTaskFact, UserSourceTaskFact,
+            ClaimTaskFact,
         )
 
         if self.sender_role is ThreadRole.USER:
-            yield UserSourceTaskFact(self)
+            yield from self.decision.user_task_facts(self)
         yield from self.decision.retained_task_facts(self)
         if self.claim_transition is not None:
             yield ClaimTaskFact(self)

@@ -155,6 +155,10 @@ class ThreadRole(StrEnum):
         if not self.executable:
             raise RelationViolationError("thread role does not execute owner turns")
 
+    def require_user(self) -> None:
+        if self is not self.USER:
+            raise RelationViolationError("A user correction requires the original human sender")
+
 
 @dataclass(frozen=True, slots=True)
 class ThreadPublicationIdentity:

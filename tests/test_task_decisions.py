@@ -178,6 +178,49 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
     assert (comms.root / "bus.jsonl").read_bytes() == before
 
 
+def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
+    from agent_comms.retained_task_facts import CurrentUserDecisionCorrectionTaskFact, RetainedTaskFacts
+    from agent_comms.routing import DeliveryScope
+    from agent_comms.task_decisions import CorrectionDecisionChange, UserDecisionSupersession
+
+    owner = admit(comms, "alpha")
+    owner = replace(owner, goal=Goal("Keep project scope", "goal", revision=1))
+    comms.registry.register(owner)
+    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    request = {"chosen": "/artifacts/old", "rejected": ["/scratch/guess"], "to": "#team"}
+    first = invoke_tool(comms, "comms_decision", request)
+    original = comms.bus.log.full_history()[0]
+    declaration = UserDecisionSupersession(CorrectionDecisionChange(original.reference))
+    before = (comms.root / "bus.jsonl").read_bytes()
+    with pytest.raises(RelationViolationError, match="human sender"):
+        comms.bus.publisher.publish_ordinary(
+            Message(owner.name, "#team", "A peer is not the user", MessageType.INFO, decision=declaration))
+    assert (comms.root / "bus.jsonl").read_bytes() == before
+    corrected = comms.messaging.send_user_message(
+        "#team", "Retract the old path choice. Never replay UNKNOWN.",
+        worktree=owner.worktree, decision=declaration)
+    assert corrected.decision == declaration
+    invoke_tool(comms, "comms_decision", {
+        **request, "chosen": "/artifacts/peer-later",
+        "change": {"kind": "correction", "original": first["reference"]},
+    })
+    snapshot = comms.registry.snapshot()
+    with comms.bus.log.locked():
+        _, facts = comms.bus.log.compaction_messages_unlocked(
+            DeliveryScope(owner.name, snapshot.aliases, frozenset({"#team"})))
+    retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
+    assert len(retained.facts) == 3
+    assert retained.current_decisions(owner, snapshot) == (corrected,)
+    current, = tuple(fact for fact in retained.facts if isinstance(fact, CurrentUserDecisionCorrectionTaskFact))
+    assert current.source == corrected
+    assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
+    assert original.decision.chosen in retained.text and original.decision.rejected[0] in retained.text
+    from agent_comms.comms import Comms
+
+    reopened = Comms(comms.root)
+    assert reopened.bus.log.full_history()[1] == corrected
+
+
 def test_original_goal_input_and_user_sources_share_compaction_fence(comms, monkeypatch):
     from agent_comms.compaction_boundary import CompactionBoundary
     from agent_comms.input_attempt import NotSentInput
