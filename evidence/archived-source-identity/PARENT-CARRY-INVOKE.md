@@ -43,9 +43,15 @@ ORIGINAL_WRITER_PYTHON retained_index_writer.py ARCHIVE_ROOT TARGET_PYTHON insta
 
 There is one invocation for each declared source above. This is not the public
 main-root restart command: parent supplies the selected old-schema writer inside
-the existing quiet operation. The exact original-reader prefix remains parent's
-retained launch authority; a newer default/installed04 prefix is NOT a substitute
-for this old-schema writer. Do not create a legacy reader or cloned package.
+the existing quiet operation. The exact original-reader prefix is now verified:
+`/home/ts/.local/share/agent-comms/runtime-canonical-native-checkpoint-20260929/bin/python`
+(Core72062939239b0f07707406309305a056a23f925f). Both original archives passed
+WireLog-only original locks/seals with all bytes/revisions unchanged; see
+OLD720-WIRELOG-PREFLIGHT.md. Parent remains retained launch authority; a newer
+default/installed04 prefix is NOT a substitute for this old-schema writer.
+Do not create a legacy reader or cloned package. Parent's writer-file claim must
+construct WireLog directly: Comms(root) would unnecessarily decode the archived
+registry. There is no registry dependency in the demonstrated source lock API.
 
 The original writer obtains/verifies its existing bus certificate first. Before
 its marker/derived-DB transition, the release hook must preserve the preimages
