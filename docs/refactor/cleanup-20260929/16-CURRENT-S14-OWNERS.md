@@ -433,11 +433,18 @@ pass; the changed installed receiving path is still pending. Receiving-command
 preparation61 uses the original runner, one editor/image input and one active
 followup, two controlled local requests, and no repeated compaction or paid run.
 
-Arendt owns the concrete live-PID/unbound-session admission failure in new draft
-Core482, `fix/runtime-session-admission-20261001`. Einstein supplied actual48's
+Arendt's concrete live-PID/unbound-session admission fix is now merged in
+Core482 as65d6cfe9, from exact reviewed17944031. Einstein supplied actual48's
 ACP log and complete caller trace. Normal fork lifecycle establishes the binding
 before runtime start; that path has not been demonstrated broken by this failure.
 The repair belongs to original runtime admission, without a second binding store.
+Parent read the actual normal-wheel CLI and Unix-socket runner/log: before binding,
+prompt and goal-history requests receive typed -32602 with no input effect;
+original bind_owned then permits a fresh goal read and canonical rename preserves
+the official logical ACP session. Acceptance passes0.628s, whole wall2.32s,
+peak88MiB,305 Python files match the source, with no native/provider/public input
+or replay. Production5 lines deleted,12 added. Einstein473 normally integrated
+this main as4345bfc8; the queue source and receiving driver remain unchanged.
 
 Full481's original SDK filesystem evidence checkpoint28c08fc4 is code-bearing:
 successful default write/edit returns evidence from the original operation;
