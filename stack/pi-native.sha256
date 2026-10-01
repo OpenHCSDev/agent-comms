@@ -1,8 +1,9 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
 f22bce669fad6f4cfe853dbcd606a3e3f4b60d225636b7d7603fbfcc7d933b17  dist/core/agent-session.js
-1ac63aa7598f1d8c4850acaf514ecc86126048e9a33654ad63e08f9e53f07f9e  dist/core/compaction/compaction.js
+bfb76a0e347c27dd0d09e87b15d2b6e6d6ac7c4f9a9eb7073d05bf8dee048686  dist/core/compaction/compaction.js
+22b5629822ee21718882966f368f50f389006aee93fd8ee044760140c4cbd029  dist/core/compaction/compaction.d.ts
 4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67  dist/core/session-manager.js
-adfd33de8dfc0833607fc14fc909dd7559d8b1d1d88b25ba064daeaefd9cc589  dist/modes/rpc/rpc-mode.js
+0d0e0118253c8c721555e3154f14ca394700e1d3c589866d7129a78a35607b64  dist/modes/rpc/rpc-mode.js
 7ce29f9d380239cc84c0501bd2d282e5884d318b94f061c127e7aab07c65cbb9  dist/core/agent-session.d.ts
 79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0  dist/core/session-manager.d.ts
 5937d70149822f9f27781d66b765199479a08d2c6e1edeeeb3ae17e1bbec3dfe  dist/modes/rpc/rpc-types.d.ts
@@ -12,7 +13,7 @@ a2807c7397e69f560e9dc6f40b3b266cbd6f09da57826ad7012c5553638f6043  node_modules/@
 07bae37d12469f43b003c9e874263f40c1e3e7584d45b44e8ce1a25c2139c54f  node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
 845edb9a4509f79bf973310a37dafa7adb1110dd77e88bfbe5e1c00292dbac68  node_modules/@earendil-works/pi-ai/dist/types.d.ts
 2f419e00e26c32462a8643d694fcfb8d793cf7119a1995023f19b3acbc492059  node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
-144507e9cbf3c8f99fe403c91ea0fff3ca11cc3249bced63d16d8c7533b7754d  dist/core/compaction/agent-comms-policy.js
+e01c8f7ca5dc1c2b668c64125137559f315ba643fe477380dc6563798e39a2d1  dist/core/compaction/agent-comms-policy.js
 5aa2488a9695a629a5057659161a0fadac9f6dadd6eee3b5dbd73864ddb7a0c5  dist/core/extensions/loader.js
 103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e  dist/core/package-manager.js
 3d951c06ade63eb2e965f9a1b26b9bc7541afb5a5dbd44a7da041af7b0af1c06  dist/core/agent-session-services.js
@@ -46,4 +47,4 @@ d2cdfd5d0daf4c0df0f52af14773b338045d0c67ae7b564b681c34d3fab013f1  node_modules/@
 20c0e1d062855f805bad7193f781123ae79a56cabb682a87a402116f66774178  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-request-input.js
 2e98f07933048e7067e9d14248ec9752ec58d85ba76bff0e54b90610f9bc2ef6  dist/core/turn-context.js
 16b42a11dd7f7a0e9847e168eb9a9e27acb158504c41bb3a10a7119a704c39e8  dist/core/turn-context.d.ts
-# agent-comms-native-tree-v1 2bca65e0934d2d71aeb054ef816762531649d18176a21bfb2e6432b724115d59
+# agent-comms-native-tree-v1 a2b40e1da14b8db418c4d950c703273942a51ced0021e1280dea9b1625fbcd9f

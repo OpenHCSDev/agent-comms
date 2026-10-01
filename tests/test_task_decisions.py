@@ -94,7 +94,6 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
 
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
     from agent_comms.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
-    from agent_comms.routing import DeliveryScope
 
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep certified root", "goal", revision=1))
@@ -116,7 +115,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     snapshot = comms.registry.snapshot()
     with comms.bus.log.locked():
         _, facts = comms.bus.log.compaction_messages_unlocked(
-            DeliveryScope(renamed.name, snapshot.aliases, frozenset({"#team"})))
+            renamed.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(renamed, snapshot)
     rows = comms.bus.log.full_history()
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(row.reference for row in rows)
@@ -179,7 +178,6 @@ def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monke
 
 def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_choice(comms, monkeypatch):
     from agent_comms.retained_task_facts import CurrentUserDecisionCorrectionTaskFact, RetainedTaskFacts
-    from agent_comms.routing import DeliveryScope
     from agent_comms.task_decisions import CorrectionDecisionChange, UserDecisionSupersession
 
     owner = admit(comms, "alpha")
@@ -206,7 +204,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     snapshot = comms.registry.snapshot()
     with comms.bus.log.locked():
         _, facts = comms.bus.log.compaction_messages_unlocked(
-            DeliveryScope(owner.name, snapshot.aliases, frozenset({"#team"})))
+            owner.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
     assert len(retained.facts) == 3
     assert retained.current_decisions(owner, snapshot) == (corrected,)
