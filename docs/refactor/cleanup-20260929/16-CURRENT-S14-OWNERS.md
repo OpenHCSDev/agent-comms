@@ -145,3 +145,24 @@ through the existing content owner: preserve stable chrome, hydrate only the cha
 region, and use one construction authority. Ctrl+h is a diagnostic path, not
 acceptance of the failed button. Core477 SQL history/catalog/native paths pass;
 actual physical Saved sessions opening and complete paired acceptance remain.
+
+## Release ancestry boundary correction
+
+Parent whole-source review found477's normal f65e53e4 merge of275a also imports
+unfinished S5/S2 production, including old nullable Decision consumers and a new
+tool catalog requiring shared478. These are separate unaccepted workflows, not
+part of the urgent historical reader release. Mendel owns normal revert of his
+own merge (no reset/rebase/force), preserving111 facts and all later477 changes.
+The receiving eight-line S5 public-page iterator grant is applied when S5 lands;
+immutable existing archive records work with current-main Message parsing.
+Future S5 integration keeps that canonical iterator. Preserve original branch
+and failed receipts; test the changed scoped477 candidate before release.
+
+266 working production candidate shares original history custody: End reuses
+an existing certified-interval PageView and original update_fragments preserves
+native ordering when admission grows backwards.21 added/10 deleted in one
+history file; source overlap/ordering and installed acceptance still pending.
+Native construction count241 versus261 for80 fragments varies with cadence and
+is not a CPU acceptance claim. Heisenberg granted Mendel268 extraction of the
+shared physical viewport presentation contract; original page/budget methods
+remain Heisenberg's disjoint ownership.
