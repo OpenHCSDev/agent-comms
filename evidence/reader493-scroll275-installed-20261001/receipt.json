@@ -1,0 +1,374 @@
+{
+  "state": "installed candidate checkpoints qualified; not default-installed",
+  "pins": {
+    "agent_comms": "1f8bf0ef9a23ae75c2b00ea97310ecbfaae37770",
+    "toad": "3fb4b8df66b103e7f9bd1ab40df2ca9ff3ce7ab2",
+    "textual": "5fbf5c76e5b67da56335a7ff422bfbfb9cf4f1ca"
+  },
+  "native": {
+    "complete": true,
+    "duration_ms": 18390.264747,
+    "provider_posts": 2,
+    "paid_calls": 0,
+    "public_inputs": 0,
+    "original_unchanged": true,
+    "source_bytes": 42924939,
+    "source_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+    "private_root": "/home/ts/wt/r493-3cal7bu4/wire"
+  },
+  "physical": {
+    "complete": true,
+    "duration_seconds": 87.28324212000007,
+    "checks": {
+      "input_remains_focused": true,
+      "original_editor_window_and_mode": true,
+      "draft_and_caret_preserved": true,
+      "input_pageup_moves_history": true,
+      "input_pagedown_moves_history": true,
+      "input_pageup_reaches_original_window": true,
+      "input_pagedown_reaches_original_window": true
+    },
+    "cleanup": {
+      "remaining_owned_pids": [],
+      "errors": [],
+      "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+      "processes": [
+        {
+          "pid": 2240524,
+          "start_ticks": 36357507,
+          "returncode": 0
+        },
+        {
+          "pid": 2240528,
+          "start_ticks": 36357592,
+          "returncode": 0
+        },
+        {
+          "pid": 2240541,
+          "start_ticks": 36357603,
+          "returncode": 0
+        },
+        {
+          "pid": 2240551,
+          "start_ticks": 36357661,
+          "custody": "verified launch identity transferred to installed ObservedProcess"
+        },
+        {
+          "pid": 2240552,
+          "start_ticks": 36357668,
+          "custody": "verified launch identity transferred to installed ObservedProcess"
+        },
+        {
+          "pid": 2240567,
+          "start_ticks": 36357745,
+          "returncode": 0
+        },
+        {
+          "pid": 2240568,
+          "start_ticks": 36357758,
+          "returncode": 0
+        },
+        {
+          "pid": 2240569,
+          "start_ticks": 36357767,
+          "returncode": 0
+        },
+        {
+          "pid": 2240570,
+          "start_ticks": 36357785,
+          "returncode": 255
+        },
+        {
+          "pid": 2240698,
+          "start_ticks": 36357987,
+          "returncode": 0
+        },
+        {
+          "pid": 2240733,
+          "start_ticks": 36358019,
+          "returncode": 0
+        },
+        {
+          "pid": 2240782,
+          "start_ticks": 36358063,
+          "returncode": 0
+        },
+        {
+          "pid": 2240925,
+          "start_ticks": 36358774,
+          "returncode": 0
+        },
+        {
+          "pid": 2241050,
+          "start_ticks": 36358922,
+          "returncode": 0
+        },
+        {
+          "pid": 2241051,
+          "start_ticks": 36358934,
+          "returncode": 0
+        },
+        {
+          "pid": 2241155,
+          "start_ticks": 36359363,
+          "returncode": 0
+        },
+        {
+          "pid": 2241156,
+          "start_ticks": 36359375,
+          "returncode": 0
+        },
+        {
+          "pid": 2241177,
+          "start_ticks": 36359542,
+          "returncode": 0
+        },
+        {
+          "pid": 2241728,
+          "start_ticks": 36361060,
+          "returncode": 0
+        },
+        {
+          "pid": 2241769,
+          "start_ticks": 36361204,
+          "returncode": 0
+        },
+        {
+          "pid": 2241796,
+          "start_ticks": 36361366,
+          "returncode": 0
+        },
+        {
+          "pid": 2241797,
+          "start_ticks": 36361378,
+          "returncode": 0
+        },
+        {
+          "pid": 2241828,
+          "start_ticks": 36361791,
+          "returncode": 0
+        },
+        {
+          "pid": 2241829,
+          "start_ticks": 36361805,
+          "returncode": 0
+        },
+        {
+          "pid": 2241950,
+          "start_ticks": 36361958,
+          "returncode": 0
+        },
+        {
+          "pid": 2242053,
+          "start_ticks": 36362109,
+          "returncode": 0
+        },
+        {
+          "pid": 2242059,
+          "start_ticks": 36362195,
+          "returncode": 0
+        },
+        {
+          "pid": 2242078,
+          "start_ticks": 36362331,
+          "returncode": 0
+        },
+        {
+          "pid": 2242087,
+          "start_ticks": 36362344,
+          "returncode": 0
+        },
+        {
+          "pid": 2242136,
+          "start_ticks": 36362755,
+          "returncode": 0
+        },
+        {
+          "pid": 2242171,
+          "start_ticks": 36362766,
+          "returncode": 0
+        },
+        {
+          "pid": 2243846,
+          "start_ticks": 36362923,
+          "returncode": 0
+        },
+        {
+          "pid": 2244273,
+          "start_ticks": 36364441,
+          "returncode": 0
+        },
+        {
+          "pid": 2244289,
+          "start_ticks": 36364584,
+          "returncode": 0
+        },
+        {
+          "pid": 2244290,
+          "start_ticks": 36364600,
+          "returncode": 0
+        },
+        {
+          "pid": 2244760,
+          "start_ticks": 36366114,
+          "returncode": 0
+        },
+        {
+          "pid": 2244781,
+          "start_ticks": 36366461,
+          "returncode": 0
+        },
+        {
+          "pid": 2244786,
+          "start_ticks": 36366486,
+          "returncode": 0
+        },
+        {
+          "pid": 2244814,
+          "start_ticks": 36366610,
+          "returncode": 0
+        },
+        {
+          "pid": 2244816,
+          "start_ticks": 36366696,
+          "returncode": 0
+        },
+        {
+          "pid": 2244820,
+          "start_ticks": 36366740,
+          "returncode": 0
+        }
+      ]
+    }
+  },
+  "stationary_trace": {
+    "input_settled": {
+      "interval_seconds": [
+        23.27,
+        33.27
+      ],
+      "events": {
+        "sidebar_publication_start": 10,
+        "sidebar_publication_done": 10
+      }
+    },
+    "history_settled": {
+      "interval_seconds": [
+        57.007,
+        67.007
+      ],
+      "events": {
+        "sidebar_publication_start": 10,
+        "sidebar_publication_done": 10,
+        "relocating": 2,
+        "relocated": 2
+      }
+    },
+    "stationary_late": {
+      "interval_seconds": [
+        73.796,
+        83.796
+      ],
+      "events": {
+        "relocating": 34,
+        "relocated": 34,
+        "sidebar_publication_start": 10,
+        "sidebar_publication_done": 10
+      }
+    }
+  },
+  "ui_cpu_by_phase": [
+    {
+      "label": "travel-start",
+      "average_cpu_percent": [
+        102.6
+      ]
+    },
+    {
+      "label": "input-held-up",
+      "average_cpu_percent": [
+        87.6
+      ]
+    },
+    {
+      "label": "input-held-up-done",
+      "average_cpu_percent": [
+        56.2
+      ]
+    },
+    {
+      "label": "input-mid-history-idle-done",
+      "average_cpu_percent": [
+        39.2
+      ]
+    },
+    {
+      "label": "input-held-down",
+      "average_cpu_percent": [
+        83.0
+      ]
+    },
+    {
+      "label": "input-held-down-done",
+      "average_cpu_percent": [
+        96.2
+      ]
+    },
+    {
+      "label": "before-history-focus",
+      "average_cpu_percent": [
+        76.0
+      ]
+    },
+    {
+      "label": "history-held-up",
+      "average_cpu_percent": [
+        79.6
+      ]
+    },
+    {
+      "label": "history-held-up-done",
+      "average_cpu_percent": [
+        36.3
+      ]
+    },
+    {
+      "label": "mid-history-idle-done",
+      "average_cpu_percent": [
+        31.2
+      ]
+    }
+  ],
+  "visual_review": "Viewed actual held-PageUp video frames at 11-14 seconds: readable content progresses in nine sampled frames; mid-history and End phase PNGs retain saved history and editor. This does not establish smooth frame rate.",
+  "limits": [
+    "High CPU remains during paging and sidebar idle. Broader performance followup remains active.",
+    "Compaction494 is not in this candidate; same original architecture-memory failure remains expected until affected path qualified and paired release installed.",
+    "Initial AF_UNIX fixture path failure preserved; fresh corrected fixture uses frozen prior original copy, never replays that attempt."
+  ],
+  "artifacts": [
+    {
+      "path": "/home/ts/wt/toad-receiving-reader493-scroll275-20261001/.artifacts/staging-reader493-scroll275-20261001/installed-native-greeting02.json",
+      "sha256": "159bcda5b9b902259481f2772485f4780982667c8746b2cbc0b19d61d31ce9f0"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/parent-reader493-scroll275-installed-20261001/receipt.json",
+      "sha256": "dfc05d7ba39aab2dcd56f00eb86d9b25ce36f3505ea7157bea91590a2f675345"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/parent-reader493-scroll275-installed-20261001/terminal.mp4",
+      "sha256": "39e062655511030b2f68145e415d920b02767a0c9989419ab4e7fb97150f4733"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/parent-reader493-scroll275-installed-20261001/scroll-travel.jsonl",
+      "sha256": "9fc9d91537f346140921033e8b7751fa6dca0e46b96aeef74d05d5d94447bc5a"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/parent-reader493-scroll275-installed-20261001/profile-review.json",
+      "sha256": "53ccbcd46b1cd1b95be677e7f0b9c71381e3baacf40e7274b6f3043c6dc39f6e"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/parent-reader493-scroll275-installed-20261001/parent-held-input-review.png",
+      "sha256": "0de83ed725fc3b0781b95e44bd18ece56d39afce6b208d258ea365534159e36a"
+    }
+  ]
+}
