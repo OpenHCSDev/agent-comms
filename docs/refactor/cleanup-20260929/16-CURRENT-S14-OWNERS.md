@@ -98,6 +98,25 @@ report the larger tally as reclaimed space. Existing p01 uses installed03, which
 remains protected with installed04, proofs, frozen default and native bundles.
 Home remains about12.2GiB free. Unknown-owned large folders remain untouched.
 
+Before the next whole S5 run, actual SDK36 caught a real image-provenance bug:
+same text with a replaced image was falsely attributed to the original input.
+Einstein's correction0fffc025 changes the existing InputImages owner (3 production
+lines deleted/9 added), retaining one fingerprint and frozen selected indices;
+valid transformed input remains accepted. Schrodinger alone builds the corrected
+native. Existing f117/270 pair remains immutable and no longer qualifies for full
+feature readiness. Next one normal paired stage follows the new verified native
+and matching source pins; no rebuild just for byte-identical merged478.
+
+Terminal274 source42c2 deletes235 production lines/adds362 across its execution,
+controller, owner and widget consumers; full installed receiving gate remains.
+Core480 is the paired extension of the ORIGINAL cancellation-resistant join:
+rename its existing private helper public and migrate both callers, no alias
+or copied retirement loop. Source cancellation3 checks pass; same274 PTY/ACP
+journey supplies the receiving proof. Parent granted only existing SurfaceBinding
+admission and narrow terminal-projection handler extension, deleting duplicate
+weak-target/closing state rather than introducing another view-lifetime store.
+Heisenberg's history/viewport methods remain separate.
+
 Heisenberg's private performance journey need not wait for public477 carry:
 Mendel's already-valid private g477/p01 root supported combined06's physical
 Saved/native original41MB/End/IRC path. Its41MB is an archived HistoryWindow,
