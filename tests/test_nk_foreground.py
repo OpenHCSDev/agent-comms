@@ -94,8 +94,8 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
                 (
                     "terminal",
                     result.disposition.declared_name if result else None,
-                    result.exact_target if result else None,
-                    result.response_message_id if result else None,
+                    tuple(receipt.exact_target for receipt in result.publications) if result else None,
+                    tuple(receipt.message_id for receipt in result.publications) if result else None,
                     len(calls),
                 )
             )
@@ -162,7 +162,7 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
         assert alpha_parent.poll(12) and beta_parent.poll(12)
         assert alpha_parent.recv() == ("terminal", None, None, None, 0)
         result = beta_parent.recv()
-        assert result[0:3] == ("terminal", "completed", "#team")
+        assert result[0:3] == ("terminal", "completed", ("#team",))
         assert result[3] and result[4] == 1
         for child in children:
             child.join(6)

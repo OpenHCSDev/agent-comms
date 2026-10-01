@@ -146,7 +146,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
         if outcome == "complete":
             result = await asyncio.wait_for(task, seconds + 40)
             elapsed = time.monotonic() - started
-            assert result.response_message_id
+            assert result.publications
             assert elapsed >= seconds
             assert provider.posts == 2
             assert comms.views.full_history()[-1].body == provider.text

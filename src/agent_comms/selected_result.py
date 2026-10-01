@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from .assignment_states import AssignmentState, CompletedAssignment, FailedAssignment, IgnoredAssignment
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from .coordination_tables.publications import PublicationReceipt
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession
@@ -21,8 +22,7 @@ class CoordinatedTurn:
     assignment_ids: tuple[str, ...] = field(metadata={"wire_name": "claim_ids"})
     disposition: type[AssignmentState]
     input_id: str
-    response_message_id: str | None
-    exact_target: str | None
+    publications: tuple[PublicationReceipt, ...]
     cursor_status: str = "unavailable"
     fresh_session: FreshPrivateSession | None = None
 
@@ -32,8 +32,7 @@ class CoordinatedTurn:
             participant.batch.assignment_ids,
             FailedAssignment,
             input_id,
-            None,
-            None,
+            (),
             cls.cursor_status_for(participant, input_id),
             session.creation,
         )
@@ -44,23 +43,18 @@ class CoordinatedTurn:
             participant.batch.assignment_ids,
             IgnoredAssignment,
             input_id,
-            None,
-            None,
+            (),
             cls.cursor_status_for(participant, input_id),
             session.creation,
         )
 
     @classmethod
-    def published(cls, participant, session, input_id, published):
-        receipt = published.publication_receipt
-        if receipt is None:
-            raise IdentityConflict("fenced response has no durable receipt")
+    def published(cls, participant, session, input_id, publications: tuple[PublicationReceipt, ...]):
         return cls(
             participant.batch.assignment_ids,
             CompletedAssignment,
             input_id,
-            receipt.message_id,
-            receipt.exact_target,
+            publications,
             cls.cursor_status_for(participant, input_id),
             session.creation,
         )

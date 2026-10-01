@@ -231,9 +231,10 @@ class SelectedAttempt:
                 self.stage.fence,
                 owner_witness=participant.response_owner,
             ).value
+            _, receipt = published.require_published_evidence()
             participant.consume_reply_wait()
             return CoordinatedTurn.published(
-                participant, session, request.admission.input_id, published
+                participant, session, request.admission.input_id, (receipt,)
             )
 
     async def observe_event(self, event):

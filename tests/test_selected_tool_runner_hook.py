@@ -142,7 +142,7 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
         await runtime.SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=private_root
         ).run()
-    ).response_message_id
+    ).publications
     assert len(calls) == 1
     assert "normal read, bash, edit and write tools." in calls[0][1]
     assert "selected_claimed_write" not in calls[0][1]
@@ -173,7 +173,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
         native_package=private_root,
         selected_tool_intent=SelectedToolIntent(),
     ).run()
-    assert result is not None and result.response_message_id
+    assert result is not None and result.publications
     assert len(calls) == 1
     assert path.read_text(encoding="utf-8") == "after"
     assert (root / "native-sessions").is_dir()
@@ -208,7 +208,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         native_package=private_root,
         selected_tool_intent=intent_type(),
     ).run()
-    assert result is not None and result.response_message_id
+    assert result is not None and result.publications
     assert len(calls) == len(kwargs_seen) == len(bound) == 1
     admission, owner, session_dir, input_id = bound[0]
     assert owner == "beta" and admission.source_seq == initial.message.seq
