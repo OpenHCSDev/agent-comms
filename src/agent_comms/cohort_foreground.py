@@ -52,19 +52,20 @@ class NoWakeReceipt:
     wire_seq: int
 
 
-def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool) -> None:
+def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool) -> Path:
     # Do not create a root, registry, SQLite database, or provider opportunity
     # when the owner-only directory or reviewed copied Pi is absent.
     if not opt_in:
         raise PublicationActivationBlocked("foreground cohort requires explicit activation")
     _private_session_dir(root)
-    _trusted_package(native_package)
+    cli = _trusted_package(native_package)
     comms = Comms(root)
     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
     with bus.log.locked():
         marker = bus.log._private_marker_unlocked()
     if marker.root_id != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
+    return cli
 
 
 def _accept_visible_deliveries(

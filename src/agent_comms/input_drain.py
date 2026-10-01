@@ -396,12 +396,14 @@ class InputDrain(FutureInputQueue):
         clear and promotion use that same lock, including their in-memory edits.
         No receipt survives a process restart or an owner/turn change.
         """
+        if pending_input_key is None:
+            return {}
         if owner.pid != os.getpid() or owner.active_turn is None or self.closing:
             return {}
         result = {}
         for session_id, original in self.original_sources.items():
             if (
-                original.notice_keys != (pending_input_key,)
+                original.compaction_key(owner.session_file) != pending_input_key
                 or self.sessions.bindings.get(session_id) != owner.name
             ):
                 continue

@@ -94,6 +94,9 @@ class ErrorStopReason(PiStopReason):
             message.diagnostics,
         )
         if not (session.explicit_interrupt and cls.explicit_abort):
+            from .turn_failure import ModelRequestFailed
+
+            session.output.record_failure(ModelRequestFailed(error.text))
             yield error
 
 

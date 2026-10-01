@@ -61,11 +61,26 @@ class PrivateNkLaunch:
         # Claim support is not a request for the optional single-write proof mode.
         return cls(validated_root, root_id, native_package, None)
 
-    def validate(self) -> None:
+    @classmethod
+    def current(cls) -> PrivateNkLaunch | None:
+        """Decode the original explicit environment or owner-installed route."""
+        environment = dict(os.environ)
+        if "AGENT_COMMS_ROOT" not in environment:
+            from .active_route import read_active_route
+
+            active_route = read_active_route()
+            if active_route is not None:
+                environment["AGENT_COMMS_ROOT"] = str(active_route.root)
+                environment.setdefault(ROOT_ID_ENV, active_route.wire_root_id)
+                environment.setdefault(PACKAGE_ENV, str(active_route.native_package))
+        root = Path(environment.get("AGENT_COMMS_ROOT", "~/.agent-comms")).expanduser().absolute()
+        return cls.from_environment(root, environment)
+
+    def validate(self) -> Path:
         """Recheck this authority before a new owner process can be reserved."""
         from .cohort_foreground import _preflight
 
-        _preflight(self.validated_root, self.wire_root_id, self.native_package, True)
+        return _preflight(self.validated_root, self.wire_root_id, self.native_package, True)
 
     def apply_environment(self, environment: dict[str, str]) -> None:
         """Derive the child handoff solely from this retained launch authority."""
@@ -78,17 +93,7 @@ class PrivateNkLaunch:
 
 def private_nk_from_environment() -> PrivateNkLaunch | None:
     """Use explicit process settings, or the owner-installed active route."""
-    environment = dict(os.environ)
-    if "AGENT_COMMS_ROOT" not in environment:
-        from .active_route import read_active_route
-
-        active_route = read_active_route()
-        if active_route is not None:
-            environment["AGENT_COMMS_ROOT"] = str(active_route.root)
-            environment.setdefault(ROOT_ID_ENV, active_route.wire_root_id)
-            environment.setdefault(PACKAGE_ENV, str(active_route.native_package))
-    root = Path(environment.get("AGENT_COMMS_ROOT", "~/.agent-comms")).expanduser().absolute()
-    launch = PrivateNkLaunch.from_environment(root, environment)
+    launch = PrivateNkLaunch.current()
     if launch is not None:
         launch.validate()
     return launch

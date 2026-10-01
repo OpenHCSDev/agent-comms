@@ -44,6 +44,17 @@ def main():
                  "AGENT_COMMS_THREAD"):
         environment.pop(name, None)
     environment["AGENT_COMMS_THREAD"] = "native-startup-fixture"
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.comms import Comms
+    from agent_comms.runtime_requests import ProjectRuntimeRequest
+    from agent_comms.threads import Thread
+
+    comms = Comms(root / "wire")
+    thread = Thread("native-startup-fixture", frozenset(), str(project),
+                    process_identity=ProcessIdentity.capture(os.getpid()))
+    comms.registry.declare(thread)
+    environment.update(ProjectRuntimeRequest.for_native(comms.registry.snapshot(), thread)
+                       .environment(comms.root))
     spec = importlib.util.spec_from_file_location("native_rpc_fixture", repo / "stack/test-native-import-rpc.py")
     isolation = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(isolation)

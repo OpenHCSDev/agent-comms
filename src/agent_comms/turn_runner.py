@@ -174,6 +174,9 @@ class TurnRunner:
         return self.agent_args.with_model(thread.model).with_thinking(ThinkingLevel.optional_name(thread.thinking_level)).argv
 
     def native_environment(self, thread: Thread, worktree: str) -> dict[str, str]:
+        from .runtime_requests import ProjectRuntimeRequest
+
+        project = ProjectRuntimeRequest.for_native(self.comms.registry.snapshot(), thread)
         return {
             "AGENT_COMMS_THREAD": thread.name,
             "PI_AGENT_ID": thread.name,
@@ -181,6 +184,7 @@ class TurnRunner:
             "PI_PARENT_ID": thread.parent or "",
             "AGENT_COMMS_MANAGED": "1",
             "PI_WORKTREE": worktree,
+            **project.environment(self.comms.root),
         }
 
     async def prepare_selected_session(self, session_id: str, thread: Thread) -> StateData:

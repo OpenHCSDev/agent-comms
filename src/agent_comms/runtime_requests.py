@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Self
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .thread_presentation import LiveThreadOwnerBinding
 
 if TYPE_CHECKING:
     from .runtime import RuntimeServer, SocketClient
@@ -76,6 +77,45 @@ class ResultRuntimeRequest(RuntimeRequest):
 
     @abstractmethod
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectRuntimeRequest(ResultRuntimeRequest):
+    """Current project observation through the original native launch binding.
+
+    This command grants no input or tool execution. A retained native process
+    must still observe its original registry lease before each project check.
+    """
+    binding: LiveThreadOwnerBinding
+
+    @classmethod
+    def for_native(cls, snapshot, thread):
+        process = thread.require_process()
+        owner = snapshot.owner_identity(thread.name)
+        snapshot.require_owner_process(owner, process)
+        return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
+
+    def environment(self, root):
+        from .runtime import socket_path
+
+        return {
+            "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
+            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
+        }
+
+    def require_original(self, snapshot):
+        if not self.binding.owner.incarnation.matches_recorded_name(self.thread, snapshot):
+            raise ValueError("Project request names another original thread")
+        snapshot.require_owner_process(self.binding.owner, self.binding.process)
+        return snapshot.require_active(self.binding.owner.incarnation.name)
+
+    def bind(self, server, reader, client):
+        self.require_original(server.agent._comms.registry.snapshot())
+        return super().bind(server, reader, client)
+
+    async def result(self, ctx):
+        current = self.require_original(ctx.server.agent._comms.registry.snapshot())
+        return {"worktree": current.worktree}
 
 
 @dataclass(frozen=True, kw_only=True)

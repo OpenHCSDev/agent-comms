@@ -176,13 +176,21 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
 
     async def events(*args, **kwargs):
         assert "Persistent goal" in args[2]
+        public_id, command = await queue_followup(agent, kwargs)
+        observed["public_id"] = public_id
+        original = agent.inputs.original_sources["project"]
+        assert original.notice_keys == ()  # Internal continuation is not a user echo.
+        pending_key = original.compaction_key(str(session))
+        assert pending_key.startswith("turn:")
+        owner = comms.registry.require("project")
+        future = agent.inputs.future_inputs(owner, pending_key)
+        assert tuple(future) == ("acp:" + public_id,)
+        agent.inputs.dispositions.read().compaction_rows(owner, pending_key, agent.inputs)
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert allowed is True
         persist_user(session, "a" * 32, args[2])
         assert kwargs["native_start"](None, "a" * 32, args[2])
         yield ae.InputStarted(id=None)
-        public_id, command = await queue_followup(agent, kwargs)
-        observed["public_id"] = public_id
         if change == "clear":
             comms.goals.update_goal("project", ClearGoalAction())
         elif change == "replace":

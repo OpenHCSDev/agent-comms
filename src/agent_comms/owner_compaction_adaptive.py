@@ -16,7 +16,6 @@ from .backend import PersistentPiSession
 from .field_codec import FieldCodec
 from .input_disposition import FutureInputQueue
 from .native_input_owner import RegistryOwner
-from .native_pi import NativePiRpcLaunch
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import OwnerSummaryOutcome
@@ -68,7 +67,6 @@ async def maybe_compact_owner_turn(
     owner_generation = snapshot.owner_generations[owner.name]
     context_window = selected.context_window
     provider, model_id = selected.provider, selected.model_id
-    package = NativePiRpcLaunch.package_for_command(launcher)
     if not persistent.available:
         raise PiSettingsEvidenceError("Selected native session must be prepared before input")
     if summary_strategy is None and (input_text is None or on_admission is None):
@@ -78,6 +76,7 @@ async def maybe_compact_owner_turn(
     # paths come from the original prepared child's launch, not display metadata
     # or a detached settings decision. Effective values are still read from Pi.
     launch = persistent.custody.idle().child.key[0]
+    package = launch.package
     environment = launch.env
     global_dir = Path(environment.get("PI_CODING_AGENT_DIR") or Path(environment["HOME"]) / ".pi" / "agent")
     if global_dir.parts and global_dir.parts[0] == "~":
