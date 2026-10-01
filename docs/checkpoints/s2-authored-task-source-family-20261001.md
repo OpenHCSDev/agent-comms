@@ -292,3 +292,45 @@ StoredInput.source_text/context_provenance and the recorded human author rather
 than assume every wording source is Message. That downstream integration is
 explicit, not an alias or fabricated wire subject. Full three native compactions
 and separately budgeted S4 model recall remain open.
+
+## Installed direct-input native acceptance: three actual commits
+
+Normal Core wheel a6dd (production91d0) matches all installed Python modules;
+no source overlay, native build, public mutation or input replay. The existing
+NativeBackendFixture/SDK SessionManager source/CommsAgent ACP machinery performs
+three successive selected-summary COMMITs, each with a distinct native journal
+compaction entry and complete original SelectedSummarySource. Every captured
+cut resolves the same direct USER pin to the exact original StoredInput, and
+native packing preserves that frozen source. Original InputDispositions bytes
+remain unchanged by each compaction. A distinct fourth native input succeeds
+and its actual provider request contains the earliest retained source.
+
+Actual72 passes51.398s,8 localhost requests (four ordinary inputs, four actual
+summary/probe requests); paid/public calls0. This is actual native/ACP source
+and commit acceptance after484, not three generated manifests. No installed
+Toad/native-pin CLI/export or S4 model recall is claimed. Source remains exact
+and mandatory; the64KiB bound is unchanged. Actual70 has no complete initial
+cut with a single completed turn. Actual71 accepts its first native pin commit
+then correctly refuses oversized required input source at round2. Both original
+failed inputs/journals/requests remain preserved. Actual72 uses the established
+SDK retained-history builder and bounded authored inputs, not truncated facts
+or a waived decoder.
+
+Installed production debt ratchet68 has zero positive deltas. All marked guards
+run:123 pass, two baseline79 source findings remain byte-identical (owner_cutover
+filename rejection and native_pi SQL literal at250). One source-layout-only
+guard cannot read pyproject from a wheel installation; its correct source-path
+run passes. None are waived or called a full guard pass. Exact baseline proof77
+is available for parent/original source owners.
+
+Retirement75 independently checks /proc original fixture root/config/cwd refs:
+70/71/72 each empty,0signals. The fixture.children list was empty because the
+CommsAgent, not fixture.run, owned these native children; its boolean alone
+is not custody proof. The existing canonical agent shutdown joined resources,
+and the read-only kernel census independently confirms absence.
+
+Exact handoff: native-pin-checkpoint78.json, actual72 receipt +original journals
+under owned s2-direct-native-pin scratch. S5 wire-only79 checkpoint remains
+frozen. Direct native export must extend the existing S5 original-source reader
+and renderer to actual StoredInput source/author/provenance; no copied Message
+body or compatibility alias is supplied. Parent owns integration/publication.

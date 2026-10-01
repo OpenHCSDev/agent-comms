@@ -51,6 +51,24 @@ async def run(destination):
         print(phase, flush=True)
 
     try:
+        package = Path(os.environ['PI_COMPACTION_TEST_PACKAGE'])
+        seed_root = destination / 'sdk-source'
+        seed = await asyncio.create_subprocess_exec(
+            'node', str(Path(__file__).with_name('native_turn_context_contract.mjs')),
+            str(package), str(seed_root), '--retained-history',
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        output, error = await seed.communicate()
+        assert seed.returncode == 0, error.decode()
+        original = json.loads(output)
+        fixture.session = Path(original['session_file'])
+        fixture.project = seed_root / 'project'
+        (destination / 'original-sdk-source.json').write_bytes(output)
+        initial_compactions = sum(json.loads(line)['type'] == 'compaction'
+                                  for line in fixture.session.read_text().splitlines())
+        models = fixture.config / 'models.json'
+        definitions = json.loads(models.read_text())
+        definitions['providers']['response-local']['models'][0]['input'] = ['text', 'image']
+        models.write_text(json.dumps(definitions))
         settings = fixture.config / 'settings.json'
         values = json.loads(settings.read_text())
         values['compaction'].update(reserveTokens=1024, keepRecentTokens=512)
@@ -74,7 +92,7 @@ async def run(destination):
         pin = None
         subject = None
         for round_number in range(1, 4):
-            wording = f'S2_ORIGINAL_ROUND_{round_number} λ Never replay UNKNOWN.\n' + 'bounded retained source. ' * 1000
+            wording = f'S2_ORIGINAL_ROUND_{round_number} λ Never replay UNKNOWN.\n' + 'bounded retained source. ' * 128
             origin = HumanInputOrigin.capture(owner._comms,
                 owner._comms.registry.snapshot().admission_identity(thread.name))
             command = QueuePromptRequest(wording, origin=origin)
@@ -105,7 +123,7 @@ async def run(destination):
             assert captured.retained.original_text_source(selected) == subject
             native_rows = [json.loads(line) for line in fixture.session.read_text().splitlines()]
             compacted = [r for r in native_rows if r['type'] == 'compaction']
-            assert len(compacted) == round_number
+            assert len(compacted) == initial_compactions + round_number
             captured.retained.require_summary(compacted[-1]['summary'])
             assert inputs.path.read_bytes() == original_rows
             assert fixture.provider.posts > before_calls
