@@ -1,0 +1,25 @@
+{
+  "scope": "Shared FieldCodec family schema installed native receiving boundary only",
+  "result": "PASS",
+  "codec_byte_equal_to_installed": true,
+  "codec_sha256": "8050f19bffa36118bac4e852836c86c76fabe22eb9c0292dbf01f15158eb2eb5",
+  "receipt_sha256": "ebf6695f1b4fd40769a796128a380bdebe528e6b0287f3cd4140025bee455508",
+  "prepared_context_sha256": "8ab986ca98db81d0497c7ab61f912d0b07ade0a800dfb25434afd475c288c488",
+  "actual_sdk_tool_count": 33,
+  "catalog_sha256": "1ce0c73e2508d7d30a69e893111885017a3b33ac47da77f00d84c7136faf6fc3",
+  "catalog_utf8_bytes": 18049,
+  "recorded_manifest_matches": 2,
+  "original_native_tool_call": "d2ddb07d",
+  "original_nonerror_tool_result": "8bc7be94",
+  "canonical_message_id": "6f69038c5f76",
+  "canonical_message_sequence": 1,
+  "original_inputs_replayed": 0,
+  "public_changes": [],
+  "paid_provider_calls": 0,
+  "negative_whole_run_preserved": true,
+  "limits": [
+    "HTTP request JSON was not persisted; no HTTP byte claim",
+    "Actual shared feature journey failed its per-user reply oracle; full S2/S5 is not ready",
+    "Default install remains unchanged"
+  ]
+}
