@@ -207,3 +207,55 @@ The recovered `multi_agent_v1` capability is absent from this session's tool
 catalog, so direct peer handoff is unconfirmed; the source and receipt are
 published through481 for the integration owner. Foundation473/270 delivery is
 independent and must not wait for these remaining full-S2 requirements.
+
+## Current coherent USER source and merged484 fixture closure
+
+The branch normally integrates merged48450d77 at4461885e, preserving its actual
+three-owner/cancel receipts and the accepted USER/source/carry declarations.
+Main's expanded context journey keeps its original private choice and public
+correction sequence; it now consumes the current TaskScope/TaskChange and
+current_authored_sources APIs instead of the deleted decision-only definitions.
+No actual native context journey was repeated, and no post484 compaction success
+is inferred from the historical C49/receiving controls.
+
+The original selected-summary journal and fresh-file fixture constructors omitted
+the required retained member. The reproduced source run collected61:29 failed,
+30 passed,2 skipped. `selected_summary_cases.summary_source` now constructs the
+whole declared `SelectedSummarySource` with typed source, selected model, settings
+and explicit `RetainedTaskFacts`, then invokes FieldCodec. Manual and continued
+admission fixtures delegate to it; refresh replaces the declared value. Empty
+retained facts are explicit only in neutral reservation/fresh-file controls,
+not a production default or a fabricated task-retention witness. The original
+per-file raw envelope builders and source-dictionary copies are removed. The
+fresh/continued and subprocess death controls use that same fixture family,
+capturing the child's own process proof rather than copying a parent identity
+(BOUND-2/IDEN-8/IMPL-12).
+
+The two requested modules now pass59 with2 existing opt-in package-path skips
+in4.35s. The final three source-builder callsite controls pass.23s. The related
+admission/continued run passes48 and preserved2 additional old-shape subprocess
+failures; migrating the child to the same typed builder closes both in1.15s.
+The two USER source journeys after484 pass1.02s. No assertions, guards, production
+reader or required journal shape were relaxed; no native package was built or
+rechecked, and there were no provider calls, old-input retries or public changes.
+
+For Einstein474: the wire-backed USER pin capability is available. Use the
+unchanged `pin_user_constraint` API and exact `original_text_source` result,
+which is the original USER Message, including its own sender_role, author name,
+seq/ID and original body. `HumanConstraintPin` shares ScopedTaskDeclaration;
+only model declarations own a turn lease. Its original USER birth witness is
+validated against the certified subject's frozen sender lookup. Existing
+WireProvenance remains the source coordinate in S5; do not label the original
+instruction as an agent declaration or copy its wording into another family.
+The actual pin -> selected native compaction -> export -> fresh-thread admission
+gate must use a coherent481/474 pair containing484 and the reviewed native776.
+Source capability readiness is not proof that this installed native journey has
+passed. The separate direct native HumanInput pin remains481owned and incomplete;
+do not mint a duplicate wire correction when original input-to-wire routing exists.
+Three genuine continuous compactions and S4 recall remain open.
+
+Exact receipt and current source hashes: `USER-484-fixture-handoff58.json`; raw
+controls are summary-baseline52/typed53/source-final55/related56/child57 and
+user-484-54. The latest audit archive100fbe8e was reread. Direct peer delivery
+remains unconfirmed because multi_agent_v1 is absent from this session catalog;
+publication in481 is the available handoff. Parent owns the next installation.
