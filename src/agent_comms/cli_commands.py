@@ -636,7 +636,7 @@ class ContextCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> Any:
         import asyncio
-        from .active_route import read_active_route
+        from .private_nk_entrypoint import PrivateNkLaunch
         from .context_tokens import NativeTokenCounter
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
@@ -665,8 +665,12 @@ class ContextCliCommand(CliCommand):
         context = TurnContext.for_owner(owner, NextContextTurn(), "", ctx.views.thread_views())
         for segment in owner.context_goal_segments():
             context = context.prepend(segment)
-        route = read_active_route()
-        counter = NativeTokenCounter(Path(route.native_package))
+        launch = PrivateNkLaunch.from_environment(
+            ctx.root, ctx.owners.restart_environment(os.environ)
+        )
+        if launch is None:
+            raise ValueError("Context inspection requires this root's configured native package")
+        counter = NativeTokenCounter(launch.native_package)
         counts = counter.measure(tuple(segment.text() for segment in context.segments))
         connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
 
