@@ -1,34 +1,32 @@
 # C0 current site ledger
 
-Initial reviewed source: Core main7fcf826a and installed Toad43949ee. This is the
-remaining-site decision ledger for the original C0 table, not a new refactor
-scope or an assertion that syntactic ratchets prove ownership. Parent owns final
-closure through432. Production consumers remain with their existing builders.
+Current bounded source review: Core cac7bdf3, Toad1cef2a46, with267/269
+normally integrated in final candidate7572b7b7. Initial7fcf826a/43949ee findings
+and intermediate421 judgments remain in Git. This is the original C0 decision
+ledger, not a new scope or a claim that syntactic ratchets establish ownership.
+Parent432 owns reconciliation; production consumers keep their named builders.
 
 ## Current Core family sites
 
-| Original C0 row | Current witness / declaration | Owner and status |
+| Original row | Current declaration and replaced caller | Evidence and disposition |
 | --- | --- | --- |
-| acp_failure::_error_detail | At source421/34a3a84b, ExternalFailureData and StructuredErrorValue own the external data/nesting and rendering projection; _error_detail is deleted. | Source implemented and inspected; all six C3 consumers and actual installed paired control/failure gate remain open. |
-| goals::__post_init__ resolution | At source421/34a3a84b, GoalMentionBinding is a resolution-discriminated family with seven members; unresolved capabilities and resolved value own their projections. | Source implemented and inspected; current stored goal/source history and control behavior require actual paired acceptance. |
-| maintenance_barrier::current_unlocked | At source421/34a3a84b, MaintenanceMarker/State use the existing FieldCodec; MaintenancePhase owns open admission and transitions. | Source implemented and inspected; no in-package maintenance operator is invented or enabled. Actual same-lock and all-admission consumer closure remains part of C3. |
-| relationships::edit | At source421/34a3a84b, RelationshipEdit family owns Add/Update/Remove behavior; store and public consumers take the declared edit. | Source implemented and inspected; full C3 paired consumer acceptance remains open. |
-| thread_status::allows_control | At source421/34a3a84b, command-family OwnerLifecycleControl capability owns availability, derived from existing status/role. String-dispatch helpers are deleted. | Source implemented and inspected with Arendt lifecycle coordination; actual installed control and refusal paths remain open. |
-| restart_queue environment/refusal | declared RestartEnvironment and RestartRefusal replace the original key/message-text sites | Mendel419/424 merged; original queued-restart, no-replay and cross-runtime receipts remain the behavioral evidence. |
-| pi_events/pi_payloads/tracked_turn/selected summary | C1 vocabulary and data-owned response declarations replace the listed sites; tracked assistant_end calls stop_reason.tracked | Einstein417 merged;431 extends the same native lifecycle/wait owners. Do not resurrect discarded raw stop reasons. |
-| threads thinking-level cases | shared Pi thinking vocabulary owns the selected spelling | Einstein417 merged; protocol spelling and internal operation identity stay distinct. |
+| acp_failure::_error_detail | ErrorValue composes JsonShapeFamily; Array/Object own detail; helper and421 builtin dispatch handlers deleted. |463/465 typed boundary and ratchet merged. Original failure evidence retained;476 derives readiness, not another parser. |
+| goals::__post_init__ resolution | GoalMentionBinding declaration discriminator; seven behavior-owning members. |421 continuous native/ACP/goal controls accepted;442 public cutover completed. S2/S5 scope remains separate. |
+| maintenance_barrier::current_unlocked | MaintenancePhase owns admission/transitions; Marker/State use original FieldCodec and delegate validation. |421 controls and442/469 canonical cutovers accepted.479 extends SAME stopped-batch operation; no production operator/competing lifecycle. |
+| relationships::edit | RelationshipEdit Add/Update/Remove owns application over original document. |421 paired consumers and457/462 source/retry/assignment closure retained. Current source finds no original switch restored. |
+| thread_status::allows_control | OwnerLifecycleControl.available_for delegates ThreadStatus capability. |Original tool-name switch deleted;421 controls plus442/469 retained launch/refusal evidence.476 changed admission has new native acceptance. |
+| restart_queue environment/refusal | RestartEnvironment and RestartRefusal own environment projection/refusal behavior. |419/424 merged; queued-restart/no-replay/cross-runtime receipts retained. |
+| Pi events/payloads/tracked turn/summary | PiPayload/PiContent/PiMessage/PiResponseData and PiEvent declarations; stop_reason.tracked. |417/431 native lifecycle closure retained. Summary response method survives without its raw shape switch. |
+| threads thinking-level cases | Shared Pi thinking vocabulary owns selected spelling. |417 merged; external spelling and internal operation identity stay distinct. |
 
-The initial packaged StringDispatch/TypeSwitch collectors found the listed
-Core sites; the five C3 rows above were reread at source34a3a84b after implementation.
-The useful C3 checkpoint is now merged through Core4212519fb65 and counterpart
-Toad2164d239091, with continuous installed actual native/ACP/mounted-App goal
-and control acceptance. It is not default-installed or full C3 closure: Arendt
-retains shared send custody and initial old-format admission/all-stop/member
-removal/target-launch ownership. The collectors
-also identify valid external codec
-and path cases below. Nested function/class scopes are measured separately.
-This source screen supplies witnesses; the implementation owner must still
-trace semantics, dependency context and every replaced consumer before editing.
+Current declaration/caller proof:
+evidence/archived-source-identity/ORIGINAL-C0-CURRENT-SOURCE.md.
+No separate unclaimed original family switch was found in that bounded review.
+442 completed initial admission, both retired Thread carriers and target launch;
+actual receipt: evidence/cleanup-live-integration/c3-paired-cutover.json.
+469 subsequently preserved UNKNOWN/native input custody. New476/477/267/268/269
+release is separate and not yet default-installed. Existing accepted receipts
+are not repeated merely because this historical ledger was stale.
 
 ## External boundary decisions
 
@@ -37,41 +35,28 @@ trace semantics, dependency context and every replaced consumer before editing.
 | FieldCodec.encode/_decode | Python dataclass, typing, Enum and JSON value constructs; the sealed codec owns their conversion | Keep those external distinctions at the codec. WireValue/FieldRepresentation supply declared extensions; no codec subclasses or caller-side shape adapters. Parent418 mechanism closure is merged. |
 | importing format/source/message/item | imported OpenCode/Codex protocols; ImportAdapter registry and declared record readers | C1 owns one import boundary. Current format.read dispatches through ImportAdapter.registry; do not add another suffix roster or legacy reader. Final declaration/caller proof stays with417 inventory. |
 | todos::_repo | external owner/repository path grammar with empty/dot/parent components | Keep path admission at the existing repo boundary. It is not an internal case family or justification for duplicate repo validators. |
-| conversation_markdown::resolve_tokens | markdown-it inline/link/text/code token grammar | Closed through Toad226 efede206: declared ProjectTokenRule behavior is registered solely through native MarkdownIt.add_render_rule, with Token output owned by RendererProtocol. Original switch deleted; pure prepared syntax, current-root resolution and original linkify ordering preserved. Installed actual App file-link click, Markdown/code preview and draft return passed. Default activation remains separate. |
+| conversation_markdown::resolve_tokens | markdown-it inline/link/text/code token grammar | Closed through Toad226 efede206: declared ProjectTokenRule behavior is registered solely through native MarkdownIt.add_render_rule, with Token output owned by RendererProtocol. Original switch deleted; pure prepared syntax, current-root resolution and original linkify ordering preserved. Installed actual App file-link click, Markdown/code preview and draft return passed. Included in current default;268 extends shared ProjectPathOwner for historical consumers. |
 | danger::visitredirect | bashlex shell redirect grammar | The existing visitor owns the sole file-target operator set and path-risk projection. No copied shell grammar in consumers. |
-| conversation/question::check_action | NativeAction, ConversationAction, QuestionAction and DeclaredWidgetActions derive native dispatch, availability and bindings | Closed through Mendel Toad230/4a0bcc67: Conversation and Question switches and PermissionsScreen's copied classification were deleted. The screen retains one Question resource from construction through mounting. Actual installed native07 covers block keys, pointer/question choice, permission forwarding and canonical double-Escape cancel; broader chronology and default C3 installation remain open. |
+| conversation/question::check_action | NativeAction, ConversationAction, QuestionAction and DeclaredWidgetActions derive native dispatch, availability and bindings | Closed through Mendel Toad230/4a0bcc67: Conversation and Question switches and PermissionsScreen's copied classification were deleted. The screen retains one Question resource from construction through mounting. Actual installed native07 covers block keys, pointer/question choice, permission forwarding and canonical double-Escape cancel; included in current default. Later M01 lacks failure-time focus evidence and remains a separate tracked defect. |
 | inline_message URL schemes | URI scheme grammar at the inline-message decoder | One declared accepted set currently lives at this boundary; consumers receive rendered links, not copied scheme policy. |
 | terminal::_encode_mouse_event_sgr | Textual MouseMove/MouseDown/MouseUp plus terminal SGR protocol | Keep event/protocol distinction at the terminal encoder. No second mouse taxonomy or event adapter in callers. |
 | work_preparation::retained_bytes | Python containers/dataclasses/object graphs for bounded resource accounting | Keep exact resource traversal at the preparation boundary. Its object-identity seen set measures a graph; it is not a message seen-ID cache or semantic authority. |
 | ACP media/file kinds | SDK external models and declared media/file kinds | Kepler208 merged; image build and project preview must consume the same declaration. Whole paired SDK acceptance remains208's recorded boundary. |
 
-## Done still means complete closure
+## Completion boundary and retired runtime
 
-The five mechanisms are sealed and dispatch/arm measures are merged. C0 stays
-open while the family rows or declared external targets above remain unfinished.
-No allowlist, count cancellation or source relocation marks them complete.
-Repeated violations use the existing ownership guards with historical witnesses;
-do not add a parallel checking framework. Preserve the original full cleanup and
-round-two plans while shipping useful live checkpoints.
+Five mechanism seals and dispatch/arm measures are merged. The original bounded
+source census does not claim all new lifecycle/retention/foreground work is done.
+Original cleanup/round-two plans remain; no allowlist, count cancellation or
+source relocation closes a remaining requirement. External distinctions above
+are single-boundary decisions, not exemptions for application semantics.
 
-C3 removes last_goal_report_turn from stored thread records. Cutover removes
-only that retired runtime member while preserving the complete canonical
-goal_history, original native witnesses, blocked attempts and UNKNOWN inputs.
-The current active registry contains114 such members,17 nonempty. This is a
-one-time outside-src cutover, not an old-format reader or a registry reset.
-
-Mendel now owns the still-open conversation_markdown::resolve_tokens row,
-following the original C0 library-rule/registry target. Its fresh census and
-draft must honor the actual MarkdownIt/Textual token contract, pure prepared
-syntax and current-root filesystem resolution. This is disjoint from Sch's
-source publication and Heisenberg's mount/layout ownership; those shared files
-require their consent before changes.
-
-The retired last_goal_report_turn also occurs inside OwnerReleaseReceipt.thread
-in owner_release_receipts.json. Actual C3 decoding of the original live registry
-refuses it before the present after_stopped hook. Arendt's later single lifecycle
-cutover owns that initial admission crossing and both runtime containers;
-canonical goal history, native proofs and original recovery preimages survive.
+C3 retired last_goal_report_turn in both LIVE Thread carriers during442's
+accepted public cutover; both final counts were zero. Preserve original private
+preimages and canonical goal/native/UNKNOWN evidence. Do not repeat the
+conversion or interpret original archived runtime fields as live owners.
+477 ThreadProvenance carries determining historical facts once. Current live
+readers retain one format. Original markdown work is closed, not a new dispatch.
 
 ## Additional original catalog caller closure — Toad234
 
@@ -81,6 +66,5 @@ Command record is bound once, and TypedLaunchAction owns the native launcher.
 All three Store details routes use that action; copied result/name switches,
 modal action/title/bootstrap mirrors and the launch response alias are deleted.
 Actual native08 continuous catalog/edit/cancel/failure/success/login/details
-journey passes. Production129 lines deleted; default activation and standalone
-packaging remain the231 paired-release boundary. This does not close other C0
+journey passes. Production129 lines deleted; 231 paired release/current default include this checkpoint. This does not close other C0
 rows or the full original cleanup package.
