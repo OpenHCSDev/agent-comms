@@ -1,0 +1,42 @@
+{
+  "elapsed_seconds": 22.73162485496141,
+  "owners": 3,
+  "history_rows": 120,
+  "bus_bytes": 388873,
+  "localhost_provider_posts": 3,
+  "native_originals": [
+    {
+      "session": "wire/native-sessions/8fd030cb316ae5eb519ae8a6eb27f96d/2026-10-01T21-25-01-774Z_01a0f95b-3ecd-76e2-bac8-c9bd71aff474.jsonl",
+      "entry_id": "8115474f"
+    },
+    {
+      "session": "wire/native-sessions/8550c04040a2d2a2d363c141bc363dcc/2026-10-01T21-25-00-858Z_01a0f95b-3b39-7294-91be-dda24c4f2a7f.jsonl",
+      "entry_id": "660576f6"
+    },
+    {
+      "session": "wire/native-sessions/34e5d5ce5574d3a52e05655369a3e59d/2026-10-01T21-25-01-056Z_01a0f95b-3bff-7627-b288-64d9f9291514.jsonl",
+      "entry_id": "f9aa3b05"
+    }
+  ],
+  "simultaneous_triage_cursor_proofs": 3,
+  "failure": null,
+  "all_owned_workers_retired": true,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "installed_interpreter": "/home/ts/wt/comms-native-evidence-exception-custody-20261001/.observations/runtime/bin/python",
+  "acp_notification_count": 21,
+  "contention": [],
+  "cancellation": {},
+  "all_native_turns_active_before_provider_release": true,
+  "acp_fact_counts": {
+    "CoordinationChangedUpdate": 3,
+    "CursorAdvancedUpdate": 4,
+    "GoalChangedUpdate": 5,
+    "InputDeliveryChangedUpdate": 6,
+    "QueueChangedUpdate": 3,
+    "TranscriptSnapshotUpdate": 4,
+    "TurnChangedUpdate": 3
+  },
+  "original_receipt": "/home/ts/wt/ac498-02/receipt.json"
+}

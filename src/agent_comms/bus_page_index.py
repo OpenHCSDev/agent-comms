@@ -206,10 +206,15 @@ class BusPageIndex:
             + where
             + f" ORDER BY seq {direction}, id {direction}"
         )
-        try:
-            yield from BusPageRow.iterate(self.connection.execute(query, params))
-        except (ValueError, TypeError) as error:
-            raise StaleBusPageIndexError("Indexed row has invalid fields") from error
+        rows = iter(BusPageRow.iterate(self.connection.execute(query, params)))
+        while True:
+            try:
+                row = next(rows)
+            except StopIteration:
+                return
+            except (ValueError, TypeError) as error:
+                raise StaleBusPageIndexError("Indexed row has invalid fields") from error
+            yield row
 
     @staticmethod
     def record(
