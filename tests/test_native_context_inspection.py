@@ -248,6 +248,10 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
             assert len({item.native_id for item in terminals}) == 2
             assert fixture.provider.posts == 2
             assert fixture.session.read_bytes().startswith(original_source)
+            queued_receipt, = (item for item in observer.observer.receipts
+                if 'queued_original' in item)
+            assert queued_receipt['pre_delivery_queue_paint']['native_started'] is False
+            assert queued_receipt['queue_to_chat_handoff']['native_chat_claims'] == 1
             print('S5_RECEIVING_INPUT_JOURNEY', json.dumps({
                 'elapsed_seconds': time.monotonic() - started,
                 'actual_toad_originals': 1, 'actual_controller_followups': 1,
@@ -255,6 +259,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend, re
                 'original_inputs': FieldCodec.encode(terminals),
                 'original_scope_captured_by_queue_owner': True,
                 'source_render_bytes_identical': source['provider_bytes_identical'],
+                'pre_delivery_queue_paint': queued_receipt['pre_delivery_queue_paint'],
+                'queue_to_chat_handoff': queued_receipt['queue_to_chat_handoff'],
                 'manual_compactions': 0, 'public_inputs': 0,
                 'artifact_root': str(output), 'python': sys.executable,
                 'visual_limit': 'Compositor source and raw export only; readable physical pixels not claimed',
