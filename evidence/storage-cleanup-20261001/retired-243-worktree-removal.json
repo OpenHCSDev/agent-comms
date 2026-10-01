@@ -1,0 +1,36 @@
+{
+  "path": "/home/ts/wt/toad-provider-login-action-modal-20260930",
+  "head": "7da9c061ca69848a64620bac19a67cf58bfe918d",
+  "branch_preserved": "fix/provider-login-action-modal-20260930",
+  "tree": "f586d59e85cf3b86e0b4c181a1f8dc55e1a5824f",
+  "git_common_dir": "/home/ts/.agent-comms/.test-tmp/toad-worktree/.git",
+  "exit_code": 0,
+  "stderr": "",
+  "allocated_bytes_before": 75132928,
+  "exclusive_allocated_blocks_bytes": 75132928,
+  "home_available_before": 10043863040,
+  "home_available_after": 10119409664,
+  "removed": true,
+  "source_proof_preservation": "Whole tracked source/evidence tree remains immutable in retained local branch and published origin/main ancestry; all untracked/modified checks empty. Original native sessions and raw owned fixture directories outside WT untouched.",
+  "reference_check": {
+    "path": "/home/ts/wt/toad-provider-login-action-modal-20260930",
+    "observed_ns": 1790821601092407646,
+    "references": [],
+    "process_limitations": [
+      {
+        "pid": "1786010",
+        "comm": "systemd"
+      },
+      {
+        "pid": "1786012",
+        "comm": "(sd-pam)"
+      }
+    ],
+    "donor_scan_exit": 1,
+    "whole_source_and_proofs_git_tracked": true
+  },
+  "finished_ns": 1790821636306313136,
+  "force_used": false,
+  "actual_df_delta_bytes": 75546624,
+  "preserved_branch_verification": "7da9c061ca69848a64620bac19a67cf58bfe918d"
+}

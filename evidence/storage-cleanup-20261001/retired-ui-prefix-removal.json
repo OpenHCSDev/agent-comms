@@ -1,0 +1,135 @@
+{
+  "status": "completed",
+  "owned_successful_retired_stages": [
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930",
+      "activation": {
+        "stage": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930",
+        "pins": {
+          "agent-comms": "4295d680a5e63885a3f338a299afc07dbb34bd85",
+          "batrachian-toad": "629cca65be1e342124df0bd6ff673e1d50dd8be3",
+          "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+        },
+        "sdk": "0.12.1",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+        "state": "verified-immutable-cohort",
+        "staging_receipt_sha256": "5ce1ec831e3470463ae2bc90348926da18250fb268ae175731f5ad8388d732a5"
+      },
+      "activation_sha256": "9fe2d1cea49b870d6fc677a0eeeb449cf47fc01944cc4b98a0767c63f8552acc",
+      "root_identity": [
+        2084,
+        16254923
+      ]
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-viewport-buffer-20260930",
+      "activation": {
+        "stage": "/home/ts/.local/share/agent-comms/runtime-viewport-buffer-20260930",
+        "pins": {
+          "agent-comms": "4295d680a5e63885a3f338a299afc07dbb34bd85",
+          "batrachian-toad": "ddf180ddc40d681e2624a9c0570abcdb5052ed30",
+          "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+        },
+        "sdk": "0.12.1",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+        "state": "verified-immutable-cohort",
+        "staging_receipt_sha256": "6480ad3ee34265ad21514df77cc65f8f38cfccc91602685ef84fbaad7648ece5"
+      },
+      "activation_sha256": "59fc2daf42ded58e04d92ef7c5e31b8205e33c9dbe7ee5da486f27b1ca813a89",
+      "root_identity": [
+        2084,
+        16277921
+      ]
+    },
+    {
+      "path": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930",
+      "activation": {
+        "stage": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930",
+        "pins": {
+          "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+          "batrachian-toad": "19970f56899674932584138ff5e6fbe533c4af8f",
+          "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+        },
+        "sdk": "0.12.1",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+        "state": "verified-immutable-cohort",
+        "staging_receipt_sha256": "043e23f53b327552901f1c943797ae61c6e52d550cc587071d81a47d9028914d"
+      },
+      "activation_sha256": "c1a632066eb604ebab24b38b5a2472980b21a7864f3feff54d9a5e1c99ae3db0",
+      "root_identity": [
+        2084,
+        16530309
+      ]
+    }
+  ],
+  "reference_check": {
+    "time_ns": 1790822266639904014,
+    "candidates": [
+      {
+        "path": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930",
+        "allocated_unique_inode_bytes": 80769024,
+        "single_link_file_bytes": 25829376,
+        "multiply_linked_files": 2236,
+        "semantic_data_files": []
+      },
+      {
+        "path": "/home/ts/.local/share/agent-comms/runtime-viewport-buffer-20260930",
+        "allocated_unique_inode_bytes": 83816448,
+        "single_link_file_bytes": 28876800,
+        "multiply_linked_files": 2236,
+        "semantic_data_files": []
+      },
+      {
+        "path": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930",
+        "allocated_unique_inode_bytes": 85024768,
+        "single_link_file_bytes": 25288704,
+        "multiply_linked_files": 2545,
+        "semantic_data_files": []
+      }
+    ],
+    "process_refs": [],
+    "process_scan_errors": [
+      {
+        "pid": 1786010,
+        "type": "PermissionError",
+        "comm": "systemd",
+        "stat_state": "S"
+      },
+      {
+        "pid": 1786012,
+        "type": "PermissionError",
+        "comm": "(sd-pam)",
+        "stat_state": "S"
+      }
+    ],
+    "launcher_refs": [],
+    "metadata_refs": [],
+    "donor_refs": [],
+    "route_sha256": "ea0bf1c06564cac1b4e7d55ac0a18540566f129b4a3c91dc4985a9b1771ca579",
+    "route_root_keys": [
+      "/home/ts/.agent-comms",
+      "/var/tmp/agent-comms-live-20260927-wzjtqhza"
+    ],
+    "donor_scan_exit": 1,
+    "donor_scan_error": "",
+    "safe_to_remove": false
+  },
+  "allocated_reclaimed_bytes": 85049344,
+  "before_home_available_bytes": 11845820416,
+  "removed_paths": [
+    "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-viewport-buffer-20260930",
+    "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930"
+  ],
+  "started_ns": 1790822269173863665,
+  "all_git_metadata_absent_in_removed_prefixes": true,
+  "native_packages_source_proofs_raw_captures_preserved": true,
+  "failed_candidate_prefixes_preserved": true,
+  "permanent_proofs_root": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence",
+  "current_route_sha256": "ea0bf1c06564cac1b4e7d55ac0a18540566f129b4a3c91dc4985a9b1771ca579",
+  "finished_ns": 1790822269365998431,
+  "after_home_available_bytes": 11930861568,
+  "removed_all_absent": true,
+  "actual_df_delta_bytes": 85041152,
+  "df_qualification": "Other workers write/delete concurrently; exclusive inode link/block accounting is attribution."
+}

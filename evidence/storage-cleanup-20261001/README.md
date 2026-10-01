@@ -24,3 +24,11 @@ Reclaimed accounting counts file blocks only when every hardlink to that inode w
 - Native journals, UNKNOWN dispositions, original inputs, goals, wire data, raw failed physical captures and unreviewed work.
 
 Further large reclamation requires exact ownership and disposable-file disposition; the 1.68 GiB recovered directory is not a disposable whole-root candidate. No bulk `git clean`, reset, forced worktree removal, or public signals were used.
+
+## Additional full worktree/runtime pass
+
+Removed the clean, fully published **243 worktree** with normal `git worktree remove`, preserving its local branch and exact source/proof tree in published ancestry. It has zero gitlinks and no `.gitmodules`; its Git common directory is outside the removed worktree and was verified after removal. Allocated bytes **75,132,928**, actual local df delta **75,546,624**.
+
+Retired three whole owner-built UI prefixes after fresh process, donor, registry and launcher absence checks: `runtime-goal-observation-20260930`, `runtime-viewport-buffer-20260930`, and `runtime-viewport-native-residency-20260930`. No Git metadata owner exists inside those prefixes. All native packages, accepted historical firstUI/Core000, source/proofs, and failed current candidates remain. Exclusive link/block recovery **85,049,344 bytes**, actual df delta **85,041,152 bytes**.
+
+Cumulative attributable recovery is **693,161,984 bytes (661.05 MiB)**. The exact per-operation actual df deltas and protected remaining paths are in `cleanup-summary.json`. Other owners recovered additional space concurrently; this receipt does not claim their work. No initialized-submodule worktree was removed. Parent's new reverse-Git-metadata ownership requirement applies before any such future removal.
