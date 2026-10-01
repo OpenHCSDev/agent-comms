@@ -12,13 +12,11 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
 
 from .agent_events import AgentEvent, CompactionSummaryProgress
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, PersistentPiSession
 from .compaction_journal import CompactionJournal
 from .compaction_records import SelectedSummarySource
-from .field_codec import FieldCodec
 from .fresh_private_session import FreshPrivateSession
 from .input_disposition import FutureInputQueue
 from .native_pi import NativePiUnavailable
@@ -69,7 +67,7 @@ class SelectedSummarySlot:
         persistent: PersistentPiSession,
         journal: CompactionJournal,
         witness: NativeWitness,
-        source: dict[str, Any],
+        source: SelectedSummarySource,
         *,
         expected_package: Path,
         tokens_before: int,
@@ -89,8 +87,7 @@ class SelectedSummarySlot:
         Every reservation stays blocking until the existing commit/recovery
         protocol settles it. Failure never authorizes another attempt.
         """
-        envelope = FieldCodec.decode(SelectedSummarySource, source)
-        source = FieldCodec.encode(envelope)
+        envelope = source
         request = AgentCommsSummarizeCompaction(
             id=secrets.token_hex(16),
             version=1,
