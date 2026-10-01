@@ -1,34 +1,38 @@
 # Native source and queue quiet cutover preparation
 
 Arendt prepares this one-use operator in the existing Core456 persistent WT.
-Parent alone reviews and executes publication. This replaces the earlier ea8/c075
-preparation; no old executable or second restart implementation is published.
+Parent alone reviews and executes publication. This updates the same existing
+operator for the reviewed156/970/6b freeze; no second restart mechanism is added.
+The prior85 operator SHAac3d3bab and exact audit remain in committed history
+(cdf081e8), followed by original client classification atd8c53e3d.
+Core main9370a601 has the reviewed970 production tree.468 is a separate followup,
+not a member of this candidate.
 
 ## Exact release and evidence
 
 - Original owners SOURCE: `runtime-native-budget-request-progress-20260930/bin/python`
   (Core6feb); capture their fresh credentials/arguments/settings only in RAM.
 - CURRENT five defaults: `runtime-body-readiness-20260930`.
-- TARGET: `runtime-source-publication-custody-20260930`.
+- TARGET: `runtime-atomic-page-handoff-20261001`.
 - Core970bc527f4ddd9b3bde5522dc671aea11fd27ece,
-  Toad85d45b512cac88bdf5dd8870f41e53768ab3c009,
+  Toad15601a4f785fd6ee3e53e12b3a971ae1186f4482,
   Textual6b5895fa0a72aeec2aeaef7206d5debfa0c1803c, SDK0.12.1.
 - Native/root unchanged: native593b978a717ae8f6, wireRoot
   e206f3766e60451a989ca34df0e2a94b,
   `/var/tmp/agent-comms-live-20260927-wzjtqhza`.
-- Activation SHA `48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83`.
-- Staging SHA `b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf`.
-- Package-ready SHA `9798c46404cb0be8bd7d8bc91c3770ae8e5db5e83b0fad8a7bf07528d7d54388` from
-  `/home/ts/.cache/agent-scratch/source-publication-custody-stage-20260930/paired-ready-receipt.json`.
-- Earlier d3ba cohort hashes remain retired from this operator.
+- Activation, staging and package-ready hashes: **pending new corrected package artifacts**. Old85 hashes have been removed from executable constants.
+- Package-ready path will be verified from Sch's actual new assembly receipt;
+  no prior cohort receipt can admit this target.
 
-Corrected source freeze and original package artifact hashes were read and verified.
-Package state is PACKAGE-READY-AWAITING-ACTUAL-JOINT-AND-BUS-GATES. Einstein
-joint-native/UI and Sch bus/hot-view acceptance artifacts are **pending and
-unfilled**. The operator requires BOTH reviewed artifact paths and hashes at
-execution and refuses package-ready/activation/staging files as substitutes.
-No native gate is claimed by this preparation. No complete public operator
-preflight, stop, reset or publication was run.
+Both original same-cohort Einstein joint-native/UI and Sch bus/hot-view gates
+are **mandatory, pending and unfilled**. Packaging cannot substitute for them.
+No complete public operator preflight, stop, client retirement, reset, publication
+or restart was run by this preparation.
+
+Earlier observations below are retained historical evidence only. They are
+not current owner count, idle admission, client absence or a reserved quiet window.
+Fresh canonical preflight must recapture original configurations and full process
+identities and refuse changed/active/unretired originals before any signal.
 
 Read-only original guarded registry/process observations at 2026-10-01
 00:06:36 UTC found thirteen live executable owners, all idle and on the exact
