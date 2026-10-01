@@ -1,0 +1,9 @@
+{
+  "path": "/home/ts/.cache/agent-scratch/s2-file-artifact-native-20261001/fresh-unverified",
+  "allocated_bytes": 194617344,
+  "source_files": 19190,
+  "all_equal_verified_canonical": "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/stack/.pi-native-776cd99e55d6917b",
+  "process_refs": [],
+  "removed": true,
+  "canonical_and_original_effects_preserved": true
+}
