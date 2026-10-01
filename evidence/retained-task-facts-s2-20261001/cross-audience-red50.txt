@@ -1,0 +1,108 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-retained-task-facts-s2-20261001
+configfile: pyproject.toml
+plugins: anyio-4.14.2, typeguard-4.5.2, asyncio-1.4.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_task_decisions.py F                                           [100%]
+
+=================================== FAILURES ===================================
+_____ test_cross_audience_corrections_capture_only_eligible_owned_lineage ______
+
+self = CorrectionDecisionChange(original=MessageReference(seq=1, message_id='c2c40498fd67'))
+message = Message(sender='user', target='#team', body='Retract that declared choice, without revealing its private text.', type=...UserDecisionSupersession(change=CorrectionDecisionChange(original=MessageReference(seq=1, message_id='c2c40498fd67'))))
+originals = {}
+
+    def root_source(self, message, originals):
+        try:
+>           return originals[self.original]
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+E           KeyError: MessageReference(seq=1, message_id='c2c40498fd67')
+
+src/agent_comms/task_decisions.py:135: KeyError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f7effa446e0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7effb31f30>
+
+    def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, monkeypatch):
+        from agent_comms.compaction_boundary import CompactionBoundary
+        from agent_comms.input_disposition import FutureInputQueue, InputDispositions
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.retained_task_facts import (
+            CurrentDecisionTaskFact, CurrentUserDecisionCorrectionTaskFact,
+            DecisionTaskFact, RetainedTaskFacts,
+        )
+        from agent_comms.task_decisions import CorrectionDecisionChange, UserDecisionSupersession
+    
+        for name in ("alpha", "beta", "gamma"):
+            owner = admit(comms, name)
+            saved = comms.root / f"{name}-source.jsonl"
+            saved.write_text('{"type":"session","id":"source-only"}\n')
+            comms.registry.register(replace(owner, session_file=str(saved)))
+        owner = comms.registry.require("alpha")
+        monkeypatch.setenv("PI_AGENT_ID", "alpha")
+        request = {"chosen": "PRIVATE_ORIGINAL_CHOICE", "rejected": ["PRIVATE_ALTERNATIVE"], "to": "beta"}
+        first = invoke_tool(comms, "comms_decision", request)
+        original = comms.bus.log.full_history()[0]
+        supersession = comms.messaging.send_user_message(
+            "#team", "Retract that declared choice, without revealing its private text.",
+            worktree=owner.worktree,
+            decision=UserDecisionSupersession(CorrectionDecisionChange(original.reference)),
+        )
+        invoke_tool(comms, "comms_decision", {
+            **request, "chosen": "PUBLIC_LATER_CHOICE", "rejected": ["PUBLIC_ALTERNATIVE"],
+            "to": "#team", "change": {"kind": "correction", "original": first["reference"]},
+        })
+        later = comms.bus.log.full_history()[-1]
+        wire_before = (comms.root / "bus.jsonl").read_bytes()
+        inputs = InputDispositions(comms.root / InputDispositions.filename)
+    
+        class EmptyFutureQueue(FutureInputQueue):
+            def future_inputs(self, owner, pending_input_key):
+                return {}
+    
+        boundary = CompactionBoundary(comms.registry, inputs, EmptyFutureQueue())
+        captured = {}
+        for name in ("alpha", "beta", "gamma"):
+            current = comms.registry.require(name)
+            _, generation = comms.registry.live_owner_with_generation(name)
+            witness = NativeWitness("source-only", current.session_file, "leaf", "kept", "1:2:3:4:5")
+            with boundary.hold(current, generation, witness) as held:
+>               source = held.capture(None, None)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_task_decisions.py:316: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_boundary.py:142: in capture
+    RetainedTaskFacts(facts).for_owner(owner, snapshot),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/retained_task_facts.py:153: in for_owner
+    current = frozenset(message.reference for message in self.current_decisions(owner, registry))
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/retained_task_facts.py:143: in current_decisions
+    root = message.decision.root_source(message, originals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/task_decisions.py:192: in root_source
+    return self.change.root_source(message, originals)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = CorrectionDecisionChange(original=MessageReference(seq=1, message_id='c2c40498fd67'))
+message = Message(sender='user', target='#team', body='Retract that declared choice, without revealing its private text.', type=...UserDecisionSupersession(change=CorrectionDecisionChange(original=MessageReference(seq=1, message_id='c2c40498fd67'))))
+originals = {}
+
+    def root_source(self, message, originals):
+        try:
+            return originals[self.original]
+        except KeyError as error:
+>           raise RelationViolationError("Retained correction lacks its original source") from error
+E           agent_comms.errors.RelationViolationError: Retained correction lacks its original source
+
+src/agent_comms/task_decisions.py:137: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_task_decisions.py::test_cross_audience_corrections_capture_only_eligible_owned_lineage
+============================== 1 failed in 0.48s ===============================

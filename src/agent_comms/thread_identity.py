@@ -7,7 +7,7 @@ does not create a new historical thread; a new turn does not change its owner.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -102,6 +102,10 @@ class TurnIdentity:
     incarnation: ThreadIncarnation
     generation: int
 
+    def resolved(self, snapshot: RegistrySnapshot) -> TurnIdentity:
+        """Resolve the original incarnation; retain this turn allocation."""
+        return replace(self, incarnation=self.incarnation.resolved(snapshot))
+
 
 @dataclass(slots=True)
 class GenerationCounter:
@@ -150,6 +154,10 @@ class ThreadRole(StrEnum):
     def require_executable(self) -> None:
         if not self.executable:
             raise RelationViolationError("thread role does not execute owner turns")
+
+    def require_user(self) -> None:
+        if self is not self.USER:
+            raise RelationViolationError("A user correction requires the original human sender")
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,15 @@
+{
+  "attempt": 3,
+  "source_head": "d82316aa7f9ce8691dae1f1e93c069dbcfac76bd",
+  "patch_sha256": "3de63cd0b390621ee12d34ed734bc1fde4f27ca3361dd643e7febf3ba7d0d27d",
+  "change": "populate exact locked owned npm cache; scripts disabled; final canonical import fence unchanged",
+  "npm_cache": "/home/ts/.cache/agent-scratch/s2-s5-native-bundle-20261001/npm-cache",
+  "source_lock_sha256": "ce9dcfaf4048a16bdce4356caea4ef692fc238c13c61435ae10a1928c7a90b61",
+  "prior_attempt": {
+    "exit": 1,
+    "log": "/home/ts/.cache/agent-scratch/s2-s5-native-bundle-20261001/stock-build02.log",
+    "reason": "offline cache missing locked zod-to-json-schema3.25.2; all native patches already applied",
+    "provider_calls": 0
+  },
+  "capture": "/home/ts/.cache/agent-scratch/s2-s5-native-bundle-20261001/fresh-unverified"
+}

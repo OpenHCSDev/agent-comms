@@ -131,9 +131,11 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                 options["required"] = True
             if isinstance(options.get("default"), DeclaredFamily):
                 options["default"] = options["default"].declared_name
-            owner.add_argument(
-                *metadata["flags"], dest=metadata.get("wire_name", declared.name), **options
-            )
+            if any(flag.startswith("-") for flag in metadata["flags"]):
+                options["dest"] = metadata.get("wire_name", declared.name)
+            else:
+                options.pop("required", None)
+            owner.add_argument(*metadata["flags"], **options)
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
@@ -621,5 +623,83 @@ class CompactionStatusCliCommand(CliCommand, declared_name="compaction-status"):
             "attempts": [
                 {"operation_id": row.operation_id, "state": FieldCodec.encode(row.state)}
                 for row in journal.summaries.history(thread.session_file)
+            ],
+        }
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextCliCommand(CliCommand):
+    help = "Inspect original context contributors without sending an input"
+    thread: str = option("thread")
+    turn: int | None = option("--turn", default=None, help="Original admitted turn generation")
+    diff: bool = option("--diff", default=False, action="store_true")
+
+    def apply(self, ctx: Comms) -> Any:
+        import asyncio
+        from .private_nk_entrypoint import PrivateNkLaunch
+        from .context_tokens import NativeTokenCounter
+        from .field_codec import FieldCodec
+        from .native_turn_context import NativeContextData
+        from .runtime import RuntimeConnection, socket_path
+        from .turn_context import TurnContext, NextContextTurn
+
+        owner = ctx.registry.require(self.thread)
+        if self.turn is not None or self.diff:
+            manifests = ctx.bus.log.context_manifests(owner.incarnation)
+            selected = tuple(
+                manifest for manifest in manifests
+                if self.turn is None or manifest.turn.matches_generation(self.turn)
+            )
+            if not selected:
+                raise ValueError("No original context manifest exists for the requested turn")
+            if self.diff:
+                latest = selected[-1]
+                prior = next(
+                    (manifest for manifest in reversed(manifests)
+                     if manifest.turn != latest.turn), None,
+                )
+                if prior is None:
+                    raise ValueError("No preceding recorded turn exists for comparison")
+                return latest.changed_since(prior)
+            return {"manifests": FieldCodec.encode(selected), "text_recorded": False}
+        context = TurnContext.for_owner(owner, NextContextTurn(), "", ctx.views.thread_views())
+        for segment in owner.context_goal_segments():
+            context = context.prepend(segment)
+        for segment in ctx.bus.awareness_segments(owner):
+            context = context.append(segment)
+        launch = PrivateNkLaunch.from_environment(
+            ctx.root, ctx.owners.restart_environment(os.environ)
+        )
+        if launch is None:
+            raise ValueError("Context inspection requires this root's configured native package")
+        counter = NativeTokenCounter(launch.native_package)
+        counts = counter.measure(tuple(segment.text() for segment in context.segments))
+        connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
+
+        async def inspect_native():
+            try:
+                payload = await connection.request("context")
+                return FieldCodec.decode(NativeContextData, payload).require_session_file(
+                    owner.require_saved_session()
+                )
+            finally:
+                await connection.close()
+
+        native = asyncio.run(inspect_native())
+        native_context = native.for_turn(owner, NextContextTurn())
+        return {
+            "scope": "next-native-base-and-core-contributors; before future input and provider hooks",
+            "input_supplied": False,
+            "native_manifest": FieldCodec.encode(native_context.segments),
+            "manifest": FieldCodec.encode(context.manifest(counts.counts, counter=counts.counter)),
+            "native_provider_context": native_context.render().provider,
+            "segments": [
+                dict(
+                    kind=segment.declared_name,
+                    provenance=FieldCodec.encode(segment.provenance),
+                    tokens=count,
+                    text=segment.text(),
+                )
+                for segment, count in zip(context.segments, counts.counts, strict=True)
             ],
         }

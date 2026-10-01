@@ -1,0 +1,50 @@
+{
+  "python": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-origin-context-20261001/bin/python",
+  "core": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-origin-context-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "fixture": "/home/ts/wt/s5i05",
+  "public_inputs": 0,
+  "paid_provider_calls": 0,
+  "state": "FAILED_NO_REPLAY",
+  "error": "LookupError(<ContextVar name='active_app' at 0x7fea1b75b1a0>)",
+  "local_provider_posts": 0,
+  "elapsed_seconds": 27.150942860986106,
+  "driver_helper_head": "751507b961d4b49396327faf4f1f8cd4cc5e7015",
+  "original_input_dispositions": {
+    "rows": {
+      "acp:fb987cefe563491d9935b5ae2acd8424": {
+        "admission": 1,
+        "key": "acp:fb987cefe563491d9935b5ae2acd8424",
+        "kind": "not_sent",
+        "origin": {
+          "admission": {
+            "admission_generation": 1,
+            "incarnation": {
+              "created_at": 1790846073.0595086,
+              "name": "context-source"
+            }
+          },
+          "author": {
+            "created_at": 1790846086.7049172,
+            "sender": "user",
+            "worktree": "/home/ts/wt/s5i05/sdk-source/project"
+          },
+          "goal": {
+            "id": "ff6b4aa0c7434745ac64482e3a2e9672",
+            "revision": 2
+          },
+          "kind": "human",
+          "project": "/home/ts/wt/s5i05/sdk-source/project",
+          "root_id": "cdccada587cc41b2898158b38f9add0c"
+        },
+        "owner": "context-source",
+        "sequence": null,
+        "source_text": "S5_CONTEXT_FIRST_ORIGINAL @s2-original-image.png",
+        "target": "context-source"
+      }
+    },
+    "version": 1
+  },
+  "claim": "Actual Toad attachment and original human reservation passed; native firstinput, Core tool and full phase1 not proven",
+  "named_owner": "Sch actual Textual UI context in marshalled driver operations",
+  "public_changes": []
+}

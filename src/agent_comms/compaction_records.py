@@ -27,6 +27,7 @@ from .input_disposition import InputDocument
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SelectedModel
 from .selected_source import SelectedSource
+from .retained_task_facts import RetainedTaskFacts
 from .thread_identity import ThreadIncarnation
 from .typed_table import Column, Index, TypedRow, TypedTable
 
@@ -45,6 +46,7 @@ class SelectedSummarySource:
     source: SelectedSource
     selected: SelectedModel
     settings: PiCompactionSettings
+    retained: RetainedTaskFacts
 
     def __post_init__(self):
         if not self.source:

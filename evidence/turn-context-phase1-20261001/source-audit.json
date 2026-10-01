@@ -1,0 +1,33 @@
+{
+  "source_scope": [
+    "owned_turn.py",
+    "selected_turn.py",
+    "goal_states.py",
+    "message_bus.py"
+  ],
+  "context_root": "src/agent_comms",
+  "python": "3.14.2",
+  "nra_source_index_files": 295,
+  "finding_count": 0,
+  "timing": {
+    "parse_seconds": 1.692,
+    "analysis_seconds": 32.092,
+    "planning_seconds": 0.0,
+    "source_index_seconds": 1.018,
+    "analysis_cache_status": "miss",
+    "total_seconds": 34.802
+  },
+  "coverage_limit": "This installed NRA output has no scan_status or detector omission report; source index and findings alone do not certify all detectors. First 3.11 scan refused PEP695 tracked_turn syntax and was replaced by 3.14 scan.",
+  "census_parse_omissions": 0,
+  "patterns": [
+    "IMPL-12",
+    "BOUND-2",
+    "BOUND-4",
+    "IDEN-5",
+    "IDEN-6",
+    "TIME-8",
+    "TIME-9"
+  ],
+  "raw_nra": "/home/ts/wt/comms-turn-context-phase1-20261001/.artifacts/turn-context-phase1/nra-before314.json",
+  "raw_nra_sha256": "22bbf9cf9346cb0948efe4457c0ddeda517b5afdc141c57b5f8797b89c6965dc"
+}

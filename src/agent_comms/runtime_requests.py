@@ -285,3 +285,12 @@ class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         goal = await ctx.server.agent.turns.goals.set_goal(ctx.session_id, self.text)
         return {"goal": goal.to_wire()}
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextRuntimeRequest(ResultRuntimeRequest):
+    async def result(self, ctx):
+        agent=ctx.server.agent
+        owner=agent._comms.registry.require(ctx.name)
+        context=await agent.turns.inspect_context(ctx.session_id,owner)
+        return FieldCodec.encode(context)

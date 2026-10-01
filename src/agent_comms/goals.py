@@ -177,6 +177,20 @@ class GoalRevision:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
 
 
+class GoalCheckpoint(DeclaredFamily, affix="GoalCheckpoint"):
+    """Captured goal identity, not a goal record or execution permission."""
+
+
+@dataclass(frozen=True)
+class AbsentGoalCheckpoint(GoalCheckpoint, declared_name="absent"):
+    pass
+
+
+@dataclass(frozen=True)
+class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
+    revision: GoalRevision
+
+
 @dataclass(frozen=True)
 class Goal:
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""

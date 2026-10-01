@@ -1,0 +1,86 @@
+{
+  "status": "working-source-native-query-checkpoint-not-ready",
+  "base": "275a7847750d7f5c558bfdd15dbef4a835a8ddc1",
+  "production_tracked_delta": {
+    "added": 284,
+    "deleted": 89,
+    "files": [
+      "src/agent_comms/agent_events.py",
+      "src/agent_comms/bus_activity_index.py",
+      "src/agent_comms/cli_commands.py",
+      "src/agent_comms/message_bus.py",
+      "src/agent_comms/native_custody.py",
+      "src/agent_comms/owned_turn.py",
+      "src/agent_comms/pi_commands.py",
+      "src/agent_comms/pi_events.py",
+      "src/agent_comms/pi_rpc.py",
+      "src/agent_comms/runtime.py",
+      "src/agent_comms/runtime_requests.py",
+      "src/agent_comms/threads.py",
+      "src/agent_comms/turn_context.py",
+      "src/agent_comms/turn_progress.py",
+      "src/agent_comms/turn_runner.py",
+      "stack/bin/prepare-pi-native",
+      "stack/pi-native.sha256"
+    ]
+  },
+  "source_resource_checks": "14 passed /41 unrelated deselected, cancellation+original socket+silent wire",
+  "actual_native_sdk_contract": {
+    "scope": "actual-sdk-source-contract",
+    "provider_calls": 0,
+    "provider_bytes_identical": true,
+    "journal_bytes_unchanged": true,
+    "kinds": [
+      "system_layer",
+      "compaction_summary",
+      "transcript",
+      "injection_message",
+      "tool_catalog"
+    ]
+  },
+  "actual_native_owner_socket_read": "1 passed 8.66s, original native/ACP owner, two context queries,0provider,0inputs; existing selected startup BEFORE read-only baseline",
+  "negative_receipts": {
+    "source04": "5 stale original nominal assertions;48 passed",
+    "runtime_old_tests": "collection failed original TurnSettledUpdate removed, no production changes to restore alias",
+    "native_contract04": "relative-path test oracle; byte/journal assertions had passed",
+    "query07": "fixture runtime server not started,0prompts",
+    "query08": "new fixture had no saved source,0prompts",
+    "query10": "SDK bootstrap startup appended model/thinking metadata; query itself returned twice,0prompts"
+  },
+  "native_manifest": {
+    "phase": "source-native-copy-prepared-not-installed-or-provider-accepted",
+    "native_path": "/home/ts/wt/comms-turn-context-phase1-20261001/stack/.pi-native-0d620ee5bdd0a252/node_modules/@earendil-works/pi-coding-agent",
+    "manifest_sha256": "0d620ee5bdd0a252d7777a2ec0a380b880233412894c58477604604e56622b1c",
+    "tree_commitment": "2bca65e0934d2d71aeb054ef816762531649d18176a21bfb2e6432b724115d59",
+    "list_count": 48,
+    "changed_native_paths": [
+      "dist/core/agent-session.js",
+      "dist/core/agent-session.d.ts",
+      "dist/modes/rpc/rpc-mode.js",
+      "dist/modes/rpc/rpc-types.d.ts",
+      "dist/core/turn-context.js",
+      "dist/core/turn-context.d.ts"
+    ],
+    "public_paths_changed": [],
+    "provider_calls": 0
+  },
+  "unchanged_public_default": true,
+  "ready": false,
+  "remaining": [
+    "all core contributor boundaries and exact logical source/token manifest attribution",
+    "one combined S2/S5 installed full original provider/native/ACP manifest +CLI turn/diff/image/goal journey",
+    "frozen recipient-incarnation compaction scope closure requested byS2",
+    "shared declared-family schema and full receiving ratchet via475/478",
+    "recorded full actual provider-input comparison beyond SDK source fixture"
+  ],
+  "prepared_disposable_paths": [
+    "/home/ts/wt/comms-turn-context-phase1-20261001/stack/.pi-native-0d620ee5bdd0a252"
+  ],
+  "protected_fixture_raw": [
+    "/home/ts/wt/s5q01",
+    "/home/ts/wt/s5q02",
+    "/home/ts/wt/s5q03",
+    "/home/ts/wt/s5q04"
+  ],
+  "no_uncertain_retry": true
+}

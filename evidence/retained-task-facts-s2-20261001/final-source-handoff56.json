@@ -1,0 +1,61 @@
+{
+  "state": "SOURCE_CHECKPOINT_PASS_INSTALLED_RECEIVING_GATE_PENDING",
+  "source_head": "3b6b658b7c2d69f84c2d86c7f988bd2c8c0da09c",
+  "production_file_sha256": {
+    "src/agent_comms/goals.py": "c2b4581829e4675b8124aff0e829f3fabae43510164bed2d65618c051b6c28dc",
+    "src/agent_comms/input_origin.py": "7932994c43456faf6a9cc01b6cd744624758daa647917af99c5ccabd9228951f",
+    "src/agent_comms/owner_compaction_gate.py": "ba49a45584090d74956c1593d503ba963d5c7f0df58dd962ce2b14fe9b164c6d",
+    "src/agent_comms/threads.py": "a2d187f53f636d1c44e1f5ff14f8f01cdeef807df154d274ec6803bc20956455",
+    "src/agent_comms/task_decisions.py": "d6299e08e462a2fc6ab43e17aeb10e463eec4eb9ff7690fb5147ad74138e4e0c",
+    "src/agent_comms/retained_task_facts.py": "4d3111685b55fadfb2bef90843455aa28c651af534902f4ba9600acae86b79be"
+  },
+  "goal_receipt": "goal-checkpoint-source48.json",
+  "source_cut_receipt": "cross-audience-source54.json",
+  "dead_declaration_receipt": "dead-trigger-declaration53.json",
+  "ratchet": {
+    "path": "final-ratchet55.json",
+    "exit_code": 0,
+    "head": "3b6b658b7c2d69f84c2d86c7f988bd2c8c0da09c",
+    "positive_numeric_delta": {}
+  },
+  "correction_production_delta": {
+    "added": 51,
+    "deleted": 22,
+    "files": 6
+  },
+  "dead_current_deletion_lines": {
+    "prototype": 95,
+    "test": 66
+  },
+  "dead_original_baseline_deletion_lines": {
+    "prototype": 244,
+    "test": 196
+  },
+  "native_manifest_sha256": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "native_builder_and_pins_changed": false,
+  "native_source_delta_from_frozen0064": "only two wholly deleted unbuilt prototype/test files",
+  "installed_receiving_gate": {
+    "owner": "Einstein",
+    "oracle_owner": "Kepler",
+    "normal_builder": "Mendel",
+    "paired_process_dependency": "Core480 ChildProcess / Toad274 ChildStdio",
+    "required": [
+      "named absent/present/replaced goal ingress",
+      "original A-private-B public-team-C source cuts and privacy",
+      "selected native original commit",
+      "existing native/ACP/Toad/catalog/manifests/CLI journey"
+    ]
+  },
+  "new_provider_calls": 0,
+  "replayed_original_inputs": 0,
+  "public_changes": [],
+  "remaining_full_s2": "draft481",
+  "patterns": [
+    "IDEN-1",
+    "IDEN-3",
+    "BOUND-2",
+    "MEMB-1",
+    "IDEN-5",
+    "TIME-6"
+  ]
+}
