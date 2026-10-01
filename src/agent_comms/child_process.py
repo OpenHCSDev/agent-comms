@@ -764,7 +764,7 @@ async def _exec_error(fd: int, command: str) -> None:
         loop.remove_reader(fd)
 
 
-async def _join_retirement(task: asyncio.Task):
+async def join_retirement(task: asyncio.Task):
     """Join owned cleanup through repeated cancellation, then propagate it."""
     interrupted = None
     while not task.done():
@@ -839,7 +839,7 @@ class ChildProcess(Sealed, ABC):
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
             self._stop_task = asyncio.create_task(self._stop())
-        return await _join_retirement(self._stop_task)
+        return await join_retirement(self._stop_task)
 
 
 class AttachedChild(ChildProcess):
@@ -1116,7 +1116,7 @@ class BoundedRun:
             try:
                 await child.stop()
             finally:
-                await _join_retirement(exchange)
+                await join_retirement(exchange)
 
 
 class SynchronousProcess(ChildProcess):
