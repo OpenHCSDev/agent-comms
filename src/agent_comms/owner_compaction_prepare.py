@@ -49,6 +49,19 @@ class NativeWitness:
         if self.session_file != canonical:
             raise ValueError("Native witness does not identify owner's canonical session")
 
+    def require_current_file(self, file: Path) -> None:
+        from .checkpoint_seals import file_revision
+
+        self.require_session(str(file))
+        if self.revision != ":".join(map(str, file_revision(file.stat()))):
+            raise ValueError("Native retained source changed since preparation")
+
+    def retained_task_facts(self):
+        from .native_entries import NativeEntry
+
+        with NativeEntry.open_evidence(Path(self.session_file)) as evidence:
+            return evidence.retained_task_facts(self)
+
 
 class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
     family_discriminator = "status"

@@ -1,8 +1,8 @@
 # Full S2 followup after the partial foundation
 
 Integration owner: Schrodinger. This draft preserves the unfinished obligations
-of original #475 before its partial foundation merges. It introduces no runtime
-implementation. The binding specification remains
+of original #475. Foundation #475 is now merged at `91db3971`; this followup
+normally integrates that main and targets main. The binding specification remains
 `docs/refactor/retained-task-memory/S2-MEMORY.md`; the delivered checkpoint and
 its evidence limits are in `s2-foundation-s5-source-20261001.md`.
 
@@ -33,6 +33,51 @@ remain protected.
 
 ## Open operations and acceptance
 
+### First artifact provenance source checkpoint
+
+The stock SDK's default local write operation now has a proposed original-result
+owner, `CompletedFileMutation`. It hashes the exact UTF-8 buffer passed to the
+successful filesystem write while the SDK mutation queue remains held. Both
+default write and edit operations return this evidence to their same original
+successful ToolResult, after existing cancellation checks. Custom operations,
+opaque extension results and failed results acquire no artifact evidence. Existing
+edit patch and numbered diff presentation remain supported by their owner.
+
+`NativeToolDetails` decodes the new publisher metadata once through FieldCodec;
+unrelated external extension details remain opaque. Write/Edit compose the same
+file-mutation capability. Original `NativeEntryCoordinates` own ancestry fields
+and opaque entries derive those coordinates without populating another identity
+copy. The existing acquired native evidence resource selects the witnessed branch
+and joins exact original SDK call/result identities. Each retained artifact uses
+the existing JournalProvenance pair coordinates and the immutable original result
+evidence; it does not retain another full copy of file contents or the tool output.
+
+The native read occurs under the existing idle writer fence **before** acquiring
+bus, registry or input locks. HeldCompaction retains this borrowed frozen source
+material and revalidates its original native revision at the canonical source
+capture. The same RetainedTaskFacts packing and commit consumers use it. There
+is no artifact store, durable index, current-filesystem inference or replay grant.
+The addressed operation path is not a claim of current inode, repository revision
+or symbol identity. Those richer producers remain unfinished below.
+
+Bounded source controls exercise the actual local producer, a saved native
+request/result source, canonical held source cut, equal-value distinct pairs,
+opaque ancestry, off-branch and failed exclusion, later file change, strict
+missing-call refusal, FieldCodec roundtrip and stale native source refusal.
+Eight affected source cases passed, followed by the changed source-lifetime case.
+The original two failures remain: a fixture omitted its private protocol marker
+and the first decoder draft mishandled an external array-valued opaque details
+field. The shared details-field owner fixes the latter for both live and saved
+records. Exact SDK patch seams and syntax pass on two copied source modules;
+this is not execution of a packaged SDK tool.
+
+The normal native builder recipe now includes this producer patch. New module,
+import and full-tree pins have **not** been built or published: the frozen 0064
+package and all installed/default packages remain unchanged. This source draft
+is not package-ready or installed-ready. A reviewed resource grant, normal new
+native artifact, then the actual SDK/native selected-compaction journey are
+required. Full S2, three native checkpoints and S4 are still open.
+
 | Remaining operation | Determining owner and required closure |
 | --- | --- |
 | General original constraints | Extend the original authored source and applicability/correction declarations beyond explicit decisions. Preserve exact wording, source identity, authority, scope and supersession; no prose-based instruction inference or second constraint ledger. All packing/query consumers derive the same applicable projection. |
@@ -50,10 +95,9 @@ TIME-6.
 
 ## Coordination and stop conditions
 
-The draft is stacked on original foundation #475. Parent reviews and merges
-that named checkpoint first, then #473's evidence/current-main closure. After
-the foundation lands, integrate main normally and retarget this followup to
-main. Preserve the foundation source and all raw proofs.
+The original foundation is merged and this draft now targets main. Preserve that
+foundation source and all raw proofs; future source or artifact acceptance does
+not relabel the earlier frozen receiving journeys.
 
 Coordinate any shared context/source helper method with Einstein and the native
 mutation/result boundary with its active owner before implementation. Keep one

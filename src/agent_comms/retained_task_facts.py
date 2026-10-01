@@ -18,6 +18,8 @@ from .input_attempt import StoredInput
 from .messages import Message
 from .message_reference import MessageReference
 from .thread_identity import ThreadRole
+from .native_file_artifact import NativeFileArtifact
+from .turn_context import JournalProvenance
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -104,6 +106,18 @@ class GoalTaskFact(ExactTaskFact):
 @dataclass(frozen=True)
 class InputTaskFact(ExactTaskFact):
     source: StoredInput
+
+
+@dataclass(frozen=True)
+class NativeArtifactTaskFact(ExactTaskFact):
+    """Exact original result evidence with its existing journal pair coordinates."""
+
+    source: JournalProvenance
+    artifact: NativeFileArtifact
+
+    def __post_init__(self):
+        if len(self.source.entries) != 2 or len(set(self.source.entries)) != 2:
+            raise ValueError("Retained file operation requires distinct original request/result entries")
 
 
 @dataclass(frozen=True)
