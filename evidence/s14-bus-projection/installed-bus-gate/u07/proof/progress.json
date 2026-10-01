@@ -1,0 +1,384 @@
+{
+  "all_views_open_before_send": true,
+  "original_inputs_retried": 0,
+  "phase": "physical_return_0_input",
+  "original": {
+    "seq": 1,
+    "message_id": "89f152b1ce49"
+  },
+  "processing": "Responding\u2026",
+  "reply": {
+    "seq": 7,
+    "message_id": "90cd950e92fc"
+  },
+  "original_terminal": {
+    "execution": {
+      "kind": "executions",
+      "execution_id": "wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd",
+      "origin": "wire",
+      "lifecycle": {
+        "kind": "completed",
+        "ordinal": 1
+      },
+      "owner_thread": "beta",
+      "owner_lookup": "0d412bcc9ed1e9d024b78e065abd3f7d",
+      "revision": 4,
+      "max_attempts": 1,
+      "reason_code": null,
+      "created_at_ms": 1790817745853,
+      "updated_at_ms": 1790817750825,
+      "exact_target": "#team"
+    },
+    "attempt": {
+      "kind": "attempts",
+      "execution_id": "wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd",
+      "attempt_ordinal": 1,
+      "owner_lookup": "0d412bcc9ed1e9d024b78e065abd3f7d",
+      "owner_thread": "beta",
+      "owner_generation": 1,
+      "owner_token_digest": "368eb1f9b17e428cb336a6b7dedc6406241d8dc123bcc54e1ebe5f5eec1f80a0",
+      "lifecycle": {
+        "kind": "succeeded"
+      },
+      "revision": 6,
+      "last_progress_at_ms": 1790817750609,
+      "reason_code": null,
+      "created_at_ms": 1790817745896,
+      "updated_at_ms": 1790817750824
+    },
+    "claims": [
+      {
+        "kind": "wake_claims",
+        "claim_id": "cohort-v1:fab070baed6b2ce112e0dca3e1900e44012de7ff944e8fe678574ab6b9b911fa",
+        "recipient": "beta",
+        "recipient_lookup": "0d412bcc9ed1e9d024b78e065abd3f7d",
+        "wire_seq": 1,
+        "message_id": "89f152b1ce49",
+        "audience": "mentioned",
+        "lifecycle": {
+          "kind": "completed",
+          "decision": {
+            "kind": "full",
+            "execution_id": "wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd",
+            "exact_target": "#team"
+          }
+        },
+        "accepted_at_ms": 1790817744982,
+        "updated_at_ms": 1790817750826,
+        "revision": 3,
+        "resolver_version": "resolver-v1",
+        "policy_version": "policy-v1"
+      }
+    ],
+    "links": [
+      {
+        "kind": "execution_claims",
+        "execution_id": "wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd",
+        "claim_id": "cohort-v1:fab070baed6b2ce112e0dca3e1900e44012de7ff944e8fe678574ab6b9b911fa",
+        "ordinal": 0
+      }
+    ],
+    "replay": null,
+    "obligation": {
+      "kind": "obligations",
+      "execution_id": "wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd",
+      "exact_target": "#team",
+      "lifecycle": {
+        "kind": "published",
+        "message_id": "90cd950e92fc",
+        "seq": 7
+      },
+      "reason_code": null,
+      "created_at_ms": 1790817745853,
+      "updated_at_ms": 1790817750823,
+      "revision": 3
+    },
+    "publication_intent": {
+      "kind": "publication_intents",
+      "execution_id": "wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd",
+      "sender": "beta",
+      "exact_target": "#team",
+      "message_type": "info",
+      "notice": false,
+      "timestamp": 1790817750.665944,
+      "payload": "RECIPIENT_RESPONSE_PROOF",
+      "payload_digest": "b72abc8f0ae313c60ae850d51312528483f29e3aaf54375670dc266aac0f9583",
+      "publication_key": "publication:v1:wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd:#team",
+      "expected_message_id": "90cd950e92fc"
+    },
+    "publication_receipt": {
+      "execution_id": "wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd",
+      "publication_key": "publication:v1:wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd:#team",
+      "seq": 7,
+      "message_id": "90cd950e92fc",
+      "sender": "beta",
+      "exact_target": "#team",
+      "message_type": "info",
+      "notice": false,
+      "timestamp": 1790817750.665944,
+      "payload_digest": "b72abc8f0ae313c60ae850d51312528483f29e3aaf54375670dc266aac0f9583"
+    },
+    "connectivity": null,
+    "last_recovery": null,
+    "current_execution_id": null,
+    "current_attempt_ordinal": null,
+    "pointer_revision": 2,
+    "is_current": false,
+    "snapshot_version": 2
+  },
+  "original_native_reply": {
+    "assignment_id": "cohort-v1:fab070baed6b2ce112e0dca3e1900e44012de7ff944e8fe678574ab6b9b911fa",
+    "recipient_lookup": "0d412bcc9ed1e9d024b78e065abd3f7d",
+    "native_input_id": "c8264fdb39dd727fbbf379276ace9343",
+    "execution_id": "wirev15f768d34a27ea6ed21c2c7ec6fe7c016f6ce37c6da41a141b9152bc559cda6cd",
+    "native_entry_id": "c7cf69dd",
+    "native_session_file": "/home/ts/wt/g460b/u07/private-root/wire/native-sessions/0d412bcc9ed1e9d024b78e065abd3f7d/2026-10-01T01-22-27-675Z_01a0f50e-42da-7239-b3ff-d5204e908b37.jsonl"
+  },
+  "original_target_handling": "Responded",
+  "same_open_31s": [
+    {
+      "second": 0,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 1,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 2,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 3,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 4,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 5,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 6,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 7,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 8,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 9,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 10,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 11,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 12,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 13,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 14,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 15,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 16,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 17,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 18,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 19,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 20,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 21,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 22,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 23,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 24,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 25,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 26,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 27,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 28,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 29,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    },
+    {
+      "second": 30,
+      "original_sender": 1,
+      "original_recipient": 1,
+      "reply_sender": 1,
+      "reply_recipient": 1
+    }
+  ],
+  "after_31s_beta": {
+    "name": "beta",
+    "tags": [
+      "team"
+    ],
+    "worktree": "/home/ts/wt/g460b/u07/application/project",
+    "parent": null,
+    "task": null,
+    "process_identity": {
+      "pid": 236960,
+      "start_time": 29336990
+    },
+    "session_file": null,
+    "model": "selected-offline/fixture",
+    "thinking_level": "off",
+    "goal": null,
+    "created_at": 1790817726.0196621,
+    "previous_worktrees": [],
+    "auto_title_pending": false,
+    "title": null,
+    "role": "agent",
+    "active_turn": null,
+    "channel_scope_generation": 0,
+    "turn_generation": 6,
+    "last_finished_turn_id": "71b16608f6a678591e102be703131bda"
+  },
+  "physical_return_immediate_send": []
+}
