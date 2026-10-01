@@ -238,3 +238,37 @@ Parent must preserve its original journal/witness archive, integrate the final
 response-route/lifecycle migration, and execute the one affected installed
 journey after coherent source closure. No test or migration run was substituted
 for design. Delete the transient cutover tool once that carry is accepted.
+
+## Final independent source-consumer preparation
+
+`NativeRuntimeInput.published_replies` replaces the scalar `published_reply`
+API. It derives all immutable published references from original response
+obligations and returns none until every original obligation is published.
+`TranscriptReceiptSource.native_events` joins every reference before suppressing
+the native assistant copy, preserving exact-once source/paint ownership.
+`PublishedReplyRevision.inputs` now counts DISTINCT original input IDs, so
+several route receipts cannot manufacture several native inputs. Search:
+
+```
+rg -n 'published_reply\(|published_replies\(' src tests tools
+```
+
+The only declaration is in `native_runtime_input.py`; the only direct consumer
+is `transcript_receipts.py`. No scalar compatibility alias remains. This closes
+the history projection interface for a forthcoming plural obligation relation;
+it does not claim that mixed-route execution/publication is implemented yet.
+
+The carry now also verifies the original native DDL and schema-meta raw cells
+in the copied stage before replacing that COPIED schema. It reuses the existing
+cutover `digest_json` and `file_witness`, rather than another witness codec or
+hashing implementation. Original file witnesses are checked before/after.
+
+Remaining payload ownership crossing found by actual source search:
+`SelectedPrompt.remaining` still uses the preexisting `_MAX_PROMPT_BYTES`
+32 KiB bound in `selected_turn.py`. No retained-context payload budget owner is
+available on this main checkpoint (search `class .*Retained|class .*Payload`,
+`RetainedContext|PayloadBudget|payloadBudget` in `src`/`stack`). Arendt owns its
+replacement and retained-context API. Do not invent a second budget type or
+remove the bound without the canonical replacement. Compaction remains Sch's
+sole scope. This is part of the explicit runtime integration dependency, not
+hidden behind previous tests or a new local limit.

@@ -7,7 +7,6 @@ never touches journals, native processes, public pointers or the original root.
 Delete this transient bridge after the operator completes the cutover.
 """
 from contextlib import closing
-import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -20,7 +19,7 @@ from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeI
 from agent_comms.private_sidecar import create_sidecar_file, sidecar_connection
 from agent_comms.typed_table import SQLiteSchemaObject
 
-from routing_carry import file_witness
+from routing_carry import file_witness, digest_json
 
 
 def _cells(db, table):
@@ -39,15 +38,22 @@ def _non_native_digest(db):
     objects = SQLiteSchemaObject.read(db.execute(
         "SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
     ))
-    digest = hashlib.sha256()
+    witnesses = []
     for original in sorted(objects, key=lambda item: item.name):
         if original.name in replaced or original.name.startswith('native_runtime_'):
             continue
         name = '"' + original.name.replace('"', '""') + '"'
         rows = sorted((list(row) for row in db.execute(f'SELECT * FROM {name}')), key=json.dumps)
-        digest.update(json.dumps((original.name, original.sql, rows), separators=(',', ':')).encode())
-    return digest.hexdigest()
+        witnesses.append(digest_json((original.name, original.sql, rows)))
+    return digest_json(witnesses)
 
+
+
+def _native_schema(db):
+    return {row.name: row.sql for row in SQLiteSchemaObject.read(db.execute(
+        "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
+        "AND (name LIKE 'native_runtime_%' OR name LIKE 'current_native_cursor%')"
+    ))}
 
 def prepare_original(root):
     """Read schema four ONLY with its authentic owner declarations; never install."""
@@ -87,6 +93,7 @@ def prepare_original(root):
                 bindings = _cells(sidecar, PromptBinding)
         packet = {
             'source_root': str(root), 'protected': protected,
+            'native_schema': _native_schema(db), 'schema_meta': _cells(db, NativeRuntimeSchemaMeta),
             'inputs': _cells(db, NativeRuntimeInput),
             'cursors': _cells(db, CurrentNativeCursor), 'bindings': bindings,
             'non_native_digest': _non_native_digest(db),
@@ -138,6 +145,8 @@ def carry_into(staged_root, packet, expected_stage_non_native_digest):
         db = store.session._connection
         if _non_native_digest(db) != expected_stage_non_native_digest:
             raise ValueError('Copied coordinator differs from the reviewed installer stage')
+        if _native_schema(db) != packet['native_schema'] or _cells(db, NativeRuntimeSchemaMeta) != packet['schema_meta']:
+            raise ValueError('Copied native schema or original version witness differs')
         db.execute('PRAGMA foreign_keys=OFF')
         try:
             with store.session.transaction():

@@ -131,7 +131,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 return PublishedReplyRevision(0, 0)
             return PublishedReplyRevision.read(
                 db.execute(
-                    "SELECT COALESCE(MAX(o.receipt_seq),0) AS through_seq, COUNT(*) AS inputs "
+                    "SELECT COALESCE(MAX(o.receipt_seq),0) AS through_seq, COUNT(DISTINCT n.input_id) AS inputs "
                     f"FROM {cls.declared_name} n JOIN {ExecutionRecord.declared_name} e "
                     "ON e.execution_id=n.execution_id AND e.owner_lookup=n.owner_lookup "
                     "AND e.current_attempt_ordinal=n.attempt_ordinal "
@@ -144,7 +144,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             )[0]
 
     @classmethod
-    def published_reply(cls, root, reader, user, owner_lookup):
+    def published_replies(cls, root, reader, user, owner_lookup):
         """Join the original tracked input to its exact published execution.
 
         This is a read-only projection of existing records. It never enrolls a
@@ -158,10 +158,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         session_id = reader.session_id
         with cls._publication_read(root) as db:
             if db is None:
-                return None
+                return ()
             rows = cls.select(db, where="input_id=? AND execution_id IS NOT NULL", parameters=(user.input_id,))
             if not rows:
-                return None
+                return ()
             original = rows[0]
             if (
                 original.owner_lookup,
@@ -169,23 +169,21 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 original.session_id,
                 original.session_entry_id,
             ) != (owner_lookup, str(reader.path), session_id, user.id):
-                return None
+                return ()
             attempt = original.execution.require_attempt()
             execution = ExecutionRecord.one(db, execution_id=attempt.execution_id)
             if not attempt.matches_execution(execution, original.owner_lookup):
-                return None
-            return next(
-                (
-                    MessageReference(
-                        obligation.lifecycle.receipt_seq, obligation.lifecycle.receipt_message_id
-                    )
-                    for obligation in ResponseObligation.select(
-                        db, where="execution_id=?", parameters=(attempt.execution_id,)
-                    )
-                    if obligation.lifecycle.published
-                ),
-                None,
+                return ()
+            obligations = ResponseObligation.select(
+                db, where="execution_id=?", parameters=(attempt.execution_id,)
             )
+            if not obligations or not all(row.lifecycle.published for row in obligations):
+                return ()
+            return tuple(sorted(
+                (MessageReference(row.lifecycle.receipt_seq, row.lifecycle.receipt_message_id)
+                 for row in obligations),
+                key=lambda reference: reference.seq,
+            ))
 
     input_id: str = field(
         metadata={

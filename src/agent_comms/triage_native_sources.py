@@ -25,6 +25,8 @@ class TriageNativeSources(NativeRuntimeTable, TypedTable, declared_name="native_
 
     @classmethod
     def triggers(cls):
+        from .native_input_record import TriageNativeExecution
+
         guards = {
             f"{cls.declared_name}_{operation.lower()}_guard":
             f"CREATE TRIGGER {cls.declared_name}_{operation.lower()}_guard BEFORE {operation} "
@@ -34,7 +36,7 @@ class TriageNativeSources(NativeRuntimeTable, TypedTable, declared_name="native_
         guards[f"{cls.declared_name}_stage_guard"] = (
             f"CREATE TRIGGER {cls.declared_name}_stage_guard BEFORE INSERT ON {cls.declared_name} "
             "WHEN NOT EXISTS (SELECT 1 FROM native_runtime_input n "
-            "WHERE n.input_id=NEW.input_id AND n.stage='triage') "
+            f"WHERE n.input_id=NEW.input_id AND n.stage='{TriageNativeExecution.declared_name}') "
             "BEGIN SELECT RAISE(ABORT,'only triage owns separate source membership'); END"
         )
         guards[f"{cls.declared_name}_membership_guard"] = (
