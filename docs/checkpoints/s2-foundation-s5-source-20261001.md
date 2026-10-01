@@ -14,7 +14,7 @@ native `0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1`,
 with paired Toad `89655a17336da92eed0d4cd06443925af909e914`, Textual
 `6b5895fa0a72aeec2aeaef7206d5debfa0c1803c` and ACP SDK 0.12.1.
 
-Current main is `464b05dc3da1e96aca608383160999c95472b33b`. The catalog at
+The source census baseline is main `464b05dc3da1e96aca608383160999c95472b33b`. The catalog at
 that main is not the catalog used by the combined acceptance: the foundation
 adds `comms_decision`. S5's preservation comparison must name its accepted S2
 foundation, never imply unchanged provider input relative to old main.
@@ -44,6 +44,13 @@ paths, relative to current main. This count is not the whole S2 or S5 delta.
 The complete combined `src/agent_comms` plus `stack` comparison is 85 paths,
 2,446 additions and 691 deletions; it includes shared callers and stack tests.
 The exact per-path census is `partial-foundation-scope43.json`.
+
+Parent's existing installed `tools.tool_catalog` comparison against accepted
+Core #480 establishes 32 tools versus 33 in the combined checkpoint. The sole
+addition is `comms_decision`: no tool is removed and canonical JSON for every
+common catalog row is unchanged. This is a catalog boundary check, not a whole
+provider-prompt comparison. Original receipt and both catalogs are preserved in
+parent #432's `.artifacts/s2-foundation-catalog-review-20261001/`.
 
 The replaced dormant retention declaration is deleted (149 lines), with its
 obsolete tests deleted (132 lines). No second memory store, decoder, semantic
@@ -86,5 +93,8 @@ acceptance is private; public/default activation remains the parent's operation.
    goal replacement, unresolved failure and queued original input.
 5. S4 configured-model recall under its separately authorized budget and oracle.
 
-These are explicit followup obligations. Acceptance or merge of this partial
-foundation must not mark the full S2 goal complete.
+These explicit obligations remain open in draft **#481**, owned by Schrodinger,
+stacked on #475 before its foundation merge. Its persistent worktree is
+`/home/ts/wt/comms-retained-task-facts-s2-followup-20261001`; the binding followup
+ledger is `docs/checkpoints/s2-foundation-followup-20261001.md`. Acceptance or
+merge of this partial foundation must not mark the full S2 goal complete.
