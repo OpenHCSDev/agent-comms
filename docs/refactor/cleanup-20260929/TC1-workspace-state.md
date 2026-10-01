@@ -37,3 +37,37 @@ The pattern is the same throughout: workspace state kept as optional fields and 
 ## Dispatch
 
 > **`toad-tc1`:** Complete TC1 per `docs/refactor/cleanup/TC1-workspace-state.md`, starting with `session_presentation.py` and `transcript_publication.py`, after T9 in each.
+
+## Current terminal execution sub-surface, 2026-10-01
+
+Verified at Toad7572b7b7 (included unchanged in271):
+`terminal_execution.py::TerminalExecution` keeps process, task, PTY descriptor,
+return code, startup error and release status independently. `ToolState.finished`
+reconstructs completion from two nullable fields; `TerminalTool.present_execution`
+interprets the execution's return code again. These are IMPL-10 and IDEN-3
+ownership witnesses, not a claim that every optional external API field is debt.
+The OS subprocess result and ACP nullable exit fields are external contracts;
+decode their meaning once and project that contract at the ACP boundary.
+
+Arendt owns this execution sub-surface and its ACP/controller/widget consumers.
+Kepler contributes the actual installed PTY/ACP journey to the same draft.
+They must create an isolated persistent worktree and draft before long work.
+Heisenberg271 retains session/transcript/viewport/workspace ownership; shared
+file changes require direct agreement. No new coordinator or parallel process
+authority. This independent continuation does not modify the frozen receiver
+release or repeat its accepted checks.
+
+Target: the original execution owns lifecycle operations and completion;
+widgets and ACP views derive from it. Preserve ANSI/output bounds, shell input,
+resize, signal semantics, cancellation, release and detached-view continuity.
+Use behavior-owning states rather than a second status cache, copied return
+code, alias or nullable field combinations. Delete replaced logic in every
+consumer. Preserve genuine weak-reference collection and external API shapes.
+
+Acceptance: reuse the real application/controller/PTY journey for create,
+output, normal exit, signal exit, failed startup, cancellation, release and
+detach/reattach, with no leaked children. Verify the changed installed entrypoint;
+focused tests alone are not readiness. Use bounded owned fixtures, no public
+session effects or paid provider calls, and clean generated artifacts. Report
+production deletions and exact remaining scope. This does not close the other
+TC1 files or its original whole-surface threshold.
