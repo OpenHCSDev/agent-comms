@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .attempt_start import AttemptStart
+from .assignment_states import CompletedAssignment
 from .channel_coding_tools import CodingToolOwner
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import prepare_fenced_response, publish_fenced_response
@@ -235,8 +236,8 @@ class SelectedAttempt:
             ).value
             _, receipt = published.require_published_evidence()
             participant.consume_reply_wait()
-            return CoordinatedTurn.published(
-                participant, session, request.admission.input_id, (receipt,)
+            return CoordinatedTurn.capture(
+                participant, session, request.admission.input_id, CompletedAssignment, (receipt,)
             )
 
     async def observe_event(self, event):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 
-from .assignment_states import AssignmentState, CompletedAssignment, FailedAssignment, IgnoredAssignment
+from .assignment_states import AssignmentState
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .coordination_tables.publications import PublicationReceipt
 from .diagnostics import record_terminal_failure
@@ -27,32 +27,13 @@ class CoordinatedTurn:
     fresh_session: FreshPrivateSession | None = None
 
     @classmethod
-    def failed(cls, participant, session, input_id):
+    def capture(
+        cls, participant, session, input_id, disposition: type[AssignmentState],
+        publications: tuple[PublicationReceipt, ...] = (),
+    ):
         return cls(
             participant.batch.assignment_ids,
-            FailedAssignment,
-            input_id,
-            (),
-            cls.cursor_status_for(participant, input_id),
-            session.creation,
-        )
-
-    @classmethod
-    def ignored(cls, participant, session, input_id):
-        return cls(
-            participant.batch.assignment_ids,
-            IgnoredAssignment,
-            input_id,
-            (),
-            cls.cursor_status_for(participant, input_id),
-            session.creation,
-        )
-
-    @classmethod
-    def published(cls, participant, session, input_id, publications: tuple[PublicationReceipt, ...]):
-        return cls(
-            participant.batch.assignment_ids,
-            CompletedAssignment,
+            disposition,
             input_id,
             publications,
             cls.cursor_status_for(participant, input_id),

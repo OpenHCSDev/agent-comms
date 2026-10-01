@@ -65,8 +65,6 @@ class SelectedSourceBatch(InputBatch):
         ))
 
     def response_instruction(self, sender: str) -> str:
-        if len(self.targets) == 1:
-            return "Return the combined answer directly for the original reply route. "
         examples = tuple(
             Message(sender, target, "Combined answer for originals on this reply route only",
                     MessageType.INFO, timestamp=0)
@@ -86,8 +84,6 @@ class SelectedSourceBatch(InputBatch):
         These uncommitted Message values grant no publication. The fenced
         publisher still owns the timestamp, audience, receipt and actual row.
         """
-        if len(self.targets) == 1:
-            return (Message(sender, self.targets[0], text, MessageType.INFO),)
         try:
             replies = FieldCodec.decode(tuple[Message, ...], json.loads(text))
             for reply in replies:
