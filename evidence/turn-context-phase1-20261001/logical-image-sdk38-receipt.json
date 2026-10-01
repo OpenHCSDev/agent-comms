@@ -1,0 +1,41 @@
+{
+  "state": "ACTUAL_NEW_NATIVE_SDK_IMAGE_AND_TEXT_TRANSFORMATION_CONTRACT_PASS_WHOLE_JOURNEY_PENDING",
+  "native_manifest": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "native_tree": "cc9e86f72ba7b2c285b209b3fc96a2e8dcc4f182a528941712a5dbd7e457a9d1",
+  "source_parent": "43df95f00f4e29f9086e2b5bb1e1f651ab5f67dc",
+  "checks": {
+    "scope": "actual-sdk-source-contract",
+    "provider_calls": 0,
+    "provider_bytes_identical": true,
+    "journal_bytes_unchanged": true,
+    "original_contribution_tokens": 1207,
+    "invalid_coordinates_refused": 5,
+    "transformation_observed_without_input_rejection": true,
+    "preview_not_recorded": true,
+    "kinds": [
+      "system_layer",
+      "compaction_summary",
+      "transcript",
+      "injection_message",
+      "tool_catalog"
+    ]
+  },
+  "changed_valid_png_observed_as_transformed_input": true,
+  "original_native_claim_digest_preserved": true,
+  "test_path": "tests/native_turn_context_contract.mjs",
+  "test_sha256": "7fe2baf8f7bef40b7089042dba0e675f8fdbe470cda5325e9df1e28066ea325b",
+  "raw": "evidence/turn-context-phase1-20261001/logical-image-sdk38.json",
+  "raw_sha256": "b5ebfd09ee486dd5aed307b62a991c86de4b892f86eab69cdfc621c42821a074",
+  "production_image_delta": {
+    "added": 9,
+    "deleted": 3
+  },
+  "not_claimed": [
+    "Actual new paired Toad/native/Core whole journey",
+    "Configured paid provider saved-source acceptance",
+    "Public/default activation",
+    "Full phase1 Ready"
+  ],
+  "original_inputs_replayed": 0,
+  "public_changes": []
+}

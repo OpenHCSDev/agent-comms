@@ -61,7 +61,8 @@ try {
         assert.throws(()=>NativeInputClaim.capture(digest,request,[{...coordinates,...invalid}]));
     assert.equal(claim.observe({...original,content:'Extension transformed input'},preview,journal)[0].kind,
         'transformed_input');
-    const changedImage={...original,content:[original.content[0],{...images[0],data:'AAAA'}]};
+    const changedImage={...original,content:[original.content[0],{...images[0],
+        data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=='}]};
     assert.equal(claim.observe(changedImage,preview,journal)[0].kind,'transformed_input');
     assert.equal(JSON.stringify(captured.render()),JSON.stringify(provider));
     assert.deepEqual(readFileSync(manager.getSessionFile()),before);
