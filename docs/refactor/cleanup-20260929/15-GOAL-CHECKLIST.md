@@ -1,3 +1,19 @@
+## 2026-10-01 merged queue/source checkpoint; bus return defect blocks activation
+
+Toad251/252/250 are merged; final mainf79c8541 production/metadata match the
+installed156 candidate. Original native queue/fork/cancel gate remains PASS.
+Independent same156 bus u07 failed at first physical tab return: canonical
+answer fragment exists once, while saved and direct live Response resources
+both visibly paint it. Hot3DM/IRC handling and31 observations pass. Sch and
+Heisenberg own the complete source/live publication diagnosis, preserving
+original source/resource/native evidence; no text deduplication or replay.
+Terminal1/120.84s, cleanup empty. Public install remains unchanged.
+
+Read-only quiet preflight reached original13 idle owners and then refused
+public Toad4091704@28109492. No signals, store reset or defaults changed.
+Arendt takes independent remaining recorded/unrecorded send-admission release
+ownership; coordinate shared native-row claims before implementation.
+
 ## 2026-10-01 corrected installed candidate passes continuous native journey
 
 Immutable atomic-page-handoff candidate Core970 / Toad15601 / Textual6b /

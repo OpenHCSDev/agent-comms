@@ -50,9 +50,64 @@
     }
   },
   "bus_gate": {
-    "owner": "Schrodinger",
-    "state": "awaiting actual same-build result",
-    "no_old_gate_substitution": true
+    "owner": "Schrodinger; publication integration Heisenberg252/254",
+    "state": "FAIL first physical tab-return answer appears twice",
+    "original_artifact": "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/u07",
+    "terminal": 1,
+    "elapsed_seconds": 120.8399907790008,
+    "canonical_fragment_answer_count": 1,
+    "visible_response_resource_count": 2,
+    "resource_ids": [
+      140438924237728,
+      140437979124864
+    ],
+    "original_resource_ancestry": [
+      [
+        {
+          "type": "TranscriptFragmentView",
+          "resource_id": 140438924233776
+        },
+        {
+          "type": "TranscriptPageView",
+          "resource_id": 140437942508496
+        },
+        {
+          "type": "TranscriptHistory",
+          "resource_id": 140437942510736
+        },
+        {
+          "type": "Contents",
+          "resource_id": 140439194763344
+        }
+      ],
+      [
+        {
+          "type": "Contents",
+          "resource_id": 140439194763344
+        },
+        {
+          "type": "ContentsGrid",
+          "resource_id": 140439194768144
+        },
+        {
+          "type": "Window",
+          "resource_id": 140439194768784
+        },
+        {
+          "type": "Conversation",
+          "resource_id": 140439196147920
+        }
+      ]
+    ],
+    "checkpoint_worker": {
+      "state": "WorkerState.SUCCESS",
+      "error": "None"
+    },
+    "remaining_owned_processes": [],
+    "provider_errors": [],
+    "no_old_gate_substitution": true,
+    "original_replays": 0,
+    "public_effects": 0
   },
   "public_install": "runtime-body-readiness-20260930 unchanged",
   "runtime_reset_and_public_signals": 0,
@@ -67,6 +122,8 @@
     "251": "merged a2761f4b",
     "252": "merged 9b9479dd",
     "250_normal_main_integration": "3fe890f80a630c64065caf5e675b934aaaf13865",
-    "250_production_and_metadata_equal_frozen156": true
-  }
+    "250_production_and_metadata_equal_frozen156": true,
+    "250": "merged f79c85419b441b41da7cf9081df143b98c1d7f52"
+  },
+  "public_quiet_preflight": "read-only validation refuses public Toad4091704@28109492; no signal, reset or publication"
 }
