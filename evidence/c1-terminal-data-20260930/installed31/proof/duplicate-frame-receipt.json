@@ -1,0 +1,38 @@
+{
+  "frame_index": 983,
+  "observed_ns": 289591039490334,
+  "input_id": "8ea38cfc351845e390d4b91bacd20f9f",
+  "marker": "FIRST_FORK_NEW_INPUT",
+  "queue_marker_occurrences": 0,
+  "chat_marker_occurrences": 2,
+  "physical_terminal_marker_occurrences": 2,
+  "response2_occurrences": 2,
+  "session_id": "immediate-fork",
+  "submissions": [],
+  "queue": [],
+  "mounted_starts": [
+    {
+      "kind": "input_started",
+      "input_id": "8ea38cfc351845e390d4b91bacd20f9f",
+      "text": "FIRST_FORK_NEW_INPUT",
+      "scope": {
+        "session_id": "immediate-fork",
+        "admission": {
+          "incarnation": {
+            "name": "immediate-fork",
+            "created_at": 1790813932.5328405
+          },
+          "admission_generation": 5
+        },
+        "owner_pid": 136319
+      },
+      "revision": 5,
+      "native_id": "0220fdb0f97d5ecb61eaeb14393a458e"
+    }
+  ],
+  "native_driver": "LinuxDriver",
+  "headless": false,
+  "total_frames": 2424,
+  "input_disposition": "already native-started in same original; not retried",
+  "evidence_source": "same original incremental ANSI; no new UI/native/provider run"
+}

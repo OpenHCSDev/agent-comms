@@ -1,0 +1,28 @@
+{
+  "target": "beta",
+  "channel": "#team",
+  "row_region": [
+    2,
+    11,
+    57,
+    2
+  ],
+  "screen_point": [
+    2,
+    11
+  ],
+  "native_hit_is_original_row": true,
+  "native_hit_type": "ThreadRow",
+  "group_expanded": true,
+  "provider_posts_before_seed": 0,
+  "native_inputs_sent": 0,
+  "same_installed_app": true,
+  "physical_driver": "LinuxDriver",
+  "headless": false,
+  "menu_opened": true,
+  "pointer_after_click": [
+    2,
+    11
+  ],
+  "declared_menu_escape_closed": true
+}

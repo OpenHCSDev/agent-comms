@@ -1,0 +1,43 @@
+{
+  "observed_ns": 289590979213197,
+  "width": 160,
+  "height": 44,
+  "ansi": "\u001b[7;3H\u001b[1;38;5;16;48;5;16m(1) \u001b[0m\u001b[1;38;5;16;48;5;16m\u280b immediate-fork\u001b[0m\u001b[48;5;16m                                     \u001b[0m\u001b[7;60H\n\u001b[8;3H\u001b[1;38;5;16;48;5;16m  Thinking \u00b7 Finishing turn\u001b[0m\u001b[48;5;16m                              \u001b[0m\u001b[8;60H\n\u001b[14;3H\u001b[1;38;5;16;48;5;16m(1) \u001b[0m\u001b[1;38;5;16;48;5;16m\u280b immediate-fork\u001b[0m\u001b[48;5;16m                                     \u001b[0m\u001b[14;60H\n\u001b[15;3H\u001b[1;38;5;16;48;5;16m  Thinking \u00b7 Finishing turn\u001b[0m\u001b[48;5;16m                              \u001b[0m\u001b[15;60H\n\u001b[38;65H\u001b[48;5;16m \u001b[0m\u001b[38;5;16;48;5;16m\u25b6 Session details \u00b7 Ready \u00b7 Saved history available\u001b[0m\u001b[48;5;16m \u001b[0m\u001b[38;118H",
+  "driver": "LinuxDriver",
+  "headless": false,
+  "session_id": "immediate-fork",
+  "submissions": [],
+  "queue": [],
+  "mounted_starts": [
+    {
+      "kind": "input_started",
+      "input_id": "8ea38cfc351845e390d4b91bacd20f9f",
+      "text": "FIRST_FORK_NEW_INPUT",
+      "scope": {
+        "session_id": "immediate-fork",
+        "admission": {
+          "incarnation": {
+            "name": "immediate-fork",
+            "created_at": 1790813932.5328405
+          },
+          "admission_generation": 5
+        },
+        "owner_pid": 136319
+      },
+      "revision": 5,
+      "native_id": "0220fdb0f97d5ecb61eaeb14393a458e"
+    }
+  ],
+  "queue_region": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "chat_region": [
+    64,
+    3,
+    90,
+    32
+  ]
+}
