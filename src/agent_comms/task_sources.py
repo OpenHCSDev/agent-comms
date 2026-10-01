@@ -1,4 +1,4 @@
-"""Authored choices live on their original wire message, never a decision ledger."""
+"""Authored task statements live on their original wire message, never a ledger."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, kw_only=True)
-class DecisionScope(DeclaredFamily, affix="DecisionScope"):
+class TaskScope(DeclaredFamily, affix="TaskScope"):
     project: str
 
     def require_current(self, owner: Thread) -> None:
@@ -32,38 +32,38 @@ class DecisionScope(DeclaredFamily, affix="DecisionScope"):
     def require_context(self, owner: Thread) -> None: ...
 
     @abstractmethod
-    def applies(self, owner: Thread, decision: Decision, registry: RegistrySnapshot) -> bool: ...
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool: ...
 
-    def require_correction(self, previous: Decision, correction: Decision,
+    def require_correction(self, previous: ScopedTaskDeclaration, correction: ScopedTaskDeclaration,
                            registry: RegistrySnapshot) -> None:
         if previous.scope != self:
             raise RelationViolationError("Decision correction must preserve its original scope")
 
 @dataclass(frozen=True, kw_only=True)
-class GoalDecisionScope(DecisionScope):
+class GoalTaskScope(TaskScope):
     goal: GoalRevision
 
     def require_context(self, owner: Thread) -> None:
         owner.require_active_goal(self.goal.id)
         owner.require_goal_checkpoint(self.goal)
 
-    def applies(self, owner: Thread, decision: Decision, registry: RegistrySnapshot) -> bool:
-        return owner.decision_scope == self
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
+        return owner.task_scope == self
 
 
 @dataclass(frozen=True, kw_only=True)
-class TurnDecisionScope(DecisionScope):
-    """The enclosing Decision's original turn determines this scope."""
+class TurnTaskScope(TaskScope):
+    """The enclosing declaration's original turn determines this scope."""
 
     def require_context(self, owner: Thread) -> None:
-        if owner.decision_scope != self:
+        if owner.task_scope != self:
             raise RelationViolationError("An active goal requires its revision scope")
 
-    def applies(self, owner: Thread, decision: Decision, registry: RegistrySnapshot) -> bool:
-        return owner.worktree == self.project and owner.has_decision_turn(
-            decision.source_turn.resolved(registry), decision.source_turn_id)
+    def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
+        return owner.worktree == self.project and owner.has_authored_turn(
+            declaration.source_turn.resolved(registry), declaration.source_turn_id)
 
-    def require_correction(self, previous: Decision, correction: Decision,
+    def require_correction(self, previous: ScopedTaskDeclaration, correction: ScopedTaskDeclaration,
                            registry: RegistrySnapshot) -> None:
         super().require_correction(previous, correction, registry)
         if (previous.source_turn.resolved(registry), previous.source_turn_id) != (
@@ -72,29 +72,29 @@ class TurnDecisionScope(DecisionScope):
             raise RelationViolationError("Decision correction belongs to a different turn scope")
 
 
-class DecisionScopeSelection(DeclaredFamily, affix="ScopeSelection"):
+class TaskScopeSelection(DeclaredFamily, affix="ScopeSelection"):
     @abstractmethod
-    def select(self, owner: Thread) -> DecisionScope: ...
+    def select(self, owner: Thread) -> TaskScope: ...
 
 
 @dataclass(frozen=True)
-class CurrentDecisionScopeSelection(DecisionScopeSelection, declared_name="current"):
-    def select(self, owner: Thread) -> DecisionScope:
-        return owner.decision_scope
+class CurrentTaskScopeSelection(TaskScopeSelection, declared_name="current"):
+    def select(self, owner: Thread) -> TaskScope:
+        return owner.task_scope
 
 
 @dataclass(frozen=True)
-class ExplicitDecisionScopeSelection(DecisionScopeSelection, declared_name="explicit"):
-    scope: DecisionScope
+class ExplicitTaskScopeSelection(TaskScopeSelection, declared_name="explicit"):
+    scope: TaskScope
 
-    def select(self, owner: Thread) -> DecisionScope:
+    def select(self, owner: Thread) -> TaskScope:
         self.scope.require_current(owner)
         return self.scope
 
 
-class DecisionChange(DeclaredFamily, affix="DecisionChange"):
+class TaskChange(DeclaredFamily, affix="TaskChange"):
     @abstractmethod
-    def require_publication(self, decision: Decision, registry: RegistrySnapshot,
+    def require_publication(self, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot,
                             original_source: CertifiedSourceRead | None) -> None: ...
 
     @abstractmethod
@@ -103,8 +103,8 @@ class DecisionChange(DeclaredFamily, affix="DecisionChange"):
 
 
 @dataclass(frozen=True)
-class OriginalDecisionChange(DecisionChange, declared_name="original"):
-    def require_publication(self, decision, registry, original_source) -> None:
+class OriginalTaskChange(TaskChange, declared_name="original"):
+    def require_publication(self, declaration, registry, original_source) -> None:
         pass
 
     def root_source(self, message, originals):
@@ -112,7 +112,7 @@ class OriginalDecisionChange(DecisionChange, declared_name="original"):
 
 
 @dataclass(frozen=True)
-class CorrectionDecisionChange(DecisionChange, declared_name="correction"):
+class CorrectionTaskChange(TaskChange, declared_name="correction"):
     original: MessageReference
 
     def require_original(self, original_source: CertifiedSourceRead | None) -> Message:
@@ -126,9 +126,9 @@ class CorrectionDecisionChange(DecisionChange, declared_name="correction"):
             raise RelationViolationError("Decision correction requires its original wire reference")
         return original
 
-    def require_publication(self, decision, registry, original_source) -> None:
+    def require_publication(self, declaration, registry, original_source) -> None:
         original = self.require_original(original_source)
-        decision.require_correction(original, registry)
+        declaration.require_correction(original, registry)
 
     def root_source(self, message, originals):
         try:
@@ -137,16 +137,22 @@ class CorrectionDecisionChange(DecisionChange, declared_name="correction"):
             raise RelationViolationError("Retained correction lacks its original source") from error
 
 
-class DecisionAttachment(DeclaredFamily, affix="DecisionAttachment"):
+class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     """Absent attachments have no publication, fact or author effects."""
 
-    retains_authored_choice = False
+    retains_authored_task = False
     permits_agent_revision = False
+
+    def require_scoped_task(self) -> ScopedTaskDeclaration:
+        raise RelationViolationError("Original wire message has no declared scoped task")
+
+    def require_constraint(self) -> Constraint:
+        raise RelationViolationError("Original wire message has no declared constraint")
 
     def require_decision(self) -> Decision:
         raise RelationViolationError("Original wire message has no declared decision")
 
-    def require_user_supersession(self) -> UserDecisionSupersession:
+    def require_user_supersession(self) -> UserTaskSupersession:
         raise RelationViolationError("Original wire message has no declared user supersession")
 
     def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
@@ -175,21 +181,21 @@ class DecisionAttachment(DeclaredFamily, affix="DecisionAttachment"):
 
 
 @dataclass(frozen=True)
-class NoDecision(DecisionAttachment, declared_name="absent"):
+class NoTaskAttachment(TaskAttachment, declared_name="absent"):
     pass
 
 
 @dataclass(frozen=True)
-class UserDecisionSupersession(DecisionAttachment, declared_name="user_supersession"):
+class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
     """The human's exact correction stays on its original enclosing Message.
 
     This event retires a declared choice; it does not infer replacement valid
     alternatives, mint a model turn, or rewrite the original author's record.
     """
 
-    change: CorrectionDecisionChange
+    change: CorrectionTaskChange
 
-    def require_user_supersession(self) -> UserDecisionSupersession:
+    def require_user_supersession(self) -> UserTaskSupersession:
         return self
 
     def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
@@ -207,30 +213,41 @@ class UserDecisionSupersession(DecisionAttachment, declared_name="user_supersess
 
     def require_publication(self, sender, registry, original_source) -> None:
         registry.require(sender).role.require_user()
-        self.change.require_original(original_source).require_decision()
+        self.change.require_original(original_source).task.require_scoped_task()
 
     def user_task_facts(self, message: Message):
-        from .retained_task_facts import UserDecisionCorrectionTaskFact
+        from .retained_task_facts import UserTaskCorrectionFact
 
-        return (UserDecisionCorrectionTaskFact(message),)
+        return (UserTaskCorrectionFact(message),)
 
 
 @dataclass(frozen=True, kw_only=True)
-class Decision(DecisionAttachment, declared_name="choice"):
-    chosen: str
-    rejected: tuple[str, ...]
-    scope: DecisionScope
+class ScopedTaskDeclaration(TaskAttachment):
+    """The original admitted author, scope and lineage shared by task statements."""
+    scope: TaskScope
     source_turn: TurnIdentity
     source_turn_id: TurnId
-    change: DecisionChange = field(default_factory=OriginalDecisionChange,
-                                   metadata={"wire_omit_default": True})
-    retains_authored_choice = True
+    change: TaskChange = field(default_factory=OriginalTaskChange,
+                              metadata={"wire_omit_default": True})
+    retains_authored_task = True
     permits_agent_revision = True
 
-    def require_decision(self) -> Decision:
+    @classmethod
+    def from_admission(cls, owner, scope, change, **content):
+        lease = owner.require_turn_lease()
+        return cls(scope=scope.select(owner), source_turn=lease.identity,
+                   source_turn_id=TurnId(lease.turn_id), change=change, **content)
+
+    def require_scoped_task(self) -> ScopedTaskDeclaration:
         return self
 
-    def root_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
+    @abstractmethod
+    def require_previous(self, original: Message) -> ScopedTaskDeclaration: ...
+
+    @abstractmethod
+    def retained_task_facts(self, message: Message): ...
+
+    def root_source(self, message, originals):
         return self.change.root_source(message, originals)
 
     def current_roots(self, message, originals, owner, registry):
@@ -238,64 +255,89 @@ class Decision(DecisionAttachment, declared_name="choice"):
             return ()
         return (self.root_source(message, originals),)
 
-    def revises_after(self, previous: Message) -> bool:
-        return previous.decision.permits_agent_revision
+    def revises_after(self, previous):
+        return previous.task.permits_agent_revision
 
-    def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool:
+    def applies(self, owner, registry):
         return (self.author.current(registry)
                 and self.author.resolved(registry) == owner.incarnation
                 and self.scope.applies(owner, self, registry))
 
-    def retained_task_facts(self, message: Message):
+    def __post_init__(self):
+        self.author.require_recorded()
+        if self.source_turn.generation <= 0:
+            raise ValueError("A task declaration requires its original admitted turn")
+
+    @property
+    def author(self):
+        return self.source_turn.incarnation
+
+    def require_sender(self, sender):
+        if self.author.name != sender:
+            raise RelationViolationError("Task declaration does not belong to this message author")
+
+    def require_emission(self, owner):
+        self.require_sender(owner.name)
+        lease = owner.require_turn_lease()
+        if (lease.identity, lease.turn_id) != (self.source_turn, self.source_turn_id.value):
+            raise RelationViolationError("Task declaration's original turn is no longer admitted")
+        self.scope.require_current(owner)
+
+    def require_correction(self, original, registry):
+        previous = self.require_previous(original)
+        if previous.author.resolved(registry) != self.author.resolved(registry):
+            raise RelationViolationError("An agent cannot correct another author's task declaration")
+        self.scope.require_correction(previous, self, registry)
+
+    def require_publication(self, sender, registry, original_source):
+        author = registry.require(sender)
+        author.require_turn(self.source_turn_id, registry.admission_generations[sender])
+        self.require_emission(author)
+        self.change.require_publication(self, registry, original_source)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Decision(ScopedTaskDeclaration, declared_name="choice"):
+    chosen: str
+    rejected: tuple[str, ...]
+
+    def require_decision(self):
+        return self
+
+    def require_previous(self, original):
+        return original.require_decision()
+
+    def retained_task_facts(self, message):
         from .retained_task_facts import DecisionTaskFact
 
         return (DecisionTaskFact(message),)
 
-    def __post_init__(self) -> None:
+    def __post_init__(self):
+        super().__post_init__()
         if not self.chosen.strip():
             raise ValueError("A decision requires a nonempty chosen alternative")
         if not self.rejected or any(not value.strip() for value in self.rejected):
             raise ValueError("A decision requires nonempty valid rejected alternatives")
         if len(set(self.rejected)) != len(self.rejected) or self.chosen in self.rejected:
             raise ValueError("Decision alternatives must be unique and distinct")
-        self.author.require_recorded()
-        if self.source_turn.generation <= 0:
-            raise ValueError("A decision requires its original admitted turn")
 
     @property
-    def author(self) -> ThreadIncarnation:
-        return self.source_turn.incarnation
-
-    @property
-    def text(self) -> str:
+    def text(self):
         return "Decision: " + self.chosen + "\nValid rejected alternatives:\n" + "\n".join(
-            "- " + value for value in self.rejected
-        )
+            "- " + value for value in self.rejected)
 
-    def require_sender(self, sender: str) -> None:
-        if self.author.name != sender:
-            raise RelationViolationError("Decision does not belong to this message author")
 
-    def require_emission(self, owner: Thread) -> None:
-        self.require_sender(owner.name)
-        lease = owner.require_turn_lease()
-        if (lease.identity, lease.turn_id) != (
-            self.source_turn, self.source_turn_id.value
-        ):
-            raise RelationViolationError("Decision's original turn is no longer admitted")
-        self.scope.require_current(owner)
+@dataclass(frozen=True, kw_only=True)
+class Constraint(ScopedTaskDeclaration):
+    """Explicit constraint membership; exact wording belongs to Message.body only."""
 
-    def require_correction(self, original: Message, registry: RegistrySnapshot) -> None:
-        previous = original.require_decision()
-        if previous.author.resolved(registry) != self.author.resolved(registry):
-            raise RelationViolationError("An agent cannot correct another author's decision")
-        self.scope.require_correction(previous, self, registry)
+    def require_constraint(self):
+        return self
 
-    def require_publication(
-        self, sender: str, registry: RegistrySnapshot,
-        original_source: CertifiedSourceRead | None,
-    ) -> None:
-        author = registry.require(sender)
-        author.require_turn(self.source_turn_id, registry.admission_generations[sender])
-        self.require_emission(author)
-        self.change.require_publication(self, registry, original_source)
+    def require_previous(self, original):
+        return original.task.require_constraint()
+
+    def retained_task_facts(self, message):
+        from .retained_task_facts import ConstraintTaskFact
+
+        return (ConstraintTaskFact(message),)

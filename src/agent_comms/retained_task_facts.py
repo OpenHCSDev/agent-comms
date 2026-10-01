@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from abc import abstractmethod
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -29,10 +30,10 @@ if TYPE_CHECKING:
 class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
     """Membership belongs to each determining source, not the packing policy."""
 
-    def choices(self) -> tuple[Message, ...]:
+    def authored_sources(self) -> tuple[Message, ...]:
         return ()
 
-    def for_decisions(self, current: frozenset[MessageReference]) -> ExactTaskFact:
+    def for_tasks(self, current: frozenset[MessageReference]) -> ExactTaskFact:
         return self
 
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> ExactTaskFact:
@@ -49,18 +50,33 @@ class UserSourceTaskFact(ExactTaskFact):
 
 
 @dataclass(frozen=True)
-class DecisionTaskFact(ExactTaskFact, declared_name="historical_decision"):
+class AuthoredTaskFact(ExactTaskFact):
+    """Captured projection only; its original declaration owns applicability."""
     source: Message
 
-    def __post_init__(self) -> None:
-        self.source.require_decision()
-
-    def choices(self) -> tuple[Message, ...]:
+    def authored_sources(self):
         return (self.source,)
 
-    def for_decisions(self, current: frozenset[MessageReference]) -> ExactTaskFact:
-        if self.source.reference in current:
-            return CurrentDecisionTaskFact(self.source)
+    @abstractmethod
+    def current_fact(self): ...
+
+    @abstractmethod
+    def historical_fact(self): ...
+
+    def for_tasks(self, current):
+        return (self.current_fact() if self.source.reference in current
+                else self.historical_fact())
+
+
+@dataclass(frozen=True)
+class DecisionTaskFact(AuthoredTaskFact, declared_name="historical_decision"):
+    def __post_init__(self):
+        self.source.require_decision()
+
+    def current_fact(self):
+        return CurrentDecisionTaskFact(self.source)
+
+    def historical_fact(self):
         return DecisionTaskFact(self.source)
 
 
@@ -70,24 +86,40 @@ class CurrentDecisionTaskFact(DecisionTaskFact, declared_name="current_decision"
 
 
 @dataclass(frozen=True)
-class UserDecisionCorrectionTaskFact(UserSourceTaskFact, declared_name="historical_user_correction"):
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        self.source.decision.require_user_supersession()
+class ConstraintTaskFact(AuthoredTaskFact, declared_name="historical_constraint"):
+    def __post_init__(self):
+        self.source.task.require_constraint()
 
-    def choices(self) -> tuple[Message, ...]:
-        return (self.source,)
+    def current_fact(self):
+        return CurrentConstraintTaskFact(self.source)
 
-    def for_decisions(self, current: frozenset[MessageReference]) -> ExactTaskFact:
-        if self.source.reference in current:
-            return CurrentUserDecisionCorrectionTaskFact(self.source)
-        return UserDecisionCorrectionTaskFact(self.source)
+    def historical_fact(self):
+        return ConstraintTaskFact(self.source)
 
 
 @dataclass(frozen=True)
-class CurrentUserDecisionCorrectionTaskFact(UserDecisionCorrectionTaskFact,
-                                            declared_name="current_user_correction"):
-    """The exact human correction selected through its original decision scope."""
+class CurrentConstraintTaskFact(ConstraintTaskFact, declared_name="current_constraint"):
+    """Original wording and captured applicability, never a rewritten restriction."""
+
+
+@dataclass(frozen=True)
+class UserTaskCorrectionFact(UserSourceTaskFact, AuthoredTaskFact,
+                             declared_name="historical_user_correction"):
+    def __post_init__(self):
+        super().__post_init__()
+        self.source.task.require_user_supersession()
+
+    def current_fact(self):
+        return CurrentUserTaskCorrectionFact(self.source)
+
+    def historical_fact(self):
+        return UserTaskCorrectionFact(self.source)
+
+
+@dataclass(frozen=True)
+class CurrentUserTaskCorrectionFact(UserTaskCorrectionFact,
+                                    declared_name="current_user_correction"):
+    """The exact human correction selected through its original task scope."""
 
 
 @dataclass(frozen=True)
@@ -144,7 +176,7 @@ class RetainedTaskFacts:
 
     facts: tuple[ExactTaskFact, ...]
 
-    def current_decisions(self, owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
+    def current_authored_sources(self, owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
         """Resolve explicit original-reference lineage, never equal text or time.
 
         These local maps live only for this read and have no update lifecycle.
@@ -153,19 +185,19 @@ class RetainedTaskFacts:
         originals: dict[MessageReference, Message] = {}
         effective: dict[MessageReference, tuple[Message, Message]] = {}
         for fact in self.facts:
-            for message in fact.choices():
-                for root in message.decision.current_roots(message, originals, owner, registry):
+            for message in fact.authored_sources():
+                for root in message.task.current_roots(message, originals, owner, registry):
                     originals[message.reference] = root
                     _, previous = effective.get(root.reference, (root, root))
-                    if message.decision.revises_after(previous):
+                    if message.task.revises_after(previous):
                         effective[root.reference] = (root, message)
         return tuple(message for root, message in effective.values()
-                     if root.require_decision().applies(owner, registry))
+                     if root.task.require_scoped_task().applies(owner, registry))
 
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""
-        current = frozenset(message.reference for message in self.current_decisions(owner, registry))
-        return RetainedTaskFacts(tuple(fact.for_decisions(current).for_owner(owner, registry)
+        current = frozenset(message.reference for message in self.current_authored_sources(owner, registry))
+        return RetainedTaskFacts(tuple(fact.for_tasks(current).for_owner(owner, registry)
                                        for fact in self.facts))
 
     @property

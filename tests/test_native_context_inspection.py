@@ -17,7 +17,7 @@ from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, RuntimeIn
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
-from agent_comms.task_decisions import CurrentDecisionScopeSelection, OriginalDecisionChange
+from agent_comms.task_sources import CurrentTaskScopeSelection, OriginalTaskChange
 from agent_comms.tools import tool_catalog
 from delivery_owner_fixture import canonical_agent
 
@@ -158,8 +158,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         choice = 'Preserve the original context source'
         fixture.provider.tool_call = ('comms_decision', {
             'chosen': choice, 'rejected': ['Reconstruct author from the native user role'],
-            'to': peer.name, 'scope': FieldCodec.encode(CurrentDecisionScopeSelection()),
-            'change': FieldCodec.encode(OriginalDecisionChange()),
+            'to': peer.name, 'scope': FieldCodec.encode(CurrentTaskScopeSelection()),
+            'change': FieldCodec.encode(OriginalTaskChange()),
         })
         fixture.provider.response_gate = asyncio.Event()
         originals = []
@@ -219,8 +219,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(native_backend):
         assert fixture.provider.posts == 3
         assert owner._comms.bus.log.latest_sequence() == baseline_sequence + 1
         decision, = owner._comms.bus.log.full_history()
-        assert decision.decision.chosen == choice
-        assert decision.decision.author == thread.incarnation
+        assert decision.task.chosen == choice
+        assert decision.task.author == thread.incarnation
         first_request = fixture.provider.requests[0]
         actual_tool = next(tool['function'] for tool in first_request['tools']
                            if tool['function']['name'] == declaration['name'])

@@ -202,12 +202,12 @@ class Thread(ThreadProvenance):
         return goal if goal is not None and goal.state.active else None
 
     @property
-    def decision_scope(self):
-        from .task_decisions import GoalDecisionScope, TurnDecisionScope
+    def task_scope(self):
+        from .task_sources import GoalTaskScope, TurnTaskScope
 
         goal = self.active_goal
-        return (GoalDecisionScope(project=self.worktree, goal=goal.checkpoint)
-                if goal is not None else TurnDecisionScope(project=self.worktree))
+        return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
+                if goal is not None else TurnTaskScope(project=self.worktree))
 
     def context_goal_segments(self):
         """Project this declaration's active goal without a second goal state."""
@@ -328,7 +328,7 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("An admitted original turn is required")
         return lease
 
-    def has_decision_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+    def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         lease = self.turn_lease
         return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 
