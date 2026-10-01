@@ -38,7 +38,7 @@ Einstein owns phase1 draft473: one ContextSegment/TurnContext assembler, origina
 provenance/token accounting, text-free manifests and inspection, with byte-identical
 input and actual saved/configured-provider acceptance. Phase2 draft474 depends
 on S2 retained classes and owns authored pin/supersede/drop/export journeys.
-Schrodinger owns S2 implementation in parallel;428 was merged planning only.
+Schrodinger owns S2 draft475 in parallel;428 was merged planning only.
 First working real-thread context inspection is pending, not fabricated from
 the plan. Both owners coordinate shared preparation/packing directly.
 

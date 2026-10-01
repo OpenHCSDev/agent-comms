@@ -39,10 +39,10 @@ exact audit and private preimages retained. No original input replay.
 | Workflow | Integration owner | Current disposition and next action |
 | --- | --- | --- |
 | Publication, DM/IRC and native queue checkpoint | Parent262; Heisenberg258, Einstein458, Schrodinger262 | Merged and installed/live verified;258 incorporated,259 closed, all original failures preserved. No repeated unchanged gate. |
-| Full warm-history/scroll/CPU/resources and T4 | Heisenberg254; Kepler263 contribution |263 merged into254 feature branch; latest5a650212 has4 production files30 deleted/67 added. Existing geometry/demand owners cover reflow and async reversal. Kepler's sole41MB real source A/B/A+draftUndo+held/reverse/End15idle run exits0 in87.826s,16 checks,744 GIL samples; CPU75–78% moving/6.3% idle. Review correlated footage/profile and ship a useful verified checkpoint; no installed/50ms acceptance yet. |
+| Full warm-history/scroll/CPU/resources and T4 | Heisenberg254; Kepler263 contribution |263 merged into254 feature branch; latest5a650212 has4 production files30 deleted/66 added. Existing geometry/demand owners cover reflow and async reversal. Kepler's sole41MB real source A/B/A+draftUndo+held/reverse/End15idle run exits0 in87.826s,16 checks,744 GIL samples; CPU75–78% moving/6.3% idle. Review correlated footage/profile and ship a useful verified checkpoint; no installed/50ms acceptance yet. |
 | S14 native triage/full execution identity | Mendel472 | Same interrupted worktree resumed. Preserve original schema4/live proof; remove nullable historical decision state and complete existing TypedTable scalar encoding. Old97fa acceptance does not cover correction. Publish coherent source and affected native proof before merge. |
 | S5 phase1 turn-context ownership | Einstein473 | Original plan copied and indexed after S2; one assembler/segments, provenance/token counts, text-free original wire manifests, context CLI; byte-identical input and actual saved/configured-provider acceptance. Publish first real inspection output. |
-| S2 exact retained facts and Decision | Schrodinger, implementation PR being opened |428 was planning only. Trace current claims, then implement original source projections/retained classes/Decision/native packing; coordinate directly with Einstein. No authoritative memory replica. |
+| S2 exact retained facts and Decision | Schrodinger475 |475 draft opened frome191 with S2 receiving ownership;428 was planning only. Implement original source projections/retained classes/Decision/native packing; coordinate directly with Einstein. No authoritative memory replica. |
 | S5 phase2 retained context operations | Einstein474 | Draft stacked on473; named dependency S2 retained classes. Add RetainedSegment and authored pin/supersede/drop/export with original source lineage and real compaction/export journeys. |
 | Quiet release closure and one-use retirement | Arendt469; parent executor | Final783a1471 reviewed and merged, zero product changes. Exact audit/private preimages protected. Completed, no new public restart or cutover. |
 | Integration/checklist and storage | Parent432 | Normal whole-source imports, final live proof/current owners; reviewed cleanup2795712f imports943.01MiB cumulative. Keep original scope/deletion closure, then merge tested remaining source normally. |
@@ -51,6 +51,20 @@ Existing six Codex agents are reused; no competing implementations or new
 coordinator. Current resource warning is swap12.5GiB, with home22.4GiB and
 RAM19.2GiB available. Completed captures are not repeated; new source work reuses
 installed dependencies, and native gates follow the current physical capture.
+
+## New live channel regression
+
+Arendt owns the actual first two #openhcs sends on the current installed build:
+262/7b8ade935c6f “test” and266/1a76688ce443 “testing again”. Direct original
+MessageNotification projection proves architecture-memory/pr159/helper checks
+ended Outcome uncertain on262 and their266 remain Pending. helper2 checked both
+and chose no response; Linnaeus/headless-bootstrap are stopped. Sidebar reports
+NativePiUnavailable for the three failed recipients. Diagnose the original native
+triage failure and derive truthful pending/error handling from its authority;
+no replay of262 or duplicate send of266. A separate CLI history read erroneously
+reaches the shared registry with unsupported last_goal_report_turn; direct
+Comms(publicroot) reads the original public registry correctly. Cause remains
+unconfirmed; no stripping of registry fields or compatibility reader authorized.
 
 ## Completed structural contributions
 
