@@ -28,7 +28,7 @@ class InputProofRevision(DeclaredFamily, affix="ProofRevision"):
 
 @dataclass(frozen=True, slots=True)
 class MissingInputProofRevision(InputProofRevision):
-    """The sidecar does not exist before its first native context commit."""
+    """The sidecar path is absent; no input-history or replay fact is inferred."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +100,7 @@ class SessionRevision(SessionObservation):
         )
 
     def same_input_proof(self, reserved: SessionRevision) -> bool:
+        """Compare sidecar observations, not committed native-input evidence."""
         return self.input_proof == reserved.input_proof
 
     def require_native_cut(self, session_file: str, through_offset: int) -> None:
