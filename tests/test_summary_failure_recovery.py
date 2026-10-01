@@ -1,12 +1,12 @@
 """Real native source/journal recovery preserves failed inputs and write uncertainty."""
 
+
 import asyncio
 import os
 from pathlib import Path
 
 import pytest
 
-from agent_comms.backend import _session_revision
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import InputAttempt
 from agent_comms.input_disposition import InputDispositions
@@ -14,7 +14,7 @@ from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.reservation_rules import ReservationViolationError
-from agent_comms.selected_source import SelectedAdmissionSource
+from agent_comms.selected_source import SelectedAdmissionSource, SessionRevision
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import TurnId
 from test_selected_owner_compaction_integration import owner_fixture
@@ -83,7 +83,7 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
                         correction_witness="prior",
                         input_digest=digest,
                         original_digest=digest,
-                        reserved_revision=_session_revision(session),
+                        reserved_revision=SessionRevision.observe(session).require_available(),
                     )
                 ),
                 "selected": dict(

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .backend import _session_revision
+from .selected_source import SessionRevision
 from .compaction_boundary import CompactionBoundary
 from .compaction_errors import CompactionJournalError
 from .compaction_identity import SelectedCommitReference
@@ -107,7 +107,7 @@ class OwnerCompactionCommit:
                     continue
                 source = attempt.source()
                 source.interrupted_check(
-                    _session_revision(witness.session_file),
+                    SessionRevision.observe(witness.session_file),
                     self.inputs._read_unlocked(),
                     owner.incarnation,
                     TurnId(held.receipt.turn_id),
@@ -146,7 +146,7 @@ class OwnerCompactionCommit:
                 self.journal.summaries.require_current(selected_attempt, witness.session_file)
                 CommitReservationCheck(
                     source=selected_attempt.source(),
-                    revision=_session_revision(witness.session_file),
+                    revision=SessionRevision.observe(witness.session_file),
                     incarnation=owner.incarnation,
                     owner=owner.process_identity,
                     turn=TurnId(source.turn_id),

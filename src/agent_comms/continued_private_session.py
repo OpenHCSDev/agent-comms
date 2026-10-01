@@ -13,7 +13,6 @@ import stat
 from contextlib import closing
 from pathlib import Path
 
-from .backend import _session_revision
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .input_disposition import InputDocument
 from .native_entries import NativeEntry
@@ -21,7 +20,7 @@ from .native_pi import NativeContextProof
 from .native_runtime_input import NativeRuntimeInput
 from .pi_payloads import TextContent
 from .private_sidecar import native_request_digest
-from .selected_source import SelectedSource
+from .selected_source import SelectedSource, SessionRevision
 
 
 def verify_continued_private_session(
@@ -32,11 +31,10 @@ def verify_continued_private_session(
     inputs: InputDocument,
 ) -> None:
     """Reprove complete saved user history; never promote an unresolved attempt."""
-    before = _session_revision(str(session))
+    before = SessionRevision.observe(str(session))
     owner = source.incarnation.name
     if (
-        before is None
-        or source.reserved_revision != before
+        not before.matches(source.reserved_revision)
         or session.parent.parent != (root / "native-sessions").resolve(strict=True)
     ):
         raise ValueError("Continued private source identity changed")
@@ -96,7 +94,7 @@ def verify_continued_private_session(
             raise ValueError("Continued private user has no verified retained context")
     if not observed or not raw_ids.issubset(observed & recorded.keys()):
         raise ValueError("Continued private raw input remains UNKNOWN")
-    if _session_revision(str(session)) != before:
+    if not source.reserved_revision.current(str(session)):
         raise ValueError("Continued private history changed during coverage check")
 
 

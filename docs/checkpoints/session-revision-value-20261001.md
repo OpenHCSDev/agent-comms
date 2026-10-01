@@ -1,7 +1,7 @@
 # Session revision value and complete consumer closure
 
-Requested structural item 4. Integration owner: parent; implementation is
-transferred as one complete surface to Mendel after this draft is opened.
+Requested structural item 4. Release integration owner: parent. Sole source
+implementation owner: Mendel, received as one complete surface in draft #468.
 Base: main9370a6010c80fba75feaad9e2076f1844d2b44ea. The required
 456/458/459/462 stack is merged. Its production tree equals tested970bc527.
 
@@ -47,3 +47,26 @@ release candidate or hold its activation.
 Publish the complete working change promptly in this draft, report production
 lines deleted, and retain exact source/installed evidence with its limits.
 No implementation is claimed by this scope commit.
+
+## Working source checkpoint
+
+All 13 direct callers now use the observation/value owner in `selected_source`.
+`SessionRevision` embeds original `FileRevision` and declared input-proof
+presence. Missing and unreadable proof observations are distinct; unavailable
+observations deny matching/acquisition. No optional tuple remains. Outcome
+placement delegates native inode/cut bounds to the value; current reservation
+uses whole equality; post-compaction compares original proof observation.
+The five-field native colon ABI remains exact and only that external stamp is
+flattened. Nested runtime source encoding uses unchanged FieldCodec.
+
+Seven indirect source/history/journal consumers retain their public operations.
+Their source digest includes the new nested record, and outcome snapshot digest
+now uses FieldCodec for that value. A quiet cutover resets only the declared
+runtime compaction journal, not native sessions/input-proof/UNKNOWN/wire/goals.
+
+Production replacement: **74 deleted / 153 added** across the 13 modules.
+Source checks: 36 passed/3.31s, one inherited transcript root-body assertion
+failed identically at untouched ca9/base970 in 1.00s. Schrodinger explicitly
+received its typed body-fixture closure; no assertion was weakened. Installed
+native/ACP acceptance is pending; this source checkpoint is not Ready.
+See `evidence/session-revision-value/WORKING.md`.

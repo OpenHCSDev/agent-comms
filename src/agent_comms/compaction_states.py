@@ -379,7 +379,7 @@ class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
             return UnknownNativeOutcome("native-metadata-mismatch")
         return self
     def require_saved_revision(self, revision: SessionRevision) -> None:
-        if self.revision != ":".join(map(str, revision[0])):
+        if self.revision != revision.native_stamp:
             raise CompactionJournalError("Selected native result is unavailable: saved revision changed")
 
     def publication_json(self, commit_id: str) -> str:
