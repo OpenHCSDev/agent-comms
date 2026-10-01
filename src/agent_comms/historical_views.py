@@ -468,5 +468,5 @@ class HistoryArchive:
             source.validate()
             result.extend(HistoricalThread(source, thread)
                           for thread in source.provenance.threads.values()
-                          if name is None or thread.name == name)
+                          if name is None or thread.incarnation.matches_recorded_name(name, source.provenance))
         return tuple(result)
