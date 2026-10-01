@@ -23,3 +23,53 @@ before adding its dependency. No competing converter or legacy reader here.
 Initial draft precedes substantive operator implementation. Preparation controls
 and source impact do not authorize execution; parent reviews the concrete member
 and future actual gates before any quiet approval.
+
+## Implemented prepared member
+
+`tools/cutover/publish_retained_summary.py` supplies
+`ReviewedRetainedSummaryCohort`, `ReviewedArtifact`, `PublishRetainedSummary`
+and the parent-only `publish(cohort, task_carry, receipt)` entry. There is no
+hardcoded future package or gate hash. A caller supplies its exact immutable
+target, original route/current default/source interpreter, byte-equal source
+proof, activation and at least two distinct actual installed journey artifacts.
+The original package proof cannot substitute for a journey. Complete current
+owner audience is captured, rather than assuming the historical thirteen count.
+Original settings/credentials are recaptured in RAM through RetainedOwnerLaunch;
+only public process/audience evidence is written to the private receipt.
+
+The composing operation is a StoppedOwnerInstallation. Its selection delegates
+to Sch's typed StoppedOwnerInstallation task carry, before the canonical batch
+fences anyone. Under the original all-stopped wire custody it retains protected
+preimages, invokes that same task owner, retires the declared runtime compaction
+journal, verifies protected hashes and publishes via the existing expected-route
+CAS. The original stopped.launch performs all target launches; readback verifies
+original settings before the original batch releases custody. No second restart
+loop, row interpreter, callback policy or client signal is introduced (IMPL-13,
+IDEN-8, TIME-3). Original clients must already be gracefully retired by parent.
+
+`retained_summary_reset.py` acquires original POSIX descriptors/FileRevision,
+validates private mode/UID/kind/one link, retains and fsyncs EVERY present named
+member before removing ANY, rejects membership/revision change, and fsyncs the
+original directory. Its write set is exactly compaction-commits.sqlite3 and
+its -journal/-wal/-shm companions. It neither opens SQLite nor decodes retired
+rows, constructs enrollment, initializes a new journal or updates inputs.
+
+Original native sessions and their .input-proof companions, InputDispositions,
+coordination/PromptBinding SQL and goals remain byte protected. Bus recertification
+belongs solely to Sch's carry member. Sch confirmed runtime retained envelopes
+are reset, not carried; a native envelope crossing has not been established and
+does not authorize native writes. Current proven task carry is three private
+attested s5final01 bus rows; live point-in-time census is not future admission.
+
+## Remaining execution dependencies
+
+- Sch481 has not yet published the accepted typed carry member. This dependency
+  is explicit and required by publish; no no-op member/default carry exists.
+- Parent must supply the new reviewed frozen cohort and accepted actual gate
+  artifacts. No future target values or execution approval are inferred here.
+- Source AST checks passed; bounded private journal custody controls follow.
+  No live root read/preflight, public input, process signal, reset, link/route
+  publication or owner launch has been performed by this preparation.
+
+Frozen479 is untouched. Parent reports its original thirteen-owner publication
+complete on cac7/7572; this future journal/task cutover is a separate operation.

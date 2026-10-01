@@ -1,0 +1,251 @@
+"""Future retained-summary installation through the original stopped batch.
+
+The release owner supplies reviewed immutable artifacts and the typed task carry
+member. This module contains no guessed target, automatic approval, retry, client
+signal, native input or alternative owner-stop/launch implementation.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+import fcntl
+import json
+import os
+from pathlib import Path
+import sys
+import time
+from typing import Annotated
+
+from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked
+from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_package import verify_native_package
+from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.private_path import PrivateDirectoryRole
+from agent_comms.store_files import _atomic_write_text
+from agent_comms.threads import Thread
+from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file
+from retained_summary_reset import RuntimeCompactionReset
+
+
+@dataclass(frozen=True)
+class ReviewedArtifact:
+    path: Annotated[Path, PathText]
+    sha256: str
+
+    def require_original(self):
+        if digest(self.path) != self.sha256:
+            raise RuntimeError(f'Reviewed artifact changed: {self.path}')
+
+
+@dataclass(frozen=True)
+class ReviewedRetainedSummaryCohort:
+    target: Annotated[Path, PathText]
+    source_interpreter: Annotated[Path, PathText]
+    current_prefix: Annotated[Path, PathText]
+    original_route: ActiveRoute
+    native: Annotated[Path, PathText]
+    pins: dict[str, str]
+    activation: ReviewedArtifact
+    source_proof: ReviewedArtifact
+    actual_gates: tuple[ReviewedArtifact, ...]
+
+    def require_original(self):
+        if self.original_route.root != ROOT:
+            raise RuntimeError('This reviewed one-use publisher names another public root')
+        if sys.executable != str(self.target / 'bin/python'):
+            raise RuntimeError('Use the reviewed target interpreter')
+        if not self.source_interpreter.is_absolute() or not self.source_interpreter.is_file():
+            raise RuntimeError('Authentic source interpreter is required')
+        self.activation.require_original()
+        self.source_proof.require_original()
+        if self.activation.path != self.target / 'activation.json':
+            raise RuntimeError('Activation is not the selected immutable target')
+        activation = json.loads(self.activation.path.read_text())
+        if activation['stage'] != str(self.target) or activation['pins'] != self.pins:
+            raise RuntimeError('Activation names another source cohort')
+        if activation['sdk'] != '0.12.1' or activation['native_package'] != str(self.native):
+            raise RuntimeError('Activation names another SDK/native pair')
+        if activation['staging_receipt'] != str(self.source_proof.path):
+            raise RuntimeError('Activation names another source proof')
+        proof = json.loads(self.source_proof.path.read_text())
+        if {row['module']: row['head'] for row in proof['sources']} != self.pins:
+            raise RuntimeError('Source proof names another cohort')
+        if not all(row['byte_equal'] for row in proof['sources']) or not proof['native_full_trust']:
+            raise RuntimeError('Package/source/native trust is incomplete')
+        gates = {gate.path for gate in self.actual_gates}
+        if len(gates) < 2 or gates.intersection((self.activation.path, self.source_proof.path)):
+            raise RuntimeError('Distinct reviewed actual installed journey gates are required')
+        for gate in self.actual_gates:
+            gate.require_original()
+        verify_native_package(self.native)
+        self.require_publication_originals()
+
+    def require_publication_originals(self):
+        if read_active_route() != self.original_route:
+            raise RuntimeError('Original active route changed; recapture/review required')
+        for command in COMMANDS:
+            if (LINKS / command).readlink() != self.current_prefix / 'bin' / command:
+                raise RuntimeError('Original default changed; recapture/review required')
+            if not (self.target / 'bin' / command).is_file():
+                raise RuntimeError('Reviewed target entrypoint is missing')
+            temporary = LINKS / (command + '.retained-summary-publish')
+            if temporary.exists() or temporary.is_symlink():
+                raise RuntimeError('Original publication attempt requires review')
+
+    def publish(self, directory: int):
+        self.require_publication_originals()
+        target_route = replace(self.original_route, native_package=self.native)
+        _publish_active_route_locked(target_route, active_route_path(), directory,
+                                     expected=self.original_route)
+        for command in COMMANDS:
+            link = LINKS / command
+            if link.readlink() != self.current_prefix / 'bin' / command:
+                raise RuntimeError('Default changed during publication; remain stopped')
+            temporary = LINKS / (command + '.retained-summary-publish')
+            temporary.symlink_to(self.target / 'bin' / command)
+            temporary.replace(link)
+        fsync_directory(LINKS)
+        if read_active_route() != target_route:
+            raise RuntimeError('Target route readback differs')
+
+
+@dataclass(frozen=True)
+class PublishRetainedSummary(StoppedOwnerInstallation):
+    cohort: ReviewedRetainedSummaryCohort
+    audience: tuple[OwnerRestartSelection, ...]
+    originals: tuple[Thread, ...]
+    task_carry: StoppedOwnerInstallation
+    route_directory: int
+    receipt: Path
+
+    def note(self, phase, **facts):
+        previous = json.loads(self.receipt.read_text())
+        previous.update(phase=phase, **facts)
+        _atomic_write_text(self.receipt, json.dumps(previous, indent=2)+'\n', fsync_parent=True)
+
+    def require_selection(self, snapshot, owners):
+        live = {thread.name for thread in snapshot.threads.values()
+                if thread.role.executable and snapshot.statuses[thread.name].active and thread.process_alive}
+        if live != {thread.name for thread in owners} or live != {item.name for item in self.audience}:
+            raise RuntimeError('Complete original owner audience changed; recapture/review required')
+        for selection, original in zip(self.audience, self.originals, strict=True):
+            current = selection.require_current(snapshot)
+            current.require_idle()
+            if current != original:
+                raise RuntimeError('Original owner settings changed')
+        self.cohort.require_original()
+        require_no_clients(self.audience)
+        InputDispositions(ROOT / InputDispositions.filename).read()
+        self.task_carry.require_selection(snapshot, owners)
+
+    def protected_files(self):
+        # Original uncertainty and evidence stay in their OWN stores. Runtime
+        # compaction rows and task-carry bus rows are not competing authorities.
+        paths = set()
+        for name in (InputDispositions.filename, 'coordination.sqlite3',
+                     'native_prompt_bindings.sqlite3', 'goal_history.sqlite3',
+                     'goal_waits.json', 'goal_pause_events.json'):
+            for suffix in ('', '-journal', '-wal', '-shm'):
+                path = ROOT / (name + suffix)
+                if path.exists() or path.is_symlink():
+                    paths.add(path)
+        for original in self.originals:
+            if original.session_file is not None:
+                session = Path(original.session_file)
+                paths.add(session)
+                for suffix in ('.input-proof', '.input-proof-journal', '.input-proof-wal', '.input-proof-shm'):
+                    proof = Path(str(session) + suffix)
+                    if proof.exists() or proof.is_symlink():
+                        paths.add(proof)
+        return paths
+
+    def after_stopped(self, lifecycle):
+        self.cohort.require_original()
+        require_no_clients(self.audience)
+        snapshot = lifecycle.registry.snapshot()
+        for original in self.originals:
+            if original.process_alive or snapshot.threads[original.name] != original:
+                raise RuntimeError('Original owner exit/configuration proof changed')
+        directory = self.receipt.with_suffix('.originals')
+        directory.mkdir(mode=0o700)
+        PrivateDirectoryRole.require(directory.lstat())
+        paths = self.protected_files()
+        protected = {str(path): digest(path) for path in sorted(paths)}
+        # No decoding of old input records from a target-compaction journal.
+        original_files = []
+        for index, path in enumerate(sorted(paths)):
+            original_files.append(retain_file(path, directory / f'protected-{index}'))
+        retain_file(ROOT / 'registry.json', directory / 'registry.json')
+        fsync_directory(directory)
+        fsync_directory(directory.parent)
+        self.note('all-original-owners-stopped-private-preimages-retained',
+                  protected_original_sha256=protected, protected_preimages=original_files)
+        # This is Sch's semantic owner, under the SAME original wire custody.
+        # It may read the runtime journal BEFORE its declared reset, but it
+        # cannot turn runtime rows into durable admission or rewrite native.
+        self.task_carry.after_stopped(lifecycle)
+        reset = RuntimeCompactionReset(ROOT).retain_and_remove(directory / 'runtime-compaction')
+        if self.protected_files() != paths or {str(path): digest(path) for path in sorted(paths)} != protected:
+            raise RuntimeError('Original input/native/proof/goal bytes changed; remain stopped')
+        self.note('runtime-compaction-retired-protected-originals-unchanged', runtime_reset=reset)
+        self.cohort.publish(self.route_directory)
+        self.note('target-route-and-defaults-published-before-retained-launch')
+
+    def complete(self, stopped):
+        self.after_stopped(stopped.lifecycle)
+        results = stopped.launch()
+        snapshot = stopped.lifecycle.registry.snapshot()
+        for original, result in zip(self.originals, results, strict=True):
+            current = snapshot.threads[result.thread]
+            if result.thread != original.name or replace(current, process_identity=original.process_identity) != original:
+                raise RuntimeError('Original settings readback differs under retained wire custody')
+            RetainedOwnerLaunch.capture(current, snapshot, interpreter=str(self.cohort.target / 'bin/python'))
+        self.note('retained-batch-launched-configurations-verified-public-ui-pending',
+                  results=FieldCodec.encode(results), finished=time.time())
+        return results
+
+
+def publish(cohort: ReviewedRetainedSummaryCohort, task_carry: StoppedOwnerInstallation,
+            receipt: Path):
+    """Parent-only EXECUTION entry, once both reviewed gates/carry are supplied.
+
+    A retry never happens here. Any existing receipt/preimage refuses before
+    admission, and the only stop/fence/launch implementation is the original one.
+    """
+    if receipt.exists() or receipt.is_symlink() or receipt.with_suffix('.originals').exists():
+        raise RuntimeError('Original attempt requires review; never automatically repeat')
+    cohort.require_original()
+    service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
+    snapshot = service.registry.snapshot()
+    owners = tuple(thread for thread in snapshot.threads.values()
+                   if thread.role.executable and snapshot.statuses[thread.name].active and thread.process_alive)
+    if not owners:
+        raise RuntimeError('Empty original audience requires review')
+    audience = tuple(OwnerRestartSelection.capture(snapshot, thread.name) for thread in owners)
+    for original in owners:
+        original.require_idle()
+        RetainedOwnerLaunch.capture(original, snapshot, interpreter=str(cohort.source_interpreter))
+    directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        operation = PublishRetainedSummary(cohort, audience, owners, task_carry, directory, receipt)
+        operation.require_selection(snapshot, owners)
+        receipt.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        PrivateDirectoryRole.require(receipt.parent.lstat())
+        descriptor = os.open(receipt, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(descriptor, 'w') as opened:
+            json.dump({'phase':'preflight-complete', 'started':time.time(),
+                       'cohort':FieldCodec.encode(cohort), 'owners_before':FieldCodec.encode(audience)}, opened, indent=2)
+            opened.flush()
+            os.fsync(opened.fileno())
+        fsync_directory(receipt.parent)
+        service.owners.pin_private_nk_launch(ROOT, cohort.original_route.wire_root_id, cohort.native)
+        runtime = RestartEnvironment(path=str(cohort.target / 'bin')+':'+os.environ['PATH'],
+                                     virtual_env=str(cohort.target))
+        return service.owners.restart_owners(runtime=runtime,
+            source_interpreter=str(cohort.source_interpreter), cutover=operation)
+    finally:
+        os.close(directory)
