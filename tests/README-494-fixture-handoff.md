@@ -1,8 +1,8 @@
 # Typed selected-summary journal fixture contribution
 
 Integration owner remains Schrodinger #494. Kepler owns tests only in this
-persistent isolated worktree. Base e0b15552, stacked on #494's authoritative
-branch, with no production edits or functional-release hold.
+persistent isolated worktree. Base f6e70a15 (production source e0b15552), stacked
+on #494's authoritative branch, with no production edits or functional-release hold.
 
 Receiving handoff: tests/test_selected_summary_journal.py,
 tests/test_fresh_private_session.py, and necessary existing fixture builders.
