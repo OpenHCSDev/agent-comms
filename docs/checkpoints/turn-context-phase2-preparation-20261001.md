@@ -66,3 +66,44 @@ PR474 remains Draft until this actual continuous journey is accepted.
 The accepted default07 receiving gate is unchanged. PR159's original final queue
 producer bound Available, but its post-bind caption physical paint remains
 **not verified**; no full public-path readiness claim is made.
+
+## Actual installed checkpoint10 — scoped acceptance complete
+
+After the owner explicitly unblocked this wire-backed journey, normal merge of
+Sch481 `79d3aae28b2524a80cc97ed881fc6dcedcf02e09` produced tested Core
+`60e5b0245bb8caa7da12f340f29b3c9c9b3c130c`. The tiny source wheel was installed in
+the existing private environment. All 308 source Python modules are byte-equal
+to the installed package; Toad/ACP/dependencies are borrowed from the accepted
+installed receiving61 prefix, not a source overlay. Native776 is the exact
+authorized immutable producer; no native rebuild or repeat trust gate occurred.
+
+The single fresh fixture `/home/ts/wt/s5authored01` completed in **47.531834s**,
+exit0, with exactly **two localhost POSTs**. Actual Toad/ACP manual compaction
+committed original native entry `931e3aea`, journal commit
+`377886fff1df462ab992d831e2ef2527`. It retained the original human author and
+wire source `1:888e4f2ac61f` through pin `2:70f974d55660` with exact wording.
+The normal CLI exported an879-byte artifact into the genuine empty SDK session's
+project. Actual Toad input `f168bc6f6c29f061c3f455cc8115dccc` then reached the real
+localhost provider with that exact exported system wording and produced its
+original native terminal answer. Parent-history inheritance cannot explain it.
+
+Fixture allocation is **1,257,472 bytes**. Existing fixture/observer shutdown
+completed; one-shot readable same-UID process inspection found no remaining
+fixture references. Two unreadable processes are explicitly retained in the
+cleanup receipt; no additional signals or replay occurred. Original journal,
+wire, requests, exported file and compositor SVGs remain protected in the
+persistent fixture. No paid/public input, default mutation or original-owner
+restart was performed.
+
+This closes the scoped #474 installed journey. It does not close full Sch481
+S2/S3/S4, direct native HumanInput pinning or readable physical TUI acceptance.
+The fresh input also carries the existing **Channel/source awareness unavailable**
+notice; its original ACP cursor observation is unavailable. That fact is retained
+and reported to parent/Sch's source owner, without guessing the underlying caught
+exception or claiming full inbox/bus readiness. `MessageBus.awareness()` owns the
+existing nonblocking read and admission path; this gate introduces no workaround.
+
+Ready receipt: `evidence/turn-context-phase2-20261001/authored-native-ready11.json`.
+Native terminal/result, source-byte verification, launch, log and cleanup receipts
+are adjacent. Earlier source-only preparation and all default07/PR159 limits
+remain historical and unmodified.
