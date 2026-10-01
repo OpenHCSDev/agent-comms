@@ -1,0 +1,104 @@
+{
+  "public_mutations": 0,
+  "provider_calls": 0,
+  "original_replays": 0,
+  "method": "Original readonly typed assignments and activity events; exact registry owner fenced diagnostic; no ActivityLog checkpoint writer invoked",
+  "notifications": [
+    {
+      "wire_seq": 266,
+      "recipient": "Linnaeus",
+      "lifecycle": "triage_pending",
+      "original_registry_only_state": "Waiting for agent",
+      "candidate_state": "Waiting for agent",
+      "candidate_detail": "Agent is stopped; this message has not been checked."
+    },
+    {
+      "wire_seq": 266,
+      "recipient": "openhcs-architecture-memory",
+      "lifecycle": "triage_pending",
+      "original_registry_only_state": "Pending",
+      "candidate_state": "Waiting for recovery",
+      "candidate_detail": "Inbox unavailable \u00b7 NativePiUnavailable: Native Pi operation failed: PromptSendUnknown: Native prompt admission ended before writing any bytes \u00b7 Drain stopped; fix the error and restart the owner. This message is saved and has not started."
+    },
+    {
+      "wire_seq": 266,
+      "recipient": "openhcs-headless-bootstrap-worker",
+      "lifecycle": "triage_pending",
+      "original_registry_only_state": "Waiting for agent",
+      "candidate_state": "Waiting for agent",
+      "candidate_detail": "Agent is stopped; this message has not been checked."
+    },
+    {
+      "wire_seq": 266,
+      "recipient": "openhcs-helper",
+      "lifecycle": "triage_pending",
+      "original_registry_only_state": "Pending",
+      "candidate_state": "Waiting for recovery",
+      "candidate_detail": "Inbox unavailable \u00b7 NativePiUnavailable: Native Pi operation failed: PromptSendUnknown: Native prompt admission ended before writing any bytes \u00b7 Drain stopped; fix the error and restart the owner. This message is saved and has not started."
+    },
+    {
+      "wire_seq": 266,
+      "recipient": "openhcs-helper2",
+      "lifecycle": "ignored",
+      "original_registry_only_state": "Checked \u2014 no response",
+      "candidate_state": "Checked \u2014 no response",
+      "candidate_detail": "The agent checked this message and chose not to respond."
+    },
+    {
+      "wire_seq": 266,
+      "recipient": "openhcs-pr159-viewer-bind-owner",
+      "lifecycle": "triage_pending",
+      "original_registry_only_state": "Pending",
+      "candidate_state": "Waiting for recovery",
+      "candidate_detail": "Inbox unavailable \u00b7 NativePiUnavailable: Native Pi operation failed: PromptSendUnknown: Native prompt admission ended before writing any bytes \u00b7 Drain stopped; fix the error and restart the owner. This message is saved and has not started."
+    },
+    {
+      "wire_seq": 262,
+      "recipient": "Linnaeus",
+      "lifecycle": "triage_pending",
+      "original_registry_only_state": "Waiting for agent",
+      "candidate_state": "Waiting for agent",
+      "candidate_detail": "Agent is stopped; this message has not been checked."
+    },
+    {
+      "wire_seq": 262,
+      "recipient": "openhcs-architecture-memory",
+      "lifecycle": "deferred",
+      "original_registry_only_state": "Outcome uncertain",
+      "candidate_state": "Outcome uncertain",
+      "candidate_detail": "The check was attempted but no decision was confirmed. Do not automatically retry."
+    },
+    {
+      "wire_seq": 262,
+      "recipient": "openhcs-headless-bootstrap-worker",
+      "lifecycle": "triage_pending",
+      "original_registry_only_state": "Waiting for agent",
+      "candidate_state": "Waiting for agent",
+      "candidate_detail": "Agent is stopped; this message has not been checked."
+    },
+    {
+      "wire_seq": 262,
+      "recipient": "openhcs-helper",
+      "lifecycle": "deferred",
+      "original_registry_only_state": "Outcome uncertain",
+      "candidate_state": "Outcome uncertain",
+      "candidate_detail": "The check was attempted but no decision was confirmed. Do not automatically retry."
+    },
+    {
+      "wire_seq": 262,
+      "recipient": "openhcs-helper2",
+      "lifecycle": "ignored",
+      "original_registry_only_state": "Checked \u2014 no response",
+      "candidate_state": "Checked \u2014 no response",
+      "candidate_detail": "The agent checked this message and chose not to respond."
+    },
+    {
+      "wire_seq": 262,
+      "recipient": "openhcs-pr159-viewer-bind-owner",
+      "lifecycle": "deferred",
+      "original_registry_only_state": "Outcome uncertain",
+      "candidate_state": "Outcome uncertain",
+      "candidate_detail": "The check was attempted but no decision was confirmed. Do not automatically retry."
+    }
+  ]
+}
