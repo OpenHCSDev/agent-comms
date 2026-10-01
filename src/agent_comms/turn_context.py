@@ -123,14 +123,14 @@ class ContextSegment(DeclaredFamily, affix="Segment"):
             self.declared_name, self.provenance, hashlib.sha256(raw).hexdigest(), len(raw), tokens
         )
 
-    def contribution(self, offset: int, text: str, images=()) -> InputContribution:
+    def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         raw = text.encode()
-        return InputContribution(self.declared_name, self.provenance, offset,
+        return InputContributionCoordinates(self.declared_name, self.provenance, offset,
                                  len(raw), hashlib.sha256(raw).hexdigest())
 
 
 @dataclass(frozen=True)
-class InputContribution:
+class InputContributionCoordinates:
     """Coordinates in the original rendered input, never another input copy."""
 
     kind: str
@@ -153,7 +153,7 @@ class SuppliedSegment:
 
 @dataclass(frozen=True, kw_only=True)
 class UserInputSegment(SuppliedSegment, ContextSegment):
-    def contribution(self, offset: int, text: str, images=()) -> InputContribution:
+    def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         return replace(super().contribution(offset, text), images=tuple(range(len(images))))
 
 
@@ -348,7 +348,7 @@ class ReplyRouteSegment(InstructionSegment):
 class RenderedInput:
     text: str
     provider: dict[str, Any]
-    contributions: tuple[InputContribution, ...] = ()
+    contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
 @dataclass(frozen=True)

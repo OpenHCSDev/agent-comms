@@ -8,29 +8,74 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 const kind = declaration => declaration.name.replace(/Segment$/, '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
 const file = (path, content) => ({kind:'file', path, sha256:hash(content)});
 
+class InputByteRange {
+    constructor(offset,length) { this.offset=offset; this.length=length; }
+    static requireCoordinate(value) {
+        if (!Number.isSafeInteger(value) || value<0)
+            throw new TypeError('Context input byte coordinate must be a nonnegative integer');
+    }
+    static capture(offset,length,bytes) {
+        this.requireCoordinate(offset); this.requireCoordinate(length);
+        if (length>bytes.length-offset)
+            throw new TypeError('Context contribution extends beyond its original input');
+        return new this(offset,length);
+    }
+    bytes(input) { return input.subarray(this.offset,this.offset+this.length); }
+    matches(input,digest) { return hash(this.bytes(input))===digest; }
+    requireDigest(input,digest) {
+        if (!this.matches(input,digest))
+            throw new TypeError('Context contribution digest differs from its original byte range');
+    }
+}
+class InputImages {
+    constructor(indices) { this.indices=indices; }
+    static capture(indices,images=[]) {
+        for (const index of indices) {
+            if (!Number.isSafeInteger(index) || index<0 || index>=images.length)
+                throw new TypeError('Context contribution names no original input image');
+        }
+        return new this(indices);
+    }
+    preserved(images) { return this.indices.every(index=>images[index]!==undefined); }
+    content(images) { return this.indices.map(index=>images[index]); }
+}
+class InputContribution {
+    constructor(kind,provenance,range,digest,images) {
+        if (!provenance.length) throw new TypeError('Context contribution requires its original source');
+        this.kind=kind; this.provenance=provenance; this.range=range;
+        this.digest=digest; this.images=images;
+    }
+    static capture(source,request,bytes) {
+        const range=InputByteRange.capture(source.offset,source.length,bytes);
+        range.requireDigest(bytes,source.sha256);
+        return new this(source.kind,source.provenance,range,source.sha256,
+            InputImages.capture(source.images,request.images ?? []));
+    }
+    preserved(bytes,images) {
+        return this.range.matches(bytes,this.digest) && this.images.preserved(images);
+    }
+    observe(bytes,images,native,journal) {
+        const content=[{type:'text',text:this.range.bytes(bytes).toString()},...this.images.content(images)];
+        const encoded=JSON.stringify(content);
+        return {kind:this.kind,provenance:[...this.provenance,native,journal],
+            sha256:hash(encoded),utf8_bytes:Buffer.byteLength(encoded),
+            tokens:estimateTokens({role:'user',content,timestamp:0})};
+    }
+}
+
 /** The existing one-use input claim also owns its read-only source coordinates. */
 export class NativeInputClaim {
     constructor(digest, contributions) { this.digest=digest; this.contributions=contributions; }
     static capture(digest, request, contributions=[]) {
         const bytes=Buffer.from(request.text);
-        for (const source of contributions) {
-            if (!source.provenance.length || !Number.isSafeInteger(source.offset) ||
-                !Number.isSafeInteger(source.length) || source.offset<0 || source.length<0 ||
-                source.offset+source.length>bytes.length ||
-                hash(bytes.subarray(source.offset,source.offset+source.length))!==source.sha256 ||
-                source.images.some(index=>!Number.isSafeInteger(index) || index<0 || index>=(request.images?.length ?? 0)))
-                throw new TypeError('Context contribution does not describe its original input');
-        }
-        return new this(digest,contributions);
+        return new this(digest,contributions.map(source=>InputContribution.capture(source,request,bytes)));
     }
     observe(message, native, journal) {
         const blocks=typeof message.content==='string'
             ? [{type:'text',text:message.content}] : message.content;
         const bytes=Buffer.from(blocks.filter(block=>block.type==='text').map(block=>block.text).join(''));
         const images=blocks.filter(block=>block.type==='image');
-        if (this.contributions.some(source=>
-            hash(bytes.subarray(source.offset,source.offset+source.length))!==source.sha256 ||
-            source.images.some(index=>images[index]===undefined))) {
+        if (!this.contributions.every(source=>source.preserved(bytes,images))) {
             // Extension transformations own their resulting value. A changed
             // range cannot claim byte-identical logical attribution or reject
             // an otherwise valid original native input.
@@ -38,14 +83,7 @@ export class NativeInputClaim {
                 [...this.contributions.flatMap(source=>source.provenance),native,journal],
                 [message]).manifest()];
         }
-        return this.contributions.map(source=>{
-            const raw=bytes.subarray(source.offset,source.offset+source.length);
-            const content=[{type:'text',text:raw.toString()},...source.images.map(index=>images[index])];
-            const encoded=JSON.stringify(content);
-            return {kind:source.kind,provenance:[...source.provenance,native,journal],
-                sha256:hash(encoded),utf8_bytes:Buffer.byteLength(encoded),
-                tokens:estimateTokens({role:'user',content,timestamp:0})};
-        });
+        return this.contributions.map(source=>source.observe(bytes,images,native,journal));
     }
 }
 

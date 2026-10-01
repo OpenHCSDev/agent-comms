@@ -49,15 +49,15 @@ def extend_input_claim(session, rpc, core):
                  'return {request_generation:generation, context_digest:digest, contributors};')
     types=core/'agent-session.d.ts'
     replace_once(types,'export interface PromptOptions {',
-                 'export interface PromptOptions {\n    contextContributions?: readonly import("./turn-context.js").InputContribution[];')
+                 'export interface PromptOptions {\n    contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[];')
     for method in ('steer','followUp'):
         replace_once(types,f'{method}(text: string, images?: ImageContent[], inputId?: string): Promise<void>;',
-            f'{method}(text: string, images?: ImageContent[], inputId?: string, contextContributions?: readonly import("./turn-context.js").InputContribution[]): Promise<void>;')
+            f'{method}(text: string, images?: ImageContent[], inputId?: string, contextContributions?: readonly import("./turn-context.js").InputContributionCoordinates[]): Promise<void>;')
     types=core.parent/'modes/rpc/rpc-types.d.ts'
     source=types.read_text()
     before='    inputId?: string;'
     if source.count(before)!=3: raise ValueError('Original prompt/steer/follow-up declaration closure changed')
-    types.write_text(source.replace(before,before+'\n    contextContributions?: readonly import("../../core/turn-context.js").InputContribution[];'))
+    types.write_text(source.replace(before,before+'\n    contextContributions?: readonly import("../../core/turn-context.js").InputContributionCoordinates[];'))
 
 
 def main(package):

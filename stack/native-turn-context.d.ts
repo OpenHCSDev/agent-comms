@@ -7,7 +7,7 @@ export interface NativeContextSegmentManifest {
     tokens: number;
     contributors?: readonly NativeContextSegmentManifest[];
 }
-export interface InputContribution {
+export interface InputContributionCoordinates {
     kind: string;
     provenance: readonly unknown[];
     offset: number;
@@ -17,8 +17,8 @@ export interface InputContribution {
 }
 export declare class NativeInputClaim {
     readonly digest: string;
-    readonly contributions: readonly InputContribution[];
-    static capture(digest: string, request: {text: string; images?: readonly unknown[] | null}, contributions?: readonly InputContribution[]): NativeInputClaim;
+    private readonly contributions;
+    static capture(digest: string, request: {text: string; images?: readonly unknown[] | null}, contributions?: readonly InputContributionCoordinates[]): NativeInputClaim;
     observe(message: unknown, native: unknown, journal: unknown): NativeContextSegmentManifest[];
 }
 export interface NativeContextManifest {

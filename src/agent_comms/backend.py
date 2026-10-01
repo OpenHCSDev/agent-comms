@@ -34,7 +34,7 @@ from .child_process import TimedOutOutcome
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
 from .image_inputs import ImageInput
-from .turn_context import InputContribution
+from .turn_context import InputContributionCoordinates
 from .maintenance_barrier import MaintenanceBarrier
 from .native_attestation import AttestationError, SavedSessionReopenError
 from .native_custody import (
@@ -208,7 +208,7 @@ async def stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     persistent_session: PersistentPiSession | None = None,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
-    context_contributions: tuple[InputContribution, ...] = (),
+    context_contributions: tuple[InputContributionCoordinates, ...] = (),
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend; native completion ends with a ``done`` event.
 
@@ -300,7 +300,7 @@ class TurnSession:
         persistent_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         startup: NativeStartupAdmission | None = None,
-        context_contributions: tuple[InputContribution, ...] = (),
+        context_contributions: tuple[InputContributionCoordinates, ...] = (),
     ):
         self.launch = launch
         self.task = task
