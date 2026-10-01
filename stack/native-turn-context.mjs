@@ -28,15 +28,21 @@ class InputByteRange {
     }
 }
 class InputImages {
-    constructor(indices) { this.indices=indices; }
+    constructor(indices,images) {
+        this.indices=Object.freeze([...indices]);
+        this.fingerprint=hash(JSON.stringify(this.content(images)));
+    }
     static capture(indices,images=[]) {
         for (const index of indices) {
             if (!Number.isSafeInteger(index) || index<0 || index>=images.length)
                 throw new TypeError('Context contribution names no original input image');
         }
-        return new this(indices);
+        return new this(indices,images);
     }
-    preserved(images) { return this.indices.every(index=>images[index]!==undefined); }
+    preserved(images) {
+        return this.indices.every(index=>images[index]!==undefined)
+            && hash(JSON.stringify(this.content(images)))===this.fingerprint;
+    }
     content(images) { return this.indices.map(index=>images[index]); }
 }
 class InputContribution {
