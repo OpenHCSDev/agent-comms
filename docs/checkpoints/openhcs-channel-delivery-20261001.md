@@ -205,3 +205,37 @@ actual native failure, a newly committed unhandled channel source visibly waitin
 for recovery, physical DM/return clicks and unchanged uncertain input, with exactly
 two controlled localhost POSTs. The completed e05 cancellation/native acceptance
 is retained without repetition. Public installation remains parent-owned.
+
+
+## Affected installed TUI acceptance complete
+
+Fresh u07: **exit 0 / 12.4846 seconds / exactly 2 localhost POSTs**. Normal
+immutable stage-03 contains tested Corea2a47db2 and paired Toad267c38aa9de;
+all295Core and273Toad Python files match, 69 packages are compatible, and the
+original native593 package passes full trust verification. Toad production remains
+identical to accepted264b524; its pin is updated through normal metadata/lock.
+
+The continuously open actual application paints an ordinary native reply, then
+real native SDK/ACP 503 failure stops the original drain. A fresh independent
+source223 is saved with original frozen audience and no handling claim. Its
+expanded channel notification visibly says Waiting for recovery. Physical clicks
+open the original DM tab, expose Needs attention/Inbox unavailable plus current
+Waiting for recovery, and return to the channel retaining that feedback. The
+failed original native input is exactly unchanged, no provider retry/new handling
+claim exists for223, and all owned fixture processes retire. No paid provider,
+public mutation or original replay. The failed u06/root and original e05 acceptance
+remain protected; this is a fresh original workflow, not a replay of its failure.
+
+Sanitized receipt and visible frames: evidence/openhcs-channel-delivery/ui-native-gates.
+Private original root: /home/ts/wt/ac476-u07. Screenshots/ACP/proof material remain
+under the owned ui07 scratch directory; hashes are recorded in the committed
+receipt. Parent alone owns merge, installation and public activation.
+
+Production accounting against integrated main500e873c^2: **153 lines deleted,
+361 added** across the complete closure, excluding fixtures/docs. Deleted early
+input dispatch/watchdog clock, whole-inbox cancellation ACK, registry-only pending
+interpretation, active-owner map and optional-owner consumer reconstructions.
+Remaining gaps: the original live lock-holder was not retained and cannot be
+attributed; original UNKNOWN dispositions remain uncertain; archive enrollment/
+carry is Mendel477's independent scope. No latency claim or global activation is
+made from this bounded acceptance.
