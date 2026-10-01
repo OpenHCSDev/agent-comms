@@ -45,6 +45,6 @@ c8708543a42959475b15f7aa0e07412cfa0bd29bd61249841a16aa2e200ddaed  node_modules/@
 9605f7cc8986b81f4e11d1d9f297632989d84339779751778c54c2769c85e2b4  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
 d2cdfd5d0daf4c0df0f52af14773b338045d0c67ae7b564b681c34d3fab013f1  node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
 20c0e1d062855f805bad7193f781123ae79a56cabb682a87a402116f66774178  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-request-input.js
-9a561f196f974b2be654a9bf5387e42309795658573865a5c3f5711f1552371e  dist/core/turn-context.js
+247561c7f0dde1dd14734b03f1fc1a864895cbe93970e38f8af215d40fe4768c  dist/core/turn-context.js
 df2ebb8371c88bff73253bad57fb485965360fb959187d84a7267e2d41b618b9  dist/core/turn-context.d.ts
-# agent-comms-native-tree-v1 53c34d888755517eceb50bb46a667b48add88e916c802dc0ea096bd390c58bd4
+# agent-comms-native-tree-v1 cc9e86f72ba7b2c285b209b3fc96a2e8dcc4f182a528941712a5dbd7e457a9d1

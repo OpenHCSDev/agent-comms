@@ -35,3 +35,28 @@ actual Toad current human ingress observer on that same private fixture. Old
 extension-disabled stock-tool tests do not establish that catalog boundary.
 General tool/artifact provenance and full retained-task acceptance remain open;
 no new provider journey is claimed by this build checkpoint.
+
+## Selected-image identity correction
+
+The actual f117 SDK negative retained `source_input` after selected image bytes
+changed while text and original input fields stayed the same. Einstein's
+`0fffc025` correction extends the existing `InputImages` declaration: frozen
+original indices and one immutable selected-image fingerprint establish whether
+the original images survived. There is no image payload copy or new claim store.
+
+Stock11 and canonical13 independently assembled the new package. All 49 module
+commitments and the complete import/resource tree were regenerated; only
+`dist/core/turn-context.js` changed. Manifest
+`0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1`
+and tree `cc9e86f72ba7b2c285b209b3fc96a2e8dcc4f182a528941712a5dbd7e457a9d1`
+passed the normal builder and full `_trusted_package` verification. Source and
+packaged context module SHA256 both equal
+`247561c7f0dde1dd14734b03f1fc1a864895cbe93970e38f8af215d40fe4768c`.
+
+Recipe11, pins12, canonical build13 and trust14 preserve exact provenance.
+Verified redundant stock05 cleanup reclaimed 138,394,374 bytes; canonical f117,
+451 and original failed journeys remain protected. This checkpoint contains zero
+provider requests, replay or public changes. Einstein still owns the changed
+image SDK acceptance and sole shared continuous installed journey; parent and
+Mendel own normal paired packaging. Artifact trust does not establish full S2/S5
+readiness.
