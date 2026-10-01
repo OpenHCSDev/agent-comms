@@ -141,6 +141,7 @@ async def maybe_compact_owner_turn(
                     source=identity.source, selected=selected,
                     settings=settings.summary_settings(), retained=captured.retained,
                 ),
+                owner=owner,
                 expected_package=package,
                 tokens_before=prepared.tokens_before,
                 future_queue=future_queue,

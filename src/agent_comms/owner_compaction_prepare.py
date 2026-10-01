@@ -98,6 +98,7 @@ class NativePreparation(NativePreparationResult, declared_name="ready"):
 class PreparationRequest(SessionHelperRequest):
     settings: PiCompactionSettings
     context_window: int
+    retained_text: str
 
     def __post_init__(self):
         if type(self.context_window) is not int or not 0 < self.context_window <= 2**53 - 1:
@@ -111,7 +112,8 @@ class PrepareCompactionHelper(PiHelper):
 
 
 def prepare_native_source(
-    package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int
+    package: Path, session_file: str, *, settings: PiCompactionSettings, context_window: int,
+    retained_text: str = "",
 ) -> NativePreparation | None:
     """Derive Pi's actual cut point without a model call or a session mutation.
 
@@ -140,6 +142,7 @@ def prepare_native_source(
                     str(file),
                     settings,
                     context_window,
+                    retained_text,
                 ),
                 cwd=file.parent,
             )
