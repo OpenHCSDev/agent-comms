@@ -1,6 +1,6 @@
 {
-  "state": "PREPARED-NOT-EXECUTED-NEW-PACKAGE-AND-SAME-COHORT-GATES-PENDING",
-  "operator_sha256": "ffe09d765ff24d057cfa6ee2f35387340f904adbd6b5a476dd6697e1f5273f93",
+  "state": "PREPARED-NOT-EXECUTED-SAME-COHORT-ACTUAL-GATES-PENDING",
+  "operator_sha256": "cab02f55c0cb0f319132c3d993432e76815667647708a8c4221d49eecc7ca1b5",
   "source_interpreter": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/bin/python",
   "current_defaults": "/home/ts/.local/share/agent-comms/runtime-body-readiness-20260930",
   "target": "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001",
@@ -9,9 +9,9 @@
     "batrachian-toad": "15601a4f785fd6ee3e53e12b3a971ae1186f4482",
     "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
   },
-  "activation_sha256": "pending-new-package-artifact",
-  "staging_sha256": "pending-new-package-artifact",
-  "package_ready_sha256": "pending-new-package-artifact",
+  "activation_sha256": "e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94",
+  "staging_sha256": "1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa",
+  "package_ready_sha256": "e37581c021162de4fff37ad4fe8e3afe215302697c95219105c001ba5d3256cf",
   "actual_acceptance": {
     "joint": "pending same156/970/6b cohort",
     "bus": "pending same156/970/6b cohort"

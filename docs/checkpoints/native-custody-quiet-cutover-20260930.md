@@ -20,9 +20,13 @@ not a member of this candidate.
 - Native/root unchanged: native593b978a717ae8f6, wireRoot
   e206f3766e60451a989ca34df0e2a94b,
   `/var/tmp/agent-comms-live-20260927-wzjtqhza`.
-- Activation, staging and package-ready hashes: **pending new corrected package artifacts**. Old85 hashes have been removed from executable constants.
-- Package-ready path will be verified from Sch's actual new assembly receipt;
-  no prior cohort receipt can admit this target.
+- Activation SHA `e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94`.
+- Staging SHA `1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa`.
+- Package-ready SHA `e37581c021162de4fff37ad4fe8e3afe215302697c95219105c001ba5d3256cf` at
+  `/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-ready-receipt.json`.
+- These original artifacts were read and hashes/pins/stage/SDK verified.
+  Packaging is separate from actual joint-native/UI and bus acceptance.
+  Older cohort receipts cannot admit this target.
 
 Both original same-cohort Einstein joint-native/UI and Sch bus/hot-view gates
 are **mandatory, pending and unfilled**. Packaging cannot substitute for them.

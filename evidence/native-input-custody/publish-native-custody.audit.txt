@@ -49,10 +49,10 @@ PINS = {
     'batrachian-toad': '15601a4f785fd6ee3e53e12b3a971ae1186f4482',
     'textual': '6b5895fa0a72aeec2aeaef7206d5debfa0c1803c',
 }
-ACTIVATION_SHA = ''  # Pending new corrected cohort artifact; cannot admit execution.
-STAGING_SHA = ''  # Pending new corrected cohort artifact; cannot admit execution.
+ACTIVATION_SHA = 'e92534c1ec44de41db22dc1eb08bd336111454aea870e8aa56d0d7b9f3559b94'
+STAGING_SHA = '1ed2519e07bbf2f10eae24b4588aa6a5a848e4490f2686433239d6c6d5b221fa'
 PAIR_READY = Path('/home/ts/.cache/agent-scratch/atomic-page-handoff-stage-20261001/paired-ready-receipt.json')
-PAIR_READY_SHA = ''  # Pending new corrected cohort artifact; cannot admit execution.
+PAIR_READY_SHA = 'e37581c021162de4fff37ad4fe8e3afe215302697c95219105c001ba5d3256cf'
 
 
 def digest(path):
