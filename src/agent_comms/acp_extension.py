@@ -10,7 +10,7 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 
 from .acp_failure import ACPFailure, BackendDeliveryFailure, DeliveryFailure
 from .agent_events import CompactionEvent
@@ -310,7 +310,7 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     def validate_scope(self, scope: QueueScope | None) -> None:
         """Pending/unavailable wire observations may have no scope."""
 
-    def capture_human_input(self, comms, scope: QueueScope | None) -> HumanInputOrigin:
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
         """Pending/unavailable observations cannot certify original ingress."""
         raise ValueError(self.feedback(True))
 
@@ -354,8 +354,8 @@ class AvailableQueueProjection(QueueProjection):
         if scope is None:
             raise ValueError('Available input queue has no original attachment scope.')
 
-    def capture_human_input(self, comms, scope: QueueScope) -> HumanInputOrigin:
-        return HumanInputOrigin.capture(comms, scope.admission)
+    def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
+        return HumanInputOrigin.capture(comms, acquire_scope().admission)
 
 
 @dataclass(frozen=True)

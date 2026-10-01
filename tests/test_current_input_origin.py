@@ -42,14 +42,16 @@ def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tm
     for projection in (PendingQueueProjection(), UnavailableQueueProjection()):
         observation = QueueChangedUpdate(None, 0, projection)
         assert FieldCodec.decode(QueueChangedUpdate, FieldCodec.encode(observation)) == observation
+        def unavailable_scope():
+            raise AssertionError('Unavailable projection acquired input scope')
         with pytest.raises(ValueError, match='queue'):
-            observation.projection.capture_human_input(comms, observation.scope)
+            observation.projection.capture_human_input(comms, unavailable_scope)
     malformed = FieldCodec.encode(QueueChangedUpdate(scope, 0, AvailableQueueProjection()))
     malformed['scope'] = None
     with pytest.raises(ValueError, match='original attachment scope'):
         FieldCodec.decode(QueueChangedUpdate, malformed)
     observation = QueueChangedUpdate(scope, 0, AvailableQueueProjection())
-    assert observation.projection.capture_human_input(comms, scope) == capture(comms)
+    assert observation.projection.capture_human_input(comms, lambda: scope) == capture(comms)
     assert not agent.inputs.dispositions.read().rows
 
 
