@@ -15,9 +15,9 @@
 
 Receipts are in `evidence/retained-task-facts-s2-20261001/`.
 
-- Source boundary, worker custody and decision journey: 20 checks passed; named tool schema initially failed because the shared instance-family schema incorrectly required the separately supplied tool selector.
-- Human supersession journey: 17 checks passed, same shared schema failure. Original emission, authority refusal, later peer correction and fresh durable read were exercised.
-- Parent owns #478 shared schema caller closure; Einstein owns #473 wire/context crossing and the introduced CLI foreign-goal probe. Required debt measurements and failing controls are preserved, including the shared schema's two string subscripts. No guard waiver or caller-specific schema adapter is used.
+- Final affected source journey: 22 checks passed after normally integrating #478 corrected shared schema. The actual generated tool catalog requires chosen/rejected/to and preserves the nested declaration-owned scope/change selectors; no tool selector is added to arguments.
+- Human supersession, original emission, authority refusal, later peer correction, distinct equal-text identity, rename, scope invalidation and fresh durable read were exercised. Initial schema failures remain preserved.
+- Parent owns #478 shared schema closure; Einstein owns #473 wire/context crossing and the introduced CLI foreign-goal probe. Required debt measurements and failing controls are preserved, including the shared schema's two string subscripts. No guard waiver or caller-specific schema adapter is used.
 - Three policy packing rounds passed using the original Pi summary envelope, exact source prefix and tool pair. These are not three native checkpoints or model recall evidence.
 
 Remaining: general user-constraint applicability; completed tool/artifact provenance where original revision/hash ownership is missing; non-selected native retention and recent-window reduction with pair custody; reviewed native bundle and matched installed checkpoints; separate S4 recall authorization.
