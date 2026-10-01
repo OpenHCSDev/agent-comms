@@ -21,6 +21,16 @@ second budget owner, string-based refusal recovery, cap increase, alias, copied
 session, UNKNOWN clearing or current-file mirror.
 
 Validation comes last, after the coherent source closure. Use preserved original
-read-only request evidence during analysis. No tests-first, original input replay,
-public writes or paid calls. Any necessary final installed journey uses a distinct
-copied session and the configured model under the standing authorization.
+read-only request evidence during analysis. No tests-first, original input replay
+or public writes.
+
+Required final acceptance is ONE real installed continuous journey using the
+failing architecture-memory saved state COPIED to an owned isolated session.
+Preserve the exact configured provider, model, authentication, settings,
+extensions and hook route. Automatic compaction must complete and a DISTINCT
+fresh message must receive its native answer through the ordinary installed
+ACP/Native/Toad path. Record the operation, original/copy provenance, provider
+effects and original input disposition. This configured real-provider journey is
+explicitly authorized by the owner and standing instructions; no additional
+approval is needed. Do not substitute Loopback, fabricated protocol, startup-only
+or kernel-denied evidence for this acceptance, or choose another model/route.
