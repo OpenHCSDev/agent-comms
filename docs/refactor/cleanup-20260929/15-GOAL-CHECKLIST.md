@@ -29,11 +29,18 @@ Normal69 installation, full source assets, direct URLs and native trust passed.
 Einstein’s existing two-POST receiving-only journey passed37.235s: actual
 mounted compositor queue paint before Started, followed by the same original
 input’s single native claim/chat occurrence and cleared queue caption.
-This candidate is not the public default. Mendel next prepares the accepted
-Textual18/Toad275 performance pair; full velocity, End/PageDown, workspace and
+Core473 and Toad270 are now merged as3d537977/e7ac80fe after that acceptance;
+this candidate is not the public default. Arendt483 prepares its journal-format
+installation through the original stopped batch, with existing unchanged-wire
+custody when the foundation's omitted NoDecision representation is verified.
+Mendel next prepares Textual18/Toad2755dd46851, including the concrete stationary
+local-fragment runway fix; full velocity, End/PageDown, workspace and
 focus scope remains active. Sch's new artifact-native776 package passes actual
 SDK write/edit and full trust, but USER admission/private carry and full S2 are
 still open. Arendt483 owns the future475 journal cutover, separate from executed479.
+The owner's accidental CLI restart disconnected the old codex_tui endpoint;
+all six existing worker sessions were recovered through native Codex controls
+and their continuation messages accepted, preserving their current worktrees.
 
 ## Earlier 2026-10-01 default checkpoint live and verified; historical
 
