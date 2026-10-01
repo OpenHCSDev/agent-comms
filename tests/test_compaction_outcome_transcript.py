@@ -49,7 +49,9 @@ def test_late_original_outcome_invalidates_source_and_pages_once(tmp_path):
     native = tmp_path / "session.jsonl"
     native.write_text("".join(json.dumps({
         "type": "message", "id": f"native-{index}",
-        "message": {"role": "assistant", "content": "equal original bodies"},
+        "message": {"role": "assistant", "content": [
+            {"type": "text", "text": "equal original bodies"}
+        ]},
     }) + "\n" for index in range(3)))
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(native)))
     captured = comms.transcripts.capture_page_read("worker")

@@ -50,7 +50,7 @@ No implementation is claimed by this scope commit.
 
 ## Working source checkpoint
 
-All 13 direct callers now use the observation/value owner in `selected_source`.
+All 13 direct callers and the indirect selected RPC consumer now use the observation/value owner in `selected_source`.
 `SessionRevision` embeds original `FileRevision` and declared input-proof
 presence. Missing and unreadable proof observations are distinct; unavailable
 observations deny matching/acquisition. No optional tuple remains. Outcome
@@ -64,9 +64,15 @@ Their source digest includes the new nested record, and outcome snapshot digest
 now uses FieldCodec for that value. A quiet cutover resets only the declared
 runtime compaction journal, not native sessions/input-proof/UNKNOWN/wire/goals.
 
-Production replacement: **74 deleted / 153 added** across the 13 modules.
+Production replacement: **75 deleted / 154 added** across 14 modules.
 Source checks: 36 passed/3.31s, one inherited transcript root-body assertion
-failed identically at untouched ca9/base970 in 1.00s. Schrodinger explicitly
-received its typed body-fixture closure; no assertion was weakened. Installed
+failed identically at untouched ca9/base970 in 1.00s. Parent identified its invalid native string-content fixture; the canonical
+TextContent-array correction passed in 0.19s with all original assertions unchanged. Installed
 native/ACP acceptance is pending; this source checkpoint is not Ready.
 See `evidence/session-revision-value/WORKING.md`.
+
+Native01 exposed the omitted RetainedNative positional consumer above plus obsolete
+fixture StateData/context_size and double fresh-root initialization. The RPC
+consumer is corrected, prepared model owns the fixture selection/capacity, and
+already-certified private roots are read through the existing certificate.
+Failed native01 roots/logs remain protected; no original input is replayed.

@@ -31,6 +31,7 @@ not process birth. Original custody and proof readers remain authorities.
 | reservation_rules | Observation matches original required revision; unavailable cannot authorize reservation/recovery. |
 | compaction_summaries | Existing locked journal/input boundary observes current value, no second stat reader. |
 | compaction_states | CommittedNativeOutcome consumes unchanged native five-field stamp. |
+| selected_pi_summary_rpc | Indirect RetainedNative consumer validates the witness through the same native_stamp owner. |
 | owner_compaction_adaptive | Requires an observed value before creating selected original admission. |
 | owner_compaction_manual | Requires a value before encoding ManualSource; no None slipped through required annotation. |
 | owner_compaction_commit | Interrupted and exact commit checks consume current observation; no uncertain-input replay. |
@@ -39,13 +40,13 @@ not process birth. Original custody and proof readers remain authorities.
 Indirect `input_disposition`, `compaction_records`, `compaction_identity`,
 `compaction_journal`, `transcript_outcomes`, `transcripts`, `transcript_receipts`
 already invoke these original operations. No extra codec/store/copy needed.
-All seven existing test consumer files, including the actual child script, are
+All existing test consumer files, including the actual child script, are
 migrated. No private revision imports, tuple subscripts or None state probes
 remain in production or those fixtures. Old tuple JSON is rejected.
 
 ## Deletions, storage and checks
 
-**74 production lines deleted / 153 added** across the 13 owned modules.
+**75 production lines deleted / 154 added** across 14 owned modules.
 Backend's tuple reader and duplicated encodings are removed in place.
 Runtime `compaction-commits.sqlite3` nested source format resets at the owner's
 quiet cutover. No legacy reader/alias/SelectedSourceCodec or converter.
@@ -55,8 +56,8 @@ Source-only affected controls: **36 passed / 3.31s**, one inherited failure.
 Exact untouched base reproduces the same late-outcome assertion in **1.00s**:
 root `event.text == 'equal original bodies'` count is 0 versus expected 3.
 Original outcome identities, frontier invalidation, read-only journal, paging
-and no-rewrite checks preceding it pass. Schrodinger explicitly received the
-typed body-fixture correction; the assertion remains unchanged here.
+and no-rewrite checks preceding it pass. Parent identified invalid native string content and assigned the fixture correction
+here. Canonical TextContent array passed in 0.19s; all original assertions remain.
 
 One small noneditable wheel environment was built under persistent
 `/home/ts/.cache/agent-scratch/sr468/installed`; all **294 package .py files**
@@ -69,3 +70,9 @@ logs, original inventory/baseline reproduction and provenance:
 `~/.cache/agent-scratch/mendel-session-revision-468-20261001`.
 Resource guard: home10.1GiB/RAM17GiB/swap8.9GiB warning. No env fleet,
 paid provider, public input, owner restart or native/stack modification.
+
+Native01 exposed the omitted RetainedNative positional consumer above plus obsolete
+fixture StateData/context_size and double fresh-root initialization. The RPC
+consumer is corrected, prepared model owns the fixture selection/capacity, and
+already-certified private roots are read through the existing certificate.
+Failed native01 roots/logs remain protected; no original input is replayed.

@@ -59,6 +59,7 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
         info,
     ):
         owner, generation = registry.live_owner_with_generation("owner")
+        selected = info.model.for_compaction(owner.model)
         package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
         bridge = await asyncio.to_thread(OwnerCompactionCommit, registry.store.path, package)
         prepared = await asyncio.to_thread(
@@ -66,7 +67,7 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
             package,
             session,
             settings=PiCompactionSettings(1000, 10),
-            context_window=info.context_size,
+            context_window=selected.context_window,
         )
         text = inputs.read().rows["acp:original"].source_text
         digest = TextDigest.of(text)
@@ -86,9 +87,7 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
                         reserved_revision=SessionRevision.observe(session).require_available(),
                     )
                 ),
-                "selected": dict(
-                    provider="openai", modelId="gpt-4.1-mini", contextWindow=info.context_size
-                ),
+                "selected": selected.to_wire(),
                 "settings": dict(reserveTokens=1000, keepRecentTokens=10),
             },
         )
