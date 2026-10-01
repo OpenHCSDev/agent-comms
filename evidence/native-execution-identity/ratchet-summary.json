@@ -1,0 +1,25 @@
+{
+  "base": "da15ac2f5bb8a66f23a735117bc5e768232270cd",
+  "head": "54caa801e5570091cb4f56d6394452687f3deeb7",
+  "paths": [
+    "src/agent_comms/attempt_recovery.py",
+    "src/agent_comms/coordinated_runtime_schema.py",
+    "src/agent_comms/historical_native_inputs.py",
+    "src/agent_comms/native_input_record.py",
+    "src/agent_comms/native_prompt_binding.py",
+    "src/agent_comms/native_runtime_input.py",
+    "src/agent_comms/native_source_cursor.py",
+    "src/agent_comms/private_send_stage.py",
+    "src/agent_comms/selected_tool_broker.py",
+    "src/agent_comms/selected_triage.py",
+    "src/agent_comms/selected_turn.py",
+    "src/agent_comms/source_proof_requirement.py"
+  ],
+  "positive_delta": {},
+  "nonzero_delta": {
+    "LongBooleanChain": -1,
+    "BooleanChainTerms:src/agent_comms/attempt_recovery.py": -4,
+    "ForeignAbsenceProbe:src/agent_comms/source_proof_requirement.py": -1
+  },
+  "raw": "/home/ts/.cache/agent-scratch/mendel-native-execution-472-20261001/ratchet02.json"
+}
