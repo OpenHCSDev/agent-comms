@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from .channels import Channel
 from .field_codec import FieldCodec
 from .message_page import MessagePage, MessagePageRequest, PageTraversal
+from .message_reference import MessageReference
 from .messages import Message
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import ChannelDisplayScope, DisplayBasis, DMDisplayScope, MessageDisplayScope
@@ -189,6 +190,10 @@ class HistoricalMessage(Message):
             sender_created_at=creation(message.sender),
             target_created_at=creation(message.target),
         )
+
+    def notification_references(self) -> tuple[MessageReference, ...]:
+        """An archived row has no current recipient handling authority."""
+        return ()
 
     @property
     def response_policy(self) -> ResponsePolicy:
