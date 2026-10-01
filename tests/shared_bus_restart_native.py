@@ -102,9 +102,9 @@ async def configured_mixed_routes(arguments):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
             MessageType.INFO), _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
             for target, body in (
-                ('#team', f'@{name} Read batch-values.txt with the normal read tool and report PUBLIC_VALUE.'),
-                ('#team', f'@{name} Also compute 10+2. Combine this with the other channel request.'),
-                (name, 'Direct/private only: compute 7+8 and include PRIVATE_ROUTE_490 in this direct reply only.'))]
+                ('#team', f'{stage.name}: @{name} Read batch-values.txt with the normal read tool and report PUBLIC_VALUE.'),
+                ('#team', f'{stage.name}: @{name} Also compute 10+2. Combine this with the other channel request.'),
+                (name, f'{stage.name}: Direct/private only: compute 7+8 and include PRIVATE_ROUTE_490 in this direct reply only.'))]
     packets = []
     class Observation:
         async def session_update(self, **kwargs):
@@ -132,8 +132,10 @@ async def configured_mixed_routes(arguments):
                         assert len(inputs) == 1 and inputs[0].reference_stage is FullNativeExecution
                         membership = inputs[0].execution.source_assignment_ids(db,inputs[0].input_id)
                         assert len(membership) == len(originals), "First native input did not capture the whole wave"
-                        late = service.messaging.send_initial_cohort(sender.name,name,
-                            'Separate late batch: compute 20+3; reply directly and once.')
+                        with _store_lock(service._wire_lock_path):
+                            late = service.bus.publisher.publish_ordinary(Message(sender.name,name,
+                                f'{stage.name}: Separate late batch: compute 20+3; reply directly and once.',MessageType.INFO),
+                                _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                         print('ORIGINAL_WAVE_RESERVED_LATE_BATCH_PUBLISHED',flush=True)
                     assignments = WakeAssignment.select(db,order_by=('wire_seq',))
                     cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')

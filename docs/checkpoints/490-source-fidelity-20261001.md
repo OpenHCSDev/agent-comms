@@ -225,3 +225,28 @@ receiving Toad286 Core pin / normal shadow-prefix builder is the next dependency
 Resource preflight observed home8.0GiB/RAM14.7GiB/swap10.2GiB critical warning;
 bounded reuse is required, not another native/dependency build. Existing private
 fixture scope does not mutate/restart public owners or replay saved inputs.
+
+
+### Normal paired shadow stage and first configured negative
+
+Normal uv lock/sync installed Core3725, receiving Toad82bafcaa366d48d14dd40e18c39e76ebffa656e7,
+Text5fbf, diff8fa7, official ACP SDK0.12.1 with persistent-renderer support.
+The before-mutation manifest/PURPOSE, lock/sync logs, installed direct URLs,
+pip-check result and stage preflight are in .artifacts/batch-paired-project.
+All329 Core production files and2 declared Hatch assets match3725 exactly;
+verify_native_package passed the original53b8 complete tree. No source overlay,
+--no-deps install, native build, public activation or Native6 is involved.
+
+Configured01 used actual Sol6.1/off and exited1 after5.946s: the late-human
+fixture used Messaging.send_initial_cohort, whose owner correctly requires an
+executable sender. The first3 originals were captured in one FULL input;
+original input7e27a456a79848b0f09914377b3ccbb6 is preserved, not retried.
+Raw receipt/journals/config remain /home/ts/wt/k490c01; private worker cleaned up.
+No native user entry was present at inspection, but no provider absence or safe
+retry is inferred. Driver now uses the same ordinary HumanOrigin publisher as
+the first wave. Subsequent fresh fixture bodies carry their own run identity.
+Production/DDL stays byte-equal3725, so the paired runtime is unchanged.
+
+Stage preflight resource warning: home7.1GiB/RAM13.0GiB/swap10.2GiB. Shadow
+prefix123152KiB is owned; next one-owner fresh private fixture is bounded64MiB.
+This is a preserved failed installed attempt, not a functional batch PASS.
