@@ -533,13 +533,14 @@ class ThreadRelationships:
             if start and lines:
                 lines.pop(0)  # The first record may be partial.
             complete = [line for line in lines if line.endswith(b"\n")]
-            limited = bool(start) or len(complete) > self.RECENT_MESSAGES
             messages = tuple(
                 message
-                for line in complete[-self.RECENT_MESSAGES :]
+                for line in complete
                 if line.strip()
                 for message in WireRecord.public_from_wire(json.loads(line)).messages()
             )
+            limited = bool(start) or len(messages) > self.RECENT_MESSAGES
+            messages = messages[-self.RECENT_MESSAGES :]
             self._recent_revision = revision
             self._recent, self._limited = messages, limited
             return messages, limited

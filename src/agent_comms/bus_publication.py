@@ -150,11 +150,16 @@ class CommittedDelivery(MessageWireRecord):
         return (
             policy.starts_turn
             and policy.separate_turn
-            and any(
-                recipient.recipient_lookup == recipient_lookup
-                for recipient in self.audience.recipients
-            )
+            and self.audience.includes_lookup(recipient_lookup)
         )
+
+    def compaction_messages_for(self, recipient_lookup):
+        addressed = self.audience.includes_lookup(recipient_lookup)
+        authored = (
+            self.audience.sender_lookup == recipient_lookup
+            and self.message.retains_authored_choice
+        )
+        return self.messages() if addressed or authored else ()
 
     @classmethod
     def from_wire(cls, record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:

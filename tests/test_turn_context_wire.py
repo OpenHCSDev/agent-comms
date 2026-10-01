@@ -21,7 +21,7 @@ def manifest(owner, generation=1):
     return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
-def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_path):
+def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_path, monkeypatch):
     comms,root_id=_root(tmp_path)
     first=comms.messaging.send_initial_cohort('sender','#team','@Alice original question')
     lookup=stable_thread_lookup(17002.0)
@@ -49,6 +49,9 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     reopened=Comms(comms.root)
     assert reopened.bus.log.full_history()==[first,second]
     assert len(_page(reopened,lookup)[1])==2
+    monkeypatch.setattr(type(reopened.relationships), "RECENT_MESSAGES", 2)
+    recent, limited = reopened.relationships._recent_messages()
+    assert recent == (first, second) and not limited
     assert reopened.bus.pending_counts_all(['Alice','Bob'])['Alice']==2
     assert len(ContextCliCommand(thread='Alice',turn=1).apply(reopened)['manifests'])==1
     assert ContextCliCommand(thread='Alice',diff=True).apply(reopened)['turn']['occurrence']['generation']==2

@@ -9,7 +9,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .catalog_store import ChannelCatalog
 from .compaction_source import CompactionSource
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -17,7 +16,6 @@ from .input_disposition import FutureInputQueue, InputDispositions
 from .owner_compaction_gate import OwnerCompactionAttestation
 from .owner_compaction_prepare import NativeWitness
 from .registration import Registration
-from .routing import DeliveryScope
 from .retained_task_facts import RetainedTaskFacts
 from .session_fence import idle_session_writer_fence
 from .store_files import _store_lock
@@ -122,18 +120,13 @@ class HeldCompaction:
         root = self.boundary.root.stat()
         snapshot = self.boundary.registry.store._read_unlocked().snapshot()
         owner = snapshot.threads[self.receipt.thread]
-        delivery = DeliveryScope(
-            owner.name,
-            snapshot.aliases,
-            ChannelCatalog(self.boundary.root / ChannelCatalog.filename).read().targets_for(owner.tags),
-        )
         inputs = self.boundary.inputs._read_unlocked()
         rows, input_facts = inputs.compaction_material(
             owner, pending_input_key, self.boundary.future_queue
         )
         bus_revision, facts = WireLog(
             self.boundary.root / "bus.jsonl"
-        ).compaction_messages_unlocked(delivery)
+        ).compaction_messages_unlocked(owner.incarnation)
         facts += owner.retained_task_facts()
         facts += input_facts
         return CompactionSource(

@@ -64,3 +64,28 @@ Phase 1 runs the live path on Tristan's saved session with his configured provid
 ## Done when
 
 `agent-comms context <thread>` shows any thread's next-turn context with provenance; every turn writes a manifest; no module outside the assembler adds text to an agent's input; and a constraint exported from one thread reaches a fresh thread intact.
+
+## Current receiving boundary and checkpoints, 2026-10-01
+
+Phase 1 remains incomplete. Source checkpoints `e2be47b2` and `84c1c480`
+publish native context observation/query and frozen-recipient compaction scope.
+The SDK source fixture preserves provider Context JSON exactly. The actual native
+and ACP owner socket supports two read-only queries after original selected
+startup, with zero input/provider calls and no subsequent journal mutation.
+The complete configured-provider, contributor attribution and installed
+manifest/CLI journey still belong to the single combined S2/S5 cohort. Sch #475
+owns its normal package build; Einstein #473 owns context acceptance.
+
+The urgent archive lane #477 normally reverted its merge of `275a7847` in
+`52c0db49`. That revert preserves the original S5 commit in ancestry. When the
+accepted archive lane reaches main, ordinary merges alone cannot restore the
+reverted S5 source. Einstein must explicitly undo that revert in this reviewed
+lane, preserve the archive provenance and #476 receiving changes, and verify
+the complete accepted source before the combined cohort. Do not reset or
+force-push either branch or activate unfinished S2/S5 through #477.
+
+S5 adds no database tables, columns or indexes. Its silent records advance the
+original sealed physical source offset/digest, while the original Message
+sequence, audience, wake, unread and display projections ignore them. The older
+#430 delivery-source schema mismatch uses the existing runtime-index installer
+in the release owner lane; it is not an S5 schema migration.
