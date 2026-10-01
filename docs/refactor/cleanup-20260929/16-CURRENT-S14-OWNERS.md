@@ -55,8 +55,8 @@ Full live channel acceptance follows quiet history carry, not before it.
 | Original archived history | Mendel477/268 | Both merged. Physical Saved→native41MB history→End→IRC passes36.43s. Final combined private ArchiveJourney PASSES36.23s under SAME45s deadline: actual Saved/native41MB history/focus/End/IRC personally reviewed. Failed05 observer export preserved; optional unused selector DTO skipped in merged273, retaining its PNG/time. Original source/index carry prepared, not published. |
 | Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271; Kepler profiles |269 merged: body constructions275→119; actual41MB journey16 checks pass91.07s. CPU remains high. Native library PR1 merged f6d3cdd0: Resize owns sizing;5 production lines deleted. Actual installed four-consumer check removes4 mount-triggered full layouts and preserves ordinary/prepared/fixed/padded resize behavior. Full original41MB comparison and TC1/T9/buffer/velocity/End/focus/resource scope remain. Not yet the public default. |
 | Original TC1 terminal execution lifecycle | Arendt274 implementation; Kepler actual PTY/ACP journey | Core480 merged dac8ffcf and Toad274 merged083245d0. One original child/execution owner and migrated ACP/controller/widget consumers. Installed continuous native ACP/PTY journey passes22.609s; actual tab return, cancellation, failure, descendant retirement and final group cleanup reviewed.265 Toad production lines deleted/10 Core lines deleted. Not default-installed; other TC1 files remain with Heisenberg. |
-| S5 phase1 context ownership | Einstein473 | Latest installed continuous journey39 passes48.995s on private270/0064: actual Toad originals/image, queued controller followup, native nested Core tool, three text-free manifests and context --turn/--diff. Parent read its original inputs/provider requests and CLI artifacts. Configured-provider saved-session acceptance and full phase1 closure remain; no public installation claim. |
-| S2 retained facts and provenance | Schrodinger475; Toad pair272 | Selected installed native retention passes9.59s. Authenticated ingress origin extends original PromptRequest/reservation/StoredInput; unproven historical inputs stay neutral. General constraints/artifact proofs/three checkpoints unfinished. Explicit controller producer methods granted; Einstein coordinates context API. |
+| S5 phase1 context ownership | Einstein473 | Installed continuous journey39 passes48.995s and configured saved-source41 passes51.415s on private270/0064. Original source and owner proof unchanged; actual input/answer, silent manifest and CLI reviewed. Source checkpoint is already integrated with475; accept the named S2 foundation before473 evidence closure. No public installation claim. |
+| S2 retained facts and provenance | Schrodinger475; Toad pair272; full followup481 | Named partial foundation475 preserves tested43df/0064 production bytes; OPEN draft481 tracks general constraints/artifact proofs/nonselected retention/three checkpoints/S4. Parent catalog check finds only comms_decision added;32 common rows unchanged. Ordinary main480 integration and review of new nullable goal-scope semantics remain before merge. |
 | S5 phase2 authored retained operations | Einstein474 | Dependency: S2 retained classes. Pin/supersede/drop/export and real compaction/fresh-thread journeys remain. |
 | Shared FieldCodec family schema | Parent478 |Merged464b05dc:3 production lines deleted/21 added; no builtin handler or alternate codec.38 source checks and receiving catalog22 pass. Parent reviewed original installed34's actual33-tool SDK catalog/hash,2 recorded manifests, native nested-family tool call/nonerror result and matching canonical decision. Complete codec is byte-identical to installed3f0. This closes the shared schema boundary; failed whole-run reply oracle and full473/475 scopes remain separate. Not yet default-installed. |
 | Quiet release | Arendt prepares; parent sole executor | Existing StoppedOwnerInstallation batch only. Exact next operator reviewed and invocation frozen with actual UI/archive hashes. Readback stays under the original wire custody. Fresh guard finds13idle original owners and openToad519107; SAVE/CLOSE question pending before execution. |
@@ -252,3 +252,28 @@ prove unchanged Phase1 input against old main. Einstein and Schrodinger own
 separating and accepting the S2 foundation checkpoint/stack, with the comparison
 base explicitly named. Full475 constraints/artifact proofs/three checkpoints
 and474 authored operations remain open. No extra paid rerun is requested.
+
+The full S2 followup is now OPEN draft481, created before foundation475 merges.
+Its owner remains Schrodinger. Foundation d61061ed changes only scope/evidence
+from tested43df; main480 requires ordinary integration and the paired Toad274
+ChildStdio callers. Existing0064 acceptance is immutable. Parent's original
+installed catalog receipt proves32 common rows unchanged and only the new
+comms_decision added, not whole-prompt preservation against old main. Kepler
+reviews the source relation while parent reviews S5; no duplicate runtime gate.
+
+The latest screenshot's three receiver failures were read from the original
+registry/activity using the frozen cac7 installed decoder: all three exact
+owners remain alive and idle, with PromptSendUnknown before writing bytes.
+Activity bytes were unchanged and no input/provider/replay occurred. Arendt
+maps these actual diagnostics to the accepted476 admission reproducer. The
+public window519107 still runs254 and the quiet publication is still absent.
+
+Heisenberg's latest75-second physical Saved-history recording is PARTIAL FAILED:
+Down and End/idle frames are readable, but observer export consumed the remaining
+budget before Return. Its105-second profiler outlived the journey and produced
+no completed raw profile, so it proves no CPU improvement. Original history,
+thread/SQL counts and source hashes were unchanged; owned cleanup completed.
+Heisenberg owns teardown/export budget in the existing recording/profiler owner,
+then actual current-agent A/B/scroll acceptance. Einstein supplied the existing
+CurrentTypedCapture/saved-fork recipe; public history carry is not assumed to
+block this independent private current-agent journey.
