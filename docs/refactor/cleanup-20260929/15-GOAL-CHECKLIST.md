@@ -26,8 +26,14 @@ Disk inventory measured533 top-level WT directories,377 with Git metadata;
 Core and Toad each register143 worktrees. Recent48h file allocations are a proxy,
 not net growth. Mendel owns verified inactive checkout/environment retirement;
 tracked source/evidence survives in retained branches and common Git objects.
-The first19.7MB bytecode cleanup is real but insufficient; home dropped below8GiB.
-New heavy allocations remain paused, while source and bounded review continue.
+The first19.7MB bytecode cleanup was insufficient. Mendel then retired30
+verified inactive completed worktrees via canonical git worktree remove with
+branches/objects preserved, reclaiming1,694,113,792 attributable bytes (1.578GiB).
+Kepler separately retired two completed worktrees and reclaimed88,297,472 bytes.
+Home now has9.068GiB free. The user explicitly directed that live installation
+should not wait for larger cleanup; the small normal484 paired stage proceeds
+now, with cleanup continuing in parallel. Heavy performance captures remain
+bounded by actual remaining headroom, not a blanket source-work hold.
 General native tool/turn latency has its own active draft485, owned by Arendt.
 
 ## 2026-10-01 queue foundation installed; scoped default queue verification passed
