@@ -151,11 +151,14 @@ actual physical Saved sessions opening and complete paired acceptance remain.
 Parent whole-source review found477's normal f65e53e4 merge of275a also imports
 unfinished S5/S2 production, including old nullable Decision consumers and a new
 tool catalog requiring shared478. These are separate unaccepted workflows, not
-part of the urgent historical reader release. Mendel owns normal revert of his
-own merge (no reset/rebase/force), preserving111 facts and all later477 changes.
+part of the urgent historical reader release. Mendel published normal revert52c0db49 of his own merge (no reset/rebase/force),
+preserving111 facts and all later477 changes.
 The receiving eight-line S5 public-page iterator grant is applied when S5 lands;
 immutable existing archive records work with current-main Message parsing.
-Future S5 integration keeps that canonical iterator. Preserve original branch
+Because275a remains an ancestor, Einstein must explicitly undo52c in the
+reviewed future S5 lane (or carry the whole accepted source closure), preserving
+current provenance and corrected nominal facts. Ordinary merging alone does not
+restore reverted hunks. This dependency has a named owner and original commits. Preserve original branch
 and failed receipts; test the changed scoped477 candidate before release.
 
 266 working production candidate shares original history custody: End reuses
@@ -166,3 +169,17 @@ Native construction count241 versus261 for80 fragments varies with cadence and
 is not a CPU acceptance claim. Heisenberg granted Mendel268 extraction of the
 shared physical viewport presentation contract; original page/budget methods
 remain Heisenberg's disjoint ownership.
+
+Latest476 source closure now acquires one named Live/Unavailable recipient
+observation from original AgentActivity/RegistrySnapshot. Recorded/unrecorded
+sources consume it; the active-owner map, nullable owner probes, nullable
+readiness helper and copied current/prior-turn flags are deleted. Narrow f802
+historical notification-reference contribution integrated as913d without the
+unaccepted477/S5 ancestry. Focused and fresh installed UI gate pending.
+
+2687ae62c7d is the published Saved-button/chat-resource/factory checkpoint.
+Black exported SVG occurs on both channel and modal due unverified ANSI/default
+palette, so it is not evidence of a modal paint cause. Actual click/hit failures
+remain separate. Mendel is checking the current matched native terminal path and
+flags before further modal architecture changes; granted shared viewport
+extraction is conditional on the real contract witness, not a guessed paint fix.
