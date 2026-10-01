@@ -109,3 +109,24 @@ input while dropping original-image attribution. Details and artifact hashes:
 
 This is installed controlled-provider acceptance, not configured-provider saved-state
 acceptance, full phase1 Ready, public activation or performance readiness.
+
+## Configured retained-source journey41
+
+The authentic original installed reader acquired NRA's current model/effort and
+process launch in RAM. One SDK fork of the actual 41,270,257-byte retained source
+then completed real installed Toad/ACP/native context acceptance in 51.415 seconds:
+`openai-codex/gpt-6.1-sol`, thinking off, one original human input, one native user
+and terminal reply, one text-free context manifest and read-only turn query. The
+actual compositor displayed the requested terminal token. Source SHA and original
+process/admission proof remained unchanged. Owner shutdown and the UI executor
+returned; the exact final fixture process census is empty. No public input or
+original retry occurred. Detailed receipt: `configured-context41-receipt.json`.
+
+The native terminal reports 92,432 input and 15 output tokens. This is SDK-reported
+usage, not independent billing or TLS request interception. Existing source byte
+comparisons and SDK38 prove render preservation; this configured journey proves
+retained-source behavior with the actual selected provider. First attempt40 only
+refused an existing fixture name, before capture/fork/provider, and remains logged.
+
+Both continuous installed journeys39/41 are accepted. Public/default activation
+and phase2 retained operations are separate.
