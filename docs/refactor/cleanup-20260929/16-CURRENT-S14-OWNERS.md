@@ -53,10 +53,10 @@ Full live channel acceptance follows quiet history carry, not before it.
 | --- | --- | --- |
 | Receiver admission and DM/IRC readiness | Arendt476/267; parent installation | Both merged. Native cancel-before-grant and independent reply pass; actual DM readiness passes. Quiet installation and post-carry channel acceptance remain. |
 | Original archived history | Mendel477/268 | Both merged. Physical Saved→native41MB history→End→IRC passes36.43s. Final combined private ArchiveJourney PASSES36.23s under SAME45s deadline: actual Saved/native41MB history/focus/End/IRC personally reviewed. Failed05 observer export preserved; optional unused selector DTO skipped in merged273, retaining its PNG/time. Original source/index carry prepared, not published. |
-| Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271; Kepler profiles |269 merged: body constructions275→119; actual41MB journey16 checks pass91.07s. CPU remains high. Native library PR1 merged f6d3cdd0: Resize owns sizing;5 production lines deleted. Actual installed four-consumer check removes4 mount-triggered full layouts and preserves ordinary/prepared/fixed/padded resize behavior. Full original41MB comparison and TC1/T9/buffer/velocity/End/focus/resource scope remain. Not yet the public default. |
+| Full warm history, viewport preparation, CPU, focus and T4 | Heisenberg271 checkpoint; full followup275; Kepler profiles | Actual warm01 uses two authenticated41MB SDK forks:16 physical checks pass,28 prepared body identities retained, readable scroll/idle/return frames reviewed, original unchanged. Profile exports8.1MB before teardown; scrolling UI CPU remains74–82% and idle15.84%, including observers. Native geometry checkpoint has only2 Toad production hook lines plus library pins. Full first-paint/raster/CPU/buffer/velocity/resource scope remains275, opened before271 merge. |
 | Original TC1 terminal execution lifecycle | Arendt274 implementation; Kepler actual PTY/ACP journey | Core480 merged dac8ffcf and Toad274 merged083245d0. One original child/execution owner and migrated ACP/controller/widget consumers. Installed continuous native ACP/PTY journey passes22.609s; actual tab return, cancellation, failure, descendant retirement and final group cleanup reviewed.265 Toad production lines deleted/10 Core lines deleted. Not default-installed; other TC1 files remain with Heisenberg. |
 | S5 phase1 context ownership | Einstein473 | Installed continuous journey39 passes48.995s and configured saved-source41 passes51.415s on private270/0064. Original source and owner proof unchanged; actual input/answer, silent manifest and CLI reviewed. Source checkpoint is already integrated with475; accept the named S2 foundation before473 evidence closure. No public installation claim. |
-| S2 retained facts and provenance | Schrodinger475; Toad pair272; full followup481 | Named partial foundation475 preserves tested43df/0064 production bytes; OPEN draft481 tracks general constraints/artifact proofs/nonselected retention/three checkpoints/S4. Parent catalog check finds only comms_decision added;32 common rows unchanged. Ordinary main480 integration and review of new nullable goal-scope semantics remain before merge. |
+| S2 retained facts and provenance | Schrodinger475; Toad pair272; full followup481 | Final source0ea6dcc includes main480, named goal checkpoint and eligible correction lineage. Parent source review accepted; corrected installed receiving check remains. OPEN draft481 preserves full constraints/artifact/nonselected/three-checkpoint/S4 scope. Normal final270 pair assembly is granted to Mendel, with Einstein/Kepler owning one controlled native/ACP/UI journey. |
 | S5 phase2 authored retained operations | Einstein474 | Dependency: S2 retained classes. Pin/supersede/drop/export and real compaction/fresh-thread journeys remain. |
 | Shared FieldCodec family schema | Parent478 |Merged464b05dc:3 production lines deleted/21 added; no builtin handler or alternate codec.38 source checks and receiving catalog22 pass. Parent reviewed original installed34's actual33-tool SDK catalog/hash,2 recorded manifests, native nested-family tool call/nonerror result and matching canonical decision. Complete codec is byte-identical to installed3f0. This closes the shared schema boundary; failed whole-run reply oracle and full473/475 scopes remain separate. Not yet default-installed. |
 | Quiet release | Arendt prepares; parent sole executor | Existing StoppedOwnerInstallation batch only. Exact next operator reviewed and invocation frozen with actual UI/archive hashes. Readback stays under the original wire custody. Fresh guard finds13idle original owners and openToad519107; SAVE/CLOSE question pending before execution. |
@@ -286,7 +286,7 @@ Draft481 was opened before the foundation merge and preserves full S2 scope.
 The final paired receiving source must include Toad274's ChildStdio callers;
 Einstein owns this ordinary270 integration while Schrodinger owns475/272.
 
-Two concrete findings prevent claiming the current foundation Ready:
+Two concrete findings were corrected in source before accepting the final stage:
 
 - InputOrigin's new goal scope uses GoalRevision|None and reconstructs absence
   from Thread.goal. The original Thread boundary itself already exposes a
@@ -308,3 +308,37 @@ Original39/41 installed evidence remains valid for its exact immutable source,
 but does not cover these new corrections. The next proportional receiving check
 must exercise their actual changed boundary; no extra paid repeat is assumed.
 Source review and physical/profile work continue independently of quiet release.
+
+Final475 source0ea6dcc includes the named absent/present GoalCheckpoint at its
+existing declarations; HumanInputOrigin no longer owns a duplicate getter.
+All current Core checkpoint consumers were read; Toad has no direct consumer
+of the changed property. GoalRevision and stored Goal formats are unchanged.
+DecisionAttachment members now own eligible current-root selection; unrelated
+corrections remain exact historical source, while a missing applicable owned
+root still refuses. A real three-participant certified source cut reproduces
+the old failure and passes the correction without private text leakage or wire
+mutation. These corrections delete22/add51 lines across6 production files.
+The wholly unused PR48 trigger prototype and its fixture are deleted95/66 lines;
+neither participates in the native package. The original total dormant prototype
+and obsolete fixture deletion is244/196 lines. Required ratchet55 passes with
+no positive metric deltas. This is source acceptance, not installed readiness.
+
+One final normal paired270 stage is authorized: reviewed Core0ea6dcc/native0064,
+Toad274+272+271 receiving union. Einstein owns source integration; Mendel alone
+owns final Core/native metadata, lock and package assembly. Einstein and Kepler
+reuse the actual continuous SDK/ACP/UI and selected-compaction boundary for
+absent/present/replaced goal, private original/public correction, commit,
+catalog, manifests and CLI. No new provider budget, competing package or public
+change. Existing43df/896/0064 and frozen receiver cohorts remain immutable.
+
+Actual271 warm01 completed115.714s overall and83.260s capture. Both SDK forks
+are41,270,305 bytes; the original41,270,257-byte source and process proof remain
+unchanged. Parent viewed physical Down, End/idle and return contact-sheet frames.
+Original prepared body identity reuse is28; 6fps return samples cannot exclude
+a33ms blank or prove50ms first paint. Profile export completes0.268s with zero
+remaining owned profiler processes; actual UI/terminal identities are retired.
+The raw profile measures observer-inclusive Up82.06%, Down74.24%, reverse79.31%
+and idle15.84%. No CPU target or complete warm raster-cache claim follows.
+Full original performance scope is preserved in OPEN draft275 before271 merge.
+Heisenberg405a9d34 normally integrates main274; its remaining Toad production
+delta is only the original ToolContent pure-layout declaration,2 added lines.
