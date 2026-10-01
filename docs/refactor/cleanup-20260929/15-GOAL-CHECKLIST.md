@@ -1,3 +1,56 @@
+## 2026-10-01 current delivery: inbox continuity and regression-first scrolling
+
+Default remains the verified Core484/Toad276/native0064 cohort below. Newly
+merged Core487 (`782ca8c2`) and Toad278 (`223d2348`) declare external CLI receiving
+capability independently of authorship. Their installed candidate real st/Xvfb
+journey passed30.712s: two CLI tabs, canonical channel acknowledgement, DM reply,
+offline status and refusal of native launch. No provider/public operations;
+26 Core plus24 Toad production lines deleted. This pair is not default yet.
+
+Parent owns Core488, correcting the actual helper2 successful native output
+`IGNORE` being mislabeled IdentityConflict and stopping its inbox. Strict JSON
+validation remains. A rejected outcome atomically records verified native context
+and canonical FailedAssignment, publishes the existing non-waking alert and lets
+distinct fresh input proceed. No synthetic decision, input retry, new SQL format
+or state store. Published working headbdac1c24 includes merged487 normally;488 is now merged
+as944ef817 after the combined installed acceptance.
+Its pre-integration installed continuous ACP/native journey passed23.98s over
+four localhost requests: channel/native reply, malformed triage, fresh channel
+decision, fresh human terminal answer. Combined487/488 installed acceptance passed24.31s with four localhost requests
+and complete owner/server cleanup; source sanity17pass and changed-source debt ratchet has no positive
+deltas. Core production deletes27 lines and adds155 across8 modules. Default
+activation requires the paired receiving stage. Tristan now explicitly requires
+the tested485 checkpoint in the same release as487/278/488. Its managed-tool
+startup, scheduled-queue compaction and native-error terminal gates passed
+10.29s/13.13s/8.62s respectively. General provider waits and active-tool budget
+continuation remain follow-up scope; the broader performance target is separate.
+
+Performance priority is now Tristan's three recent regressions before broader
+A–E. Full required scope, discriminators and acceptance are preserved in Toad275
+and277 bodies and committed evidence/performance275-feedback-edges-20261001/.
+
+| Active owner | Immediate scope | Next evidence required |
+| --- | --- | --- |
+| Heisenberg / Toad275 | #254 geometry wrapper erasing scroll travel; sole viewport integration owner | observe travel per held PageUp before/after254 |
+| Einstein / Toad275 | e7dbc widget-count walks on height path | walk_children calls/sec on busy idle workload |
+| Kepler / Toad275 | #269 full admission repeated per edge page load | admissions/page load; shared pass-resource contract |
+| Arendt / Core485 | Native tool/turn latency, generation-budget admission, compaction eligibility and terminal publication | nearest code-bearing installed checkpoint; exact unresolved blocker |
+| Schrodinger / Core481 | S2 producer/native artifact and retained-source ownership | coherent useful producer checkpoint; remaining fullS2 scope in follow-up |
+| Parent / Core488 and432 | Inbox continuity, merged-pair staging and installed activation | combined real ACP/native acceptance then default entrypoint |
+| Singer | Verified disposable worktree/build cleanup | safe cleanup completion receipt; preserve active source/native/session donors |
+
+Einstein474's actual installed human pin/compaction/export/fresh native journey is
+ready, but its branch incorporates unmerged481 producer/native776 changes. It
+cannot be merged as an independent four-file consumer without a concrete
+producer checkpoint disposition. No optional repeat gate is requested. The
+full goal and original/refactor deletion closure remain active.
+
+Scrolling acceptance: actual busy live workload, input-focused held PageUp,
+stop mid-history and idle; faster frame time/input latency than pre2548ea96a37,
+no frozen frames during held PageUp. Each discriminator precedes its fix with
+numbers. Broad A–E is held, not dropped; E's body-owned Live/Rendered/Measured
+family follows A–C reporting and measures frame-gate withholding before build.
+
 ## 2026-10-01 admission checkpoint installed; default native gate passed
 
 Core484 and paired Toad276 are merged. Parent published the reviewed normal
