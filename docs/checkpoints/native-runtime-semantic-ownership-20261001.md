@@ -135,7 +135,15 @@ references cannot be reset as if they were cursor projections. Preserve original
 IDs, context group, digest, admission and source membership at a reviewed one-shot
 outside-src storage seam; no product legacy reader or reconstructed reservation.
 The cursor remains a derived projection only after those originals survive.
-Kepler owns that producer/membership/storage proposal; #489 owns consuming custody.
+Kepler owns the target producer/membership declarations; #495 owns the installer-only
+preserved schema 4→5 carry through the existing stopped-owner installation family.
+#489 owns consuming custody and adds no carry/reset implementation.
+
+Existing `CompactionPolicy.packSummary` already checks mandatory retained text before
+generation and final packed context afterward. Reuse that behavior; add no second
+native preflight or Python estimator. Its resource allocation must consume the
+original request-local native budget relation. Any required capacity fields belong
+to existing `NativePreparation`, not a new payload budget or capacity store.
 
 Schrodinger `01a0ef00-6563-7ec0-9c64-564ece67a6eb` owns #494 retained metadata/content
 framing. Shared `compaction_boundary`, `selected_pi_summary_rpc`,
