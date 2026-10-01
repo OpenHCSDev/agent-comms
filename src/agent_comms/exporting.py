@@ -22,7 +22,9 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import Message
+from .message_reference import MessageReference
 from .registration import Registration
+from .retained_context import RetainedSegment
 
 
 class WireExportFormat(DeclaredFamily, affix="Format"):
@@ -46,8 +48,12 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
         return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
 
 
+class SelectableWireExportFormat(WireExportFormat):
+    """Formats whose complete input is the ordinary wire export selection."""
+
+
 @dataclass(frozen=True)
-class JsonlFormat(WireExportFormat):
+class JsonlFormat(SelectableWireExportFormat):
     importable: ClassVar[bool] = True
 
     def header(self, metadata: Mapping[str, object]) -> bytes:
@@ -58,7 +64,7 @@ class JsonlFormat(WireExportFormat):
 
 
 @dataclass(frozen=True)
-class TextFormat(WireExportFormat):
+class TextFormat(SelectableWireExportFormat):
     def header(self, metadata: Mapping[str, object]) -> bytes:
         return (
             f"# agent-comms wire export v{metadata['version']} (non-importable text view)\n"
@@ -91,6 +97,26 @@ class TextFormat(WireExportFormat):
 
 
 @dataclass(frozen=True)
+class RetainedFormat(WireExportFormat):
+    """An instruction artifact renders wording from its certified original row."""
+
+    segment: RetainedSegment
+
+    def header(self, metadata: Mapping[str, object]) -> bytes:
+        return ("# Authored retained context\n"
+                f"# metadata: {self.json_record(metadata)}\n\n").encode()
+
+    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
+        original = self.segment.original_text_source(message)
+        provenance = dict(declaration=FieldCodec.encode(message.reference),
+                          wording=FieldCodec.encode(original.reference),
+                          author=original.sender, author_role=original.sender_role.value,
+                          task=FieldCodec.encode(message.task))
+        return (f"# source: {self.json_record(provenance)}\n"
+                + original.body + "\n\n").encode()
+
+
+@dataclass(frozen=True)
 class ResolvedExportScope:
     """One canonical scope and its alias/catalog-resolved predicate snapshot."""
 
@@ -113,6 +139,16 @@ class WireExportScope(DeclaredFamily, affix="Scope"):
 class EverythingScope(WireExportScope):
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
         return ResolvedExportScope(self, lambda message: True)
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoredSourceScope(WireExportScope):
+    """Immutable artifact selection, resolved by the original retained family."""
+
+    sources: tuple[MessageReference, ...]
+
+    def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
+        return ResolvedExportScope(self, lambda message: message.reference in self.sources)
 
 
 @dataclass(frozen=True, slots=True)

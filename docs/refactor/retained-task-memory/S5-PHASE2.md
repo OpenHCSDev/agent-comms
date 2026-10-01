@@ -1,8 +1,9 @@
 # S5 phase 2: authored retained context operations
 
 Owner: Einstein, the same S5 integration owner. Dependency: accepted S2 retained
-classes and S5 phase 1, tracked by Core PR473. This PR reserves the dependent
-scope now; it does not claim implementation or live readiness.
+classes and S5 phase 1, tracked by Core PR473. This PR now implements the human
+operations, retained contributor and file export. Full native journeys remain
+unverified; no public installation or live readiness is claimed.
 
 Extend the existing ContextSegment family with RetainedSegment from S2's original
 source-owned retained classes. Pin, supersede, drop and export are authored
@@ -36,3 +37,44 @@ certified wire source cut and member applicability; atomic file publication stay
 with WireTranscriptExporter. No new retained ledger, semantic text copy, reader,
 codec or human claim inferred from an agent turn is authorized. The commands and
 export/model journeys remain unfinished; source integration is not readiness.
+
+## Working consumer checkpoint, 2026-10-01
+
+Normally integrated merged PR473 and Sch481's `08c20bcb` publication (production
+`55d2e6ae`). Five declaration-owned CLI commands now expose `pin-constraint`,
+`supersede-constraint`, `drop-constraint`, `retained-context` and `export-retained`.
+References enter as `sequence:message_id` and decode once into MessageReference.
+Human pin admission, correction/drop lineage and current scope remain on Sch's
+original task family and Messaging publication, without agent leases.
+
+HistoryViews captures one certified wire/registry cut through the existing
+compaction-source reader. RetainedSegment holds that immutable source projection,
+renders its existing exact-source envelope and derives provenance from original
+references and the recipient/digest receipt. It owns no mutable state or text
+copy. The segment is an inspection/export contributor; it is not added again
+to native input already containing the compaction's exact retained envelope.
+
+RetainedFormat renders current authored wording from its original Message.body;
+AuthoredSourceScope describes only the immutable artifact selection. Original
+WireTranscriptExporter owns limits, checksums, temporary files, fsync and atomic
+publication. Existing JSONL/text formats compose SelectableWireExportFormat so
+the ordinary export CLI does not advertise a format needing retained-source
+custody as a constructor-free option. No second writer or command registry.
+
+One continuous private workflow covers human pin, exact Unicode/multiline text,
+original source identity, no agent lease, wrong-recipient refusal before write,
+atomic overwrite refusal, revision, drop, historical evidence and reopen. It
+passes against the wheel installation; its normal console executable also reads
+the resulting retained contributor with PYTHONPATH unset. This is installed CLI
+acceptance, not native compaction, ACP/UI or configured-provider acceptance.
+
+Remaining: the two native Phase2 journeys above, matched foundation/source-format
+carry with Sch481/Arendt483, and explicit fresh-thread exported context admission.
+No repeated receiving61, configured41 or historical49 gate. No public changes.
+The restarted tool catalog lacks multi_agent_v1 peer controls; exact API/source
+custody and this disjoint consumer scope are recorded here, without claiming a
+direct peer notification was delivered.
+
+Ownership receipt: IDEN-5 (wording stays in original Message.body), BOUND-2
+(certified reader and existing typed task family), IMPL-4 (all commands are
+declared members), TIME-9 (existing atomic exporter; no parallel adapter/store).
