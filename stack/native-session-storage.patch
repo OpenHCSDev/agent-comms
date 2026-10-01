@@ -2446,13 +2446,6 @@
  /**
   * Generate summaries for compaction using prepared data.
   * Returns CompactionResult - SessionManager adds uuid/parentUuid when saving.
-@@ -139,5 +113,5 @@
-  * @param customInstructions - Optional custom focus for the summary
-  * @param sessionId - Optional routing session ID forwarded without enabling prompt caching
-  */
- export declare function compact(preparation: CompactionPreparation, model: Model<any>, apiKey: string | undefined, headers?: Record<string, string>, customInstructions?: string, signal?: AbortSignal, thinkingLevel?: ThinkingLevel, streamFn?: StreamFn, env?: Record<string, string>, retry?: RetryPolicy, callbacks?: RetryCallbacks, sessionId?: string): Promise<CompactionResult>;
- //# sourceMappingURL=compaction.d.ts.map
-\ No newline at end of file
 --- a/dist/core/export-html/index.js
 +++ b/dist/core/export-html/index.js
 @@ -1,4 +1,4 @@
