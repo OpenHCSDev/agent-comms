@@ -1,0 +1,27 @@
+{
+  "started": 1790876178.938057,
+  "runtime": "/home/ts/wt/comms-external-cli-participation-20261001/.artifacts/runtime-external-cli-candidate",
+  "native": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent",
+  "source_entrypoint": "/home/ts/wt/toad-external-cli-conversation-20261001/tests/external_cli_native_installed_pilot.py",
+  "display": ":1",
+  "terminal_exit": 0,
+  "passed": true,
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 1878977,
+        "start_ticks": 35181811,
+        "returncode": 0
+      },
+      {
+        "pid": 1878979,
+        "start_ticks": 35181819,
+        "returncode": 0
+      }
+    ]
+  },
+  "finished": 1790876211.9964154
+}

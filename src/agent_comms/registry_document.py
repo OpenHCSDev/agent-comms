@@ -385,12 +385,9 @@ class RegistrySnapshot(RegistryProvenance):
         return AdmissionIdentity(self.threads[canonical].incarnation, self.admission_generations[canonical])
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
-        try:
-            thread = self.require_active(name)
-            process = thread.require_process()
-        except RelationViolationError:
-            return UnavailableThreadOwnerBinding()
-        return LiveThreadOwnerBinding(self.owner_identity(thread.name), process)
+        canonical = self.aliases.get(name, name)
+        thread = self.threads[canonical]
+        return thread.execution.owner_binding(self, thread)
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
         """A read attachment retains its owner lease across startup, not across restart."""
