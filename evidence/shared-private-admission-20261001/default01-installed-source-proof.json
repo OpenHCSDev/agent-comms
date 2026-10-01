@@ -1,0 +1,50 @@
+{
+  "default_selection": {
+    "interpreter": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-core484-receiving-20261001/bin/python",
+    "core": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-core484-receiving-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+    "native": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent"
+  },
+  "production_files": [
+    {
+      "file": "compaction_journal.py",
+      "installed_sha256": "0462e3b2c46cb29ac0aa03c85b65d7e0667ae59651169d61d08b2dc430070db4",
+      "reviewed_sha256": "0462e3b2c46cb29ac0aa03c85b65d7e0667ae59651169d61d08b2dc430070db4",
+      "equal": true
+    },
+    {
+      "file": "compaction_private_inputs.py",
+      "installed_sha256": "b793dde31b014df7e5b837e81cbe1635c403af68c5fc79df2d7ea95b3803f1f5",
+      "reviewed_sha256": "b793dde31b014df7e5b837e81cbe1635c403af68c5fc79df2d7ea95b3803f1f5",
+      "equal": true
+    },
+    {
+      "file": "locked_store.py",
+      "installed_sha256": "565b488ada15b8b89f4e27c199f51d2392cae62ddaf179d6487e2bdc5c29a827",
+      "reviewed_sha256": "565b488ada15b8b89f4e27c199f51d2392cae62ddaf179d6487e2bdc5c29a827",
+      "equal": true
+    },
+    {
+      "file": "native_prompt_binding.py",
+      "installed_sha256": "4844abe34a8c30575914f93ff2adec3c5400650d9f07b3d896c00307f1060fe9",
+      "reviewed_sha256": "4844abe34a8c30575914f93ff2adec3c5400650d9f07b3d896c00307f1060fe9",
+      "equal": true
+    },
+    {
+      "file": "private_send_admission.py",
+      "installed_sha256": "f3e5458c21029a1dfbaf19caf9311cb1cf475c083ad5f87cda1cea2421cde1e3",
+      "reviewed_sha256": "f3e5458c21029a1dfbaf19caf9311cb1cf475c083ad5f87cda1cea2421cde1e3",
+      "equal": true
+    },
+    {
+      "file": "private_send_stage.py",
+      "installed_sha256": "f3846c327b0e437c695047e8cf860d975aaae9e09b67d855bb0c66ec070185f6",
+      "reviewed_sha256": "f3846c327b0e437c695047e8cf860d975aaae9e09b67d855bb0c66ec070185f6",
+      "equal": true
+    }
+  ],
+  "fixture": "/home/ts/wt/a484d01",
+  "fixture_regular_bytes": 771119,
+  "exit": 0,
+  "budget_bytes": 67108864,
+  "all_owned_workers_retired": true
+}

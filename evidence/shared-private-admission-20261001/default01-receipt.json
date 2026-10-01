@@ -1,0 +1,38 @@
+{
+  "elapsed_seconds": 24.370840330957435,
+  "owners": 3,
+  "history_rows": 30,
+  "bus_bytes": 98390,
+  "localhost_provider_posts": 3,
+  "native_originals": [
+    {
+      "session": "wire/native-sessions/63e4bc8c7ca3d76b46da965dc100349b/2026-10-01T16-24-53-022Z_01a0f848-741e-77b6-b6bb-333f369ea637.jsonl",
+      "entry_id": "e6a6b22f"
+    },
+    {
+      "session": "wire/native-sessions/f97e79f6662b6de0ac7f2a702d94d425/2026-10-01T16-24-53-988Z_01a0f848-77e4-7457-989e-656c9567d8e8.jsonl",
+      "entry_id": "cc8fceae"
+    },
+    {
+      "session": "wire/native-sessions/56f1ab4bb7668639664bad05ce5f8cff/2026-10-01T16-24-53-069Z_01a0f848-744d-77c0-8769-b1d59d14cf6f.jsonl",
+      "entry_id": "82a4cdbf"
+    }
+  ],
+  "failure": null,
+  "all_owned_workers_retired": true,
+  "public_mutations": 0,
+  "paid_provider_calls": 0,
+  "original_replays": 0,
+  "installed_interpreter": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-core484-receiving-20261001/bin/python",
+  "acp_notification_count": 0,
+  "contention": [
+    {
+      "held_seconds": 3.000074651034083,
+      "original_reserved_input": "0bc258aca804a0ebebd5104bfacf0bb5",
+      "resource": "binding"
+    }
+  ],
+  "cancellation": {},
+  "all_native_turns_active_before_provider_release": true,
+  "acp_fact_counts": {}
+}

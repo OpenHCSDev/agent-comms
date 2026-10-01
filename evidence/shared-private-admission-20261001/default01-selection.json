@@ -1,0 +1,5 @@
+{
+  "interpreter": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-core484-receiving-20261001/bin/python",
+  "core": "/home/ts/wt/toad-s5-receiving-boundary-pair-20261001/.artifacts/runtime-core484-receiving-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "native": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-0064a96bb79c21c1/node_modules/@earendil-works/pi-coding-agent"
+}

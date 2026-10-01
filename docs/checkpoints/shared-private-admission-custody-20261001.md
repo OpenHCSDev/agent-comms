@@ -99,3 +99,22 @@ owner's summary fixtures. The default covariance, public channel UI, full S2 and
 performance targets are not claimed by these scoped admission results. Parent
 owns review, merge, paired installation and public acceptance. No further native
 gate is necessary without a concrete source change or remaining risk.
+
+## Published default admission verification
+
+After the parent installed signal, exactly one fresh gate ran through the actual
+resolved default agent-comms-acp interpreter: runtime-core484-receiving-20261001.
+Native0064 was discovered from the original active route; no runtime override,
+builder, source overlay, public mutation or original seq273 replay. The six
+admitted production files byte-match the reviewed484 source.
+
+Actual default gate EXIT0,24.370840s:3 owners,30 retained history rows,20 unrelated
+registrations, shared original binding snapshot held3.000075s. All3 native turns
+were active before local provider release;3 localhost POST and3 distinct original
+native entries. All owned workers retired. Fixture771119 regular bytes, below
+the64MiB budget. No paid provider call. This is scoped installed admission proof,
+not UI notification/paint or broad performance acceptance.
+
+Raw /home/ts/wt/a484d01/receipt.json; immutable copies and discovered source/argv
+are default01-*.json in evidence/shared-private-admission-20261001. Preserve the
+fresh private source until review. No further unchanged native gate planned.
