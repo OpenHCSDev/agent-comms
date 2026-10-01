@@ -44,7 +44,7 @@ The ChildStdio family declares the launch IO boundary. StreamingChildStdio owns
 the unchanged PIPE/DEVNULL and 65536-byte streaming defaults. TerminalChildStdio
 owns the original supplied slave file. AttachedChild.start consumes those
 declarations through the same existing launch/identity/verify/retirement path.
-Every original start/session caller continues to use streaming defaults; none
+Every original Core start/session caller continues to use streaming defaults; none
 supplied the removed scalar input_enabled/limit parameters. No caller maintains
 a parallel stdio roster or starts a process outside the original owner.
 
@@ -59,7 +59,33 @@ child_process owner. All 22 existing child-process and guard controls passed in
 observed one surviving original member after leader exit; release retired it and
 closed the PTY in 2.075s. These are source controls, not installed/live claims.
 
-Toad274 actual paired ACP/PTY receiving acceptance remains pending. Its original
-journey includes this new descendant control. No second native fixture or build
-is requested. Production and fixture deletion counts are recorded separately
-in the receiving Toad checkpoint.
+The receiving Toad admitted_spawn/AgentProcess family also consumes the original
+ChildStdio member directly; the ACP10MiB stream budget is unchanged. Removed
+scalar kwargs have no compatibility path. This crossing was caught before staging.
+
+## Scoped installed receiving acceptance
+
+One actual installed ACP/native/PTY journey passed in22.609s with Coref8ae4f52 /
+Toad4552528d / Textual6b / SDK0.12.1 / native593. All69 packages, Git source/assets
+and native full trust were verified. The normal ACP launch consumed the new
+stdio family; no source overlays, dependency bypass or native rebuild.
+
+Canonical receipt in the paired Toad274 branch:
+`evidence/terminal-execution/installed-custody-20261001.json`, SHA
+`a326895c340773086de905a33d093ee5396ca234d7e972357213d5f5b71cae21`.
+Persistent receiving path:
+`/home/ts/wt/toad-terminal-execution-custody-20261001/evidence/terminal-execution/installed-custody-20261001.json`.
+
+Normal exit, ACP SIGKILL, cancelled wait, two delivered release cancellations,
+missing cwd, bounded UTF8 and exited-leader descendant retirement passed through
+the original owner. Actual detach/tab-click return retained the same ANSI/resource;
+Arendt personally viewed both restored output bodies. Original PTY masters[]→[]
+and addresses0; both private native owners exited with groups empty after shutdown.
+Zero provider POST/paid/public/default changes or input replay.
+
+Startup cancellation proved pre-acquisition refusal only; acquired-startup
+cancellation was not exercised in this installed run. This is scoped paired
+terminal acceptance, not public activation, X11/CPU or all comms workflows.
+Production remains10lines deleted/42added; receiving source and fixture counts
+are separate. Documentation/evidence after f8ae change no tested production code.
+CI deferred; parent owns merge/publication. Ready at this measured strength.
