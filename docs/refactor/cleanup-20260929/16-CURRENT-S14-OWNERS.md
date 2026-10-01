@@ -26,6 +26,13 @@ Receipt: evidence/openhcs-recovery-cohort-20261001/source-proof.json.
 Fresh original activity observations, fenced to current registry owners,
 confirm architecture-memory, PR159 and helper still have NativePiUnavailable:
 native admission ended before writing bytes. Their drains are stopped. Final installed native crossing passes18.5917s: joined cancellation0providerPOST, independent channel reply2native originals/2localhostPOST; workers retired.
+The latest screenshot was checked against the original registry and activity
+again: all three exact current owners are alive and idle, with the same fenced
+UnavailableDrainReadiness. This is a stopped inbox, not an absent process.
+The read made no public writes, provider calls or input retries. The default
+remains254 and publication.json is absent; actual ToAd519107 still blocks the
+already-pending quiet installation. Arendt owns the merged476 fix; parent owns
+installation and verification of the original receivers afterward.
 Core476 separates cancellation-aware admission custody from the write budget;
 notification and receiver views derive original readiness. No second status
 store, increased whole-turn deadline or old-input replay. Original262 UNKNOWN
@@ -116,6 +123,13 @@ journey supplies the receiving proof. Parent granted only existing SurfaceBindin
 admission and narrow terminal-projection handler extension, deleting duplicate
 weak-target/closing state rather than introducing another view-lifetime store.
 Heisenberg's history/viewport methods remain separate.
+
+Parent's original installed254 PTY exited-leader witness did NOT reproduce a
+descendant leak: one original group member existed before close, none afterward,
+close took0.023s and final cleanup was empty. Keep that negative at
+.artifacts/terminal-leader-exit-review-20261001; do not label254 leaking from the
+new274 static kill snippet. The new274 custody closure still uses original Core
+A12 launch/identity/group retirement, with Kepler's receiving ACP/PTY control.
 
 Heisenberg's private performance journey need not wait for public477 carry:
 Mendel's already-valid private g477/p01 root supported combined06's physical
