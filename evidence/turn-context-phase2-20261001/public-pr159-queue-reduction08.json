@@ -1,0 +1,31 @@
+{
+  "log": "/home/ts/.cache/agent-scratch/parent-public-queue-default-20261001-01/state/toad/logs/Agent_Comms_2026-10-01T11_24_52_798861.txt",
+  "observations": [
+    {
+      "position": "request initiated",
+      "attachment_status": null,
+      "projection": null
+    },
+    {
+      "log_line": 4,
+      "result": false,
+      "revision": 2,
+      "producer_projection": "available",
+      "attachment_status": "unavailable",
+      "projection": "unavailable",
+      "effect": "buffer",
+      "quarantined": false
+    },
+    {
+      "log_line": 8,
+      "result": true,
+      "revision": 3,
+      "producer_projection": "available",
+      "attachment_status": "available",
+      "projection": "available",
+      "effect": "bind",
+      "quarantined": false
+    }
+  ],
+  "scope": "offline reduction of already captured original typed queue observations; not another UI capture or user input replay"
+}
