@@ -151,10 +151,11 @@ def retain_file(path, destination):
             raise RuntimeError(f'Original file changed under stopped custody: {path}')
     descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, 'wb') as output:
+        os.fchown(output.fileno(), before.st_uid, before.st_gid)
         output.write(payload)
         output.flush()
+        os.utime(output.fileno(), ns=(before.st_atime_ns, before.st_mtime_ns))
         os.fsync(output.fileno())
-    os.utime(destination, ns=(before.st_atime_ns, before.st_mtime_ns), follow_symlinks=False)
     return {'path': str(path), 'sha256': hashlib.sha256(payload).hexdigest(),
             'size': before.st_size, 'mode': before.st_mode, 'uid': before.st_uid,
             'gid': before.st_gid, 'revision': FieldCodec.encode(revision)}
