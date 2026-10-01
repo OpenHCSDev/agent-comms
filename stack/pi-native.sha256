@@ -1,12 +1,12 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-f22bce669fad6f4cfe853dbcd606a3e3f4b60d225636b7d7603fbfcc7d933b17  dist/core/agent-session.js
+709bcbf952a648587e3f1961b79cf1e7a95095758018bd1f956b416784bfa06f  dist/core/agent-session.js
 bfb76a0e347c27dd0d09e87b15d2b6e6d6ac7c4f9a9eb7073d05bf8dee048686  dist/core/compaction/compaction.js
 22b5629822ee21718882966f368f50f389006aee93fd8ee044760140c4cbd029  dist/core/compaction/compaction.d.ts
 4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67  dist/core/session-manager.js
-0d0e0118253c8c721555e3154f14ca394700e1d3c589866d7129a78a35607b64  dist/modes/rpc/rpc-mode.js
-7ce29f9d380239cc84c0501bd2d282e5884d318b94f061c127e7aab07c65cbb9  dist/core/agent-session.d.ts
+2077e5a2c54b072fa46a124ebe469bd478ee885abae83a7315f5c3c867260c50  dist/modes/rpc/rpc-mode.js
+39c0b4203c25509f64089bbff3a9dceec9281cfc80a205d7c49d64a73fc09e16  dist/core/agent-session.d.ts
 79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0  dist/core/session-manager.d.ts
-5937d70149822f9f27781d66b765199479a08d2c6e1edeeeb3ae17e1bbec3dfe  dist/modes/rpc/rpc-types.d.ts
+88bce628eb358af08ec861e7596f507c9bb3dfd3f3ed38051b3296273d8165c9  dist/modes/rpc/rpc-types.d.ts
 8e9c3338bf40a4d965456214584400ab8c41130ca55ec3d8625d676d4807cab6  node_modules/@earendil-works/pi-agent-core/dist/agent.js
 a2807c7397e69f560e9dc6f40b3b266cbd6f09da57826ad7012c5553638f6043  node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js
 3a7bf091426e01aa7513116d60eb3e24bb4f8c584160e52fe3401d9b892996f6  node_modules/@earendil-works/pi-agent-core/dist/agent.d.ts
@@ -45,6 +45,6 @@ c8708543a42959475b15f7aa0e07412cfa0bd29bd61249841a16aa2e200ddaed  node_modules/@
 9605f7cc8986b81f4e11d1d9f297632989d84339779751778c54c2769c85e2b4  node_modules/@earendil-works/pi-ai/dist/api/simple-options.js
 d2cdfd5d0daf4c0df0f52af14773b338045d0c67ae7b564b681c34d3fab013f1  node_modules/@earendil-works/pi-ai/dist/utils/estimate.js
 20c0e1d062855f805bad7193f781123ae79a56cabb682a87a402116f66774178  node_modules/@earendil-works/pi-ai/dist/api/agent-comms-request-input.js
-2e98f07933048e7067e9d14248ec9752ec58d85ba76bff0e54b90610f9bc2ef6  dist/core/turn-context.js
-16b42a11dd7f7a0e9847e168eb9a9e27acb158504c41bb3a10a7119a704c39e8  dist/core/turn-context.d.ts
-# agent-comms-native-tree-v1 a2b40e1da14b8db418c4d950c703273942a51ced0021e1280dea9b1625fbcd9f
+9a561f196f974b2be654a9bf5387e42309795658573865a5c3f5711f1552371e  dist/core/turn-context.js
+df2ebb8371c88bff73253bad57fb485965360fb959187d84a7267e2d41b618b9  dist/core/turn-context.d.ts
+# agent-comms-native-tree-v1 53c34d888755517eceb50bb46a667b48add88e916c802dc0ea096bd390c58bd4

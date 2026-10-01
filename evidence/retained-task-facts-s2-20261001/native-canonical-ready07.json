@@ -1,0 +1,13 @@
+{
+  "status": "CANONICAL_NEW_STOCK_FULL_TRUST_PASS",
+  "native_manifest_sha256": "f1178500e5154c38152aeb5d1133ab9fbd84774e2a8bc6b6233ba9b490b4eb4c",
+  "tree_sha256": "53c34d888755517eceb50bb46a667b48add88e916c802dc0ea096bd390c58bd4",
+  "package": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-f1178500e5154c38/node_modules/@earendil-works/pi-coding-agent",
+  "trusted_package": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-f1178500e5154c38/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "canonical_build_exit": 0,
+  "canonical_build_log": "native-canonical-build07.txt",
+  "source": "d7c2cf3d source before pin-only checkpoint",
+  "provider_calls": 0,
+  "public_changes": [],
+  "remaining": "normal paired installed actual Coretools+S2 Toad ingress+S5 native/context/retention continuous journey"
+}
