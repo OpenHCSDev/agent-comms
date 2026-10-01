@@ -146,7 +146,7 @@ class HeldCompaction:
             self.receipt.goal_revision,
             bus_revision,
             TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,
-            RetainedTaskFacts(facts),
+            RetainedTaskFacts(facts).for_owner(owner, snapshot),
             pending_input_key,
             settings_paths,
             self.boundary.settings_revision(settings_paths),

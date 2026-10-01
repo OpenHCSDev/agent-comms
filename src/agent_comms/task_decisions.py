@@ -31,6 +31,14 @@ class DecisionScope(DeclaredFamily, affix="DecisionScope"):
     @abstractmethod
     def require_context(self, owner: Thread) -> None: ...
 
+    @abstractmethod
+    def applies(self, owner: Thread, decision: Decision, registry: RegistrySnapshot) -> bool: ...
+
+    def require_correction(self, previous: Decision, correction: Decision,
+                           registry: RegistrySnapshot) -> None:
+        if previous.scope != self:
+            raise RelationViolationError("Decision correction must preserve its original scope")
+
 @dataclass(frozen=True, kw_only=True)
 class GoalDecisionScope(DecisionScope):
     goal: GoalRevision
@@ -38,6 +46,9 @@ class GoalDecisionScope(DecisionScope):
     def require_context(self, owner: Thread) -> None:
         owner.require_active_goal(self.goal.id)
         owner.require_goal_checkpoint(self.goal)
+
+    def applies(self, owner: Thread, decision: Decision, registry: RegistrySnapshot) -> bool:
+        return owner.decision_scope == self
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -47,6 +58,18 @@ class TurnDecisionScope(DecisionScope):
     def require_context(self, owner: Thread) -> None:
         if owner.decision_scope != self:
             raise RelationViolationError("An active goal requires its revision scope")
+
+    def applies(self, owner: Thread, decision: Decision, registry: RegistrySnapshot) -> bool:
+        return owner.worktree == self.project and owner.has_decision_turn(
+            decision.source_turn.resolved(registry), decision.source_turn_id)
+
+    def require_correction(self, previous: Decision, correction: Decision,
+                           registry: RegistrySnapshot) -> None:
+        super().require_correction(previous, correction, registry)
+        if (previous.source_turn.resolved(registry), previous.source_turn_id) != (
+            correction.source_turn.resolved(registry), correction.source_turn_id
+        ):
+            raise RelationViolationError("Decision correction belongs to a different turn scope")
 
 
 class DecisionScopeSelection(DeclaredFamily, affix="ScopeSelection"):
@@ -74,11 +97,18 @@ class DecisionChange(DeclaredFamily, affix="DecisionChange"):
     def require_publication(self, decision: Decision, registry: RegistrySnapshot,
                             original_source: CertifiedSourceRead | None) -> None: ...
 
+    @abstractmethod
+    def root_reference(self, reference: MessageReference,
+                       originals: dict[MessageReference, MessageReference]) -> MessageReference: ...
+
 
 @dataclass(frozen=True)
 class OriginalDecisionChange(DecisionChange, declared_name="original"):
     def require_publication(self, decision, registry, original_source) -> None:
         pass
+
+    def root_reference(self, reference, originals):
+        return reference
 
 
 @dataclass(frozen=True)
@@ -94,6 +124,12 @@ class CorrectionDecisionChange(DecisionChange, declared_name="correction"):
         if original.reference != self.original:
             raise RelationViolationError("Decision correction requires its original wire reference")
         decision.require_correction(original, registry)
+
+    def root_reference(self, reference, originals):
+        try:
+            return originals[self.original]
+        except KeyError as error:
+            raise RelationViolationError("Retained correction lacks its original source") from error
 
 
 class DecisionAttachment(DeclaredFamily, affix="DecisionAttachment"):
@@ -132,6 +168,11 @@ class Decision(DecisionAttachment, declared_name="choice"):
 
     def require_decision(self) -> Decision:
         return self
+
+    def applies(self, owner: Thread, registry: RegistrySnapshot) -> bool:
+        return (self.author.current(registry)
+                and self.author.resolved(registry) == owner.incarnation
+                and self.scope.applies(owner, self, registry))
 
     def retained_task_facts(self, message: Message):
         from .retained_task_facts import DecisionTaskFact
@@ -176,8 +217,7 @@ class Decision(DecisionAttachment, declared_name="choice"):
         previous = original.require_decision()
         if previous.author.resolved(registry) != self.author.resolved(registry):
             raise RelationViolationError("An agent cannot correct another author's decision")
-        if previous.scope != self.scope:
-            raise RelationViolationError("Decision correction must preserve its original scope")
+        self.scope.require_correction(previous, self, registry)
 
     def require_publication(
         self, sender: str, registry: RegistrySnapshot,

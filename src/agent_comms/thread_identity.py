@@ -7,7 +7,7 @@ does not create a new historical thread; a new turn does not change its owner.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -101,6 +101,10 @@ class AdmissionIdentity:
 class TurnIdentity:
     incarnation: ThreadIncarnation
     generation: int
+
+    def resolved(self, snapshot: RegistrySnapshot) -> TurnIdentity:
+        """Resolve the original incarnation; retain this turn allocation."""
+        return replace(self, incarnation=self.incarnation.resolved(snapshot))
 
 
 @dataclass(slots=True)

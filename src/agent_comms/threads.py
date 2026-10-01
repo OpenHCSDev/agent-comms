@@ -328,6 +328,10 @@ class Thread:
             raise RelationViolationError("An admitted original turn is required")
         return lease
 
+    def has_decision_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        lease = self.turn_lease
+        return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
+
     def observed_turn(self, admission: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
         turn_id = self.active_turn.id if self.active_turn is not None else self.last_finished_turn_id
