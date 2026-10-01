@@ -1,0 +1,4 @@
+END-only deferred project IPC control, installed Core: /home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/lib/python3.14/site-packages/agent_comms/__init__.py
+original_project_observation_ms=[3.166753, 49.176762, 43.072551, 0.940072, 0.895137, 0.830304]
+.
+1 passed in 2.57s

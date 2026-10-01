@@ -16,7 +16,9 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_sidecar import native_request_digest
-from selected_summary_cases import admission_identity, refresh_source
+from agent_comms.owner_compaction_settings import PiCompactionSettings
+from agent_comms.pi_summary_payloads import SelectedModel
+from selected_summary_cases import admission_identity, refresh_source, summary_source
 
 
 @pytest.fixture
@@ -45,14 +47,12 @@ def continued(tmp_path):
     inputs.bind("acp:old", admission=1, turn_id="old-turn", native_id=native_id, text="old")
     inputs.started("acp:old", turn_id="old-turn", native_id=native_id, text="old")
     inputs.record("acp:new", seq=None, owner="owner", admission=2, target="owner", text="new")
-    source = dict(
-        source=FieldCodec.encode(
-            admission_identity(
-                session, text="new", key="acp:new", turn="new-turn", owner="owner", admission=2
-            ).source
-        ),
-        selected=dict(provider="fixture", modelId="fixture", contextWindow=1000),
-        settings=dict(reserveTokens=100, keepRecentTokens=10),
+    source = summary_source(
+        admission_identity(
+            session, text="new", key="acp:new", turn="new-turn", owner="owner", admission=2
+        ).source,
+        selected=SelectedModel("fixture", "fixture", 1000),
+        settings=PiCompactionSettings(100, 10),
     )
     return CompactionJournal(tmp_path / "compaction-commits.sqlite3"), session, inputs, source
 
