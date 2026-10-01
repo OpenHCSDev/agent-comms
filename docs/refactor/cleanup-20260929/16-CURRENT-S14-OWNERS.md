@@ -89,6 +89,23 @@ quiet installation. No copied provenance defaults or public old-manifest binding
 
 ## Quiet history carry
 
+### Independent native performance checkpoint
+
+Textual16 merged b380afaa418361cd08011a9879b80bce544c186f, reviewed head388684c1
+and product6e34622ce:0 production lines deleted/6 added in containers.py.
+VerticalGroup and HorizontalGroup declare admission to the existing box and
+arrangement reuse, with the original height-dependency proof and invalidation.
+No second cache or measurement owner. Toad27155f05727 carries the exact pin
+and lock (3 deleted/3 added), not yet merged or public-installed.
+
+Parent reviewed installed native control02:4 diff scrollers each8 arrangements
+to1;6 context-dependent ancestors remain8. Native Vertical/Horizontal each1;
+relative height, padding, member addition/removal, unknown hooks and actual
+ordinary/prepared/fixed/padded wide/narrow/wide behavior pass. The counter is
+not CPU or physical warm-agent acceptance. Failed observer01 timeout preserved.
+Frozen receiver release still uses Textual6b; this independent checkpoint does
+not change it or hold its quiet switch.
+
 Both original archive locks/seals passed read-only with authentic installed720.
 Existing writer constructs WireLog directly and hands the SAME opened descriptor
 to current installer. No retired registry decoder or separate archive owner batch.
