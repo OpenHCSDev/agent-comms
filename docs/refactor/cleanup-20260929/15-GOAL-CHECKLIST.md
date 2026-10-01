@@ -1,3 +1,32 @@
+## 2026-10-01 corrected paired candidate: both actual journeys pass
+
+Replacement Toad262 freezes Coree191bcf4 / Toad1edd96c0 (source7026ea09) /
+Textual6b5895fa / SDK0.12.1 / native593. The parent reviewed the full shared
+source-read/application cut and all eight production files against current
+main. This includes the after-read race that the earlier259/u08 scoped pass
+did not cover. Original negative and scoped-positive evidence remains intact.
+
+Actual installed bus-u09 passes137.640s: hot sender/recipient DM and IRC,
+31 observations, physical B/A/B distinct sends, cold reopen and shutdown;
+7583 original LinuxDriver ANSI frames, five expected answers, zero duplicates.
+Actual retained native/ACP g458j/u03 passes113.939s: unchanged41,270,331-byte
+source; native SDK fork; physically painted/focused fork Escape before any
+provider POST; cold child open and first answer; all five physical submissions
+visibly pending before native Started and transferred once; busy queue and
+cancel. Original backend finished-turn identity and visible Session details
+both converge to Ready without forced repaint.2731 original ANSI frames;
+source SHAfc5a6209 unchanged. Parent directly read the terminal, input-paint,
+stationary-ready and preserved-source artifacts. Final published cleanup and
+receipt are being completed by Einstein; no public activation is claimed.
+
+Core468/470/471 are merged and included. Full254 performance and remaining
+472 nominal execution identity continue independently; neither is a hold for
+this tested checkpoint. Arendt is retargeting the same quiet469 operator to
+this exact pair and obtaining a fresh public-owner/client census. Parent is
+the sole public executor. Current default remains runtime-body-readiness;
+public Toad PID4091704 was observed still open, so draft-safe client retirement
+is required before the runtime-store reset and original-owner restart.
+
 ## 2026-10-01 SessionRevision closure merged; shared epoch capability pushed
 
 Core468 merged77fc0838:75 production lines deleted/155 added across14
