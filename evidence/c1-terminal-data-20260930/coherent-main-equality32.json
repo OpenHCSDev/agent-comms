@@ -1,0 +1,39 @@
+{
+  "backend_source_scope": "READY for backend source merge; frontend duplication blocks activation",
+  "frozen_tested_product": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "merged_source_head": "23aadad9b43da1d527fecd653d63b0b84362a37f",
+  "integrated_main": "eba06a0f955121bafe28fbd023ded990ee1e46ec",
+  "normal_merge_conflicts": [],
+  "production_bytes_identical": [
+    {
+      "path": "src",
+      "frozen_object": "755f6e7b4fc563bfb0e724c70fdce6850ba8f43d",
+      "merged_object": "755f6e7b4fc563bfb0e724c70fdce6850ba8f43d",
+      "identical": true
+    },
+    {
+      "path": "stack",
+      "frozen_object": "a008170b05442229484d8bcbfe1edcb203a2fe70",
+      "merged_object": "a008170b05442229484d8bcbfe1edcb203a2fe70",
+      "identical": true
+    },
+    {
+      "path": "pyproject.toml",
+      "frozen_object": "1874d0750122c5605b87dd3951bbf4f7a90b5829",
+      "merged_object": "1874d0750122c5605b87dd3951bbf4f7a90b5829",
+      "identical": true
+    }
+  ],
+  "new_production_changed_lines": 0,
+  "new_production_deleted_lines": 0,
+  "actual_native_rerun": false,
+  "immutable_runtime_mutations": 0,
+  "history_rewrite": false,
+  "working_evidence_preserved": [
+    "installed30",
+    "installed31"
+  ],
+  "frontend_open_failure": "original emitted duplicate child input/reply frame983; Heisenberg 252 publication/custody closure",
+  "accepted_functional_actual_controls": "installed31 actual original native/ACP/LinuxDriver 5POST workflow and five physical pending-beforeStarted captures",
+  "proof_tool_correction": "initial tool incorrectly queried root uv.lock; Core has no such tracked path, full stack tree equality covers stack metadata. No source change or gate affected."
+}
