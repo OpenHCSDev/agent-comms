@@ -1,0 +1,40 @@
+{
+  "status": "NORMAL_INSTALLED_SELECTED_NATIVE_RETENTION_PASS",
+  "core": "3f4456c5ff25952fd7bf3ae0ede798e955662135",
+  "toad": "f9bf parent270 paired dependency (Toad not exercised in this gate)",
+  "installed_module": "/home/ts/wt/toad-s2-s5-context-pair-20261001/.artifacts/runtime-s2-s5-context-270-20261001/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "installed_manifest_sha256": "4519164ef97bb5ece65f98544179e544e0ac0b486d8976023b610f2397d937f8",
+  "native_package": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-4519164ef97bb5ec/node_modules/@earendil-works/pi-coding-agent",
+  "native_entry_id": "4e75a5eb",
+  "selected_operation_id": "526ac07bc89e4109a1b939d9144ccb6b",
+  "commit_id": "e950fbe9007e46a1801dc86b955cee0e",
+  "retained_fact_kinds": [
+    "user_source",
+    "current_decision",
+    "goal",
+    "input"
+  ],
+  "original_wire_facts": [
+    {
+      "seq": 1,
+      "message_id": "27dc52da61d5"
+    },
+    {
+      "seq": 2,
+      "message_id": "01c61d5744dc"
+    }
+  ],
+  "fixture": "/home/ts/wt/comms-retained-task-facts-s2-20261001/evidence/retained-task-facts-s2-20261001/pytest-native-installed03/test_selected_native_summary_c0",
+  "provider_requests": 1,
+  "provider": "controlled localhost only",
+  "result": "1 passed in9.59s; exactsource prefix verified in original native compaction; nativecommit +one-use admission retained",
+  "child_retirement": "original contextmanager proves proc.returncode terminal and ProcessIdentity no longeralive",
+  "public_effects": [],
+  "remaining": [
+    "Three continuous native checkpoints",
+    "General constraints and completed artifact/tool provenance",
+    "Nonselected retention/recent window closure",
+    "Separate S4 model recall",
+    "Einstein fullcontext/ACP/CLI cohort acceptance"
+  ]
+}
