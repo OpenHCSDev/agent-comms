@@ -11,7 +11,7 @@
   "native_cli": "/home/ts/wt/comms-combined474-global491-native-20261001/stack/.pi-native-53b8c413d90aa6b1/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
   "wheel": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/wheels/agent_comms-0.1.0-py3-none-any.whl",
   "wheel_sha256": "5b93442bdf0b46b157a6cf6f70b4027aca25e235059e8ef064197b40ad6fe4b9",
-  "installed_prefix": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/lib",
+  "installed_prefix": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime",
   "installed_module": "/home/ts/.cache/agent-scratch/sch-combined474-native-20261001/runtime/lib/python3.14/site-packages/agent_comms/__init__.py",
   "installed_source_modules_equal": 309,
   "protected_current_main_sources_equal": [
