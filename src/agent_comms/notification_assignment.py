@@ -119,7 +119,7 @@ class NotificationAssignment(NotificationSource):
                 connection.execute(
                     f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
                     "WHERE n.assignment_id=w.assignment_id "
-                    "AND n.stage='triage' AND n.verdict IS NULL) "
+                    "AND n.stage='triage' AND n.session_id IS NULL) "
                     "AS triage_inflight, c.execution_id AS current_execution_id "
                     f"FROM {WakeAssignment.declared_name} w "
                     f"LEFT JOIN {CurrentExecutions.declared_name} c "

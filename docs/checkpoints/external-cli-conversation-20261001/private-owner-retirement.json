@@ -1,0 +1,30 @@
+{
+  "records": [
+    {
+      "name": "beta",
+      "identity": {
+        "pid": 1879243,
+        "start_time": 35182861
+      },
+      "alive": false
+    },
+    {
+      "name": "external-cli-fixture",
+      "identity": {
+        "pid": 1879053,
+        "start_time": 35182034
+      },
+      "alive": false
+    },
+    {
+      "name": "external-cli-peer",
+      "identity": {
+        "pid": 1879094,
+        "start_time": 35182217
+      },
+      "alive": false
+    }
+  ],
+  "reply_sender_role": "agent",
+  "provider_requests": 0
+}

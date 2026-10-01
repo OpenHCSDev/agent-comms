@@ -1,0 +1,224 @@
+{
+  "file": "Agent_Comms_2026-10-01T12_40_15_875754.txt",
+  "phases": {
+    "preparing": 20,
+    "prompt_acceptance": 22,
+    "model_wait": 23,
+    "settling_stats": 44,
+    "publishing": 47
+  },
+  "stages": {
+    "preparing": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872838567,
+      "elapsedMs": 0.047219,
+      "callbackMs": 0,
+      "callbackMaxMs": 0,
+      "transport": ""
+    },
+    "callback": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872838782,
+      "elapsedMs": 214.454965,
+      "callbackMs": 0,
+      "callbackMaxMs": 0,
+      "transport": ""
+    },
+    "callback_end": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872838782,
+      "elapsedMs": 214.580373,
+      "callbackMs": 0.124957,
+      "callbackMaxMs": 0.124957,
+      "transport": ""
+    },
+    "connecting": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872838790,
+      "elapsedMs": 222.360557,
+      "callbackMs": 0.124957,
+      "callbackMaxMs": 0.124957,
+      "transport": "websocket"
+    },
+    "connected": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872839150,
+      "elapsedMs": 583.132358,
+      "callbackMs": 0.124957,
+      "callbackMaxMs": 0.124957,
+      "transport": "websocket"
+    },
+    "dispatch": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872839150,
+      "elapsedMs": 583.184006,
+      "callbackMs": 0.124957,
+      "callbackMaxMs": 0.124957,
+      "transport": "websocket"
+    },
+    "first_event": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872839617,
+      "elapsedMs": 1049.642126,
+      "callbackMs": 0.124957,
+      "callbackMaxMs": 0.124957,
+      "transport": "websocket"
+    },
+    "first_delta_consumed": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872844023,
+      "elapsedMs": 5455.292797,
+      "callbackMs": 0.646044,
+      "callbackMaxMs": 0.333131,
+      "transport": ""
+    },
+    "stream_end": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872844313,
+      "elapsedMs": 5745.22931,
+      "callbackMs": 1.16746,
+      "callbackMaxMs": 0.333131,
+      "transport": "websocket"
+    },
+    "finished": {
+      "requestId": "b74024a5-243a-4cb7-822d-ef84c75ac922",
+      "inputId": "e09ae4a27dc1137f731b130662a31fbd",
+      "sessionId": "01a0ebd9-c9fa-7018-9041-3f4fca04885f",
+      "startedAtMs": 1790872838567,
+      "observedAtMs": 1790872844318,
+      "elapsedMs": 5750.246572,
+      "callbackMs": 5.540251,
+      "callbackMaxMs": 4.372791,
+      "transport": ""
+    }
+  },
+  "failures": [],
+  "tools": 0,
+  "text": [
+    {
+      "line": 37,
+      "text": "Here"
+    },
+    {
+      "line": 38,
+      "text": "."
+    }
+  ],
+  "queues": [
+    {
+      "line": 4,
+      "revision": 2,
+      "projection": "available",
+      "items": []
+    },
+    {
+      "line": 19,
+      "revision": 4,
+      "projection": "available",
+      "items": [
+        "0b16829740e24bc4bea13e765b24fe96"
+      ]
+    },
+    {
+      "line": 26,
+      "revision": 6,
+      "projection": "available",
+      "items": []
+    }
+  ],
+  "rpc": {
+    "id": 7,
+    "line": 17,
+    "session": "openhcs-pr159-viewer-bind-owner"
+  },
+  "turn": {
+    "id": "613c8bae18fd4f20a28fadec8467a72c",
+    "started_at": 1790872829.4645822
+  },
+  "input_started": {
+    "line": 25,
+    "kind": "input_started",
+    "input_id": "0b16829740e24bc4bea13e765b24fe96",
+    "text": "test",
+    "scope": {
+      "session_id": "openhcs-pr159-viewer-bind-owner",
+      "admission": {
+        "incarnation": {
+          "name": "openhcs-pr159-viewer-bind-owner",
+          "created_at": 1790657026.7285714
+        },
+        "admission_generation": 1195
+      },
+      "owner_pid": 1733171
+    },
+    "revision": 5,
+    "native_id": "e09ae4a27dc1137f731b130662a31fbd"
+  },
+  "original_input_document": {
+    "admission": 1195,
+    "key": "acp:0b16829740e24bc4bea13e765b24fe96",
+    "kind": "started",
+    "native_id": "e09ae4a27dc1137f731b130662a31fbd",
+    "origin": {
+      "admission": {
+        "admission_generation": 1195,
+        "incarnation": {
+          "created_at": 1790657026.7285714,
+          "name": "openhcs-pr159-viewer-bind-owner"
+        }
+      },
+      "author": {
+        "created_at": 1790525452.302317,
+        "sender": "user",
+        "worktree": "/home/ts/.agent-comms"
+      },
+      "goal": {
+        "kind": "absent"
+      },
+      "kind": "human",
+      "project": "/home/ts/.agent-comms",
+      "root_id": "e206f3766e60451a989ca34df0e2a94b"
+    },
+    "owner": "openhcs-pr159-viewer-bind-owner",
+    "sequence": null,
+    "target": "openhcs-pr159-viewer-bind-owner",
+    "turn_id": "613c8bae18fd4f20a28fadec8467a72c"
+  },
+  "publication_completed_cumulative": {
+    "count": 35,
+    "total_ns": 461377139,
+    "maximum_ns": 253588287,
+    "maximum_started_ns": 348480473633359,
+    "maximum_finished_ns": 348480727221646
+  },
+  "source_log_sha256": "2dc08a28c1d7c481c65a4c12704c5e355245a12ccae2c355e31dd8f3332dfb57",
+  "pre_request_wall_bracket_seconds": 9.102417707443237,
+  "clock_limits": "Public ACP log retains ordering only; native request stages use native monotonic elapsedMs; pre-request wall bracket is not a function-duration measurement; ACP publication cumulatives use original Core monotonic_ns; UI paint is not timed."
+}

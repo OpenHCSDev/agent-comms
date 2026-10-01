@@ -102,6 +102,13 @@ class FinalStopMissing(TerminalFailure):
         return output.failure_text or output.error_message or cls.default_text
 
 
+class ModelRequestFailed(TurnFailure):
+    """An original native error terminal is evidence, not a missing stop."""
+
+    code = FailureReason.MODEL_REQUEST_FAILED
+    precedence = 45
+
+
 class QueuedInputMissing(TerminalFailure):
     code = FailureReason.QUEUED_INPUT_MISSING
     precedence = 30

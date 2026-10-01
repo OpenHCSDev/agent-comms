@@ -23,6 +23,11 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
         return False
 
+    def recipient_activity(self, agents, snapshot, thread):
+        from .agent_activity import UnavailableRecipientActivity
+
+        return UnavailableRecipientActivity()
+
 
 @dataclass(frozen=True, slots=True)
 class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
@@ -33,6 +38,11 @@ class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
 class LiveThreadOwnerBinding(ThreadOwnerBinding):
     owner: OwnerIdentity
     process: ProcessIdentity
+
+    def recipient_activity(self, agents, snapshot, thread):
+        from .agent_activity import LiveRecipientActivity
+
+        return LiveRecipientActivity(thread, agents.activity_of(thread.name, snapshot=snapshot))
 
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
         return replacement.replaces(self)
