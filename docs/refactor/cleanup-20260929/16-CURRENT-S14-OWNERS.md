@@ -195,11 +195,13 @@ stop and cancellation join algorithms remain. Source22 controls and real PTY
 exited-leader retirement passed. The whole installed receiving gate is pending.
 
 Parent found the receiving ACP launcher still supplied removed input_enabled
-and limit parameters at maintenance_ingress.py169. This would raise TypeError
-on normal launch, so staging is held for Arendt's full caller migration: typed
-StreamingChildStdio through admitted_spawn and AgentProcess's existing10MiB
-stream limit. No compatibility kwargs or alternate spawn path. Kepler's
-continuous native ACP/PTY journey must cross that launcher before acceptance.
+and limit parameters at maintenance_ingress.py169. Arendt fixed the whole caller
+crossing in pushed4552528d: typed StreamingChildStdio through admitted_spawn and
+AgentProcess's existing10MiB stream limit. Parent reviewed the source and remote
+head. No compatibility kwargs or alternate spawn path. Current Toad production
+versus8116949e deletes265 lines/adds463 across9 files; Core480 deletes10/adds42.
+Mendel is authorized for the sole normal paired stage; Kepler's continuous native
+ACP/PTY journey must cross that launcher before acceptance. Not yet installed.
 
 S2/S5 journey39's original negative32–35 attempts remain preserved. The fresh
 0064 run at /home/ts/wt/s5i08 used3 localhost POSTs and0 paid calls; original
