@@ -107,11 +107,9 @@ async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp
 
 def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_path):
     from agent_comms.channel_input_batch import SingleInputBatch
-    from agent_comms.comms import Comms
     from agent_comms.goal_presentation import GoalWaitTarget
     from agent_comms.goal_waits import GoalWait
     from agent_comms.goals import Goal
-    from agent_comms.messages import Message, MessageType
     from agent_comms.threads import Thread
     from agent_comms.turn_goal_permission import ContinuationGoalPermission
     from agent_comms.turn_input_source import (
@@ -121,19 +119,22 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         RoutedOriginalInput,
     )
 
-    comms = Comms(tmp_path / "wire")
+    from goal_owner_fixture import canonical_goal_wire
+
+    comms = canonical_goal_wire(tmp_path / "wire")
+    comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree=str(tmp_path)))
     peer = Thread(name="peer", tags=frozenset(), worktree=str(tmp_path))
     comms.registry.declare(peer)
     peer = comms.registry.require("peer")
     goal = Goal("Wait for peer", "goal")
-    message = Message(seq=2, sender="peer", target="owner", body="Result", type=MessageType.INFO)
+    message = comms.messaging.send_message("peer", "owner", "Result")
     wait = GoalWait(
         goal_id=goal.id,
         wait_id="wait",
         revision=0,
-        after_seq=1,
+        after_seq=0,
         targets=(GoalWaitTarget(peer.name, peer.created_at),),
-        owner_created_at=1.0,
+        owner_created_at=comms.registry.require("owner").created_at,
         target_turn_generations=(None,),
         report_turn_id=None,
         report_turn_generation=None,
@@ -148,12 +149,11 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         batch=SingleInputBatch(),
     )
     dependency = DependencyOriginalInput(
-        **common, dependency=CapturedInputDependency(wait.wait_id, (message,))
+        **common, dependency=CapturedInputDependency(wait.wait_id)
     )
     routed = RoutedOriginalInput(**common, dependency=NoInputDependency())
-    snapshot = comms.registry.snapshot()
     rules.OrdinaryContextCheck(
-        source=dependency, goal=goal, wait=wait, registry=snapshot
+        source=dependency, goal=goal, wait=wait, comms=comms
     ).require_valid()
     for source, current_wait, expected in (
         (routed, None, rules.OrdinaryGoalInputRule),
@@ -163,6 +163,6 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     ):
         with pytest.raises(ReservationViolationError) as error:
             rules.OrdinaryContextCheck(
-                source=source, goal=goal, wait=current_wait, registry=snapshot
+                source=source, goal=goal, wait=current_wait, comms=comms
             ).require_valid()
         assert type(error.value.rule) is expected

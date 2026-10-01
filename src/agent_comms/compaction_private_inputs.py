@@ -80,8 +80,8 @@ class PrivateInputs(JournalRole):
                 enrollment = EnrolledPrivateSession(
                     str(fresh.path),
                     fresh.session_id,
-                    fresh.device,
-                    fresh.inode,
+                    fresh.file_identity.device,
+                    fresh.file_identity.inode,
                     fresh.header_sha256,
                     incarnation,
                     owner_lookup,

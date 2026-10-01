@@ -9,14 +9,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, fields, replace
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
-from .goal_waits import GoalWait
 from .goals import Goal
 from .image_inputs import ImageInput
-from .input_attempt import InputAttempt
+from .input_attempt import ACPInputIdText, InputAttempt
 from .store_files import _store_lock
 from .turn_goal_permission import AcceptedGoalPermission
 from .turn_input_source import AcceptedFollowingInput
@@ -37,11 +35,10 @@ class InputHandoffRefused(RelationViolationError):
 class QueuedInputContext:
     admission: AdmissionIdentity
     goal: Goal | None = None
-    wait: GoalWait | None = None
 
     @classmethod
-    def capture(cls, owner: Thread, admission: AdmissionIdentity, wait: GoalWait | None):
-        return cls(admission, owner.goal, wait)
+    def capture(cls, owner: Thread, admission: AdmissionIdentity):
+        return cls(admission, owner.goal)
 
     def named(self, name: str) -> QueuedInputContext:
         """Use the caller's canonical registry name without changing authority."""
@@ -97,6 +94,7 @@ class QueuedInput:
         echo: bool,
         images: tuple[ImageInput, ...],
         controller: Any,
+        input_id: str | None = None,
     ) -> tuple[QueuedInput, Thread]:
         """Called inside the wire boundary; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
@@ -105,13 +103,12 @@ class QueuedInput:
         context = QueuedInputContext.capture(
             owner,
             snapshot.admission_identity(canonical),
-            inputs.comms.goals.goal_wait(canonical),
         )
         item = cls(
             text or prompt or "[image prompt]",
             echo,
             context,
-            uuid4().hex,
+            ACPInputIdText.new() if input_id is None else ACPInputIdText.decode(input_id),
             prompt,
             images,
             controller,
@@ -128,7 +125,7 @@ class QueuedInput:
         return item, owner
 
     def bind_turn(
-        self, owner: Thread, admission: int, wait: GoalWait | None, turn_id: str
+        self, owner: Thread, admission: int, turn_id: str
     ) -> QueuedInput:
         return self
 
@@ -153,7 +150,6 @@ class QueuedInput:
                 self.require_handoff(
                     snapshot,
                     canonical,
-                    inputs.comms.goals.goal_wait(canonical),
                     inputs.dispositions.read().lookup(self.key),
                     self.input_id,
                 )
@@ -175,16 +171,15 @@ class QueuedInput:
         if inputs.following_sources.get(session_id, {}).get(self.input_id) != self.source():
             raise RelationViolationError("Accepted input source changed")
 
-    def current(self, owner: Thread, admission: int, wait: GoalWait | None) -> bool:
+    def current(self, owner: Thread, admission: int) -> bool:
         return self.context.named(owner.name) == QueuedInputContext.capture(
-            owner, AdmissionIdentity(owner.incarnation, admission), wait
+            owner, AdmissionIdentity(owner.incarnation, admission)
         )
 
     def require_handoff(
         self,
         snapshot: RegistrySnapshot,
         name: str,
-        wait: GoalWait | None,
         row: InputAttempt,
         input_id: str,
     ) -> None:
@@ -193,7 +188,7 @@ class QueuedInput:
         owner.require_local_process(ProcessIdentity.capture(os.getpid()))
         owner.require_idle()
         admission = snapshot.admission_generations[owner.name]
-        if not self.current(owner, admission, wait):
+        if not self.current(owner, admission):
             raise RelationViolationError("Queued input acceptance context changed")
         if not row.queued_for(owner.incarnation, admission, self.text):
             raise RelationViolationError("Queued input reservation changed")
@@ -203,10 +198,23 @@ class QueuedInput:
     def future_receipt(self, owner: Thread) -> InputAttempt | None:
         return None
 
+    def after_clear(self) -> QueuedInput | None:
+        return None
+
+    def restore_after_turn(self) -> QueuedInput | None:
+        return self.immediate() if self.echo else None
+
 
 class InitialInput(QueuedInput):
     def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
-        pass  # This freshly captured original has not been offered to a backend inbox.
+        if inputs.queued_inputs.get(session_id, {}).get(self.input_id) is not self:
+            raise RelationViolationError("Original input acceptance changed")
+
+    def after_clear(self) -> InitialInput:
+        return self  # Clearing follow-ups cannot withdraw the original dispatch.
+
+    def restore_after_turn(self) -> None:
+        return None  # Its original terminal disposition owns cancellation/UNKNOWN.
 
     @property
     def accepted_id(self) -> None:
@@ -219,9 +227,9 @@ class DeferredQueuedInput(QueuedInput):
     turn_id: str | None
 
     def bind_turn(
-        self, owner: Thread, admission: int, wait: GoalWait | None, turn_id: str
+        self, owner: Thread, admission: int, turn_id: str
     ) -> QueuedInput:
-        return replace(self, turn_id=turn_id) if self.current(owner, admission, wait) else self
+        return replace(self, turn_id=turn_id) if self.current(owner, admission) else self
 
     def immediate(self) -> QueuedInput:
         return QueuedInput(

@@ -1,0 +1,20 @@
+{
+  "command": [
+    "timeout",
+    "--signal=INT",
+    "--kill-after=20s",
+    "240s",
+    "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/bin/python",
+    "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/next-cohort-driver/tests/canonical_wire_conversation_installed_pilot.py"
+  ],
+  "fixture": "/home/ts/wt/g460b/u05",
+  "prefix": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930",
+  "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "toad": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+  "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+  "driver_sha256": "36369f23be97b7ec821a0eff1d2f6a5b89a591b5e54c78211ceb86dc8d6a5046",
+  "driver_checkpoint": "09677244",
+  "started_at": 1790810587.1062412,
+  "controlled_local_only": true,
+  "reused_original_inputs": false
+}

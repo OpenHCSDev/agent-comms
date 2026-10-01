@@ -1,0 +1,46 @@
+{
+  "baseline": "3462257919a2091ed2e8a5f52af7e2793119c4af",
+  "production_delta": [
+    {
+      "file": "src/agent_comms/pi_vocabulary.py",
+      "added": 1,
+      "deleted": 1
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "added": 107,
+      "deleted": 27
+    }
+  ],
+  "added": 108,
+  "deleted": 28,
+  "source_check": {
+    "passed": 41,
+    "seconds": 1.51,
+    "log": "tracked-state-focus20.log",
+    "original_failed_check": "tracked-state-focus19.log: test mistakenly expected ValueError, corrected to original NativePiUnavailable; no product exception change"
+  },
+  "deleted_slots": [
+    "input_event",
+    "context_event",
+    "terminal_error",
+    "final_messages"
+  ],
+  "replacement": {
+    "input_context": "PendingNativeCommit/ObservedNativeCommit hold ORIGINAL typed native event object; not copied IDs/source metadata",
+    "terminal": "Pending/Completed/Ambiguous/FailedTrackedTerminal own actual terminal data and interpretation"
+  },
+  "native_custody": "original NativeEntry.open_evidence FD/ExitStack and _verify_context unchanged; repeated input refused before another acquisition; observed commitment captured before reader acquisition",
+  "preserved_semantics": [
+    "context event may arrive before input",
+    "later context record replaces prior for same original input",
+    "failure dominates later final/tool events",
+    "tool round clears prior reply stream/unique terminal",
+    "multiple final messages are ambiguous",
+    "terminal text matches original streamed chunks before publication"
+  ],
+  "remaining_owner": "Arendt selected-start family +prepared-model/manual/adaptive caller closure (parent granted narrow methods)",
+  "installed_gate_pending": true,
+  "frozen_cohort_changed": false,
+  "ready": false
+}

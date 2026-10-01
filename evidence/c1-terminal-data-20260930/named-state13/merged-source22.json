@@ -1,0 +1,36 @@
+{
+  "source_head": "0896b9318b2c62c289162ee4000ecb931350e5d2",
+  "normal_merged_main": "03e9e4b66f6d62c4387c5c004f55fab5003987a4",
+  "merged_scopes": [
+    "463958a typed SDK ACP error decode",
+    "46503e9e4b6 original proxy retirement before subscription"
+  ],
+  "own_production_changed_by_merge": false,
+  "source_crossing": {
+    "passed": 34,
+    "seconds": 0.89,
+    "log": "merged-codec-crossing22.log",
+    "scope": "existing Pi payload/terminal/receipt tests and merged FieldCodec JSON shape owner with C1 guards"
+  },
+  "original_native_stage_unchanged": true,
+  "ready": false,
+  "next_affected_continuous_gate": {
+    "owner": "Einstein / Core458",
+    "driver_owner": "Kepler / 251",
+    "driver": "tests/input_visibility_native_installed_pilot.py, published 13639614",
+    "production_dependencies": [
+      "Arendt467 original selected-start and StateData prepared-model closure",
+      "Heisenberg252 source/live publication and actual caption handoff closure"
+    ],
+    "acceptance": [
+      "idle agent: original input physically visible as submission before delivery",
+      "busy agent: original accepted input physically visible in queue before delivery",
+      "once first painted, no missing or duplicate physical original marker through one transfer into native user/chat",
+      "native/saved/ACP joins original ACP input_id to native input_id once",
+      "first fork immediate open and first answer once",
+      "actual started cancellation and no uncertain retry"
+    ],
+    "oracle": "original LinuxDriver incremental ANSI, emitting-frame region custody, original typed SDK and native receipts; no application state mutation or protocol/UI mocks"
+  },
+  "remaining_live_scope": "live6feb/ade253 does not include251 queue/submission/backend candidate; no live queue display claim"
+}

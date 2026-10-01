@@ -1,0 +1,76 @@
+{
+  "scope": "read-only original SVG XML census; no recoloring or new UI/provider",
+  "current_inherited_capture_environment": {
+    "NO_COLOR": "1",
+    "TERM": "dumb"
+  },
+  "original_launch_environment_was_not_fully_recorded": true,
+  "installed_pure_filter_control": {
+    "Monochrome(default_on_default)": "#000000 on #000000",
+    "Monochrome(white_on_black)": "#000000 on #000000",
+    "Monochrome(explicit_rgb)": "explicit RGB preserved"
+  },
+  "original_files": {
+    "recipient-reply.svg": {
+      "sha256": "dcda93d5d6dcd873b707bd0b4b19cd9fcd9777447d11dcf56b324355ef833201",
+      "text_node_count": 345,
+      "app_glyph_style_contains_black": true,
+      "literal_body_nodes": {
+        "CONTROLLED_RETURN_0": 0,
+        "CONTROLLED_RETURN_1": 0,
+        "CONTROLLED_RETURN_2": 0,
+        "HOT_ORIGINAL_TRIGGER": 0
+      },
+      "joined_lines_contain_original_reply": true
+    },
+    "physical-return-0.svg": {
+      "sha256": "ed6fbaf40c1f781cad3c6fb1654f03559fcbf4f70f0bdde8f52c496ca5ecf736",
+      "text_node_count": 245,
+      "app_glyph_style_contains_black": true,
+      "literal_body_nodes": {
+        "CONTROLLED_RETURN_0": 1,
+        "CONTROLLED_RETURN_1": 0,
+        "CONTROLLED_RETURN_2": 0,
+        "HOT_ORIGINAL_TRIGGER": 0
+      },
+      "joined_lines_contain_original_reply": true
+    },
+    "physical-return-1.svg": {
+      "sha256": "e829dfd11b618402651babe76387912a340a18fc1b3306b16213b7c0c4035004",
+      "text_node_count": 328,
+      "app_glyph_style_contains_black": true,
+      "literal_body_nodes": {
+        "CONTROLLED_RETURN_0": 0,
+        "CONTROLLED_RETURN_1": 1,
+        "CONTROLLED_RETURN_2": 0,
+        "HOT_ORIGINAL_TRIGGER": 0
+      },
+      "joined_lines_contain_original_reply": true
+    },
+    "physical-return-2.svg": {
+      "sha256": "4bf23f5bc81ad81805dc2e77e4ffe2950b007f5328f66aadeabf804c2775f5ec",
+      "text_node_count": 236,
+      "app_glyph_style_contains_black": true,
+      "literal_body_nodes": {
+        "CONTROLLED_RETURN_0": 1,
+        "CONTROLLED_RETURN_1": 0,
+        "CONTROLLED_RETURN_2": 1,
+        "HOT_ORIGINAL_TRIGGER": 0
+      },
+      "joined_lines_contain_original_reply": true
+    },
+    "cold-sender.svg": {
+      "sha256": "3393072d929f8d7e0908b2b92dddb2d674fc8f675bb94b17d43abf34db394240",
+      "text_node_count": 234,
+      "app_glyph_style_contains_black": true,
+      "literal_body_nodes": {
+        "CONTROLLED_RETURN_0": 0,
+        "CONTROLLED_RETURN_1": 0,
+        "CONTROLLED_RETURN_2": 0,
+        "HOT_ORIGINAL_TRIGGER": 1
+      },
+      "joined_lines_contain_original_reply": false
+    }
+  },
+  "disposition": "Text/coordinates and original compositor assertions support publication/geometry; black-on-black SVG/PNG does not establish physically readable colored UI. Physical color visibility unproven. Kepler owns recorder environment normalization; no altered artifact passed off as original."
+}

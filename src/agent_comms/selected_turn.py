@@ -59,7 +59,6 @@ class SelectedPrompt:
                 participant.initial,
                 participant.assignment,
                 participant.owner.thread,
-                phase="triage",
             )
             + (
                 f"You are participant {participant.owner.thread.name}. "
@@ -79,7 +78,6 @@ class SelectedPrompt:
             participant.initial,
             assignment,
             participant.owner.thread,
-            phase="full",
             obligation=obligation,
         )
         suffix = (
@@ -253,6 +251,7 @@ class SelectedAttempt:
                 self.stage.fence,
                 owner_witness=participant.response_owner,
             ).value
+            participant.consume_reply_wait()
             return CoordinatedTurn.published(
                 participant, session, request.admission.input_id, published
             )

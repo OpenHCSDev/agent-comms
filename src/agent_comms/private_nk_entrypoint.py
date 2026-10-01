@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import PublicationActivationBlocked
 
+from .wire_metadata import WireRootIdText
+
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
 
@@ -41,23 +43,20 @@ class PrivateNkLaunch:
         package = environment.get(PACKAGE_ENV)
         if root_id is None and package is None:
             return None
-        if (
-            type(root_id) is not str
-            or len(root_id) != 32
-            or any(ch not in "0123456789abcdef" for ch in root_id)
-            or type(package) is not str
-            or not package
-            or not Path(package).is_absolute()
-        ):
+        from .active_route import AbsoluteRoutePathText
+
+        try:
+            root_id = WireRootIdText.decode(root_id)
+            native_package = AbsoluteRoutePathText.decode(package)
+        except (TypeError, ValueError) as error:
             raise PublicationActivationBlocked(
                 "private N/K owner requires exact root ID and absolute reviewed package"
-            )
+            ) from error
         if environment.get("PI_PROMPT"):
             raise PublicationActivationBlocked(
                 "private N/K owner cannot start with an unbound prompt"
             )
         validated_root = Path(root).expanduser().absolute()  # capture cwd once
-        native_package = Path(package)
         # Normal production FULL turns select their coding tools in the runtime.
         # Claim support is not a request for the optional single-write proof mode.
         return cls(validated_root, root_id, native_package, None)

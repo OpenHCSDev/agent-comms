@@ -1,0 +1,24 @@
+{
+  "pid": 12884,
+  "argv": [
+    "script",
+    "-q",
+    "-e",
+    "-f",
+    "-T",
+    "/home/ts/wt/g458g/u01/terminal.timing",
+    "-c",
+    "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/bin/python /home/ts/wt/toad-input-delivery-visibility-20260930/tests/input_visibility_native_installed_pilot.py",
+    "/home/ts/wt/g458g/u01/terminal.ansi"
+  ],
+  "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "toad": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+  "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+  "driver": "f265a9f240da62e51e7736c4299c7388cca64ecc",
+  "activation_sha256": "c354f5e5ad7faff5901b144bf5233ad305d589e0b1d073dc51223eb6f016daa3",
+  "private_fixture": "/home/ts/wt/g458g/u01/fixture",
+  "provider_budget": 5,
+  "paid_calls": 0,
+  "public_mutations": 0,
+  "old_u02_reused": false
+}

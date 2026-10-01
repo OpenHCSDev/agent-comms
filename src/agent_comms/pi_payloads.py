@@ -149,8 +149,13 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
     wire_tag = "type"
     opaque: ClassVar[bool] = False
     text: ClassVar[str] = ""
-    final_text_allowed: ClassVar[bool] = False
     tool_round_allowed: ClassVar[bool] = False
+
+    @property
+    def final_text(self) -> str:
+        from .native_pi import NativePiUnavailable
+
+        raise NativePiUnavailable("Native Pi assistant returned non-text content")
 
     @classmethod
     def wire_member(cls, value):
@@ -174,7 +179,11 @@ class TextContent(PiContent):
 
     text: str = field()
     text_signature: str | None = wire_field("textSignature")
-    final_text_allowed = tool_round_allowed = True
+    tool_round_allowed = True
+
+    @property
+    def final_text(self) -> str:
+        return self.text
 
 
 @dataclass(frozen=True)
@@ -186,7 +195,11 @@ class ThinkingContent(PiContent):
 
     thinking: str = ""
     thinking_signature: str | None = wire_field("thinkingSignature")
-    final_text_allowed = tool_round_allowed = True
+    tool_round_allowed = True
+
+    @property
+    def final_text(self) -> str:
+        return ""
 
 
 @dataclass(frozen=True)
@@ -362,6 +375,9 @@ class UnknownDiagnostic(PiDiagnostic):
 
 @dataclass(frozen=True)
 class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
+    def tracked_end(self, session) -> None:
+        """Non-assistant messages cannot supply a tracked final response."""
+
     @property
     def parts(self) -> tuple[PiContent, ...]:
         return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
@@ -448,8 +464,18 @@ class AbsentMessage(PiMessage):
     update_context = True
 
 
+@dataclass(frozen=True)
 class AssistantMessage(PiMessage):
+    # Pi's assistant record always carries an array, including failed terminals.
+    content: tuple[PiContent, ...] = field(default=(), metadata={"wire_required": True})
     assistant = True
+
+    def tracked_end(self, session) -> None:
+        self.stop_reason.tracked(session, self)
+
+    @property
+    def authoritative_text(self) -> str:
+        return "".join(part.final_text for part in self.content)
 
     @property
     def final_reply(self):
@@ -560,20 +586,20 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
     details: Any = None
 
     def transcript_events(self, context):
-        from .tool_results import ToolDiff
+        from .native_tools import NativeTool
         from .transcript_events import ToolEndTranscript
 
         if not self.parts:
             return []
         output = "\n".join(part.text for part in self.parts if isinstance(part, TextContent))
-        result = PiToolResult(content=self.parts, details=self.details)
+        result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [
             ToolEndTranscript(
                 text=output,
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,
                 ok=not self.is_error,
-                diff=ToolDiff.from_result(self.tool_name, result, not self.is_error),
+                diff=NativeTool.for_name(self.tool_name).result_diff(result, not self.is_error),
             )
         ]
         return events
@@ -665,11 +691,57 @@ class UnknownDelta(PiDelta):
 
 
 @dataclass(frozen=True)
-class PiModel(PiPayload):
+class PiModel(PiPayload, DeclaredFamily, affix="Model"):
+    wire_tag = None
+    opaque: ClassVar[bool] = False
+    display_name: ClassVar[str | None] = None
+    context_window: ClassVar[int | None] = None
+
+    @classmethod
+    def wire_member(cls, value):
+        return ReportedModel
+
+    @abstractmethod
+    def matches_identity(self, selected: tuple[str, str]) -> bool: ...
+
+    def require_selection(self, selected: str | None):
+        raise ValueError("Prepared native model does not match the owner selection")
+
+    def for_compaction(self, configured_model: str | None):
+        return self.require_selection(configured_model)
+
+
+class UnreportedModel(PiModel):
+    """The external state has not reported a model; no identity is implied."""
+
+    def matches_identity(self, selected: tuple[str, str]) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class ReportedModel(PiModel):
     provider: str | None = None
     id: str | None = None
     name: str | None = None
     context_window: int | None = wire_field("contextWindow")
+
+    @property
+    def identity(self):
+        return self.provider, self.id
+
+    def matches_identity(self, selected: tuple[str, str]) -> bool:
+        return self.identity == selected
+
+    def require_selection(self, selected: str | None):
+        if self.display_name != selected:
+            return super().require_selection(selected)
+        return self
+
+    def for_compaction(self, configured_model: str | None):
+        from .pi_summary_payloads import SelectedModel
+
+        self.require_selection(configured_model)
+        return SelectedModel(self.provider, self.id, self.context_window)
 
     @property
     def display_name(self):
@@ -698,6 +770,15 @@ class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
     def session_busy(self) -> bool:
         return False
 
+    def require_request(self, request):
+        raise ValueError("Native response data does not declare this selected request")
+
+    def require_payload(self):
+        return self
+
+    def conflicts_attestation(self, attestation) -> bool:
+        return False
+
     @classmethod
     def wire_member(cls, value):
         return cls if cls is not PiResponseData else cls.decode(value.get("kind"))
@@ -705,6 +786,13 @@ class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
 
 class EmptyData(PiResponseData):
     pass
+
+
+class MissingData(PiResponseData):
+    """An omitted/null native payload is not a successful data observation."""
+
+    def require_payload(self):
+        raise ValueError("Native response has no data")
 
 
 @dataclass(frozen=True)
@@ -732,17 +820,29 @@ class NativeSessionSnapshot(PiPayload):
         known, observed = self._known_identity(), other._known_identity()
         return any(known[key] != observed[key] for key in known.keys() & observed.keys())
 
+    def conflicts_attestation(self, attestation) -> bool:
+        return attestation.conflicts(self)
+
 
 @dataclass(frozen=True)
 class StateData(NativeSessionSnapshot, PiResponseData):
     session_name: str | None = wire_field("sessionName")
     native_input_proof_capability: str | None = wire_field("nativeInputProofCapability")
-    model: PiModel | None = None
+    model: PiModel = field(default_factory=UnreportedModel)
     thinking_level: type[ThinkingLevel] | None = wire_field("thinkingLevel")
     message_count: int | None = wire_field("messageCount")
     pending_message_count: int | None = wire_field("pendingMessageCount")
     is_streaming: bool | None = wire_field("isStreaming")
     is_compacting: bool | None = wire_field("isCompacting")
+
+    @classmethod
+    def normalize_field(cls, target, key, value, record):
+        if key == "model" and value is None:
+            return {"kind": UnreportedModel.declared_name}
+        return super().normalize_field(target, key, value, record)
+
+    def matches_model(self, selected: tuple[str, str]) -> bool:
+        return self.model.matches_identity(selected)
 
     @property
     def session_busy(self) -> bool:
@@ -793,7 +893,36 @@ class UnknownData(PiResponseData):
 
 
 @dataclass(frozen=True)
-class PiToolResult(PiPayload):
+class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
+    wire_tag = None
+    opaque: ClassVar[bool] = False
+
+    @classmethod
+    def normalize_wire(cls, value):
+        if value is None:
+            return {"kind": MissingToolResult.declared_name}
+        return super().normalize_wire(value)
+
+    @classmethod
+    def wire_member(cls, value):
+        return ProvidedToolResult
+
+    @abstractmethod
+    def text(self, limit=4000): ...
+
+    def edit_diff(self, ok):
+        return None
+
+
+class MissingToolResult(PiToolResult):
+    """No native result was emitted; output and edit evidence are absent."""
+
+    def text(self, limit=4000):
+        return ""
+
+
+@dataclass(frozen=True)
+class ProvidedToolResult(PiToolResult):
     content: tuple[PiContent, ...] = ()
     # Extension-defined details are deliberately opaque; no second tool schema.
     details: Any = None
@@ -801,6 +930,35 @@ class PiToolResult(PiPayload):
     def text(self, limit=4000):
         text = "".join(part.text for part in self.content)
         return text[:limit] + ("…" if len(text) > limit else "")
+
+    def edit_diff(self, ok):
+        return NativeEditDetails.capture_diff(self.details) if ok else None
+
+
+@dataclass(frozen=True)
+class NativeEditDetails(PiPayload):
+    """Native edit metadata, decoded only when projecting actual edit evidence."""
+
+    patch: str | None = None
+    diff: str | None = None
+    first_changed_line: int | None = wire_field("firstChangedLine")
+
+    @classmethod
+    def capture_diff(cls, raw):
+        from .tool_results import ToolDiff
+
+        try:
+            details = cls.from_wire(raw)
+        except (ValueError, TypeError):
+            # Extension-defined metadata may be opaque. Preserve the original
+            # result and output; unsupported formatting grants no diff evidence.
+            return None
+        if details.patch and details.patch.strip():
+            return ToolDiff(details.patch)
+        if details.diff and details.diff.strip():
+            # This is the external numbered edit format in retained Pi journals.
+            return ToolDiff(details.diff, "numbered")
+        return None
 
 
 class McpCallPolicy(DeclaredFamily, affix="McpCallPolicy"):

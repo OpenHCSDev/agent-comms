@@ -1,0 +1,27 @@
+{
+  "driver": "3a3a36059da0c615990ff39f18754ab16ff064b1",
+  "target": "beta",
+  "channel": "#team",
+  "row_region": [
+    2,
+    11,
+    57,
+    2
+  ],
+  "screen_point": [
+    2,
+    11
+  ],
+  "native_hit_type": "ThreadRow",
+  "native_hit_is_original_row": true,
+  "expanded": true,
+  "provider_posts": 0,
+  "native_inputs_sent": 0,
+  "physical_driver": "LinuxDriver",
+  "headless": false,
+  "pointer_after_click": [
+    2,
+    11
+  ],
+  "screen_after_click": "ContextMenu"
+}

@@ -143,7 +143,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             )
             thread = owner._comms.registry.require(sid)
             state = await owner.turns.prepare_selected_session(sid, thread)
-            assert state.model == "response-local/fixture"
+            assert state.model.display_name == "response-local/fixture"
             assert (
                 native.session.read_bytes() == history and read_proof_rows(native.session) == proof
             )
@@ -162,7 +162,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             assert native.session.read_bytes().startswith(history)
             assert all(row in read_proof_rows(native.session) for row in proof)
             assert len(native.saved_inputs()) == 2 and native.provider.posts == 2
-            assert not owner.turns.active_turns
+            assert owner._comms.registry.require(sid).active_turn is None
     finally:
         await owner.shutdown()
     assert not owner.turns.persistent_backends

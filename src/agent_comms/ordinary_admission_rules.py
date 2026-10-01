@@ -9,6 +9,7 @@ from .reservation_rules import ReservationRule, RuleCheck
 from .thread_identity import TurnId
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_waits import GoalWait
     from .goals import Goal
@@ -122,7 +123,6 @@ class AcceptedInputCheck(RuleCheck):
     receipt: QueuedInput
     current: Thread
     admission: int
-    wait: GoalWait | None
     input_id: str
     keys: tuple[str, ...]
     accepted_source: TurnInputSource | None
@@ -130,10 +130,10 @@ class AcceptedInputCheck(RuleCheck):
 
 class AcceptedInputAuthorityRule(ReservationRule):
     check_type = AcceptedInputCheck
-    explanation = "The live input's accepted owner, goal or wait authority changed."
+    explanation = "The live input's accepted owner or goal authority changed."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return not check.receipt.current(check.current, check.admission, check.wait)
+        return not check.receipt.current(check.current, check.admission)
 
 
 class AcceptedInputKeyRule(ReservationRule):
@@ -157,7 +157,7 @@ class OrdinaryContextCheck(RuleCheck):
     source: TurnInputSource
     goal: Goal | None
     wait: GoalWait | None
-    registry: RegistrySnapshot
+    comms: Comms
 
 
 class OrdinaryGoalRule(ReservationRule):
@@ -181,7 +181,7 @@ class OrdinaryWaitRule(ReservationRule):
     explanation = "The current dependency wait does not authorize this input."
 
     def violated(self, check: OrdinaryContextCheck) -> bool:
-        return not check.source.allows_wait(check.wait, check.registry)
+        return not check.source.allows_wait(check.wait, check.comms)
 
 
 class OrdinaryGoalInputRule(ReservationRule):

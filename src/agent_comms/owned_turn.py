@@ -142,12 +142,6 @@ class OwnedTurn:
             self.session_id, self.thread_name, self.turn_id, self.turn_lease,
         )
         resources.push_async_callback(self.lease_custody.aclose)
-        self.direct_origins = tuple(
-            origin
-            for origin in self.origins
-            if origin.seq > 0
-            and origin.target in self.runner.comms.registry.aliases_for(self.thread_name)
-        )
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
             with _store_lock(self.runner.comms._wire_lock_path):
@@ -269,7 +263,7 @@ class OwnedTurn:
             original_display=self.original_display,
             origins=self.origins,
             dependency=(
-                CapturedInputDependency(self.dependency_wait_id, self.direct_origins)
+                CapturedInputDependency(self.dependency_wait_id)
                 if self.dependency_wait_id is not None
                 else NoInputDependency()
             ),
@@ -357,17 +351,13 @@ class OwnedTurn:
                 self.runner.inputs.selected_summary_admissions[self.session_id] = admission
 
             try:
-                selected_info = (
-                    await self.runner.prepare_selected_session(self.session_id, self.thread)
-                    if self.runner.adaptive_summary_strategy is None
-                    else self.runner.comms.agents.agent_info_of(self.thread_name)
-                )
+                prepared = await self.runner.prepare_selected_session(self.session_id, self.thread)
                 self.committed = await maybe_compact_owner_turn(
                     self.runner.comms.registry,
                     self.runner.agent_bin,
                     self.thread_name,
                     self.turn_id,
-                    selected_info,
+                    prepared,
                     pending_key,
                     self.runner.persistent_backends.setdefault(
                         self.session_id, backend.PersistentPiSession()

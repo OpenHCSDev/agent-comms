@@ -1,0 +1,14 @@
+{
+  "installed_core": "/home/ts/wt/comms-typed-acp-error-payload-20260930/.observations/error-installed/agent_comms",
+  "sdk": "0.12.1",
+  "provider_posts": 2,
+  "native_originals": 2,
+  "notification_published": true,
+  "failure_title": "Provider usage limit reached",
+  "disposition": "Started \u2014 input not retried",
+  "nested_provider_reason_preserved": true,
+  "passive_failed_history_and_dispositions_unchanged": true,
+  "public_effects": 0,
+  "paid_calls": 0,
+  "replays": 0
+}

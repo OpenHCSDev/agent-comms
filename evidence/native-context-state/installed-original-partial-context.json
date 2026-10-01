@@ -1,0 +1,11 @@
+{
+  "installed_core": "/home/ts/wt/comms-native-context-state-20260930/.observations/context-installed/agent_comms",
+  "original_private_native_fixture": "Mendel462 completed n4",
+  "original_probe_sha256": "6e2e6b0d2efa58e65b2bec1c43e5faaae76bbffbd5f6142dc8950f6accae51d0",
+  "private_copy_unchanged": true,
+  "partial_request_generation_refused": true,
+  "refusal": "Native recorded context group is partial",
+  "public_effects": 0,
+  "provider_calls": 0,
+  "replays": 0
+}

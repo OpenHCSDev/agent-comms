@@ -1,0 +1,21 @@
+{
+  "receipt": {
+    "failure": {
+      "kind": "provider_quota",
+      "code": -32603,
+      "detail": "400: {\"message\":\"{\\\"data\\\": [null, {\\\"details\\\": \\\"Controlled provider usage limit has been reached; original input not retried\\\"}], \\\"message\\\": \\\"Internal error\\\"}\",\"code\":\"invalid_request_error\"}",
+      "input_state": "started",
+      "diagnostics": []
+    },
+    "notification_published": true
+  },
+  "notifications": [
+    {
+      "kind": "provider_quota",
+      "code": -32603,
+      "detail": "400: {\"message\":\"{\\\"data\\\": [null, {\\\"details\\\": \\\"Controlled provider usage limit has been reached; original input not retried\\\"}], \\\"message\\\": \\\"Internal error\\\"}\",\"code\":\"invalid_request_error\"}",
+      "input_state": "started",
+      "diagnostics": []
+    }
+  ]
+}

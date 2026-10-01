@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.child_process import AttachedChild, ProcessIdentity
+from agent_comms.comms import Comms
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -20,8 +22,8 @@ from agent_comms.input_attempt import NotSentInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.owner_compaction_adaptive import maybe_compact_owner_turn
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.registration import Registration
 from agent_comms.runtime_info import AgentRuntimeInfo
 from agent_comms.store_files import _store_lock
@@ -49,13 +51,10 @@ async def owner_fixture(
     tmp_path, monkeypatch, *, goal=True, response_gate: asyncio.Event | None = None
 ):
     package = Path(PACKAGE).resolve()
-    monkeypatch.setattr(
-        "agent_comms.private_nk_entrypoint.private_nk_from_environment",
-        lambda: PrivateNkLaunch(tmp_path, "f" * 32, package, None),
-    )
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path))
-    monkeypatch.delenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", raising=False)
-    monkeypatch.delenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", raising=False)
+    root_id = Comms(tmp_path).messaging.initialize_private_initial_protocol()
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
+    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
     launcher = "pi"
     repo = Path(__file__).resolve().parents[1]
     requests = []
@@ -133,6 +132,13 @@ async def owner_fixture(
     )
     agent_dir = tmp_path / "pi-settings"
     agent_dir.mkdir()
+    (agent_dir / "settings.json").write_text(json.dumps({
+        "compaction": {
+            "enabled": os.environ.get("PR95_EFFECTIVE_DISABLED") != "1",
+            "reserveTokens": 1000, "keepRecentTokens": 10,
+        },
+        "retry": {"enabled": False},
+    }))
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(agent_dir))
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path))
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", f"{provider}/{model}")
@@ -187,11 +193,12 @@ async def owner_fixture(
             "PR95_EMPTY_SESSION"
         ):
             record_fixture_history(inputs, "owner", owner.active_turn.admission_generation)
-        info = AgentRuntimeInfo(
-            thread="owner",
-            model=fixture["model"],
-            context_used=fixture["contextWindow"] - 500,
-            context_size=fixture["contextWindow"],
+        info = await NativeSessionPreparation.open(
+            persistent, launcher,
+            ["--provider", provider, "--model", model, "--thinking", "off",
+             "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+             "--no-prompt-templates", "--no-tools"],
+            worktree=str(tmp_path), environment=dict(os.environ), session_file=file,
         )
         async with asyncio.timeout(60):
             yield persistent, registry, inputs, file, launcher, info
@@ -400,15 +407,15 @@ async def acp_selected_summary_journey(
                 comms.registry.require("proj"),
                 goal=Goal("retain history", "goal-acp"),
                 session_file=file,
-                model=info.model,
+                model=info.model.display_name,
                 process_identity=ProcessIdentity.capture(os.getpid()),
             )
         )
         comms.agents.set_agent_info(
             "proj",
-            model=info.model,
-            context_used=info.context_used,
-            context_size=info.context_size,
+            model=info.model.display_name,
+            context_used=info.model.context_window - 500,
+            context_size=info.model.context_window,
         )
         private = root / "goal-private"
         private.mkdir(mode=0o700)
@@ -655,9 +662,9 @@ async def acp_selected_summary_journey(
                 # Runtime info remains a display projection, not decision authority.
                 comms.agents.set_agent_info(
                     "proj",
-                    model=info.model,
-                    context_used=info.context_used,
-                    context_size=info.context_size,
+                    model=info.model.display_name,
+                    context_used=info.model.context_window - 500,
+                    context_size=info.model.context_window,
                 )
                 await agent.turns.run_agent_turn(
                     "proj",
@@ -791,7 +798,7 @@ async def test_selected_custom_model_and_project_settings_use_actual_owner(tmp_p
         info,
     ):
         admitted = []
-        assert info.model == "custom-local/custom-model"
+        assert info.model.display_name == "custom-local/custom-model"
         assert await maybe_compact_owner_turn(
             registry,
             launcher,
@@ -990,7 +997,7 @@ async def test_private_retained_session_accepts_after_runtime_journal_reset(
                 replace(
                     comms.registry.require("proj"),
                     session_file=file,
-                    model=info.model,
+                    model=info.model.display_name,
                     process_identity=ProcessIdentity.capture(os.getpid()),
                 )
             )

@@ -26,12 +26,25 @@ def file_revision(info: os.stat_result) -> Revision:
 
 
 @dataclass(frozen=True)
+class PrefixSource:
+    """The original logical root and opened physical file, compared as one value."""
+
+    root_id: str
+    device: int
+    inode: int
+
+
+@dataclass(frozen=True)
 class PrefixSeal:
     root_id: str
     revision: Revision
     through_seq: int
     digest: str
     tail: str
+
+    @property
+    def source_identity(self) -> PrefixSource:
+        return PrefixSource(self.root_id, self.revision[0], self.revision[1])
 
     def __post_init__(self) -> None:
         if len(self.root_id) != 32 or any(c not in "0123456789abcdef" for c in self.root_id):

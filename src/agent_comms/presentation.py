@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, ClassVar
 from .activity import Activity, ActivityState
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
-from .bus_display_index import BusDisplayIndex
+from .bus_display_index import BusDisplayIndex, DisplayCheckpoint, DisplayMetricScope
+from .bus_projection import BusFileRevision
 from .channel_targets import is_channel_target
 from .channels import Channel
 from .display_order import ChannelSort
@@ -20,7 +21,7 @@ from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import MessagePage, MessagePageRequest
 from .messages import Message
-from .read_basis import ChannelDisplayScope, DMDisplayScope, ViewUnread
+from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock, file_revision
@@ -193,10 +194,7 @@ class BusPresentation:
         self.catalog = catalog
         self._path = bus.log.path
         self._wire_lock_path = bus.log.path.parent / "wire"
-        self._view_unread_cache: dict[str, ViewUnread] = {}
-        self._display_activity_revision: tuple | None = None
-        self._display_activity: dict[str, ChannelActivity] = {}
-        self._display_activity_verified = False
+        self._display_metrics: dict[str, DisplayCheckpoint] = {}
 
     def revision(self) -> tuple:
         """Revisions of every store used to define one display predicate and marker."""
@@ -325,85 +323,28 @@ class BusPresentation:
         captured registry as the scopes. Never recanonicalize during this scan.
         Caches may be reused or published only for an unchanged bus revision.
         """
-        activity_key = (bus_revision, activity_scopes)
-        unread_key = (bus_revision, viewer_names)
-        cached_unread = self._view_unread_cache.get(viewer)
-        if (
-            bus_revision is not None
-            and self._display_activity_revision == activity_key
-            and self._display_activity_verified
-            and cached_unread is not None
-            and cached_unread.revision == unread_key
-            and cached_unread.verified_display_boundary
-            and cached_unread.scopes == scopes
-        ):
-            return dict(self._display_activity), dict(cached_unread.counts)
-
-        def scope_key(scope: ChannelDisplayScope) -> list[object]:
-            return [
-                scope.channel,
-                sorted(scope.targets) if scope.targets is not None else None,
-                scope.any_mode,
-                sorted(scope.participant_names),
-                sorted(scope.seen_sequences),
-            ]
-
-        def apply(record: Mapping, metrics: tuple[dict, dict]) -> None:
-            message = Message.from_wire(record)
-            clocks, unread = metrics
-            for scope in activity_scopes:
-                if scope.includes(message):
-                    last_message, last_user = clocks[scope.channel]
-                    clocks[scope.channel] = (
-                        max(last_message, message.timestamp),
-                        (
-                            max(last_user, message.timestamp)
-                            if ReadLedger.human(message.sender_role)
-                            else last_user
-                        ),
-                    )
-            if message.sender not in viewer_names:
-                for scope in scopes:
-                    if scope.unread(message):
-                        unread[scope.channel] += 1
-
-        initial = (
-            {scope.channel: (0.0, 0.0) for scope in activity_scopes},
-            dict.fromkeys((scope.channel for scope in scopes), 0),
-        )
+        semantics = DisplayMetricScope(scopes, activity_scopes, viewer_names)
+        cached = self._display_metrics.get(viewer)
+        if bus_revision is not None and cached is not None:
+            if cached.current_for(BusFileRevision(*bus_revision), semantics):
+                return ({name: ChannelActivity(*clocks) for name, clocks in cached.activity.items()},
+                        dict(cached.counts))
+        initial = semantics.empty_metrics
         projected = BusDisplayIndex(self._path, viewer).snapshot(
-            bus_revision,
-            [
-                [scope_key(scope) for scope in scopes],
-                [scope_key(scope) for scope in activity_scopes],
-                sorted(viewer_names),
-            ],
-            initial,
-            apply,
+            bus_revision, semantics, initial,
+            lambda record, metrics: semantics.observe(Message.from_wire(record), metrics),
         )
-        if projected is not None:
-            activity = {name: ChannelActivity(*clocks) for name, clocks in projected[0].items()}
-            counts = projected[1]
-        else:
-            activity = {scope.channel: ChannelActivity() for scope in activity_scopes}
-            counts = dict.fromkeys((scope.channel for scope in scopes), 0)
+        if projected is None:
+            metrics = initial
             for message, _ in records:
-                for scope in activity_scopes:
-                    if scope.includes(message):
-                        activity[scope.channel] = activity[scope.channel].observe(message)
-                if message.sender in viewer_names:
-                    continue
-                for scope in scopes:
-                    if scope.unread(message):
-                        counts[scope.channel] += 1
-        if bus_revision is not None and file_revision(self._path) == bus_revision:
-            self._display_activity = activity
-            self._display_activity_revision = activity_key
-            self._display_activity_verified = True
-            self._view_unread_cache[viewer] = ViewUnread(
-                unread_key, scopes, counts, verified_display_boundary=True
-            )
-        return activity, counts
+                semantics.observe(message, metrics)
+        else:
+            metrics = projected.metrics
+            if bus_revision is not None and file_revision(self._path) == bus_revision:
+                self._display_metrics[viewer] = projected
+        return ({name: ChannelActivity(*clocks) for name, clocks in metrics[0].items()},
+                dict(metrics[1]))
+
 
 
 @dataclass(frozen=True, slots=True)

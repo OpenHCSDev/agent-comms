@@ -1,0 +1,46 @@
+{
+  "functional_core_head": "a2bfa9d8d67524f29e78158a315bd1f27362c779",
+  "normal_merged_467": "f78af469fd241193962255395ca5c19dbb23547c",
+  "current_merge_head": "b4725e9eb7e45d26e5ce32ef5d01ddcc55132d43",
+  "production_source_tree": "14266ac08390ff7cf4813306186ceee83234610a",
+  "production_source_equal_to_467_f78": true,
+  "pyproject_and_stack_equal_to_467_f78": true,
+  "scoped_467_production_delta": {
+    "added": 127,
+    "deleted": 152,
+    "files": 9,
+    "baseline": "f21ac24a parent; count correction from original contributor"
+  },
+  "removed_competing_slots_and_builders": [
+    "TrackedTurnSession.fresh_selected",
+    "TrackedTurnSession.selected_revision",
+    "TrackedTurnSession.attest_selected",
+    "SelectedModel.from_runtime",
+    "TurnRunner AgentRuntimeInfo reconstruction",
+    "detached adaptive settings/context reconstruction"
+  ],
+  "canonical_owners": [
+    "original NativeStartupAdmission selected member holds original enrollment and FileRevision",
+    "original native StateData.model.for_compaction",
+    "original retained native child compaction policy for both performers"
+  ],
+  "native_external_abi": "593b unchanged",
+  "new_textual_source": "a5c6678da3873f4a0b3a85dfe876aaa6ffcc8ca3",
+  "textual_check_source": "Heisenberg actual ToadApp red-to-green +5 native damage controls, not this lane installed acceptance",
+  "source_to_avoid_retesting": "Arendt f78 installed manual/adaptive gate is running against byte-identical production source",
+  "next_joint_gate_requirements": [
+    "exact coherent paired installed source pins/new Textual",
+    "strict real Enter pre-delivery original submission for idle owner",
+    "accepted queue before delivery for busy owner",
+    "single physical transfer original request through native user/chat",
+    "firstfork answer once and original started cancellation"
+  ],
+  "pending_acceptance": [
+    "Arendt affected manual/adaptive installed receipt",
+    "Kepler strict driver checkpoint",
+    "parent final Toad/Core/Textual metadata and Sch immutable package"
+  ],
+  "old_original_u02_and_unknown_preserved": true,
+  "public_mutation": false,
+  "ready": false
+}

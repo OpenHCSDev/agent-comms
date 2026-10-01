@@ -1,0 +1,55 @@
+[1790810885.876] incoming: {"jsonrpc": "2.0", "method": "initialize", "params": {"protocolVersion": 1, "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}, "terminal": true, "auth": {"terminal": true}}, "
+[1790810885.877] outgoing: {"jsonrpc": "2.0", "id": 1, "result": {"protocolVersion": 1, "agentCapabilities": {"loadSession": true, "promptCapabilities": {"image": true}}, "authMethods": [{"id": "pi-login-openai-codex", "name": 
+[1790810885.880] incoming: {"jsonrpc": "2.0", "method": "session/load", "params": {"cwd": "/home/ts/wt/g458g/m01/fixture/application/project", "mcpServers": [], "sessionId": "beta", "_meta": {"agentCommsLoad": {"kind": "ensurin
+[1790810888.108] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "coordination_changed",
+[1790810888.118] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "transcript_snapshot", 
+[1790810888.119] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delivery_changed
+[1790810888.165] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"_meta": {"agentComms": {"updates": [{"kind": "cursor_advanced", "envelope": {"scope": {"session_id": "beta", 
+[1790810888.209] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"_meta": {"agentComms": {"updates": [{"kind": "goal_changed", "goal": null, "execution": null}]}}, "sessionUpd
+[1790810888.211] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "transcript_snapshot", 
+[1790810888.221] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "turn_changed", "state"
+[1790810888.221] outgoing: {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "beta", "update": {"content": {"text": "", "type": "text"}, "_meta": {"agentComms": {"updates": [{"kind": "input_delivery_changed
+[1790810888.243] outgoing: {"jsonrpc": "2.0", "id": 2, "result": {"configOptions": [{"currentValue": "selected-offline/fixture", "options": [{"value": "selected-offline/fixture", "name": "selected-offline/fixture"}], "id": "mod
+[1790810890.435] incoming: {"jsonrpc": "2.0", "id": null, "error": {"code": -32603, "message": "An error occurred handling your request: BrokenProcessPool('A process in the process pool was terminated abruptly while the future 
+[1790810890.437] incoming: {"jsonrpc": "2.0", "id": null, "error": {"code": -32603, "message": "An error occurred handling your request: BrokenProcessPool('A child process terminated abruptly, the process pool is not usable any
+[1790810890.437] incoming: {"jsonrpc": "2.0", "id": null, "error": {"code": -32603, "message": "An error occurred handling your request: BrokenProcessPool('A child process terminated abruptly, the process pool is not usable any
+[1790810890.438] incoming: {"jsonrpc": "2.0", "id": null, "error": {"code": -32603, "message": "An error occurred handling your request: BrokenProcessPool('A child process terminated abruptly, the process pool is not usable any
+[1790810890.439] incoming: {"jsonrpc": "2.0", "id": null, "error": {"code": -32603, "message": "An error occurred handling your request: BrokenProcessPool('A child process terminated abruptly, the process pool is not usable any
+[1790810890.441] incoming: {"jsonrpc": "2.0", "id": null, "error": {"code": -32603, "message": "An error occurred handling your request: BrokenProcessPool('A child process terminated abruptly, the process pool is not usable any
+[1790810890.442] incoming: {"jsonrpc": "2.0", "id": null, "error": {"code": -32603, "message": "An error occurred handling your request: BrokenProcessPool('A child process terminated abruptly, the process pool is not usable any
+[1790810890.443] incoming: {"jsonrpc": "2.0", "id": null, "error": {"code": -32603, "message": "An error occurred handling your request: BrokenProcessPool('A child process terminated abruptly, the process pool is not usable any
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:453
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:480
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581
+=== watchdog: 4 tasks ===
+  Task-3: runtime.py:480
+  Task-2: base_events.py:677 <- base_events.py:2046 <- events.py:94 <- acp.py:556
+  acp.Sender.loop: sender.py:46
+  Task-1: acp.py:581

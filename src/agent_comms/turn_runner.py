@@ -36,7 +36,7 @@ from .runtime import (
     RuntimeServer,
     SocketClient,
 )
-from .runtime_info import AgentRuntimeInfo
+from .pi_payloads import StateData
 from .session_lifecycle import SessionLifecycle
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
@@ -182,7 +182,7 @@ class TurnRunner:
             "PI_WORKTREE": worktree,
         }
 
-    async def prepare_selected_session(self, session_id: str, thread: Thread) -> AgentRuntimeInfo:
+    async def prepare_selected_session(self, session_id: str, thread: Thread) -> StateData:
         from .native_session_prepare import NativeSessionPreparation
 
         if thread.session_file is None:
@@ -195,17 +195,12 @@ class TurnRunner:
             environment=self.native_environment(thread, thread.worktree),
             session_file=thread.session_file,
         )
-        if state.model is None or state.model.display_name != thread.model:
-            raise ValueError("Prepared native model does not match the owner selection")
-        return AgentRuntimeInfo(
-            thread=thread.name,
-            model=state.model.display_name,
-            session_name=state.session_name,
-            context_size=state.model.context_window,
-        )
+        state.model.require_selection(thread.model)
+        return state
 
     async def prompt_owned(
-        self, session_id: str, prompt: list[Any], *, display_text: str | None = None
+        self, session_id: str, prompt: list[Any], *, display_text: str | None = None,
+        input_id: str | None = None,
     ) -> PromptResponse:
         turn_task = asyncio.current_task()
         assert turn_task is not None
@@ -241,10 +236,12 @@ class TurnRunner:
                     agent_task or "",
                     images=images,
                     display_text=display_text,
+                    input_id=input_id,
                 )
             elif agent_task:
                 await self.inputs.run_owned_input(
-                    session_id, thread_name, agent_task, display_text=display_text
+                    session_id, thread_name, agent_task, display_text=display_text,
+                    input_id=input_id,
                 )
             else:
                 turn_id = uuid4().hex

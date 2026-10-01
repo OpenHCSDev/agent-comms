@@ -1,0 +1,129 @@
+{
+  "state": "failed-before-editor-click-and-enter",
+  "ready": false,
+  "terminal": {
+    "exit_code": 1,
+    "elapsed_seconds": 43.75346559297759,
+    "stage": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930",
+    "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "toad": "d3ba4cf330acd4d2eec6cd806fab8113c3a046ec",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+    "driver": "f265a9f240da62e51e7736c4299c7388cca64ecc",
+    "runtime_activation_unchanged": true,
+    "manual_replay": false,
+    "old_u02_preserved": true,
+    "public_mutations": 0,
+    "paid_calls": 0,
+    "gate": "existing actual native+ACP+LinuxDriver firstfork/five original preDelivery/oncechat/cancel; raw source proof review pending"
+  },
+  "raw_root": "/home/ts/wt/g458g/u01",
+  "actual": {
+    "physical_driver": "LinuxDriver",
+    "headless": false,
+    "frames": 183,
+    "frame_span_seconds": 36.026835355,
+    "frames_with_submissions": 0,
+    "frames_with_queue": 0,
+    "frames_with_mounted_native_starts": 0,
+    "controlled_provider_posts": 0,
+    "provider_errors": [],
+    "native_session_file": null,
+    "first_input_id": null,
+    "input_disposition": "no-original-input-created-before-failure",
+    "database_counts": {
+      "native_prompt_bindings.sqlite3": {
+        "snapshot_meta": 1,
+        "prompt_binding": 0
+      },
+      "coordination.sqlite3": {
+        "wake_claims": 0,
+        "execution_claims": 0,
+        "participants": 1,
+        "participant_aliases": 1,
+        "owner_generations": 1,
+        "attempts": 0,
+        "replay_assessments": 0,
+        "current_executions": 1,
+        "executions": 0,
+        "schema_meta": 1,
+        "publication_intents": 0,
+        "publication_receipts": 0,
+        "connectivity": 0,
+        "recovery_audit": 0,
+        "sqlite_sequence": 0,
+        "obligations": 0,
+        "native_runtime_schema_meta": 1,
+        "native_runtime_input": 0,
+        "current_native_cursor": 0,
+        "cohort_schema_meta": 1,
+        "claim_batch_receipts": 0,
+        "claim_batch_members": 0,
+        "cohort_delivery_receipts": 0,
+        "awareness_schema_meta": 1,
+        "awareness_claim_generations": 0,
+        "response_schema_meta": 1,
+        "publication_append_dispatches": 0
+      },
+      "bus_route_counts.sqlite3": {
+        "route_source": 1,
+        "route_entry": 0,
+        "route_total": 0
+      },
+      "private_bus_checkpoint.sqlite3": {
+        "response_keys": 0,
+        "delivery_sources": 0,
+        "addressed": 0,
+        "prefix_certificate": 1
+      }
+    },
+    "bus_bytes": 0,
+    "cleanup_remaining": []
+  },
+  "failure": {
+    "exception": "textual.pilot.WaitForScreenTimeout",
+    "site": "saved_state_user_journey_pilot.py:238 submit_editor first pilot.pause",
+    "observed_order": [
+      "managed private owner attached",
+      "input_presentation_gate stopped own private worker",
+      "submit_editor requested reveal then awaited screen barrier",
+      "screen barrier timed out before editor click/insert/Enter",
+      "fixture finally released worker then canonical owner stop completed"
+    ],
+    "source_explanation": "Original Conversation.on_agent_ready queues GoalObservation.refresh and InputDeliveryObservation.refresh. SessionObservation.refresh awaits original read; input_delivery resolves an original RuntimeProxy request to the stopped worker. Pilot pause waits queued widget callbacks. Holding worker before editor readiness can prevent this barrier from finishing. No stopped-time task stack was retained; attribution to the exact pending callback remains source-based inference, not a measured stack.",
+    "owner": "Kepler251 original fixture control",
+    "pending_caption_verdict": "not exercised; no Enter. Do not waive previous original u02 double-caption failure.",
+    "compositor_owner": "Heisenberg252/Textual15, directly notified; this original attempt does not assess merged compositor fix"
+  },
+  "required_workflow": "Physical Enter -> exactly one visible pending or queued caption before native Started -> exactly one original native/saved/chat transfer for all five inputs and immediate fork/cancel. Current attempt proves none of these input transitions.",
+  "effects": {
+    "production_changes": 0,
+    "production_lines_deleted": 0,
+    "public_mutations": 0,
+    "paid_calls": 0,
+    "manual_replay": false,
+    "fixture_restart": false,
+    "defaults_changed": false,
+    "runtime_activation_unchanged": true
+  },
+  "next": "Kepler corrects original readiness-before-worker-hold control boundary; retain all original negatives. No automatic rerun/replay or timeout/oracle relaxation. Parent owns next gate/cutover disposition.",
+  "sha256": {
+    "terminal.timing": "4e95a7cfcc59ca0caaeb3ddf5405a4e6bca16bf5f624fced61d69a56c28c07a4",
+    "launch.json": "979bd2dc537f2415817600afd22e93cf337ed5818f0b1c2d763c20e33050559d",
+    "terminal-receipt.json": "78fe5a3b54764a53c8a03f1b4f356589eb68f5a1e374800662d2ab0ee8b3a5a3",
+    "terminal.ansi": "64e2d94c445958e5060d968772183f04772efae8df561e22e793dfebee240d75",
+    "provider-failures.json": "a6fc30eec065b4f634b270fb3d419d5b2f24c8bf11a5cff6e943ad02a6aa053d",
+    "cleanup-review.json": "b5346eb530ef3302dc26cc33a034dc436d1827fb8c0b41eafdbb0761de8890b8",
+    "toad-acp.log": "421ad0ad9f99dbbb591e1ecfda07e8a651df258be3e84393d3e8539e92e2a294",
+    "acceptance-failure.txt": "4a15dc3722ba032d7695747749ccf5a30067f40674179de33f7ded12b300dbd2",
+    "owner-582cab0ee27a96c4b675b7614162defa-2f34cf8a596c4b5b880a26711640cd23.log": "632d1131e90aed1cd03587ef58c309c45fdc7862fed4e2826534c12d7ef37f48",
+    "input-frames.jsonl": "67428988e51e8989192d197238f5787d99da60a0a7b42752458c7480f1360ab8"
+  },
+  "reviewed_control_correction": {
+    "owner": "Kepler251",
+    "head": "e1d9ba540ef1cc6eb4c331e0d65fbcf90d9945ff",
+    "actual_diff": "Existing physical reveal/pause/click/insert extracted into prepare_editor. Original fixture InstalledApp.submit_editor drains those native widget callbacks with worker running, then owns original held-worker interval around physical Enter and strict before-delivery ANSI receipt. All five original callers migrated.",
+    "production_delta": 0,
+    "timeout_or_oracle_changes": 0,
+    "installed_new_attempt": "not run; original u01 remains failure"
+  }
+}

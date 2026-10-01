@@ -1,0 +1,43 @@
+{
+  "owner": "Einstein Core458 continuous actual gate",
+  "status": "prepared-waiting-exact-Sch-preflight-ready",
+  "core": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+  "toad": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+  "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c",
+  "sdk": "0.12.1",
+  "native": "593b978a717ae8f6",
+  "driver": "214aaacba056cf582c2f4d39387872e25bd9537f",
+  "test_files": [
+    {
+      "file": "tests/input_visibility_native_installed_pilot.py",
+      "sha256": "534329188d7e66f4b694eda8f5b05d54fb9bb0f941f43897637d9ba966aa27f3",
+      "byte_equal_final250": true
+    },
+    {
+      "file": "tests/first_fork_native_installed_pilot.py",
+      "sha256": "03869c043d31ee4b1e3ca675d8e3a8ca856872b6198244187ab3d6810c231208",
+      "byte_equal_final250": true
+    },
+    {
+      "file": "tests/saved_state_user_journey_pilot.py",
+      "sha256": "96983bad6cbde69860a3f21c36847374943239c55348d460be68691175fe80cf",
+      "byte_equal_final250": true
+    },
+    {
+      "file": "tests/l0a_native_installed_pilot.py",
+      "sha256": "6086cbc3c671537d92b8c95c8f6f80c28a88813d001090c18fa04b7eb963878b",
+      "byte_equal_final250": true
+    },
+    {
+      "file": "tests/runtime_fixture.py",
+      "sha256": "2080002916a9d42ae98941e4548be3359ece5a6d6ce8d9391fb14399f40eb08f",
+      "byte_equal_final250": true
+    }
+  ],
+  "scope": "single real native/ACP/LinuxDriver preseed row/menuclose and five original pending-beforeStarted/once-native-saved-chat/fork/cancel",
+  "public_effects": 0,
+  "paid_calls": 0,
+  "original_replay": false,
+  "retained_failed_originals": "/home/ts/wt/g458g and /home/ts/wt/g458f",
+  "resource_policy": "one bounded fixture; independent BUS allowed concurrently"
+}

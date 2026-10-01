@@ -9,15 +9,11 @@ has no bus/registry/SQLite reads, inbox cursor, or model-launch operation.
 from __future__ import annotations
 
 import json
-from typing import Literal
-
-from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 
-from .bus_publication import CommittedDelivery, stable_thread_lookup
+from .bus_publication import CommittedDelivery
 from .threads import Thread
-from .wake import WakeDecision, derive_exact_reply_target
 
 
 def render_selected_wake_frame(
@@ -25,7 +21,6 @@ def render_selected_wake_frame(
     assignment: WakeAssignment,
     owner: Thread,
     *,
-    phase: Literal["triage", "full"],
     obligation: ResponseObligation | None = None,
 ) -> str:
     """Render one selected wake; do not manufacture one from message text.
@@ -34,58 +29,15 @@ def render_selected_wake_frame(
     live owner. These exact-data checks are defense in depth, not admission.
     A bounded triage has no response obligation until it engages FULL work.
     """
-    if (
-        phase not in {"triage", "full"}
-        or assignment.wire_seq != initial.message.seq
-        or assignment.message_id != initial.message.message_id
-        or assignment.recipient != owner.name
-        or assignment.recipient_lookup != stable_thread_lookup(owner.created_at)
-    ):
-        raise IdentityConflict("wake frame does not match a committed recipient")
-    selected = [
-        decision
-        for recipient, decision in zip(initial.audience.recipients, initial.decisions, strict=True)
-        if recipient.recipient_lookup == assignment.recipient_lookup
-        and recipient.canonical_thread == owner.name
-        and isinstance(decision, WakeDecision)
-        and decision.recipient == assignment.recipient_lookup
-        and decision.audience is assignment.audience
-        and decision.wake_mode == assignment.lifecycle.mode
-    ]
-    if len(selected) != 1:
-        raise IdentityConflict("wake frame requires one selected N/K recipient")
-    if phase == "triage":
-        if not assignment.lifecycle.triage_pending or obligation is not None:
-            raise IdentityConflict("bounded triage cannot inherit a response obligation")
-        expectation = assignment.lifecycle.mode.triage_expectation()
-        obligation_line = "No response obligation exists until triage engages."
-    else:
-        target = derive_exact_reply_target(initial.message)
-        if (
-            not assignment.lifecycle.engaged
-            or obligation is None
-            or not obligation.lifecycle.pending
-            or obligation.exact_target != target
-            or assignment.lifecycle.execution_id != obligation.execution_id
-        ):
-            raise IdentityConflict("full wake frame requires the current response obligation")
-        expectation = assignment.lifecycle.mode.full_expectation()
-        obligation_line = "you owe a response: " + json.dumps(
-            {
-                "target": obligation.exact_target,
-                "source_seq": assignment.wire_seq,
-                "execution_id": obligation.execution_id,
-            },
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
+    assignment.require_selected_source(initial, owner)
+    expectation, obligation_line = assignment.lifecycle.wake_frame(initial.message, obligation)
     selected_line = json.dumps(
         {
             "source_seq": assignment.wire_seq,
             "claim_id": assignment.assignment_id,
             "sender": initial.message.sender,
             "target": initial.message.target,
-            "audience": selected[0].audience.value,
+            "audience": assignment.audience.value,
             "wake_mode": assignment.lifecycle.mode.declared_name,
         },
         ensure_ascii=True,

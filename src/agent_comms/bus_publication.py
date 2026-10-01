@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
 from .wire_record import WireRecord
+from .field_codec import TextRepresentation
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
@@ -25,6 +26,20 @@ INITIAL_CODEC: Final = "audience-v1"
 _DECISION_DOMAIN: Final = b"agent-comms:cohort-decisions:v1\0"
 _HEX32: Final = re.compile(r"[0-9a-f]{32}\Z")
 _HEX64: Final = re.compile(r"[0-9a-f]{64}\Z")
+
+
+class StableLookupText(TextRepresentation):
+    """Private source lookup spelling owned by the original bus publication."""
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if _HEX32.fullmatch(value) is None:
+            raise ValueError("Invalid private stable recipient lookup")
+        return value
 
 
 def _canonical(value: object) -> bytes:
@@ -128,6 +143,18 @@ class CommittedDelivery(WireRecord):
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
     receipt: KeyedResponseReceipt | None = None
+
+    def direct_for(self, recipient_lookup: str) -> bool:
+        """Direct reply semantics and its original addressed incarnation agree."""
+        policy = self.message.response_policy
+        return (
+            policy.starts_turn
+            and policy.separate_turn
+            and any(
+                recipient.recipient_lookup == recipient_lookup
+                for recipient in self.audience.recipients
+            )
+        )
 
     @classmethod
     def from_wire(cls, record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:

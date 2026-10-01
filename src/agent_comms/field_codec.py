@@ -37,6 +37,8 @@ class FieldRepresentation(ABC):
     ordinary JSON. All record structure remains owned by FieldCodec.
     """
 
+    accepts_null = False
+
     @classmethod
     @abstractmethod
     def encode(cls, value: object) -> object: ...
@@ -70,6 +72,61 @@ class WireValue(FieldRepresentation):
     def decode(cls, value: object) -> Self:
         FieldCodec.encode(value)  # Custom forms still cross the JSON boundary.
         return cls.from_wire(value)
+
+
+class JsonShapeMember:
+    """A declared external JSON shape with one typed ``value`` field.
+
+    Concrete members opt in to shape selection. Other members of their nominal
+    family can represent decoded meanings without becoming ingress candidates.
+    """
+
+    @classmethod
+    def from_json_value(cls, value):
+        return cls(value=value)
+
+
+class JsonShapeFamily(WireValue):
+    """Untagged external JSON enters one declaration-owned value family.
+
+    Put DeclaredFamily before this capability in the root's bases, preserving
+    its name-decoding contract. Each JsonShapeMember declares
+    its external shape through its value annotation; this codec owns primitive
+    selection and recursive conversion. Rendering stays with the value owners.
+    """
+
+    accepts_null = True
+
+    @classmethod
+    def _value_annotation(cls, member):
+        if tuple(item.name for item, _ in FieldCodec._fields(member)) != ("value",):
+            raise TypeError("A JSON shape must declare one value field")
+        return FieldCodec._types(member)["value"]
+
+    @classmethod
+    def from_wire(cls, data):
+        if not issubclass(cls, DeclaredFamily):
+            raise TypeError("A JSON shape family requires a declared family")
+        owners = []
+        for member in cls.members_with(JsonShapeMember):
+            annotation = cls._value_annotation(member)
+            shape = get_origin(annotation) or annotation
+            if shape in (tuple, frozenset):
+                shape = list
+            if shape not in (dict, list, str, int, float, bool, type(None)):
+                raise TypeError(f"Unsupported JSON shape declaration: {member.__name__}")
+            if type(data) is shape:
+                owners.append((member, annotation))
+        if len(owners) != 1:
+            raise ValueError(f"Expected one {cls.__name__} owner for {type(data).__name__}")
+        member, annotation = owners[0]
+        result = member.from_json_value(FieldCodec.decode(annotation, data))
+        if not isinstance(result, cls):
+            raise TypeError("A JSON shape factory must return its own family")
+        return result
+
+    def to_wire(self):
+        return self.value
 
 
 class TextRepresentation(FieldRepresentation):
@@ -362,7 +419,12 @@ class FieldCodec(Sealed):
     @classmethod
     def _decode(cls, target: Any, data: Any) -> Any:
         target, representation = cls._representation(target)
-        if representation is not None and data is not None:
+        if representation is not None and (data is not None or representation.accepts_null):
+            if issubclass(representation, JsonShapeFamily):
+                # Decode through the representation capability, independently
+                # of the family's public name decoder. Children validate once;
+                # WireValue's pre-validation would traverse each subtree again.
+                return representation.from_wire(data)
             return representation.decode(data)
         if target is Any:
             cls.encode(data)  # still require valid JSON data
