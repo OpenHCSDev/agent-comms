@@ -67,6 +67,23 @@ public package change or readiness claim. This journey must exercise the Core
 declared tool catalog/nested-family tool and actual Toad original/followup
 ingress/context, unlike earlier19's four stock SDK tools.
 
+The first combined32 attempt passed its read-only context query, then blocked
+before any input or provider POST: the fixture put Toad and its owner on one
+event loop. Its maintenance spawn thread held the wire lock while waiting for
+that loop, which was blocked in goal_snapshot acquiring the same lock. Stack
+evidence and originals are preserved in /home/ts/wt/s5i04. Exact owned fixture
+identities were retired; no original/public owner or input changed. Schrodinger
+owns the fixture's process separation; Einstein keeps the same full journey.
+This is not installed feature readiness or authorization to repeat the failed
+attempt. The continuous custom-tool receiving boundary remains unproven.
+
+Heisenberg's private performance journey need not wait for public477 carry:
+Mendel's already-valid private g477/p01 root supported combined06's physical
+Saved/native original41MB/End/IRC path. Mendel hands off that existing certified
+fixture directly; Heisenberg retains the whole A/B/A/fast/reverse/End/idle
+video/profile journey and its source work. Public acceptance still follows the
+quiet installation. No copied provenance defaults or public old-manifest binding.
+
 ## Quiet history carry
 
 Both original archive locks/seals passed read-only with authentic installed720.
