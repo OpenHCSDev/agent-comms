@@ -54,3 +54,21 @@ closes the required relation across every consumer. No new classes or copied
 decisions. Wire/store/native formats unchanged. Final batched sanity and an
 affected installed original native/ACP/UI journey come last; no passing or
 Ready claim has been made yet.
+
+## Implemented declaration checkpoint
+
+One production declaration changes: summary_phase now has compare=False in
+the existing CompactionSourceProgress, as observed_at_ms already does. The
+full original wire field remains encoded/decoded. Aggregate counters/start
+still distinguish source work; CompactionPhase's operation ID and lifecycle
+remain exact. No type, policy, timer, cache, observer inventory or ABI is added.
+Production delta: one deleted line / three added, including the source rationale.
+
+After completing source reasoning and implementation, one final focused batch
+ran existing progress/codec/phase controls, extending its unchanged-work case
+over all concurrent leaf observations. Eight passed in 0.11s. These controls
+check raw leaf text/phase survive FieldCodec and ACP update encoding while
+unchanged whole-operation work does not become a new turn state. They are not
+an installed configured native/UI qualification. That remains unfilled and
+must join the existing receiving configured compaction journey, without
+replaying the completed original 95fe or creating a competing provider fixture.

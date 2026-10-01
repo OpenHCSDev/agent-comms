@@ -7,7 +7,9 @@ from dataclasses import dataclass, field
 class CompactionSourceProgress:
     source_bytes_done: int = field(metadata={"wire_name": "sourceBytesDone"})
     source_bytes_total: int = field(metadata={"wire_name": "sourceBytesTotal"})
-    summary_phase: str = field(metadata={"wire_name": "summaryPhase"})
+    # Concurrent leaves emit through the same original operation plan. Their
+    # identity is retained in each event, not a new whole-turn source state.
+    summary_phase: str = field(compare=False, metadata={"wire_name": "summaryPhase"})
     started_at_ms: int = field(metadata={"wire_name": "startedAtMs"})
     # An observation time measures the stream; it does not change source state.
     # Existing turn equality avoids a registry rewrite for every text/heartbeat.
