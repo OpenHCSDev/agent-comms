@@ -14,6 +14,7 @@ from pathlib import Path
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_cutover import PreserveOwnerRuntime
 from publish_retained_summary import ReviewedRetainedSummaryCohort, publish
+from retained_summary_reset import ResetCompactionPolicy
 
 
 def main():
@@ -26,7 +27,8 @@ def main():
         parser.error('Parent execution approval is required; --help has no public effects')
     cohort = FieldCodec.decode(ReviewedRetainedSummaryCohort,
                                json.loads(args.review_plan.read_text()))
-    results = publish(cohort, PreserveOwnerRuntime(), args.receipt)
+    results = publish(cohort, PreserveOwnerRuntime(), args.receipt,
+                      runtime_policy=ResetCompactionPolicy(cohort.original_route.root))
     print(json.dumps({'state':'retained-foundation-published-and-launched',
                       'owners':len(results)}), flush=True)
 
