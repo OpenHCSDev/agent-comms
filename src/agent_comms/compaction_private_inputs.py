@@ -6,6 +6,7 @@ import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from weakref import WeakKeyDictionary
@@ -103,20 +104,28 @@ class PrivateInputs(JournalRole):
         only attempting the one raw write; it never proves provider acceptance
         or authorizes later selected summary reservation.
         """
-        if type(input_id) is not str or not re.fullmatch(r"[0-9a-f]{32}", input_id):
-            raise CompactionJournalError("Exact private raw input ID required")
+        with self.admission(session_file) as admitted:
+            admitted.mark_unknown(input_id)
+
+    @contextmanager
+    def admission(
+        self, session_file: Path, *, blocking: bool = True
+    ) -> Iterator[PrivateInputSend]:
+        """Acquire ALL input/journal custody before consuming raw admission.
+
+        The original SQLite EXCLUSIVE connection retains its file lock across
+        the durable UNKNOWN checkpoint. There is no post-token lock upgrade or
+        second connection gap between that checkpoint and the raw send.
+        """
         canonical = str(session_file.resolve(strict=False))
-        try:
-            with (
-                InputDispositions(
-                    self.journal.path.parent / InputDispositions.filename
-                ).reading() as inputs,
-                self.journal.transaction() as db,
-            ):
-                self.require_clear(db, canonical, inputs)
-                PrivateRawInput(input_id, canonical).insert(db)
-        except sqlite3.IntegrityError as error:
-            raise CompactionJournalError("Private raw input ID already reserved") from error
+        with (
+            InputDispositions(
+                self.journal.path.parent / InputDispositions.filename
+            ).reading(blocking=blocking) as inputs,
+            self.journal.transaction(blocking=blocking, retain_exclusion=True) as db,
+        ):
+            self.require_clear(db, canonical, inputs)
+            yield PrivateInputSend(self.journal, db, canonical, inputs)
 
     @contextmanager
     def send_fence(
@@ -137,17 +146,9 @@ class PrivateInputs(JournalRole):
         private_sessions = (self.journal.path.parent / "native-sessions").resolve(strict=False)
         if Path(canonical).is_relative_to(private_sessions) and private_input_id is None:
             raise CompactionJournalError("Private raw send requires durable prewrite marker")
-        with (
-            InputDispositions(
-                self.journal.path.parent / InputDispositions.filename
-            ).reading() as inputs,
-            self.journal.transaction() as db,
-        ):
-            self.require_clear(db, canonical, inputs)
-            if private_input_id is not None and PrivateRawInput.one(
-                db, input_id=private_input_id
-            ) != PrivateRawInput(private_input_id, canonical):
-                raise CompactionJournalError("Exact durable private raw prewrite marker required")
+        with self.admission(session_file) as admitted:
+            if private_input_id is not None:
+                admitted.require_marker(private_input_id)
             yield
 
     def require_coverage(
@@ -172,3 +173,32 @@ class PrivateInputs(JournalRole):
             db, canonical, inputs
         ):
             raise CompactionJournalError("Selected or unresolved journal blocks native input")
+
+
+@dataclass
+class PrivateInputSend(PrivateInputs):
+    """Original held resources, not another input or admission authority."""
+
+    db: sqlite3.Connection
+    canonical: str
+    inputs: InputDocument
+
+    def mark_unknown(self, input_id: str) -> None:
+        if type(input_id) is not str or not re.fullmatch(r"[0-9a-f]{32}", input_id):
+            raise CompactionJournalError("Exact private raw input ID required")
+        self.require_clear(self.db, self.canonical, self.inputs)
+        try:
+            PrivateRawInput(input_id, self.canonical).insert(self.db)
+        except sqlite3.IntegrityError as error:
+            raise CompactionJournalError("Private raw input ID already reserved") from error
+        self.journal.commit(self.db)
+        # locking_mode=EXCLUSIVE preserves the SAME SQLite file exclusion even
+        # between transactions; this begins under custody already granted.
+        self.db.execute("BEGIN EXCLUSIVE")
+        self.require_marker(input_id)
+
+    def require_marker(self, input_id: str) -> None:
+        if PrivateRawInput.one(self.db, input_id=input_id) != PrivateRawInput(
+            input_id, self.canonical
+        ):
+            raise CompactionJournalError("Exact durable private raw prewrite marker required")

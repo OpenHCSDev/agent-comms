@@ -31,6 +31,8 @@ const kept=manager.appendMessage({role:'user',content:[
     {type:'image',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',mimeType:'image/png'},
 ],timestamp:3});
 manager.appendCompaction('Original source summary.',kept,100);
+if (process.argv.includes('--retained-history'))
+    manager.appendMessage({role:'user',content:'Representative retained native history. '.repeat(3000),timestamp:4});
 manager.appendCustomMessageEntry('source-contract','Original injected delivery',true);
 const {session}=await pi.createAgentSession({cwd,agentDir,modelRuntime:runtime,
     settingsManager:settings,sessionManager:manager,resourceLoader:loader});
@@ -61,7 +63,8 @@ try {
         assert.throws(()=>NativeInputClaim.capture(digest,request,[{...coordinates,...invalid}]));
     assert.equal(claim.observe({...original,content:'Extension transformed input'},preview,journal)[0].kind,
         'transformed_input');
-    const changedImage={...original,content:[original.content[0],{...images[0],data:'AAAA'}]};
+    const changedImage={...original,content:[original.content[0],{...images[0],
+        data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=='}]};
     assert.equal(claim.observe(changedImage,preview,journal)[0].kind,'transformed_input');
     assert.equal(JSON.stringify(captured.render()),JSON.stringify(provider));
     assert.deepEqual(readFileSync(manager.getSessionFile()),before);

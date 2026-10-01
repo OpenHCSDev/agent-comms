@@ -1,0 +1,12 @@
+{
+  "state": "FINAL_SOURCE_INTEGRATED_CONTROLLED_INSTALLED_GATE_PENDING",
+  "head": "f4dfe31f550085b03e4b7b275f623896ae0b851a",
+  "foundation": "0ea6dccbd39b1f8656e2fc2ad983046244d9312d",
+  "s5_production_native_delta": [],
+  "native_manifest_unchanged": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1",
+  "source_gate_plan": "docs/checkpoints/s2-s5-final-receiving-journey-20261001.md",
+  "old_configured_receipt_scope": "Exact43df/89655/0064 only; preserved51.415s acceptance",
+  "final_stage_ready": false,
+  "new_provider_calls": 0,
+  "public_changes": []
+}
