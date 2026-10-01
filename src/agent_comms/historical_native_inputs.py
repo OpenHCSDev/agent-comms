@@ -69,6 +69,16 @@ class TriageHistoricalNativeInput(HistoricalNativeInput):
 
 
 @dataclass(frozen=True, kw_only=True)
+class FailedTriageHistoricalNativeInput(HistoricalNativeInput):
+    """Canonical failed claim plus live-recorded context; no decision fabricated."""
+
+    execution: TriageNativeExecution
+
+    def proves_triage_source(self, evidence) -> bool:
+        return self.expected_prompt_equality_established
+
+
+@dataclass(frozen=True, kw_only=True)
 class FullHistoricalNativeInput(HistoricalNativeInput):
     execution: FullNativeExecution
 
@@ -175,6 +185,7 @@ def read_historical_native_inputs(
         evidence.append(
             row.execution.historical_proof(
                 row,
+                lifecycle=store.assignments.get(row.assignment_id).lifecycle,
                 wire_root_id=wire_root_id,
                 source_seq=source.wire_seq,
                 source_message_id=source.message_id,

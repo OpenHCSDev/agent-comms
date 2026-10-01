@@ -8,12 +8,15 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .assignment_states import IgnoredAssignment, TriagePendingAssignment
-from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, TextRepresentation
+from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, TextRepresentation
 from .typed_table import TextStorage
 from .pi_rpc import unique_fields
+
+
+class InvalidTriageDecision(ValueError):
+    """A model result violates its contract; participant identity is unchanged."""
 
 
 class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
@@ -22,11 +25,11 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     @classmethod
     def parse(cls, text: str) -> SelectedTriage:
         if not 0 < len(text.encode("utf-8")) <= 256:
-            raise IdentityConflict("triage response is not bounded")
+            raise InvalidTriageDecision("triage response is not bounded")
         try:
             return FieldCodec.decode(cls, json.loads(text, object_pairs_hook=unique_fields))
         except (ValueError, TypeError) as error:
-            raise IdentityConflict("triage response is not an unambiguous decision") from error
+            raise InvalidTriageDecision("triage response is not an unambiguous decision") from error
 
     @classmethod
     @abstractmethod
@@ -85,6 +88,91 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
 
     def continue_turn(self, participant, session, input_id):
         return None
+
+
+class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
+    """One decoded model result owns settlement and continued inbox behavior."""
+
+    @classmethod
+    def acquire(cls, text: str) -> SelectedTriageOutcome:
+        try:
+            return DecidedTriageOutcome(SelectedTriage.parse(text))
+        except InvalidTriageDecision as error:
+            return RejectedTriageOutcome(error)
+
+    @abstractmethod
+    def settle(self, participant, stage, admission, context) -> None: ...
+
+    @abstractmethod
+    def continue_turn(self, participant, session, input_id): ...
+
+
+@dataclass(frozen=True)
+class DecidedTriageOutcome(SelectedTriageOutcome):
+    decision: SelectedTriage
+
+    def settle(self, participant, stage, admission, context):
+        stage.commit(participant.store, participant.identity, admission.input_id,
+                     admission.token_digest, context, self.decision)
+
+    def continue_turn(self, participant, session, input_id):
+        return self.decision.continue_turn(participant, session, input_id)
+
+
+@dataclass(frozen=True)
+class RejectedTriageOutcome(SelectedTriageOutcome):
+    error: InvalidTriageDecision
+
+    def settle(self, participant, stage, admission, context):
+        from .selected_result import publish_native_failure
+
+        stage.reject(participant.store, participant.identity, admission.input_id,
+                     admission.token_digest, context)
+        publish_native_failure(participant, admission.input_id,
+                               "The selected model returned an invalid triage decision.",
+                               source_error=self.error)
+
+    def continue_turn(self, participant, session, input_id):
+        from .selected_result import CoordinatedTurn
+
+        return CoordinatedTurn.failed(participant, session, input_id)
+
+
+class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):
+    """Decode the original nullable SQL scalar once, without inventing a verdict."""
+
+    @abstractmethod
+    def historical_proof(self, record, lifecycle, execution, **source): ...
+
+
+@dataclass(frozen=True)
+class TriageDecisionText(TriageDecisionRecord, JsonShapeMember):
+    value: str
+
+    @classmethod
+    def from_json_value(cls, value):
+        return DecidedTriageRecord(FieldCodec.decode(type[SelectedTriage], value))
+
+    def historical_proof(self, record, lifecycle, execution, **source):
+        raise TypeError("Triage decision text must be decoded at ingress")
+
+
+@dataclass(frozen=True)
+class DecidedTriageRecord(TriageDecisionRecord):
+    decision: type[SelectedTriage]
+
+    def historical_proof(self, record, lifecycle, execution, **source):
+        from .historical_native_inputs import TriageHistoricalNativeInput
+
+        return TriageHistoricalNativeInput(execution=execution, decision=self.decision, **source)
+
+
+@dataclass(frozen=True)
+class AbsentTriageDecisionRecord(TriageDecisionRecord, JsonShapeMember):
+    value: None = None
+
+    def historical_proof(self, record, lifecycle, execution, **source):
+        return lifecycle.rejected_triage_history(execution, **source)
 
 
 class RecordedTriageText(TextRepresentation):

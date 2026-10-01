@@ -25,7 +25,7 @@ from .selected_participant import SelectedParticipant
 from .selected_request import SelectedRequest
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
-from .selected_triage import SelectedTriage
+from .selected_triage import SelectedTriageOutcome
 from .wake import derive_exact_reply_target
 from .wake_candidate_index import WakeCandidateIndex
 from .wake_injection import render_selected_wake_frame
@@ -290,16 +290,9 @@ class SelectedConsideration:
                 observe_event=participant.dispatch,
             )
             participant.transition(PublishingPhase())
-            decision = SelectedTriage.parse(result.text)
-            stage.commit(
-                participant.store,
-                participant.identity,
-                request.admission.input_id,
-                request.admission.token_digest,
-                result.context,
-                decision,
-            )
+            outcome = SelectedTriageOutcome.acquire(result.text)
+            outcome.settle(participant, stage, request.admission, result.context)
             continued = session.continued(result.context.session_file)
-            return continued, decision.continue_turn(
+            return continued, outcome.continue_turn(
                 participant, continued, request.admission.input_id
             )

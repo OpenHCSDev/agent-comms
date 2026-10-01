@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 
-from .assignment_states import AssignmentState, CompletedAssignment, IgnoredAssignment
+from .assignment_states import AssignmentState, CompletedAssignment, FailedAssignment, IgnoredAssignment
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
@@ -25,6 +25,18 @@ class CoordinatedTurn:
     exact_target: str | None
     cursor_status: str = "unavailable"
     fresh_session: FreshPrivateSession | None = None
+
+    @classmethod
+    def failed(cls, participant, session, input_id):
+        return cls(
+            participant.assignment.assignment_id,
+            FailedAssignment,
+            input_id,
+            None,
+            None,
+            cls.cursor_status_for(participant, input_id),
+            session.creation,
+        )
 
     @classmethod
     def ignored(cls, participant, session, input_id):

@@ -10,7 +10,7 @@ from pathlib import Path
 from contextlib import contextmanager
 from collections.abc import Iterator
 
-from .assignment_states import DeferredAssignment
+from .assignment_states import DeferredAssignment, FailedAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_tables.assignments import WakeAssignment
@@ -205,6 +205,24 @@ class NativeSendStage(ABC):
 
 
 class TriageNativeSend(NativeSendStage):
+    def reject(self, store, owner, input_id, token_digest, context):
+        """Settle this proved result atomically; never reserve a replacement input."""
+        with store.session.transaction() as db:
+            row = self.pending_input(store, input_id, owner, token_digest)
+            current = store.assignments.get(self.assignment.assignment_id)
+            self.require_phase(store, current)
+            row.commit_context(db, context)
+            updated = WakeAssignment.update(
+                db,
+                where="assignment_id=? AND revision=?",
+                parameters=(current.assignment_id, current.revision),
+                lifecycle=current.lifecycle.preengagement(FailedAssignment),
+                revision=current.revision + 1,
+                updated_at_ms=store.session.now(current.updated_at_ms),
+            )
+            if updated.rowcount != 1:
+                raise StaleFence("rejected triage lost its original claim")
+
     @property
     def execution(self) -> TriageNativeExecution:
         return TriageNativeExecution()
