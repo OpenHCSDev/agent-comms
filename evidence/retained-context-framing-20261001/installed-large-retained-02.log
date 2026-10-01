@@ -1,0 +1,72 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+____________ test_actual_cold_retained_commit_and_reopen[adaptive] _____________
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owned_turn.py:447: in run_native
+    await self.prepare_native()
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owned_turn.py:352: in prepare_native
+    self.committed = await maybe_compact_owner_turn(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_adaptive.py:164: in maybe_compact_owner_turn
+    operation = await compact_owner_once(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_runtime.py:126: in compact_owner_once
+    admission = result.admit_original(bridge, owner, owner_generation, operation, source)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_runtime.py:44: in admit_original
+    return bridge.admit_selected_original(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_commit.py:201: in admit_selected_original
+    with self.boundary.hold(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/compaction_boundary.py:53: in hold
+    native_facts = witness.retained_task_facts()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:60: in retained_task_facts
+    return evidence.retained_task_facts(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/native_entries.py:232: in retained_task_facts
+    witness.require_current_file(self.source.path)
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:54: in require_current_file
+    raise ValueError("Native retained source changed since preparation")
+E   ValueError: Native retained source changed since preparation
+
+The above exception was the direct cause of the following exception:
+tests/test_retained_manual_compaction.py:163: in test_actual_cold_retained_commit_and_reopen
+    response = await build_agent_router(agent)(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/acp/router.py:184: in __call__
+    return await route.handle(params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/acp/router.py:73: in handle
+    result = await self.func(params)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/acp/router.py:107: in wrapper
+    return await func(**params)  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/acp.py:206: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/mro_dispatch.py:41: in dispatch
+    replacement = await handler(value)
+                  ^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/acp.py:280: in _prompt_request
+    return await self.turns.prompt_owned(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/turn_runner.py:256: in prompt_owned
+    await self.inputs.run_owned_input(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/input_drain.py:548: in run_owned_input
+    await item.dispatch(self.effects.turns, session_id, thread_name)
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/queued_input.py:162: in dispatch
+    await turns.run_agent_turn(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/turn_runner.py:519: in run_agent_turn
+    await OwnedTurn(
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owned_turn.py:443: in run
+    await self.run_native()
+.artifacts/retained-context-framing-20261001/runtime/lib/python3.14/site-packages/agent_comms/owned_turn.py:468: in run_native
+    raise PromptFailureReceipt(failure, True).request_error() from error
+E   acp.exceptions.RequestError: Internal error
+=========================== short test summary info ============================
+FAILED tests/test_retained_manual_compaction.py::test_actual_cold_retained_commit_and_reopen[adaptive]
+1 failed, 1 passed in 55.98s

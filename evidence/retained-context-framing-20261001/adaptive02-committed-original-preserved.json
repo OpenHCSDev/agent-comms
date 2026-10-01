@@ -1,0 +1,14 @@
+{
+  "scope": "installed-large-retained-02 adaptive; commit/recovery complete; original input admission failed",
+  "source_commit": "cc534692",
+  "reservation_bytes": 71412,
+  "intent_bytes": 73690,
+  "original_retained_summary": true,
+  "recovered_intent_and_outcome": true,
+  "summary_state": "reserved",
+  "operation_state": "committed",
+  "input_rows": [
+    "not_sent"
+  ],
+  "remaining": "postcommit original admission recaptures precommit native cut; do not replay"
+}
