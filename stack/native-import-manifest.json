@@ -26,12 +26,12 @@
       "sources": [
         {
           "path": "/home/ts/.pi/agent/extensions/project-sync/index.ts",
-          "sha256": "545decea80b2fb64d57f8f7ffd88b99496874b9a4bb08666ea852bdaae36c87e",
+          "sha256": "53ccfd898b885a9033ebec6fab0f646c0c0cd7a063eca1e67dca17239e5fe76b",
           "snapshot": "extensions/pi-project-sync/global-entry.ts",
-          "bytes": 85
+          "bytes": 39
         },
         {
-          "path": "/home/ts/.agent-comms/extensions/pi-project-sync/index.ts",
+          "path": "/home/ts/.pi/agent/extensions/project-sync/source.ts",
           "sha256": "1cceb41fe65f2d58d1f9838f9314e800906a0959173beee2a21892caf2e33d69",
           "snapshot": "extensions/pi-project-sync/index.ts",
           "bytes": 1878
