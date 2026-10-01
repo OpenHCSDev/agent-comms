@@ -1,3 +1,7 @@
+## Default authored-context release verified — 2026-10-01
+
+474/282 is installed. Same17owners restarted with recorded configs;34 original protected files unchanged; runtime journal preserved, no uncertain replay. Mandatory stopped whole-wire and automatic globals/native saved27-message startup passed. Actual default isolated st/Xvfb openhcs-helper attachment25.219s completed; saved chat, Ready in sidebar/details individually viewed, original owner identity unchanged, cleanup empty. Receipt: evidence/authored474-default-20261001/receipt.json. This does not claim494 compaction framing,489 lifecycle,490 batching or275 scrolling complete.
+
 ## Authored-context paired release checkpoint — 2026-10-01
 
 Core #474 merged as ee000781; receiving Toad #282 merged as b27b8309.
