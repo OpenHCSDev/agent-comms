@@ -10,7 +10,6 @@ No model tool, Pi RPC, or producer exposes this module.
 
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
 from dataclasses import dataclass, replace
@@ -23,7 +22,6 @@ from .compaction_identity import JournalCustody, ReturnedSummaryTerminal
 from .compaction_journal import CompactionJournal
 from .compaction_records import SelectedSummarySource
 from .compaction_summaries import _consume_selected_ack
-from .field_codec import FieldCodec
 from .reservation_rules import ReservationViolationError
 from .selected_source import SelectedAdmissionSource, SessionRevision, SessionRevisionUnavailable
 
@@ -106,7 +104,7 @@ class SelectedSummaryAdmission:
             raise CompactionJournalError("Exact returned terminal fsync ACK required")
         try:
             attempt = terminal.attempt
-            source = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
+            source = attempt.envelope()
             identity.require_current(source, attempt.session_file)
             attempt.state.require_original_admission()
         except (TypeError, ValueError, OSError) as error:

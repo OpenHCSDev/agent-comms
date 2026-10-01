@@ -356,6 +356,26 @@ class NativeOutcome(DeclaredFamily, affix="NativeOutcome"):
     def bind_metadata(self, expected: str) -> NativeOutcome:
         return self
 
+    def publication_json(self, commit_id: str) -> str | None:
+        return None
+
+    def require_committed(self) -> CommittedNativeOutcome:
+        raise CompactionJournalError("Committed operation lacks committed native evidence")
+
+    def journal_json(self) -> str:
+        from .field_codec import FieldCodec
+        from .retained_task_facts import RetainedTaskFacts
+
+        return RetainedTaskFacts.frame_journal(FieldCodec.encode(self))
+
+    @classmethod
+    def read(cls, payload: str) -> NativeOutcome:
+        from .field_codec import FieldCodec
+
+        outcome = FieldCodec.decode(cls, json.loads(payload))
+        outcome.journal_json()
+        return outcome
+
 
 @dataclass(frozen=True)
 class UnknownNativeOutcome(NativeOutcome):
@@ -381,6 +401,9 @@ class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
     def require_saved_revision(self, revision: SessionRevision) -> None:
         if self.revision != revision.native_stamp:
             raise CompactionJournalError("Selected native result is unavailable: saved revision changed")
+
+    def require_committed(self) -> CommittedNativeOutcome:
+        return self
 
     def publication_json(self, commit_id: str) -> str:
         from .field_codec import FieldCodec

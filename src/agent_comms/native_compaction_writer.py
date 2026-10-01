@@ -110,8 +110,5 @@ class NativeCompactionWriter:
         except Exception as error:
             outcome = UnknownNativeOutcome(str(error)[:1024])
         outcome = outcome.bind_metadata(request.commit.metadata_digest)
-        journal.operations.resolve(
-            request.commit.commit_id, outcome.state, FieldCodec.encode(outcome),
-            publication=outcome.state.committed,
-        )
+        journal.operations.resolve(request.commit.commit_id, outcome)
         return journal.operations.get(request.commit.commit_id)

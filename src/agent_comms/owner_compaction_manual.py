@@ -7,16 +7,14 @@ Stock Pi's separate saved-session /compact remains outside canonical roots.
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
 from .backend import PersistentPiSession
 from .compaction_errors import CompactionJournalError
-from .compaction_records import SelectedSummaryAttempt
+from .compaction_records import SelectedSummaryAttempt, SelectedSummarySource
 from .compaction_result import CommittedCompactionResult
 from .compaction_states import ManualCommittedSummary
-from .field_codec import FieldCodec
 from .native_input_owner import RegistryOwner
 from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_prepare import NativePreparation
@@ -25,7 +23,7 @@ from .owner_compaction_runtime import compact_owner_once
 from .pi_payloads import StateData
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_pi_summary_rpc import SelectedSummarySlot
-from .selected_source import ManualSource, SelectedSource, SessionRevision
+from .selected_source import ManualSource, SessionRevision
 from .thread_identity import TurnId
 
 
@@ -60,7 +58,6 @@ async def compact_manual_owner(
     session_file = owner.require_saved_session()
     generation = snapshot.owner_generations[owner.name]
     selected = prepared.model.for_compaction(owner.model)
-    provider, model = selected.provider, selected.model_id
     package = runner.effects._private_nk_native_package
     if package is None:
         raise ValueError("Canonical native package is unavailable")
@@ -72,7 +69,7 @@ async def compact_manual_owner(
     refusals = bridge.journal.summaries.blocking(session_file)
     for refusal in refusals:
         refusal.state.manual_recovery()
-        prior = FieldCodec.decode(SelectedSource, json.loads(refusal.source_json)["source"])
+        prior = refusal.source()
         if prior.incarnation != owner.incarnation:
             raise CompactionJournalError("Refused selected source belongs to another owner")
         key = prior.pending_input_key
@@ -104,26 +101,17 @@ async def compact_manual_owner(
         settings.require_current(await decision())
         for refusal in refusals:
             bridge.journal.summaries.retire_refused(refusal)
-        source = {
-            "retained": FieldCodec.encode(captured.retained),
-            "source": FieldCodec.encode(
-                ManualSource(
-                    incarnation=owner.incarnation,
-                    owner=owner.process_identity,
-                    turn=TurnId(turn.id),
-                    reserved_revision=SessionRevision.observe(session_file).require_available(),
-                )
+        source = SelectedSummarySource(
+            retained=captured.retained,
+            source=ManualSource(
+                incarnation=owner.incarnation,
+                owner=owner.process_identity,
+                turn=TurnId(turn.id),
+                reserved_revision=SessionRevision.observe(session_file).require_available(),
             ),
-            "selected": {
-                "provider": provider,
-                "modelId": model,
-                "contextWindow": selected.context_window,
-            },
-            "settings": {
-                "reserveTokens": settings.reserve_tokens,
-                "keepRecentTokens": settings.keep_recent_tokens,
-            },
-        }
+            selected=selected,
+            settings=settings.summary_settings(),
+        )
         result = await SelectedSummarySlot(
             owner.name, prepared.witness.session_id
         ).run_selected_summary(

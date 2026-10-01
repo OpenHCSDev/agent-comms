@@ -9,7 +9,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass, field, fields
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .compaction_records import CompactionOperation
 from .declared_family import DeclaredFamily
@@ -17,6 +17,11 @@ from .field_codec import FieldCodec
 from .owner_compaction_prepare import NativeWitness
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 from .text_digest import TextDigest
+
+if TYPE_CHECKING:
+    from .compaction_identity import SelectedCommitReference
+    from .compaction_source import CompactionSource
+    from .owner_compaction_gate import OwnerCompactionAttestation
 
 
 @dataclass(frozen=True)
@@ -100,10 +105,35 @@ class NativeIntent:
     payload_digest: str = field(metadata={"wire_name": "payloadDigest"})
     metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
 
+    def journal_json(
+        self, owner: OwnerCompactionAttestation, source: CompactionSource,
+        selected: SelectedCommitReference | None = None,
+    ) -> str:
+        """Retain the original source view alongside the declared native intent."""
+        from .retained_task_facts import RetainedTaskFacts
+
+        record = dict(
+            FieldCodec.encode(self), owner=FieldCodec.encode(owner),
+            source=FieldCodec.project(source, "journal"),
+        )
+        if selected is not None:
+            record.update(FieldCodec.encode(selected))
+        return RetainedTaskFacts.frame_journal(
+            record, retained_payload=RetainedTaskFacts.canonical_journal_bytes(
+                FieldCodec.project(source.retained, "journal")
+            ),
+        )
+
     @classmethod
     def read(cls, operation: CompactionOperation) -> NativeIntent:
+        from .retained_task_facts import RetainedTaskFacts
+
         raw = FieldCodec.decode(dict[str, Any], json.loads(operation.intent_json))
-        return FieldCodec.decode(cls, {wire: raw[wire] for _, wire in FieldCodec._fields(cls)})
+        intent = FieldCodec.decode(cls, {wire: raw[wire] for _, wire in FieldCodec._fields(cls)})
+        # Recovery consumes this declaration's request controls, never promotes
+        # the containing journal's redacted source view into task authority.
+        RetainedTaskFacts.frame_journal(FieldCodec.encode(intent))
+        return intent
 
     def identity(self, commit_id: str) -> NativeCommitIdentity:
         return NativeCommitIdentity(commit_id, self.payload_digest, self.metadata_digest)

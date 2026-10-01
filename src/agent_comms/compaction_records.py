@@ -52,6 +52,20 @@ class SelectedSummarySource:
         if not self.source:
             raise ValueError("Selected source witness required")
 
+    def journal_json(self) -> str:
+        record = FieldCodec.encode(self)
+        return RetainedTaskFacts.frame_journal(
+            record, retained_payload=RetainedTaskFacts.canonical_journal_bytes(
+                FieldCodec.encode(self.retained)
+            )
+        )
+
+    @classmethod
+    def read(cls, payload: str) -> SelectedSummarySource:
+        source = FieldCodec.decode(cls, json.loads(payload))
+        source.journal_json()
+        return source
+
 
 class JournalTable:
     """Tables whose schema and transactions belong to the compaction journal."""
@@ -119,7 +133,9 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
 
     def committed_outcome(self) -> CommittedNativeOutcome:
         self.state.require_committed(self.commit_id)
-        return FieldCodec.decode(CommittedNativeOutcome, json.loads(self.evidence_json))
+        from .compaction_states import NativeOutcome
+
+        return NativeOutcome.read(self.evidence_json).require_committed()
 
     def represents_summary(self, attempt: SelectedSummaryAttempt) -> bool:
         """Read-only original linkage, never an input-admission capability."""
@@ -166,7 +182,10 @@ class SelectedSummaryAttempt(
             raise CompactionJournalError("Selected summary reservation changed before commit")
 
     def source(self) -> SelectedSource:
-        return FieldCodec.decode(SelectedSummarySource, json.loads(self.source_json)).source
+        return self.envelope().source
+
+    def envelope(self) -> SelectedSummarySource:
+        return SelectedSummarySource.read(self.source_json)
 
     def require_transition(self, target: SummaryState) -> None:
         if not self.state.may_become(target):
@@ -220,7 +239,7 @@ class SelectedSummaryAttempt(
         cannot retire the reservation. Historical rows and IDs stay intact.
         """
         try:
-            envelope = FieldCodec.decode(SelectedSummarySource, json.loads(self.source_json))
+            envelope = self.envelope()
             return envelope.source.original_has_started(inputs)
         except (KeyError, TypeError, ValueError):
             return False

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from abc import abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -207,6 +207,35 @@ class RetainedTaskFacts:
     """One frozen source projection; no inferred prose facts or replay authority."""
 
     facts: tuple[ExactTaskFact, ...]
+
+    journal_control_bytes: ClassVar[int] = 65536
+
+    @staticmethod
+    def canonical_journal_bytes(record: object) -> bytes:
+        return json.dumps(record, sort_keys=True, separators=(",", ":"),
+                          allow_nan=False).encode()
+
+    @classmethod
+    def frame_journal(
+        cls, record: dict[str, Any], *, retained_payload: bytes = b"null"
+    ) -> str:
+        """Bound journal controls independently of the exact retained payload.
+
+        The containing owner supplies its exact canonical retained bytes. Native
+        CompactionPolicy admits that content against the actual selected model;
+        a journal control limit is not another model/context budget. The frozen
+        payload remains in the same record, byte-for-byte under the existing
+        canonical serialization. No content is shortened or stored elsewhere.
+
+        An outcome supplies no retained payload: its entire observation,
+        including an UNKNOWN reason, is control metadata. Read-only source
+        projections are measured here without promoting them to fact authority.
+        """
+        payload = cls.canonical_journal_bytes(record)
+        control_bytes = len(payload) - len(retained_payload) + len(b"null")
+        if control_bytes > cls.journal_control_bytes:
+            raise ValueError("Compaction journal control metadata exceeds bound")
+        return payload.decode()
 
     def original_text_source(self, message: Message) -> Message:
         originals = {source.reference: source for fact in self.facts
