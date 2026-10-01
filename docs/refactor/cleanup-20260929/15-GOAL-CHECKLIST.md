@@ -33,6 +33,43 @@ remain open; no completed follow-up live gate is claimed. These do not hold this
 useful installed checkpoint. Full performance and retained-task closure remain
 active parallel work.
 
+## 18:57UTC concrete progress and latest priority
+
+Tristan's live channel wave delivered/read/acknowledged without a new failure,
+but response latencies38.344/51.318/68.343/80.013/103.254s are unacceptable.
+Arendt found the models-owner native relevance request4.98s and native answer4.60s,
+with45.83s between full execution creation and answer request begin. Singer found
+five broadcast replies generate45more claims and35native triage inputs, all IGNORE.
+This proves extra reply work, not infinite recursion or provider causation.
+Batching ALL available pending messages is now top latency priority: Kepler owns
+new backend draft/implementation, Singer readonly allocation/amplification;
+Arendt489 retains active-budget/paused-native-compaction and overall latency seams.
+One canonical pending source/claim/native-proof/receipt path, per-original handling,
+no input replay or parallel batch queue. Shared-method owners coordinate directly.
+
+Parent recovered architecture-memory's pre-install orphan PromptStarting slot
+through existing attested-owner-loss monitor: local attempt FailedExecution,
+UNKNOWN_EFFECTS512 remains replay-unsafe, NativeRuntimeInput unchanged, original
+input not retried. Idle owner restarted2009721; current execution pointer verified
+idle. Original read-only and recovery receipt at `.release-private/architecture-memory-released-slot-20261001/`.
+
+Performance latest: Heis reproduced currentdefault coldPR159history30.85s,
+heldPgUpUI79.54%CPU and idle63.33%,1361profile samples.396rows observed;
+#254near-zero travel unconfirmed. Input-focused82editor actions zerochatmovement.
+Einstein regression2 has0height/count subtreewalks over9.63sidle with33%CPU;
+PR280 publishescounter+receipt, no speculativeproductionpatch.
+Kepler regression3 confirmed12extensions cause12duplicatepageradmissions;
+8229c8b3fix deletes9productionlines andsourcehistorysanitypassed. Heis owns
+integration+actualpairedbusyvideo/profile acceptance, leftsidebarstationaryjumps
+and retainedscopeA–E. No no-frozen-frame or finalperformance claim yet.
+
+Einstein now owns complete normalmain→474 integration after Sch's all79approval;
+Sch owns one fresh matched native build combining producer776artifact ownership
+with live485projectIPC. Current default17d untouched. FullS2research and optional
+repeat evaluation do not hold this useful checkpoint. Actual integrated installed
+humanpin→compaction→export→freshanswer journey remains required once, not assumed
+from old source evidence.
+
 Performance priority is now Tristan's three recent regressions before broader
 A–E. Full required scope, discriminators and acceptance are preserved in Toad275
 and277 bodies and committed evidence/performance275-feedback-edges-20261001/.
@@ -40,12 +77,12 @@ and277 bodies and committed evidence/performance275-feedback-edges-20261001/.
 | Active owner | Immediate scope | Next evidence required |
 | --- | --- | --- |
 | Heisenberg / Toad275 | #254 geometry wrapper erasing scroll travel; sole viewport integration owner | observe travel per held PageUp before/after254 |
-| Einstein / Toad275 | e7dbc widget-count walks on height path | walk_children calls/sec on busy idle workload |
-| Kepler / Toad275 | #269 full admission repeated per edge page load | admissions/page load; shared pass-resource contract |
+| Einstein / Core474 | Complete normal-main integration after producer approval | matched native artifact and integrated authored journey |
+| Kepler / new backend batch PR | Batch available pending messages with original handling receipts | canonical batch workflow and actual installed wave timing |
 | Arendt / Core489 | Final request budget, paused original-turn compaction/continuation and remaining provider waits | implementation checkpoint and same-input native/ACP continuation gate |
 | Schrodinger / Core481 | S2 producer/native artifact and retained-source ownership | coherent useful producer checkpoint; remaining fullS2 scope in follow-up |
 | Parent / Core432 | Bundled279 installed and default saved-history attachment checked; remaining integration | useful producer checkpoint and coherent deletion closure |
-| Singer | Verified disposable worktree/build cleanup | safe cleanup completion receipt; preserve active source/native/session donors |
+| Singer | Latest live queue/provider timing and reply-amplification forensics | actual allocation receipt; cleanup checkpoint complete |
 
 Einstein474's actual installed human pin/compaction/export/fresh native journey is
 ready, but its branch incorporates unmerged481 producer/native776 changes. It
