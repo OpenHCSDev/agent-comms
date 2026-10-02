@@ -1,6 +1,6 @@
 # Retained source and tracked input coverage
 
-Einstein owns the source family; Mendel owns original418 failure integration and the affected installed original-source check. Base actual main399fef69. Draft until that installed check completes.
+Einstein owns the source family; Mendel owns original418 failure integration and the affected installed original-source check. Base actual main399fef69. Ready for the accepted retained-source/preparation checkpoint; full input admission remains refused.
 
 ## What changed
 
@@ -20,6 +20,6 @@ Four production files59 added/22 deleted. Before/after evidence uses the existin
 
 End source batch: all48 affected continued-coverage cases PASS, including7 added ancestry/sidecar/tail/raw/generation/started/cycle controls. Extra existing evidence-boundary file8PASS/17FAIL from obsolete session_dir launch keyword and old regex assertion, unchanged production bodies; overall broader batch FAILED and negative receipt retained. No repeated optional repairs.
 
-Normal compact Core wheel +10 existing frozen production/SDK dependencies installed.339 source resources and3 packaged native resources byte-equal; SDK0.12.1; no source overlay, native build, provider call or public mutation. Exact candidate and source proof are in evidence/retained-source-input-coverage-20261002/installed-source-proof.json. Mendel owns ONE affected installed original-path floor/preparation check, preserving original source/receipts/UNKNOWN; pending.
+Normal compact Core wheel +10 existing frozen production/SDK dependencies installed.339 source resources and3 packaged native resources byte-equal; SDK0.12.1; no source overlay, native build, provider call or public mutation. Exact candidate and source proof are in evidence/retained-source-input-coverage-20261002/installed-source-proof.json. Mendel completed the ONE installed original-path operation and continued source/preparation with the same observed settings: 26 original live records corroborated, 9569-entry ancestry covering all834 older untracked users, native preparation ready255704tokens, original native/proof revisions unchanged. Initial admission refused the genuine unresolved NotSentInput acp:0d9d2784d0f34858947e138b375e83e5; no queue capability, no row exclusions or reclassification. Full admission remains NOT accepted. Exact7-file evidence in original-installed/RECEIPT.md; 12.301s original operation +8.548s same-settings source/preparation, no repeatedRPC/provider/input/reservation/public mutation. Parent reviewed and accepted this exact scope.
 
 Source first, coherent owner implementation, validation last. CI deferred. No public restart, reservation or input replay.

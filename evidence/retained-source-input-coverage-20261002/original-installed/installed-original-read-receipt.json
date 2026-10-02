@@ -1,0 +1,34 @@
+{
+  "classification": "installed original-path read/prepare; running-source snapshots, not public stopped carry",
+  "installed_module": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-coverage540-installed-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "source": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl",
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-9f12ddf4e22d6d7a/node_modules/@earendil-works/pi-coding-agent",
+  "provider_calls": 0,
+  "inputs": 0,
+  "reservations": 0,
+  "public_writes": 0,
+  "original_turn_used_for_read_identity_only": "816075c342b1eda27bcb94d38e6043d2",
+  "historical_recorded_paths_rewritten": false,
+  "owned_child": {
+    "pid": 411788,
+    "start_time": 44114281
+  },
+  "selected_model": {
+    "provider": "openai-codex",
+    "modelId": "gpt-6.1-sol",
+    "contextWindow": 272000
+  },
+  "native_settings": {
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000,
+    "enabled": false,
+    "taskAware": false,
+    "reason": "overflow",
+    "boundary": []
+  },
+  "owned_child_alive_after_cleanup": false,
+  "status": "failed",
+  "error_type": "CompactionJournalError",
+  "error": "Selected source requires reviewed raw-history coverage floor",
+  "elapsed_seconds": 12.301351581001654
+}
