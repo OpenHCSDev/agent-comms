@@ -90,8 +90,7 @@ class SelectedParticipant(MroDispatch):
         await Coordination.run_worker(partial(self.record_native_phase, event))
 
     def record_native_phase(self, event: NativePhaseChanged) -> None:
-        current = self.comms.registry.require(self.owner.thread.name).turn_state.phase
-        self.transition(current.observed(event.phase))
+        self.comms.agents.observe_native_phase(self.owner.thread.require_turn_lease(), event.phase)
 
     @classmethod
     @asynccontextmanager

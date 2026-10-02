@@ -26,7 +26,7 @@ from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, TurnLeaseFence
+from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import PreparingPhase, TurnPhase
 
 _LOG = logging.getLogger(__name__)
@@ -175,9 +175,13 @@ class AgentActivity:
                 raise
             return lease
 
-    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> bool:
+    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, shared=True):
             return self.registry.transition_turn(lease, phase)
+
+    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
+        with _store_lock(self._wire_lock_path, shared=True):
+            return self.registry.observe_native_phase(lease, phase)
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
         """Persist this lease's terminal identity before publishing idle activity."""

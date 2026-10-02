@@ -126,7 +126,7 @@ class NativeSendStage(ABC):
     ) -> None:
         # The native boundary validated the live RPC events before returning.
         # Disk evidence corroborates those events, never authorizes recovery.
-        with NativeEntry.open_evidence(context.session_file) as evidence:
+        with NativeEntry.open_input_evidence(context.session_file) as evidence:
             if not context.corroborates_input(input_id, evidence=evidence):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"

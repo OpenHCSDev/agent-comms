@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shlex
+from functools import partial
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -22,6 +23,7 @@ from . import pi_events as pi
 from .acp_failure import ACPFailure
 from .channel_targets import BuiltinChannel
 from .comms import Comms
+from .coordinator import Coordination
 from .goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
@@ -150,11 +152,11 @@ class TurnRunner:
         return state.busy and state.managed_id == turn_id
 
     async def transition_turn(self, session_id: str, lease: TurnLeaseFence, phase: TurnPhase) -> None:
-        current = self.turn_state(session_id)
-        if current.phase == phase:
-            return
-        if self.comms.agents.transition_turn(lease, phase):
-            await self.effects._emit_event(session_id, self.current_turn_update(session_id))
+        states = await Coordination.run_worker(partial(
+            self.comms.agents.transition_turn, lease, phase
+        ))
+        for state in states:
+            await self.effects._emit_event(session_id, TurnTranscriptUpdate(state=state))
 
     async def observe_compaction(self, session_id: str, event) -> None:
         name = self.sessions.bindings.get(session_id)

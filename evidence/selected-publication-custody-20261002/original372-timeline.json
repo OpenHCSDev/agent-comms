@@ -1,0 +1,1337 @@
+{
+  "original_seq": 372,
+  "original_id": "c325cac723e0",
+  "wire_ts": 1790939655.7969525,
+  "owners": [
+    {
+      "owner": "compaction499-live-architecture-memory",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 57.138168811798096,
+      "inputs": [
+        {
+          "input_id": "16f8b0bda0c2fc7efc86fe9142637f40",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "9723026b",
+              "parentId": "fd096899",
+              "offset_s": 33.877047538757324,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "2664ea9c",
+              "parentId": "9723026b",
+              "offset_s": 39.49404740333557,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 120532,
+                "output": 56,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 120588,
+                "cost": {
+                  "input": 0.241064,
+                  "output": 0.0005600000000000001,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.241624
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 33.894047498703,
+              "parent_receipt_lag_s": 6.872711521
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 34.491047620773315,
+              "parent_receipt_lag_s": 9.429267938
+            },
+            {
+              "stage": "first_event",
+              "native_s": 34.95804762840271,
+              "parent_receipt_lag_s": 8.963164548
+            },
+            {
+              "stage": "finished",
+              "native_s": 39.53504753112793,
+              "parent_receipt_lag_s": 4.432864205
+            }
+          ]
+        },
+        {
+          "input_id": "2ca43de8852f849aeb7f0a41b450e279",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "a5890914",
+              "parentId": "8eb1a4ae",
+              "offset_s": 17.277047395706177,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "fd096899",
+              "parentId": "a5890914",
+              "offset_s": 21.799047470092773,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 119133,
+                "output": 9,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 119142,
+                "cost": {
+                  "input": 0.23826599999999998,
+                  "output": 9e-05,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.23835599999999998
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 17.29004740715027,
+              "parent_receipt_lag_s": 3.674278002
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 17.805047512054443,
+              "parent_receipt_lag_s": 3.47838118
+            },
+            {
+              "stage": "first_event",
+              "native_s": 18.093047618865967,
+              "parent_receipt_lag_s": 3.191206265
+            },
+            {
+              "stage": "finished",
+              "native_s": 21.806047439575195,
+              "parent_receipt_lag_s": 0.002417733
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "compaction501-live-architecture-memory",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 54.62654757499695,
+      "inputs": [
+        {
+          "input_id": "4e61d1990a41caa45df55bd79855318c",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "f6d75795",
+              "parentId": "1bcfa2ce",
+              "offset_s": 27.60704755783081,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "b225a9a8",
+              "parentId": "f6d75795",
+              "offset_s": 37.984047412872314,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 45656,
+                "output": 59,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 45715,
+                "cost": {
+                  "input": 0.09131199999999999,
+                  "output": 0.00059,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.09190199999999998
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 27.635047435760498,
+              "parent_receipt_lag_s": 3.019946922
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 28.20204758644104,
+              "parent_receipt_lag_s": 3.40984449
+            },
+            {
+              "stage": "first_event",
+              "native_s": 28.447047472000122,
+              "parent_receipt_lag_s": 3.165343176
+            },
+            {
+              "stage": "finished",
+              "native_s": 39.19604754447937,
+              "parent_receipt_lag_s": 0.00687406
+            }
+          ]
+        },
+        {
+          "input_id": "2529d705307c1d23301570f3cfd71a45",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "b1e2d008",
+              "parentId": "c7fc2070",
+              "offset_s": 14.286047458648682,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "1bcfa2ce",
+              "parentId": "b1e2d008",
+              "offset_s": 17.473047494888306,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 44243,
+                "output": 9,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 44252,
+                "cost": {
+                  "input": 0.088486,
+                  "output": 9e-05,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.088576
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 14.294047594070435,
+              "parent_receipt_lag_s": 2.892347125
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 14.742047548294067,
+              "parent_receipt_lag_s": 2.521268267
+            },
+            {
+              "stage": "first_event",
+              "native_s": 15.399047613143921,
+              "parent_receipt_lag_s": 1.864655536
+            },
+            {
+              "stage": "finished",
+              "native_s": 17.47604751586914,
+              "parent_receipt_lag_s": 0.002410059
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-architecture-memory",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 55.31404781341553,
+      "inputs": [
+        {
+          "input_id": "bf0a203f3b150471a75baa435b1504d1",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "bf94f9b5",
+              "parentId": "54a4e79f",
+              "offset_s": 33.76604747772217,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "83d1aeb6",
+              "parentId": "bf94f9b5",
+              "offset_s": 38.22604751586914,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 75962,
+                "output": 52,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 76014,
+                "cost": {
+                  "input": 0.151924,
+                  "output": 0.0005200000000000001,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.152444
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 33.78004741668701,
+              "parent_receipt_lag_s": 6.358919815
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 34.217047452926636,
+              "parent_receipt_lag_s": 7.605546111
+            },
+            {
+              "stage": "first_event",
+              "native_s": 34.57004761695862,
+              "parent_receipt_lag_s": 7.252567705
+            },
+            {
+              "stage": "finished",
+              "native_s": 39.19704747200012,
+              "parent_receipt_lag_s": 2.646533404
+            }
+          ]
+        },
+        {
+          "input_id": "b0e7957ce1fd2d24a91316ce831cec7f",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "83466bc3",
+              "parentId": "becd896c",
+              "offset_s": 17.384047508239746,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "54a4e79f",
+              "parentId": "83466bc3",
+              "offset_s": 20.653047561645508,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 897,
+                "output": 9,
+                "cacheRead": 73344,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 74250,
+                "cost": {
+                  "input": 0.001794,
+                  "output": 9e-05,
+                  "cacheRead": 0.0073344000000000005,
+                  "cacheWrite": 0,
+                  "total": 0.0092184
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 17.396047592163086,
+              "parent_receipt_lag_s": 3.479749303
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 17.941047430038452,
+              "parent_receipt_lag_s": 3.208622879
+            },
+            {
+              "stage": "first_event",
+              "native_s": 18.329047441482544,
+              "parent_receipt_lag_s": 2.821225269
+            },
+            {
+              "stage": "finished",
+              "native_s": 20.66104745864868,
+              "parent_receipt_lag_s": 0.500378772
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-audit-merged-boundaries",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 55.1954288482666,
+      "inputs": [
+        {
+          "input_id": "951e1178f0c6d84683b3b891905ad27f",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "1c8a18af",
+              "parentId": "4d86d703",
+              "offset_s": 34.716047525405884,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "23427840",
+              "parentId": "1c8a18af",
+              "offset_s": 40.79004740715027,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 3777,
+                "output": 53,
+                "cacheRead": 234624,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 238454,
+                "cost": {
+                  "input": 0.007554,
+                  "output": 0.0005300000000000001,
+                  "cacheRead": 0.0234624,
+                  "cacheWrite": 0,
+                  "total": 0.0315464
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 34.734047412872314,
+              "parent_receipt_lag_s": 2.567781138
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 35.5430474281311,
+              "parent_receipt_lag_s": 3.752256685
+            },
+            {
+              "stage": "first_event",
+              "native_s": 35.98104763031006,
+              "parent_receipt_lag_s": 3.314923099
+            },
+            {
+              "stage": "finished",
+              "native_s": 40.801047563552856,
+              "parent_receipt_lag_s": 0.003129502
+            }
+          ]
+        },
+        {
+          "input_id": "f138cd87c994b98c21e59b5dbbc87c5f",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "b27da2cc",
+              "parentId": "88d8cd25",
+              "offset_s": 15.591047525405884,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "4d86d703",
+              "parentId": "b27da2cc",
+              "offset_s": 19.323047399520874,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 914,
+                "output": 9,
+                "cacheRead": 235776,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 236699,
+                "cost": {
+                  "input": 0.001828,
+                  "output": 9e-05,
+                  "cacheRead": 0.0235776,
+                  "cacheWrite": 0,
+                  "total": 0.0254956
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 15.600047588348389,
+              "parent_receipt_lag_s": 3.057353743
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 16.223047494888306,
+              "parent_receipt_lag_s": 2.546570839
+            },
+            {
+              "stage": "first_event",
+              "native_s": 16.562047481536865,
+              "parent_receipt_lag_s": 2.207262844
+            },
+            {
+              "stage": "finished",
+              "native_s": 19.325047492980957,
+              "parent_receipt_lag_s": 0.002713774
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-audit-merged-models",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 55.36911368370056,
+      "inputs": [
+        {
+          "input_id": "1066c8f644aa1908257c4b70116aa3f6",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "3db75b75",
+              "parentId": "031fa863",
+              "offset_s": 33.32104754447937,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "24bbf1be",
+              "parentId": "3db75b75",
+              "offset_s": 39.741047620773315,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 32786,
+                "output": 56,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 32842,
+                "cost": {
+                  "input": 0.06557199999999999,
+                  "output": 0.0005600000000000001,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.066132
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 33.341047525405884,
+              "parent_receipt_lag_s": 6.621834242
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 33.717047452926636,
+              "parent_receipt_lag_s": 7.959877613
+            },
+            {
+              "stage": "first_event",
+              "native_s": 33.96504759788513,
+              "parent_receipt_lag_s": 7.713233438
+            },
+            {
+              "stage": "finished",
+              "native_s": 39.74804759025574,
+              "parent_receipt_lag_s": 1.953677053
+            }
+          ]
+        },
+        {
+          "input_id": "2523fc87fb4b3c8c9cd7ffd58c2a4bd5",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "a3a89cbc",
+              "parentId": "c418b533",
+              "offset_s": 17.460047483444214,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "031fa863",
+              "parentId": "a3a89cbc",
+              "offset_s": 20.11804747581482,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 874,
+                "output": 9,
+                "cacheRead": 30208,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 31091,
+                "cost": {
+                  "input": 0.001748,
+                  "output": 9e-05,
+                  "cacheRead": 0.0030208,
+                  "cacheWrite": 0,
+                  "total": 0.0048588
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 17.47504758834839,
+              "parent_receipt_lag_s": 3.65071143
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 17.841047525405884,
+              "parent_receipt_lag_s": 3.495946867
+            },
+            {
+              "stage": "first_event",
+              "native_s": 18.04604744911194,
+              "parent_receipt_lag_s": 3.290839375
+            },
+            {
+              "stage": "finished",
+              "native_s": 20.129047632217407,
+              "parent_receipt_lag_s": 1.216790204
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-audit-merged-runtime",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 34.72239303588867,
+      "inputs": [
+        {
+          "input_id": "b37138e518574870a3ece346dff9b10f",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "64a19f8f",
+              "parentId": "5729c890",
+              "offset_s": 24.705047607421875,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "848ea3b9",
+              "parentId": "64a19f8f",
+              "offset_s": 29.00504755973816,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 35320,
+                "output": 54,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 35374,
+                "cost": {
+                  "input": 0.07064,
+                  "output": 0.00054,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.07118
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 24.721047401428223,
+              "parent_receipt_lag_s": 3.160527159
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 25.19604754447937,
+              "parent_receipt_lag_s": 2.742916829
+            },
+            {
+              "stage": "first_event",
+              "native_s": 25.40504741668701,
+              "parent_receipt_lag_s": 2.534620092
+            },
+            {
+              "stage": "finished",
+              "native_s": 29.015047550201416,
+              "parent_receipt_lag_s": 0.006396425
+            }
+          ]
+        },
+        {
+          "input_id": "19c72e240a24547c004ffad3dea4e9df",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "feb6976b",
+              "parentId": "d595c53e",
+              "offset_s": 11.520047426223755,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "5729c890",
+              "parentId": "feb6976b",
+              "offset_s": 14.275047540664673,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 33579,
+                "output": 9,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33588,
+                "cost": {
+                  "input": 0.067158,
+                  "output": 9e-05,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.067248
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 11.533047437667847,
+              "parent_receipt_lag_s": 3.136094621
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 11.974047422409058,
+              "parent_receipt_lag_s": 2.748796679
+            },
+            {
+              "stage": "first_event",
+              "native_s": 12.799047470092773,
+              "parent_receipt_lag_s": 1.923876011
+            },
+            {
+              "stage": "finished",
+              "native_s": 14.27904748916626,
+              "parent_receipt_lag_s": 0.455291738
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-audit-open-prs",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 64.03486514091492,
+      "inputs": [
+        {
+          "input_id": "214599190c24089d411a7f9d2b5793cf",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "cce94459",
+              "parentId": "c8928033",
+              "offset_s": 54.217047452926636,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "b95644b0",
+              "parentId": "cce94459",
+              "offset_s": 58.59604740142822,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 33274,
+                "output": 54,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 33328,
+                "cost": {
+                  "input": 0.066548,
+                  "output": 0.00054,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.067088
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 54.24204754829407,
+              "parent_receipt_lag_s": 2.954219121
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 54.622047424316406,
+              "parent_receipt_lag_s": 2.835980264
+            },
+            {
+              "stage": "first_event",
+              "native_s": 55.13104748725891,
+              "parent_receipt_lag_s": 2.32777557
+            },
+            {
+              "stage": "finished",
+              "native_s": 58.604047536849976,
+              "parent_receipt_lag_s": 0.003944747
+            }
+          ]
+        },
+        {
+          "input_id": "f5b93a6f9b6bce6332e75b322c2e1f5c",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "9342a24c",
+              "parentId": "aaa6dd7c",
+              "offset_s": 19.277047395706177,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "c8928033",
+              "parentId": "9342a24c",
+              "offset_s": 26.230047464370728,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 973,
+                "output": 9,
+                "cacheRead": 30592,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 31574,
+                "cost": {
+                  "input": 0.0019459999999999998,
+                  "output": 9e-05,
+                  "cacheRead": 0.0030592,
+                  "cacheWrite": 0,
+                  "total": 0.005095199999999999
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 19.289047479629517,
+              "parent_receipt_lag_s": 3.786135132
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 19.730047464370728,
+              "parent_receipt_lag_s": 3.517116654
+            },
+            {
+              "stage": "first_event",
+              "native_s": 19.986047506332397,
+              "parent_receipt_lag_s": 3.261377437
+            },
+            {
+              "stage": "finished",
+              "native_s": 26.240047454833984,
+              "parent_receipt_lag_s": 0.002729124
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-helper",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 55.26817083358765,
+      "inputs": [
+        {
+          "input_id": "b7acdf41644581df51744eedcc4cd5f1",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "3ee0ecbc",
+              "parentId": "6093e43f",
+              "offset_s": 32.51604747772217,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "b33a5e6d",
+              "parentId": "3ee0ecbc",
+              "offset_s": 38.75104761123657,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 2560,
+                "output": 50,
+                "cacheRead": 52608,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 55218,
+                "cost": {
+                  "input": 0.0051199999999999996,
+                  "output": 0.0005,
+                  "cacheRead": 0.0052608,
+                  "cacheWrite": 0,
+                  "total": 0.0108808
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 32.53304743766785,
+              "parent_receipt_lag_s": 7.480781898
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 32.991047620773315,
+              "parent_receipt_lag_s": 8.747281414
+            },
+            {
+              "stage": "first_event",
+              "native_s": 33.22704744338989,
+              "parent_receipt_lag_s": 8.51243942
+            },
+            {
+              "stage": "finished",
+              "native_s": 39.19504761695862,
+              "parent_receipt_lag_s": 2.585579133
+            }
+          ]
+        },
+        {
+          "input_id": "4059bf296f20ecee94f653ac3915c969",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "fc4a544e",
+              "parentId": "b0b06a7a",
+              "offset_s": 14.378047466278076,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "6093e43f",
+              "parentId": "fc4a544e",
+              "offset_s": 18.36204743385315,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 640,
+                "output": 9,
+                "cacheRead": 53120,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 53769,
+                "cost": {
+                  "input": 0.0012799999999999999,
+                  "output": 9e-05,
+                  "cacheRead": 0.005312000000000001,
+                  "cacheWrite": 0,
+                  "total": 0.0066820000000000004
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 14.386047601699829,
+              "parent_receipt_lag_s": 4.243418697
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 14.855047464370728,
+              "parent_receipt_lag_s": 3.86939673
+            },
+            {
+              "stage": "first_event",
+              "native_s": 15.761047601699829,
+              "parent_receipt_lag_s": 2.96484067
+            },
+            {
+              "stage": "finished",
+              "native_s": 18.36804747581482,
+              "parent_receipt_lag_s": 0.369069479
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-helper2",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 54.79910731315613,
+      "inputs": [
+        {
+          "input_id": "9581c4d68ddc0cd7117dad843ed087ee",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "e75cdcc7",
+              "parentId": "7c932aac",
+              "offset_s": 28.76104760169983,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "e85506e6",
+              "parentId": "e75cdcc7",
+              "offset_s": 34.83104753494263,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 2589,
+                "output": 50,
+                "cacheRead": 52352,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 54991,
+                "cost": {
+                  "input": 0.0051779999999999994,
+                  "output": 0.0005,
+                  "cacheRead": 0.005235200000000001,
+                  "cacheWrite": 0,
+                  "total": 0.0109132
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 28.775047540664673,
+              "parent_receipt_lag_s": 2.730319919
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 31.039047479629517,
+              "parent_receipt_lag_s": 0.602025818
+            },
+            {
+              "stage": "first_event",
+              "native_s": 31.39304757118225,
+              "parent_receipt_lag_s": 0.248055009
+            },
+            {
+              "stage": "finished",
+              "native_s": 34.85004758834839,
+              "parent_receipt_lag_s": 0.002748119
+            }
+          ]
+        },
+        {
+          "input_id": "c905039e159410a86910738126390206",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "f4e66264",
+              "parentId": "dbb68bc3",
+              "offset_s": 14.155047416687012,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "7c932aac",
+              "parentId": "f4e66264",
+              "offset_s": 18.390047550201416,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 681,
+                "output": 9,
+                "cacheRead": 52864,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 53554,
+                "cost": {
+                  "input": 0.001362,
+                  "output": 9e-05,
+                  "cacheRead": 0.0052864,
+                  "cacheWrite": 0,
+                  "total": 0.0067384
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 14.168047428131104,
+              "parent_receipt_lag_s": 3.217264151
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 14.74904751777649,
+              "parent_receipt_lag_s": 3.184019424
+            },
+            {
+              "stage": "first_event",
+              "native_s": 15.647047519683838,
+              "parent_receipt_lag_s": 2.286383031
+            },
+            {
+              "stage": "finished",
+              "native_s": 18.39304757118225,
+              "parent_receipt_lag_s": 0.001967058
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "owner": "openhcs-pr159-viewer-bind-owner",
+      "admitted_s": 2.813047409057617,
+      "wire_reply_s": 55.62882089614868,
+      "inputs": [
+        {
+          "input_id": "ff4d7052a0b105fe2afc7cfa9000d2a1",
+          "stage": "full",
+          "native_entries": [
+            {
+              "id": "b3e7f5a9",
+              "parentId": "700d8e51",
+              "offset_s": 33.592047452926636,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "afd0d384",
+              "parentId": "b3e7f5a9",
+              "offset_s": 40.36904740333557,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 194496,
+                "output": 56,
+                "cacheRead": 0,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 194552,
+                "cost": {
+                  "input": 0.388992,
+                  "output": 0.0005600000000000001,
+                  "cacheRead": 0,
+                  "cacheWrite": 0,
+                  "total": 0.389552
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 33.603047609329224,
+              "parent_receipt_lag_s": 6.724629174
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 34.30404758453369,
+              "parent_receipt_lag_s": 7.609844279
+            },
+            {
+              "stage": "first_event",
+              "native_s": 34.64104747772217,
+              "parent_receipt_lag_s": 7.273569354
+            },
+            {
+              "stage": "finished",
+              "native_s": 40.40004754066467,
+              "parent_receipt_lag_s": 1.536232568
+            }
+          ]
+        },
+        {
+          "input_id": "34f4a7753f237d2c93a78cfbd4161adb",
+          "stage": "triage",
+          "native_entries": [
+            {
+              "id": "0e9c859e",
+              "parentId": "a3357de6",
+              "offset_s": 18.795047521591187,
+              "role": "user",
+              "stopReason": null,
+              "provider": null,
+              "model": null,
+              "usage": null
+            },
+            {
+              "id": "700d8e51",
+              "parentId": "0e9c859e",
+              "offset_s": 22.78504753112793,
+              "role": "assistant",
+              "stopReason": "stop",
+              "provider": "openai-codex",
+              "model": "gpt-6.1-sol",
+              "usage": {
+                "input": 882,
+                "output": 9,
+                "cacheRead": 192000,
+                "cacheWrite": 0,
+                "reasoning": 0,
+                "totalTokens": 192891,
+                "cost": {
+                  "input": 0.001764,
+                  "output": 9e-05,
+                  "cacheRead": 0.019200000000000002,
+                  "cacheWrite": 0,
+                  "total": 0.021054000000000003
+                }
+              }
+            }
+          ],
+          "request_samples": 14,
+          "request_spans": [
+            {
+              "stage": "preparing",
+              "native_s": 18.80304741859436,
+              "parent_receipt_lag_s": 4.17287203
+            },
+            {
+              "stage": "dispatch",
+              "native_s": 19.534047603607178,
+              "parent_receipt_lag_s": 3.576872835
+            },
+            {
+              "stage": "first_event",
+              "native_s": 19.941047430038452,
+              "parent_receipt_lag_s": 3.171381376
+            },
+            {
+              "stage": "finished",
+              "native_s": 22.789047479629517,
+              "parent_receipt_lag_s": 0.3335498
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
