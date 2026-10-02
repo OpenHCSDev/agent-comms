@@ -361,6 +361,7 @@ async def configured_pure_channel(arguments):
 
 async def configured_cancel_continue(arguments, service, attachment, name, sender, stage):
     """Use ordinary originals and the existing joined ACP cancellation boundary."""
+    from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
     from agent_comms.coordination_tables.publications import PublicationReceipts
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_input_record import FullNativeExecution
@@ -382,8 +383,12 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 ids = {claim.assignment_id for claim in claims}
                 inputs = tuple(row for row in NativeRuntimeInput.select(db)
                     if ids.intersection(row.execution.source_assignment_ids(db, row.input_id)))
-                receipts = tuple(receipt for claim in claims
-                    for receipt in PublicationReceipts.for_assignment(db, claim.assignment_id))
+                execution_ids = {link.execution_id for claim in claims
+                    for link in ExecutionAssignmentLink.select(
+                        db, where='assignment_id=?', parameters=(claim.assignment_id,))}
+                receipts = tuple(receipt for execution_id in sorted(execution_ids)
+                    for receipt in PublicationReceipts.select(
+                        db, where='execution_id=?', parameters=(execution_id,)))
                 return claims, inputs, receipts
 
     cancelled = publish('CANCEL_ORIGINAL')
@@ -411,7 +416,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                     service.registry.require(name).active_turn is None:
                 full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                 assert len(full) == 1 and full[0].reference.recorded
-                assert len(receipts) == 1 and receipts[0].output_port == 'channel:openhcs'
+                assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
                 reply = service.bus.log.message_by_id(receipts[0].message_id)
                 assert reply.sender == name and '12' in reply.body
                 break
@@ -422,6 +427,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         assert final_receipts == cancelled_receipts, 'Cancellation later published an extra original reply'
         return {'cancelled_original': FieldCodec.encode(cancelled.reference),
             'continued_original': FieldCodec.encode(continuation.reference),
+            'cancelled_admission_stages': [row.reference_stage.declared_name for row in admitted],
             'cancelled_native_inputs': FieldCodec.encode(cancelled_inputs),
             'cancelled_claims': FieldCodec.encode(cancelled_claims),
             'cancelled_publications': FieldCodec.encode(cancelled_receipts),
