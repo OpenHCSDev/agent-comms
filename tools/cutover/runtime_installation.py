@@ -2,11 +2,13 @@
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import PathText
 from publish_openhcs_recovery import retain_file
 from retained_summary_reset import AcquiredRuntimeFiles
-from native_schema_carry import NativeSchemaCarryPlan, NativeSchemaDeclaration
+from native_schema_carry import NativeSchemaCarryPlan, NativeSchemaDeclaration, RuntimeNativeFiles
 
 
 @dataclass(frozen=True)
@@ -18,7 +20,7 @@ class RuntimeInstallation(DeclaredFamily, affix='RuntimeInstallation'):
     def synchronize_goal(self, acquired, destination):
         return NativeSchemaDeclaration.observe().synchronize_goal(acquired, destination, self.goal_schema)
 
-    def unchanged_protected(self, paths: frozenset[Path]) -> frozenset[Path]:
+    def unchanged_protected(self, paths: frozenset[Path], acquired: AcquiredRuntimeFiles) -> frozenset[Path]:
         """The member owns which original bytes its installation may change."""
         return frozenset(paths)
 
@@ -56,19 +58,22 @@ class PreserveRuntimeInstallation(RuntimeInstallation):
 class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
     """Native6 declarations; original compaction proof facts remain unchanged."""
 
-    plan: NativeSchemaCarryPlan
+    original: NativeSchemaDeclaration
+    source_python: Annotated[Path, PathText]
+    candidate: Annotated[Path, PathText]
 
-    def unchanged_protected(self, paths: frozenset[Path]) -> frozenset[Path]:
-        self.plan.require_candidate()
-        return super().unchanged_protected(paths).difference(
-            self.plan.root / item.name for item in self.plan.stores)
+    def unchanged_protected(self, paths: frozenset[Path], acquired: AcquiredRuntimeFiles) -> frozenset[Path]:
+        return super().unchanged_protected(paths, acquired).difference(
+            RuntimeNativeFiles(acquired.paths[0].parent).paths)
 
     def install(self, acquired, destination):
-        if acquired.paths[0].parent != self.plan.root:
-            raise ValueError('Native carry names another stopped root')
         acquired.require_original()
         original_evidence = acquired.evidence()
-        carried = self.plan.install(destination)
-        changed = {self.plan.root / item.name for item in self.plan.stores}
+        # The publisher has stopped its original audience and holds the wire
+        # custody before invoking this member. No live-store plan is admitted.
+        plan = NativeSchemaCarryPlan.prepare(acquired.paths[0].parent, self.candidate,
+                       self.original, self.source_python)
+        carried = plan.install(destination)
+        changed = {plan.root / item.name for item in plan.stores}
         acquired.unchanged_by(changed).require_original()
         return {**carried, 'compaction_original_files': original_evidence}
