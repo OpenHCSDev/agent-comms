@@ -54,9 +54,14 @@ c4ff566ee8f2c15407d486291971c9ef52efb99801150311a9f0fe40cd8ce8d2
 
 Release must use the existing quiet checkpoint rebuild from the original writer
 to the target installer. Wire/native/session/UNKNOWN data stay unchanged; previous
-schema is rejected. The existing retained_index_writer still passes StoreLock as
-an integer to its child, and needs its canonical descriptor migrated before that
-recipe is used. Sch owns the publisher/carry lane; exact tool claim requested.
+schema is rejected. Sch granted the exact existing tool family. The old
+retained_index_writer StoreLock-as-integer handoff is deleted; the child receives
+its original descriptor via argv/pass_fds. Both target subprocesses exclude
+PYTHONPATH. checkpoint_schema derives membership through the same TypedTable owner
+as the runtime reader. install_retained_index already validates that inherited
+descriptor's exact lock inode and original root; its behavior stays unchanged.
+Sch owns the publisher/carry lane. Public and frozen original artifacts remain
+untouched; a private installed rebuild control belongs to final acceptance.
 
 Installed original observation CLI/Tree acceptance remains pending Sch's release
 of the reused normal holder after the critical550 publication. No new environment,
