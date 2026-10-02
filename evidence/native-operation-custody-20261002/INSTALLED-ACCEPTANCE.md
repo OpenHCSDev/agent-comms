@@ -25,9 +25,14 @@ that actual partial receipt; it contains no fabricated PASS. `owner-postexit.jso
 independently verifies both exact process identities absent and both original
 source/proof hashes unchanged after shutdown. No second owner or input was run.
 
-Lovelace owns the physical Tree observation through this same held owner. Its
-successful RPC and operation timestamps must establish the scope completed
-before this deadline; that paired receipt remains pending. The harness dispatches
-no prompt; it does not instrument unrelated startup network traffic. This check
-does not attribute the historical terminal
-tail or claim general latency acceptance.
+Lovelace reports that RuntimeSelection.receipt refused a native activation
+mismatch before st/UI launch. No successful context RPC or Tree frame occurred.
+Her sole recorder process805497 exited and no UI remains. The physical log is
+retained at her owned `.artifacts/context-explorer309/paired-physical.log`;
+the absolute path and raw receipt are requested. Sch owns the canonical
+activation correction. This is a staging refusal, not physical Tree acceptance.
+No second owner was started.
+
+The harness dispatches no prompt; it does not instrument unrelated startup
+network traffic. This check does not attribute the historical terminal tail
+or claim general latency acceptance.
