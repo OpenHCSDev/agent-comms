@@ -113,7 +113,20 @@ class InputDocument:
         cannot become the source of an earlier native checkpoint.
         """
         rows = self.compaction_rows(owner, pending_input_keys, queue)
-        return rows, tuple(row.origin.retained_fact(row) for row in rows.values())
+        return rows, self.retained_task_facts(tuple(rows))
+
+    def retained_task_facts(self, keys: tuple[str, ...]):
+        """The original input origin owns fact membership and provenance."""
+        return tuple(row.origin.retained_fact(row) for row in self.originals(keys))
+
+    def owner_originals(self, owner: Thread) -> tuple[str, ...]:
+        """Observe durable membership without selecting a compaction queue.
+
+        Reserved and UNKNOWN rows keep their exact recorded disposition. Only
+        compaction_rows, with the live queue's custody, can admit a source cut.
+        """
+        return tuple(key for key, row in self.rows.items()
+                     if row.matches_owner(owner.incarnation))
 
     def started_for_native(
         self, lease: TurnLeaseFence, native_id: str, sent_text: str,

@@ -1,0 +1,79 @@
+{
+  "head": "3847ceae697ef1c0254644d8263fc363e68e653b",
+  "prefix": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/install/runtime",
+  "module": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms",
+  "git_source_assets": 339,
+  "wheel_files": 341,
+  "unequal_sources": [],
+  "wheel_sha256": "4f7ff82350c7e719bfde6aeaa6aca204a18b04b338859af99895287d1298b9b5",
+  "source_inventory_sha256": "a56fa5c4bc877b63fadaa169a5dee205bc7b479a51570a52a5d2bee5588abe44",
+  "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "native_full_trust": true,
+  "sdk": "0.12.1",
+  "source_overlay": false,
+  "dependency_bypass": false,
+  "new_native_build": false,
+  "packages": [
+    [
+      "Pygments",
+      "2.21.0"
+    ],
+    [
+      "agent-client-protocol",
+      "0.12.1"
+    ],
+    [
+      "agent-comms",
+      "0.1.0"
+    ],
+    [
+      "annotated-types",
+      "0.8.0"
+    ],
+    [
+      "iniconfig",
+      "2.3.0"
+    ],
+    [
+      "metaclass-registry",
+      "0.2.2"
+    ],
+    [
+      "nominal-refactor-audit",
+      "0.1.0"
+    ],
+    [
+      "packaging",
+      "26.3"
+    ],
+    [
+      "pluggy",
+      "1.6.0"
+    ],
+    [
+      "pydantic",
+      "2.13.5"
+    ],
+    [
+      "pydantic_core",
+      "2.46.5"
+    ],
+    [
+      "pytest",
+      "9.1.1"
+    ],
+    [
+      "pytest-asyncio",
+      "1.4.0"
+    ],
+    [
+      "typing-inspection",
+      "0.4.4"
+    ],
+    [
+      "typing_extensions",
+      "4.16.0"
+    ]
+  ],
+  "scope": "Core inspection package only; not a Toad receiving/public release cohort"
+}

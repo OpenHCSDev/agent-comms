@@ -30,12 +30,11 @@ def saved_source(path):
 
 
 def source_witness(path):
-    from agent_comms.native_revision_text import NativeRevisionText
     from agent_comms.owner_compaction_prepare import NativeWitness
     from agent_comms.private_path import FileRevision
 
     return NativeWitness("source-only", str(path), "kept", "kept",
-                         NativeRevisionText.encode(FileRevision.from_stat(path.stat())))
+                         FileRevision.from_stat(path.stat()))
 
 
 def admit(comms, name):
@@ -440,7 +439,7 @@ def test_original_goal_input_and_user_sources_share_compaction_fence(comms, monk
     _, generation = comms.registry.live_owner_with_generation("alpha")
     before = (saved.read_bytes(), inputs.path.read_bytes())
     with boundary.hold(owner, generation, witness) as held:
-        source = held.capture(None, None)
+        source = held.capture((), None)
         source.require_current(held)
     assert next(fact.source for fact in source.retained.facts if isinstance(fact, UserSourceTaskFact)) == user
     assert next(fact.source for fact in source.retained.facts if isinstance(fact, GoalTaskFact)) == owner.goal
@@ -502,7 +501,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
         _, generation = comms.registry.live_owner_with_generation(name)
         witness = source_witness(Path(current.session_file))
         with boundary.hold(current, generation, witness) as held:
-            source = held.capture(None, None)
+            source = held.capture((), None)
             source.require_current(held)
         captured[name] = source.retained
     snapshot = comms.registry.snapshot()
