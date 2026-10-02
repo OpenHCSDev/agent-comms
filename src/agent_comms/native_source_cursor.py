@@ -113,11 +113,10 @@ class NativeSourceCursor:
     ) -> CurrentNativeCursor | None:
         sources = self._coverage(identity.lookup, contention)
         coverage = sources.prefix(source_reads=source_reads)
-        proof = sources.last_proof(
+        proof = coverage.last_proof(
             coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
-            source_reads=source_reads,
         )
-        evidence = sources.evidence(coverage, source_reads=source_reads)
+        evidence = coverage.evidence()
         with (
             _response_boundary(self.bus, blocking=False, contention=contention) as registry,
             self.store.session.transaction() as db,
@@ -245,12 +244,12 @@ class NativeSourceCursor:
             cursor.injected_seq > 0 and cursor.injected_seq not in coverage.injected_source_seqs
         ):
             raise IdentityConflict("current native cursor exceeds canonical source proof")
-        evidence = sources.evidence(coverage, through_seq=cursor.covered_seq, source_reads=source_reads)
+        evidence = coverage.evidence(through_seq=cursor.covered_seq)
         with self.store.session.read():
             assert_native_runtime_schema(self.store.session._connection)
             if not owner.matches_prefix(self.store.session._connection, evidence):
                 raise IdentityConflict("current cursor borrows historical owner source proof")
-        proof = sources.last_proof(cursor.injected_seq, source_reads=source_reads)
+        proof = coverage.last_proof(cursor.injected_seq)
         expected = proof.reference if proof is not None else UnrecordedNativeInputReference()
         if cursor.reference != expected:
             raise IdentityConflict("current native cursor proof differs from journal")

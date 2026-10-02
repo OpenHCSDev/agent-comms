@@ -249,16 +249,16 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
     ).run()
     assert result is not None and result.cursor_status == "proven"
     lookup = stable_thread_lookup(people[1].created_at)
-    original = SourceCoverage.evidence
+    original = SourceCoverage.prefix
 
     def advance_generation(*args, **kwargs):
-        evidence = original(*args, **kwargs)
+        coverage = original(*args, **kwargs)
         # Supported same-name owner-generation change after initial SQL read,
         # but before second proof snapshot. Registry remains same incarnation.
         args[0].store.participants.advance_generation(lookup, "alpha", expected_generation=1)
-        return evidence
+        return coverage
 
-    monkeypatch.setattr(SourceCoverage, "evidence", advance_generation)
+    monkeypatch.setattr(SourceCoverage, "prefix", advance_generation)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(StaleFence, match="participant generation changed"):
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
@@ -267,7 +267,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
             f"SELECT owner_generation,input_id FROM {CurrentNativeCursor.declared_name}"
         ).fetchall()
         assert [tuple(row) for row in retained] == [(1, result.input_id)]
-    monkeypatch.setattr(SourceCoverage, "evidence", original)
+    monkeypatch.setattr(SourceCoverage, "prefix", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         assert (
             NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(owner_name="alpha")
