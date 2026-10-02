@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .active_route import CommsRoute
+from .active_route import CommsRoute
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
