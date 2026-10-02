@@ -82,7 +82,7 @@ class NativeToolMode(ABC):
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         """Return the native tool selection and reviewed extension."""
 
-    def finish(self) -> None:
+    async def finish(self) -> None:
         """Release completed coding claims; selected proof keeps its old semantics."""
         return None
 

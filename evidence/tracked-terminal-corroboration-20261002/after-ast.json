@@ -1,0 +1,3521 @@
+{
+  "head": "42aa8c74dae4951dd97d4a4123c5dc1dd1d14821",
+  "roots": [
+    "src",
+    "tests",
+    "tools"
+  ],
+  "modules": 724,
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 74,
+      "class": "CodingToolOwner",
+      "bases": [],
+      "methods": [
+        {
+          "name": "for_original",
+          "line": 83,
+          "async": false
+        },
+        {
+          "name": "admit",
+          "line": 102,
+          "async": false
+        },
+        {
+          "name": "finish",
+          "line": 121,
+          "async": true
+        },
+        {
+          "name": "release",
+          "line": 130,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 138,
+      "class": "CodingToolMode",
+      "bases": [
+        "NativeToolMode"
+      ],
+      "methods": [
+        {
+          "name": "launch_arguments",
+          "line": 141,
+          "async": false
+        },
+        {
+          "name": "socket",
+          "line": 148,
+          "async": false
+        },
+        {
+          "name": "finish",
+          "line": 151,
+          "async": true
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 23,
+      "class": "Coordination",
+      "bases": [],
+      "methods": [
+        {
+          "name": "run_worker",
+          "line": 25,
+          "async": true
+        },
+        {
+          "name": "run_async",
+          "line": 36,
+          "async": true
+        },
+        {
+          "name": "_run_owned",
+          "line": 52,
+          "async": false
+        },
+        {
+          "name": "__init__",
+          "line": 59,
+          "async": false
+        },
+        {
+          "name": "install_private_runtime",
+          "line": 71,
+          "async": false
+        },
+        {
+          "name": "close",
+          "line": 81,
+          "async": false
+        },
+        {
+          "name": "__enter__",
+          "line": 84,
+          "async": false
+        },
+        {
+          "name": "__exit__",
+          "line": 87,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 198,
+      "class": "NativeEvidenceRead",
+      "bases": [],
+      "methods": [
+        {
+          "name": "__init__",
+          "line": 205,
+          "async": false
+        },
+        {
+          "name": "require_path",
+          "line": 209,
+          "async": false
+        },
+        {
+          "name": "open",
+          "line": 217,
+          "async": false
+        },
+        {
+          "name": "borrow",
+          "line": 231,
+          "async": false
+        },
+        {
+          "name": "close",
+          "line": 250,
+          "async": false
+        },
+        {
+          "name": "observe",
+          "line": 254,
+          "async": false
+        },
+        {
+          "name": "decode_rows",
+          "line": 274,
+          "async": false
+        },
+        {
+          "name": "retained_task_facts",
+          "line": 277,
+          "async": false
+        },
+        {
+          "name": "entry_index",
+          "line": 303,
+          "async": false
+        },
+        {
+          "name": "branch",
+          "line": 313,
+          "async": false
+        },
+        {
+          "name": "recorded_source_prefix",
+          "line": 327,
+          "async": false
+        },
+        {
+          "name": "covered_prefix",
+          "line": 352,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 362,
+      "class": "NativeInputEvidenceRead",
+      "bases": [
+        "NativeEvidenceRead"
+      ],
+      "methods": [
+        {
+          "name": "decode_rows",
+          "line": 369,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 378,
+      "class": "NativeEvidenceScope",
+      "bases": [
+        "ExitStack"
+      ],
+      "methods": [
+        {
+          "name": "__init__",
+          "line": 386,
+          "async": false
+        },
+        {
+          "name": "borrow",
+          "line": 392,
+          "async": false
+        },
+        {
+          "name": "for_source",
+          "line": 404,
+          "async": false
+        },
+        {
+          "name": "close",
+          "line": 411,
+          "async": false
+        },
+        {
+          "name": "__exit__",
+          "line": 417,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 302,
+      "class": "NativeContextProof",
+      "bases": [
+        "NativeContextRecord"
+      ],
+      "methods": [
+        {
+          "name": "corroborates_input",
+          "line": 305,
+          "async": false
+        },
+        {
+          "name": "read_evidence",
+          "line": 318,
+          "async": false
+        },
+        {
+          "name": "read_history_evidence",
+          "line": 339,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_tool_call.py",
+      "line": 103,
+      "class": "NativeToolCall",
+      "bases": [
+        "ABC"
+      ],
+      "methods": [
+        {
+          "name": "name",
+          "line": 118,
+          "async": false
+        },
+        {
+          "name": "correlate",
+          "line": 120,
+          "async": false
+        },
+        {
+          "name": "announce",
+          "line": 124,
+          "async": false
+        },
+        {
+          "name": "start",
+          "line": 127,
+          "async": false
+        },
+        {
+          "name": "authorize",
+          "line": 130,
+          "async": true
+        },
+        {
+          "name": "finish",
+          "line": 142,
+          "async": false
+        },
+        {
+          "name": "assert_complete",
+          "line": 147,
+          "async": false
+        },
+        {
+          "name": "commit_terminal",
+          "line": 151,
+          "async": false
+        },
+        {
+          "name": "admission_failed",
+          "line": 154,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 78,
+      "class": "NativeToolMode",
+      "bases": [
+        "ABC"
+      ],
+      "methods": [
+        {
+          "name": "launch_arguments",
+          "line": 82,
+          "async": false
+        },
+        {
+          "name": "finish",
+          "line": 85,
+          "async": true
+        },
+        {
+          "name": "socket",
+          "line": 90,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 95,
+      "class": "SelectedToolMode",
+      "bases": [
+        "NativeToolMode"
+      ],
+      "methods": [
+        {
+          "name": "__post_init__",
+          "line": 100,
+          "async": false
+        },
+        {
+          "name": "launch_arguments",
+          "line": 104,
+          "async": false
+        },
+        {
+          "name": "socket",
+          "line": 113,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 349,
+      "class": "OwnerToolSocket",
+      "bases": [
+        "ABC",
+        "Generic[Call]"
+      ],
+      "methods": [
+        {
+          "name": "__init__",
+          "line": 354,
+          "async": false
+        },
+        {
+          "name": "decode_call",
+          "line": 370,
+          "async": false
+        },
+        {
+          "name": "decode_request",
+          "line": 373,
+          "async": false
+        },
+        {
+          "name": "admit",
+          "line": 376,
+          "async": false
+        },
+        {
+          "name": "call_for",
+          "line": 378,
+          "async": false
+        },
+        {
+          "name": "announce",
+          "line": 386,
+          "async": false
+        },
+        {
+          "name": "tool_started",
+          "line": 395,
+          "async": false
+        },
+        {
+          "name": "tool_finished",
+          "line": 403,
+          "async": false
+        },
+        {
+          "name": "assert_complete",
+          "line": 409,
+          "async": false
+        },
+        {
+          "name": "active_tools",
+          "line": 414,
+          "async": false
+        },
+        {
+          "name": "selected_call_id",
+          "line": 420,
+          "async": false
+        },
+        {
+          "name": "handle_request",
+          "line": 423,
+          "async": true
+        },
+        {
+          "name": "failure_response",
+          "line": 428,
+          "async": false
+        },
+        {
+          "name": "start",
+          "line": 431,
+          "async": true
+        },
+        {
+          "name": "close",
+          "line": 449,
+          "async": true
+        },
+        {
+          "name": "_handle",
+          "line": 466,
+          "async": true
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 141,
+      "class": "TrackedTurnSession",
+      "bases": [
+        "TurnSession",
+        "MroDispatch"
+      ],
+      "methods": [
+        {
+          "name": "__init__",
+          "line": 144,
+          "async": false
+        },
+        {
+          "name": "execute",
+          "line": 179,
+          "async": true
+        },
+        {
+          "name": "complete",
+          "line": 239,
+          "async": true
+        },
+        {
+          "name": "resume_prepared",
+          "line": 278,
+          "async": true
+        },
+        {
+          "name": "open_transport",
+          "line": 285,
+          "async": true
+        },
+        {
+          "name": "started_input",
+          "line": 296,
+          "async": false
+        },
+        {
+          "name": "active_tools",
+          "line": 300,
+          "async": false
+        },
+        {
+          "name": "apply_native_event",
+          "line": 303,
+          "async": true
+        },
+        {
+          "name": "next_event",
+          "line": 308,
+          "async": true
+        },
+        {
+          "name": "send",
+          "line": 325,
+          "async": true
+        },
+        {
+          "name": "attest",
+          "line": 343,
+          "async": true
+        },
+        {
+          "name": "write",
+          "line": 366,
+          "async": false
+        },
+        {
+          "name": "prompt_boundary",
+          "line": 372,
+          "async": false
+        },
+        {
+          "name": "admit_prompt",
+          "line": 379,
+          "async": true
+        },
+        {
+          "name": "response",
+          "line": 392,
+          "async": true
+        },
+        {
+          "name": "committed_input",
+          "line": 404,
+          "async": true
+        },
+        {
+          "name": "committed_context",
+          "line": 413,
+          "async": true
+        },
+        {
+          "name": "message_update",
+          "line": 418,
+          "async": true
+        },
+        {
+          "name": "text_delta",
+          "line": 423,
+          "async": true
+        },
+        {
+          "name": "message_end",
+          "line": 427,
+          "async": true
+        },
+        {
+          "name": "accept_tool_round",
+          "line": 430,
+          "async": false
+        },
+        {
+          "name": "accept_final_message",
+          "line": 438,
+          "async": false
+        },
+        {
+          "name": "fail_terminal",
+          "line": 443,
+          "async": false
+        },
+        {
+          "name": "context_proof",
+          "line": 446,
+          "async": true
+        },
+        {
+          "name": "tool_started",
+          "line": 461,
+          "async": true
+        },
+        {
+          "name": "tool_finished",
+          "line": 468,
+          "async": true
+        },
+        {
+          "name": "settled",
+          "line": 474,
+          "async": true
+        },
+        {
+          "name": "result",
+          "line": 478,
+          "async": true
+        }
+      ]
+    }
+  ],
+  "consumer_candidates": [
+    {
+      "file": "src/agent_comms/acp.py",
+      "line": 394,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 235,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 239,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 348,
+      "call": "self.watchdog.observe"
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 756,
+      "call": "self.native.proc.finish"
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 123,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 562,
+      "call": "self.startup.release"
+    },
+    {
+      "file": "src/agent_comms/bus_display_index.py",
+      "line": 34,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 125,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 152,
+      "call": "self.owner.finish"
+    },
+    {
+      "file": "src/agent_comms/child_process.py",
+      "line": 822,
+      "call": "task.result"
+    },
+    {
+      "file": "src/agent_comms/child_process.py",
+      "line": 966,
+      "call": "launch.release"
+    },
+    {
+      "file": "src/agent_comms/child_process.py",
+      "line": 1073,
+      "call": "launch.release"
+    },
+    {
+      "file": "src/agent_comms/child_process.py",
+      "line": 1276,
+      "call": "launch.release"
+    },
+    {
+      "file": "src/agent_comms/child_process.py",
+      "line": 1148,
+      "call": "launch.release"
+    },
+    {
+      "file": "src/agent_comms/claim_admission.py",
+      "line": 396,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cli_commands.py",
+      "line": 651,
+      "call": "ctx.owners.release"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 120,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 177,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 186,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/compaction_journal.py",
+      "line": 75,
+      "call": "observe"
+    },
+    {
+      "file": "src/agent_comms/compaction_private_inputs.py",
+      "line": 60,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/compaction_publication.py",
+      "line": 138,
+      "call": "journal.publications.observe"
+    },
+    {
+      "file": "src/agent_comms/compaction_summaries.py",
+      "line": 105,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 35,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 39,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/coordinated_runtime.py",
+      "line": 90,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 259,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 47,
+      "call": "cls.run_worker"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 119,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 128,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/durable_turn.py",
+      "line": 47,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/goal_history.py",
+      "line": 221,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/goal_history.py",
+      "line": 230,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/historical_native_inputs.py",
+      "line": 161,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 223,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 139,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 178,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 261,
+      "call": "self.traversal.result"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 176,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/native_attestation.py",
+      "line": 106,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 287,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 114,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 178,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 832,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 852,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 315,
+      "call": "self.read_evidence"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 328,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_send.py",
+      "line": 196,
+      "call": "done.result"
+    },
+    {
+      "file": "src/agent_comms/native_runtime_input.py",
+      "line": 113,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 41,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 56,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 71,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 105,
+      "call": "NativeEvidenceScope"
+    },
+    {
+      "file": "src/agent_comms/native_source_cursor.py",
+      "line": 219,
+      "call": "NativeEvidenceScope"
+    },
+    {
+      "file": "src/agent_comms/native_tool_call.py",
+      "line": 61,
+      "call": "call.admission.finish"
+    },
+    {
+      "file": "src/agent_comms/native_tool_call.py",
+      "line": 145,
+      "call": "self.observation.finish"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 27,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 340,
+      "call": "self._build_slot.release"
+    },
+    {
+      "file": "src/agent_comms/optional_awareness_projection.py",
+      "line": 364,
+      "call": "self._build_slot.release"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 328,
+      "call": "self.progress.goals.finish"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 64,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 75,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 223,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 191,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 216,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 260,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_manual.py",
+      "line": 76,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_lifecycle.py",
+      "line": 342,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 215,
+      "call": "stopped.complete"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 254,
+      "call": "fenced.complete"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 161,
+      "call": "operation.complete"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 215,
+      "call": "session.native.attestation.observe"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 278,
+      "call": "future.result"
+    },
+    {
+      "file": "src/agent_comms/pi_events.py",
+      "line": 406,
+      "call": "session.extension_ui.observe"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 359,
+      "call": "semantics.observe"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 154,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 209,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 130,
+      "call": "context.corroborates_input"
+    },
+    {
+      "file": "src/agent_comms/publisher.py",
+      "line": 186,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/publisher.py",
+      "line": 483,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/recovery_gateway.py",
+      "line": 364,
+      "call": "self._worker_slots.release"
+    },
+    {
+      "file": "src/agent_comms/registry_document.py",
+      "line": 346,
+      "call": "observe"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 76,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/selected_actions.py",
+      "line": 87,
+      "call": "CodingToolMode"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 65,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 97,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 106,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 114,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 242,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 117,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 133,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 134,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 141,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 167,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 136,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 211,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 218,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 224,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/selected_source.py",
+      "line": 93,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/selected_source.py",
+      "line": 101,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/selected_summary_admission.py",
+      "line": 67,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 279,
+      "call": "SelectedToolMode"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 286,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 407,
+      "call": "call.finish"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 425,
+      "call": "call.authorize"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 207,
+      "call": "CodingToolOwner"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 265,
+      "call": "self.stage.progress.finish"
+    },
+    {
+      "file": "src/agent_comms/selected_write_plan.py",
+      "line": 206,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 342,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 189,
+      "call": "Coordination"
+    },
+    {
+      "file": "src/agent_comms/todos.py",
+      "line": 252,
+      "call": "current.state.release"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 360,
+      "call": "self.startup.release"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 237,
+      "call": "turn.complete"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 451,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 464,
+      "call": "self.context_proof"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 317,
+      "call": "self.native.proc.finish"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 481,
+      "call": "self.context_proof"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 487,
+      "call": "self.selected_tool_mode.finish"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 266,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 468,
+      "call": "traversal.finish"
+    },
+    {
+      "file": "src/agent_comms/turn_input_binding.py",
+      "line": 111,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 240,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 252,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 155,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/turn_stats.py",
+      "line": 49,
+      "call": "future.result"
+    },
+    {
+      "file": "src/agent_comms/turn_stats.py",
+      "line": 33,
+      "call": "future.result"
+    },
+    {
+      "file": "src/agent_comms/turn_stats.py",
+      "line": 40,
+      "call": "future.result"
+    },
+    {
+      "file": "src/agent_comms/turn_watchdog.py",
+      "line": 152,
+      "call": "read_task.result"
+    },
+    {
+      "file": "src/agent_comms/view_unread.py",
+      "line": 224,
+      "call": "self._lock.release"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 213,
+      "call": "probe.observe"
+    },
+    {
+      "file": "tests/guards/test_mutation_ownership.py",
+      "line": 64,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 141,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 89,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 99,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 171,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/native_initialization_installed_pilot.py",
+      "line": 87,
+      "call": "admission.release"
+    },
+    {
+      "file": "tests/reply_relevance_installed_journey.py",
+      "line": 129,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 37,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 105,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 135,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 141,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 149,
+      "call": "self.checkpoint.observe"
+    },
+    {
+      "file": "tests/selected_summary_cases.py",
+      "line": 29,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/selected_summary_cases.py",
+      "line": 92,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/selected_summary_cases.py",
+      "line": 90,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/selected_summary_cases.py",
+      "line": 100,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 73,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 151,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 452,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 483,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 639,
+      "call": "observe"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 654,
+      "call": "observe"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 563,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 609,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 627,
+      "call": "observe"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 644,
+      "call": "observe"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 776,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 780,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 874,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 390,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 430,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 1202,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 228,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 527,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 726,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 1328,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/shared_bus_restart_native.py",
+      "line": 271,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/test_acp_channel_disposition.py",
+      "line": 44,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_channel_disposition.py",
+      "line": 90,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_channel_disposition.py",
+      "line": 145,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 66,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 131,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 150,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 159,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 220,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 245,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 253,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 278,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 294,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 369,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 487,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 541,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 599,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 619,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 643,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 670,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 720,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 745,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 783,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 817,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 185,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_private_nk_delivery.py",
+      "line": 707,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_selected_write_plan.py",
+      "line": 90,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_selected_write_plan.py",
+      "line": 133,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_selected_write_plan.py",
+      "line": 276,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_selected_write_plan.py",
+      "line": 128,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_selected_write_plan.py",
+      "line": 318,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_selected_write_plan.py",
+      "line": 353,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_acp_selected_write_plan.py",
+      "line": 372,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_backend.py",
+      "line": 2414,
+      "call": "lease.release"
+    },
+    {
+      "file": "tests/test_backend_native_lifecycle.py",
+      "line": 210,
+      "call": "turn.result"
+    },
+    {
+      "file": "tests/test_backend_native_watchdog.py",
+      "line": 44,
+      "call": "task.result"
+    },
+    {
+      "file": "tests/test_backend_native_watchdog.py",
+      "line": 138,
+      "call": "task.result"
+    },
+    {
+      "file": "tests/test_channel_bus_ownership.py",
+      "line": 26,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_channel_participant_registration.py",
+      "line": 25,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_child_process.py",
+      "line": 478,
+      "call": "launch.release"
+    },
+    {
+      "file": "tests/test_claim_admission_baseline.py",
+      "line": 51,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_claim_admission_verifier.py",
+      "line": 70,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_claim_admission_verifier.py",
+      "line": 130,
+      "call": "CodingToolOwner"
+    },
+    {
+      "file": "tests/test_claim_admission_verifier.py",
+      "line": 260,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_claim_admission_verifier.py",
+      "line": 135,
+      "call": "CodingToolMode(coding).finish"
+    },
+    {
+      "file": "tests/test_claim_admission_verifier.py",
+      "line": 145,
+      "call": "empty_release.result"
+    },
+    {
+      "file": "tests/test_claim_admission_verifier.py",
+      "line": 135,
+      "call": "CodingToolMode"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 149,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 188,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 455,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 482,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 493,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 528,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 784,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 379,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_foreground.py",
+      "line": 739,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 138,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 144,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 157,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 169,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 182,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 191,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 200,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 238,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 277,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 328,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 404,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 425,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 452,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 475,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 480,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 488,
+      "call": "left.result"
+    },
+    {
+      "file": "tests/test_cohort_schema.py",
+      "line": 488,
+      "call": "right.result"
+    },
+    {
+      "file": "tests/test_compaction_journal.py",
+      "line": 224,
+      "call": "reopened.publications.observe"
+    },
+    {
+      "file": "tests/test_compaction_journal.py",
+      "line": 225,
+      "call": "reopened.publications.observe"
+    },
+    {
+      "file": "tests/test_compaction_journal.py",
+      "line": 222,
+      "call": "reopened.publications.observe"
+    },
+    {
+      "file": "tests/test_compaction_journal.py",
+      "line": 276,
+      "call": "journal.publications.observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 50,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 53,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 80,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 88,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 115,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 126,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 152,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 71,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_read.py",
+      "line": 119,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_compaction_outcome_transcript.py",
+      "line": 65,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 206,
+      "call": "NativeEntry.read_evidence"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 229,
+      "call": "bad_answer.observe"
+    },
+    {
+      "file": "tests/test_continued_private_session.py",
+      "line": 216,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_continued_private_session.py",
+      "line": 252,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_continued_private_session.py",
+      "line": 319,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_continued_private_session.py",
+      "line": 379,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_continued_private_session.py",
+      "line": 145,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 728,
+      "call": "OptionalAwarenessProjection._build_slot.release"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 143,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 336,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 371,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 413,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 424,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 440,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 467,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 692,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 733,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 749,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 793,
+      "call": "OptionalAwarenessProjection._build_slot.release"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 847,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 867,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 892,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 976,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1095,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1110,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1128,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1175,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1336,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1404,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1455,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1493,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1559,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1608,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1651,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1753,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1787,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1828,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1841,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1860,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1890,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1944,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1982,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1999,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 310,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1194,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "tests/test_coordinated_runtime.py",
+      "line": 1292,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_cohort.py",
+      "line": 62,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_cohort.py",
+      "line": 148,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_cohort.py",
+      "line": 162,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_cohort.py",
+      "line": 435,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_nominal.py",
+      "line": 172,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_nominal.py",
+      "line": 239,
+      "call": "progress.finish"
+    },
+    {
+      "file": "tests/test_coordination_nominal.py",
+      "line": 118,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_nominal.py",
+      "line": 286,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_nominal.py",
+      "line": 344,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_response.py",
+      "line": 92,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_response.py",
+      "line": 258,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_response.py",
+      "line": 277,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_response.py",
+      "line": 356,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_response.py",
+      "line": 424,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_store.py",
+      "line": 83,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_store.py",
+      "line": 159,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_coordination_store.py",
+      "line": 187,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cursor_load_recovery.py",
+      "line": 27,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_cutover_admission.py",
+      "line": 35,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_dm_scoped_ack_successor.py",
+      "line": 194,
+      "call": "lifecycle.result"
+    },
+    {
+      "file": "tests/test_dm_scoped_ack_successor.py",
+      "line": 191,
+      "call": "marked.result"
+    },
+    {
+      "file": "tests/test_goal_wait_certified_reply.py",
+      "line": 173,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_live_drain_failure.py",
+      "line": 42,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_maintenance_native_boundary.py",
+      "line": 84,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_admission_epoch_installed.py",
+      "line": 111,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_admission_epoch_installed.py",
+      "line": 131,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_admission_epoch_installed.py",
+      "line": 60,
+      "call": "comms.owners.release"
+    },
+    {
+      "file": "tests/test_native_admission_epoch_installed.py",
+      "line": 69,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_admission_rules.py",
+      "line": 44,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_catalog_discovery.py",
+      "line": 183,
+      "call": "pending.result"
+    },
+    {
+      "file": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 396,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 286,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_channel_reply_roundtrip.py",
+      "line": 75,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_context_inspection.py",
+      "line": 320,
+      "call": "reader.observe"
+    },
+    {
+      "file": "tests/test_native_context_inspection.py",
+      "line": 264,
+      "call": "reader.observe"
+    },
+    {
+      "file": "tests/test_native_context_reference.py",
+      "line": 98,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "tests/test_native_evidence_boundary.py",
+      "line": 28,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "tests/test_native_evidence_boundary.py",
+      "line": 42,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 23,
+      "call": "NativeEvidenceScope"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 25,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 30,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 37,
+      "call": "NativeEvidenceScope"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 39,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 52,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 60,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 65,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 75,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 211,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 42,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 45,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 109,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 118,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 145,
+      "call": "NativeEvidenceScope"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 147,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 230,
+      "call": "Coordination.run_async"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 224,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 228,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_failure_recovery.py",
+      "line": 227,
+      "call": "comms.owners.release"
+    },
+    {
+      "file": "tests/test_native_failure_recovery.py",
+      "line": 62,
+      "call": "comms.owners.release"
+    },
+    {
+      "file": "tests/test_native_failure_recovery.py",
+      "line": 76,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_failure_recovery.py",
+      "line": 117,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_failure_recovery.py",
+      "line": 145,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_failure_recovery.py",
+      "line": 186,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_failure_recovery.py",
+      "line": 239,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_failure_recovery.py",
+      "line": 205,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_file_artifact.py",
+      "line": 67,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_native_file_artifact.py",
+      "line": 69,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_native_file_artifact.py",
+      "line": 70,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_native_file_artifact.py",
+      "line": 71,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_native_file_artifact.py",
+      "line": 102,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_native_file_artifact.py",
+      "line": 77,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 80,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 81,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 1406,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 1422,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 87,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 130,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 143,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 157,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 167,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 171,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 961,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 1433,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 1435,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 1244,
+      "call": "durable_attempt.finish"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 1432,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 1456,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_pi.py",
+      "line": 1305,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 82,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 249,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 288,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 296,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 307,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 329,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 337,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 372,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 377,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 385,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 415,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 436,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 441,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 466,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 515,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 536,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 543,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 549,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 574,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 605,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 651,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 695,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 720,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 799,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 817,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 230,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "tests/test_native_prompt_binding.py",
+      "line": 760,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 61,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 203,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 76,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 138,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 239,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 275,
+      "call": "future.result"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 302,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 68,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 160,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_proof_recovery.py",
+      "line": 173,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "tests/test_native_send_admission.py",
+      "line": 484,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_send_admission.py",
+      "line": 605,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_send_admission.py",
+      "line": 42,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_certificate.py",
+      "line": 63,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_certificate.py",
+      "line": 79,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_certificate.py",
+      "line": 105,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_certificate.py",
+      "line": 134,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_certificate.py",
+      "line": 159,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_certificate.py",
+      "line": 185,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 69,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 84,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 117,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 132,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 159,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 167,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 186,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 194,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 197,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 207,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 226,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 262,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 271,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 299,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 55,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 123,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_startup.py",
+      "line": 73,
+      "call": "first.release"
+    },
+    {
+      "file": "tests/test_native_startup.py",
+      "line": 75,
+      "call": "queued.release"
+    },
+    {
+      "file": "tests/test_native_startup.py",
+      "line": 56,
+      "call": "lease.release"
+    },
+    {
+      "file": "tests/test_native_startup.py",
+      "line": 186,
+      "call": "lease.release"
+    },
+    {
+      "file": "tests/test_native_startup.py",
+      "line": 137,
+      "call": "lease.release"
+    },
+    {
+      "file": "tests/test_native_startup_actual.py",
+      "line": 83,
+      "call": "admission.release"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 44,
+      "call": "comms.owners.release"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 58,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 109,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 137,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 147,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 162,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 171,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 206,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 215,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 281,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 296,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_native_unknown_recovery.py",
+      "line": 321,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_nk_foreground.py",
+      "line": 110,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_nk_foreground.py",
+      "line": 344,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_nk_foreground.py",
+      "line": 170,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_nk_foreground.py",
+      "line": 242,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_operations.py",
+      "line": 250,
+      "call": "wired.owners.release"
+    },
+    {
+      "file": "tests/test_operations.py",
+      "line": 248,
+      "call": "wired.owners.release"
+    },
+    {
+      "file": "tests/test_optional_awareness_projection.py",
+      "line": 59,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_optional_awareness_projection.py",
+      "line": 453,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_ordinary_nk_delivery.py",
+      "line": 66,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_ordinary_nk_delivery.py",
+      "line": 106,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_outbound_transcript_source.py",
+      "line": 37,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_outbound_transcript_source.py",
+      "line": 157,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_outbound_transcript_source.py",
+      "line": 165,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_outbound_transcript_source.py",
+      "line": 271,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_outbound_transcript_source.py",
+      "line": 81,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_outbound_transcript_source.py",
+      "line": 87,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_owner_compaction_prepare.py",
+      "line": 442,
+      "call": "child.finish"
+    },
+    {
+      "file": "tests/test_owner_release_restart.py",
+      "line": 116,
+      "call": "stopping.result"
+    },
+    {
+      "file": "tests/test_owner_release_restart.py",
+      "line": 143,
+      "call": "stopping.result"
+    },
+    {
+      "file": "tests/test_pi_payloads.py",
+      "line": 161,
+      "call": "NativeContextProof"
+    },
+    {
+      "file": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 70,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 98,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 105,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 128,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 136,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 168,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 179,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 187,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_human_ingress.py",
+      "line": 42,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_human_ingress.py",
+      "line": 237,
+      "call": "future.result"
+    },
+    {
+      "file": "tests/test_private_idle_drain.py",
+      "line": 80,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_idle_drain.py",
+      "line": 83,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_idle_drain.py",
+      "line": 87,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_idle_drain.py",
+      "line": 109,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_idle_drain.py",
+      "line": 169,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_nk_entrypoint.py",
+      "line": 292,
+      "call": "publishing.result"
+    },
+    {
+      "file": "tests/test_private_nk_entrypoint.py",
+      "line": 383,
+      "call": "publishing.result"
+    },
+    {
+      "file": "tests/test_private_nk_entrypoint.py",
+      "line": 556,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_nk_entrypoint.py",
+      "line": 576,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_nk_entrypoint.py",
+      "line": 319,
+      "call": "executor.submit(custody.__enter__).result"
+    },
+    {
+      "file": "tests/test_private_nk_entrypoint.py",
+      "line": 382,
+      "call": "sending.result"
+    },
+    {
+      "file": "tests/test_private_nk_entrypoint.py",
+      "line": 568,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_runtime_bootstrap.py",
+      "line": 24,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_private_runtime_bootstrap_native.py",
+      "line": 122,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_reservation_rules.py",
+      "line": 64,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_reservation_rules.py",
+      "line": 38,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_reservation_rules.py",
+      "line": 46,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_reservation_rules.py",
+      "line": 52,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_reservation_rules.py",
+      "line": 193,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_reservation_rules.py",
+      "line": 115,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_reservation_rules.py",
+      "line": 162,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_retained_native_tool_latency.py",
+      "line": 118,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_retained_native_tool_latency.py",
+      "line": 164,
+      "call": "task.result"
+    },
+    {
+      "file": "tests/test_roster_restoration.py",
+      "line": 156,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_runtime_goal_retry_running.py",
+      "line": 59,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_execution_native.py",
+      "line": 54,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_execution_native.py",
+      "line": 228,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_input_lifetime_native.py",
+      "line": 187,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_input_lifetime_native.py",
+      "line": 73,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_input_lifetime_native.py",
+      "line": 78,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_input_lifetime_native.py",
+      "line": 245,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_observation_native.py",
+      "line": 40,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_selected_observation_native.py",
+      "line": 64,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_selected_observation_native.py",
+      "line": 46,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_selected_observation_native.py",
+      "line": 90,
+      "call": "observe"
+    },
+    {
+      "file": "tests/test_selected_owner_compaction_integration.py",
+      "line": 978,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_owner_compaction_integration.py",
+      "line": 460,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_source_batch.py",
+      "line": 36,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_summary_exchange.py",
+      "line": 175,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_selected_summary_exchange.py",
+      "line": 205,
+      "call": "task.result"
+    },
+    {
+      "file": "tests/test_selected_summary_exchange.py",
+      "line": 314,
+      "call": "task.result"
+    },
+    {
+      "file": "tests/test_selected_summary_exchange.py",
+      "line": 517,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_selected_summary_exchange.py",
+      "line": 80,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 50,
+      "call": "broker.SelectedToolMode"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 37,
+      "call": "broker.SelectedToolMode"
+    },
+    {
+      "file": "tests/test_selected_tool_broker.py",
+      "line": 133,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_selected_tool_native_fake.py",
+      "line": 111,
+      "call": "SelectedToolMode"
+    },
+    {
+      "file": "tests/test_selected_tool_runner_hook.py",
+      "line": 198,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_stack_persistent_compaction.py",
+      "line": 271,
+      "call": "compact_task.result"
+    },
+    {
+      "file": "tests/test_summary_failure_recovery.py",
+      "line": 191,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_summary_failure_recovery.py",
+      "line": 142,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_summary_failure_recovery.py",
+      "line": 168,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_summary_failure_recovery.py",
+      "line": 86,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "tests/test_thread_identity.py",
+      "line": 189,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_thread_unread.py",
+      "line": 268,
+      "call": "task.result"
+    },
+    {
+      "file": "tests/test_todos.py",
+      "line": 151,
+      "call": "store.release"
+    },
+    {
+      "file": "tests/test_todos.py",
+      "line": 130,
+      "call": "store.release"
+    },
+    {
+      "file": "tests/test_todos.py",
+      "line": 154,
+      "call": "store.release"
+    },
+    {
+      "file": "tests/test_todos.py",
+      "line": 156,
+      "call": "store.release"
+    },
+    {
+      "file": "tests/test_todos.py",
+      "line": 162,
+      "call": "store.release"
+    },
+    {
+      "file": "tests/test_todos.py",
+      "line": 74,
+      "call": "future.result"
+    },
+    {
+      "file": "tests/test_tool_diffs.py",
+      "line": 61,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_tool_diffs.py",
+      "line": 35,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_tool_diffs.py",
+      "line": 42,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_tool_diffs.py",
+      "line": 43,
+      "call": "result"
+    },
+    {
+      "file": "tests/test_tracked_native_lifecycle.py",
+      "line": 185,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_tracked_native_lifecycle.py",
+      "line": 156,
+      "call": "task.result"
+    },
+    {
+      "file": "tests/test_tracked_terminal_measurements.py",
+      "line": 38,
+      "call": "turn.complete"
+    },
+    {
+      "file": "tests/test_turn_context_wire.py",
+      "line": 132,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_turn_goal_account.py",
+      "line": 64,
+      "call": "progress.goals.finish"
+    },
+    {
+      "file": "tests/test_wake_candidate_index.py",
+      "line": 110,
+      "call": "Coordination"
+    },
+    {
+      "file": "tests/test_wake_lifetime.py",
+      "line": 58,
+      "call": "lock.release"
+    },
+    {
+      "file": "tests/test_wire_watch.py",
+      "line": 192,
+      "call": "observe"
+    },
+    {
+      "file": "tests/turn_context_installed_journey.py",
+      "line": 150,
+      "call": "reader.observe"
+    },
+    {
+      "file": "tools/cutover/native_schema_carry.py",
+      "line": 445,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "file": "tools/cutover/native_schema_carry.py",
+      "line": 636,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "file": "tools/cutover/native_schema_carry.py",
+      "line": 676,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "file": "tools/cutover/native_schema_carry.py",
+      "line": 761,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "file": "tools/cutover/native_schema_carry_controls.py",
+      "line": 77,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "file": "tools/cutover/original_owner_capture.py",
+      "line": 48,
+      "call": "self.observe"
+    },
+    {
+      "file": "tools/cutover/original_owner_capture.py",
+      "line": 73,
+      "call": "self.reader.observe"
+    },
+    {
+      "file": "tools/cutover/runtime_installation.py",
+      "line": 20,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "file": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 41,
+      "call": "Coordination"
+    },
+    {
+      "file": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 65,
+      "call": "Coordination"
+    },
+    {
+      "file": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 142,
+      "call": "Coordination"
+    }
+  ],
+  "limits": "Conservative receivers and indirect/MRO resolution read semantically, not claimed statically proven. Native960 source unchanged and reviewed separately. No native/provider/UI proof from AST."
+}
