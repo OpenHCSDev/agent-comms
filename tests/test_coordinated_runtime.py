@@ -313,7 +313,9 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert len(alpha_calls) == 1
     assert "── comms: 1 selected ──" in alpha_calls[0][1]
     assert f'"source_seq":{initial.message.seq}' in alpha_calls[0][1]
-    assert "engage only if this concerns your assigned task" in alpha_calls[0][1]
+    from agent_comms.wake_policy import WakePolicy
+
+    assert WakePolicy.relevance_instruction().content in alpha_calls[0][1]
     assert "No response obligation exists until triage engages" in alpha_calls[0][1]
     assert "you owe a response" not in alpha_calls[0][1]
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -337,7 +339,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert beta is not None and beta.disposition is CompletedAssignment
     assert tuple(receipt.exact_target for receipt in beta.publications) == ("#team",) and beta.publications
     assert len(beta_calls) == 2
-    assert "engage only if this concerns your assigned task" in beta_calls[0][1]
+    assert WakePolicy.relevance_instruction().content in beta_calls[0][1]
     assert "expected: this is yours" in beta_calls[1][1]
     assert '"target":"#team"' in beta_calls[1][1]
     assert f'"source_seq":{initial.message.seq}' in beta_calls[1][1]

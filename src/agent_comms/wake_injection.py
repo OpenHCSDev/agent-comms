@@ -14,6 +14,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 
 from .bus_publication import CommittedDelivery
 from .threads import Thread
+from .wake_policy import WakePolicy
 
 
 def render_selected_wake_frame(
@@ -93,10 +94,7 @@ def render_selected_batch_frame(
         f"selected: {selected_line}\n"
         "── your state ──\n"
         f"work_context: {work_context}\n"
-        "Judge relevance using your current goal, thread role/title, channel tags and the "
-        "new request. The original assignment records how the thread started; an old "
-        "bootstrap instruction to wait for a task does not exclude a new relevant request. "
-        "A current goal takes precedence over that original assignment. Preserve explicit "
-        "goal pauses; answering a coordination question need not resume paused work.\n"
+        "── reply relevance ──\n"
+        f"{WakePolicy.relevance_instruction().content}\n"
         "This frame is a read-only projection, not file-write permission.\n"
     )
