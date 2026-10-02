@@ -1,0 +1,25 @@
+{
+  "scope": "S1 boundary registry read ownership",
+  "source_validation": {
+    "passed": 5,
+    "elapsed_seconds": 1.28,
+    "tests": [
+      "tests/test_owner_compaction_runtime.py",
+      "tests/test_task_decisions.py::test_explicit_subtask_observation_correction_drop_and_turn_continuity"
+    ],
+    "command": "PYTHONPATH=src candidate-python with system pytest appended; pytest -o addopts='' (source sanity, not installed readiness)"
+  },
+  "production_delta": {
+    "added": 12,
+    "deleted": 6,
+    "files": [
+      "src/agent_comms/pi_vocabulary.py",
+      "src/agent_comms/owner_compaction_settings.py",
+      "src/agent_comms/owner_compaction_runtime.py"
+    ]
+  },
+  "extra_provider_calls": 0,
+  "saved_history_gate_reruns": 0,
+  "optional_S1_end_to_end_verified": false,
+  "unchanged_accepted_receipt": "evidence/task-aware-timing-20261002/summary-budget-source/configured529-continuation.json"
+}

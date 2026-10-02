@@ -1,0 +1,15 @@
+{
+  "source_head": "de60e38e",
+  "installed_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-fork-carry520-installed-20261002/bin/python",
+  "counts": {
+    "operations": 3,
+    "selected_summary_attempts": 4,
+    "publications": 3,
+    "private_raw_inputs": 394,
+    "enrolled_private_sessions": 0,
+    "native_fork_creation": 0
+  },
+  "control": "native5-addition01",
+  "provider_calls": 0,
+  "native_inputs": 0
+}

@@ -19,7 +19,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import LinkedSummary, ManualCommittedSummary
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_attempt import NotSentInput
-from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+from agent_comms.native_fork import ForkSessionRequest
 from agent_comms.native_package import verify_native_package
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.registration import Registration
@@ -76,12 +76,12 @@ async def main():
     project = stage / "project"
     project.mkdir()
     environment = dict(retained.environment)
-    forks = [await ForkSessionHelper.run(
+    service = Comms(stage / "wire")
+    forks = [await CompactionJournal(service.root / 'compaction-commits.sqlite3').private_inputs.fork(
         ForkSessionRequest(str(package), str(source_file), str(project), str(stage / 'native-forks')),
         cwd=project, env=environment,
     ) for _ in range(2)]
     assert all(Path(identity.session_file).is_relative_to(stage) for identity in forks)
-    service = Comms(stage / "wire")
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     runtime_path = str(Path(sys.executable).parent)

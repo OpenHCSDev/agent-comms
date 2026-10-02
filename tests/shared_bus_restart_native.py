@@ -102,7 +102,7 @@ async def configured_pure_channel(arguments):
     copied into the private coordinator or submitted as new inputs.
     """
     from agent_comms.comms import wire
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_fork import ForkSessionRequest
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.selected_triage import FullSelectedTriage
     from agent_comms.coordination_tables.publications import PublicationReceipts
@@ -121,17 +121,20 @@ async def configured_pure_channel(arguments):
     snapshot = public.registry.snapshot()
     sources = tuple(snapshot.require(name) for name in original_names)
     assert all(source.model and source.session_file for source in sources)
+    if arguments.saved_source is not None:
+        assert len(sources) == 1, 'An explicit saved source belongs to one configured fork'
     common_tags = set.intersection(*(set(source.tags) for source in sources))
     assert 'openhcs' in common_tags
     stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0], snapshot)
     assert len(str(service.root/'native-sessions'/('0'*32)/'s')) < 108
     names, settings = [], []
     for index, source in enumerate(sources):
-        original = Path(source.session_file)
+        original = arguments.saved_source or Path(source.session_file)
         before = hashlib.sha256(original.read_bytes()).hexdigest()
         # Existing SessionManager fork owns strict saved-history creation under
         # its native source lock. Its output stays under the owned profile.
-        fork = await ForkSessionHelper.run(
+        from agent_comms.compaction_journal import CompactionJournal
+        fork = await CompactionJournal(service.root / 'compaction-commits.sqlite3').private_inputs.fork(
             ForkSessionRequest(str(arguments.package), str(original), source.worktree, str(stage / 'forks')),
             cwd=Path(source.worktree), env=dict(os.environ),
         )
@@ -148,6 +151,7 @@ async def configured_pure_channel(arguments):
             'model':source.model, 'thinking':source.thinking_level.declared_name,
             'worktree':source.worktree, 'tags':sorted(source.tags),
             'source_session_bytes':original.stat().st_size,
+            'source_session_file': str(original),
             'source_session_sha256':before, 'owned_fork':fork.session_file,
             'original_task_sha256':hashlib.sha256((source.task or '').encode()).hexdigest()})
     service.registry.declare(Thread('human', frozenset(), str(project), role=ThreadRole.USER))
@@ -157,10 +161,15 @@ async def configured_pure_channel(arguments):
         for index in range(arguments.history):
             service.messaging.send_initial_cohort('history-sender', 'history-recipient',
                 f'Original private retained history {index}: ' + 'history ' * 400)
-    packets, timeline = [], []
+    packets, timeline, compaction_events = [], [], []
     class Observation:
         async def session_update(self, **kwargs):
             packets.append(kwargs)
+            from agent_comms.acp_extension import CompactionChangedUpdate
+            for item in decode_updates(kwargs['update'].get('_meta')):
+                if isinstance(item, CompactionChangedUpdate):
+                    compaction_events.append({'elapsed_seconds': time.perf_counter()-begun,
+                        'phase': item.event.phase})
     attachment = CommsClient(service, runtime_enabled=True,
         private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
@@ -336,6 +345,8 @@ async def configured_pure_channel(arguments):
             proof['task_timing'] = await configured_task_timing(
                 arguments, service, attachment, names[0], sender, stage
             )
+            assert {'start', 'progress', 'end'} <= {event['phase'] for event in compaction_events}, \
+                'Optional compaction did not publish continuous ACP progress and completion'
         if arguments.configured_saved_preparation:
             from agent_comms.compaction_journal import CompactionJournal
             from agent_comms.compaction_records import SelectedSummarySource
@@ -386,6 +397,7 @@ async def configured_pure_channel(arguments):
                 'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                     for path,digest in source_hashes.items()),
                 'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
+            receipt['compaction_events'] = compaction_events
             (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
             print(json.dumps(receipt,indent=2),flush=True)
 
@@ -534,6 +546,13 @@ async def configured_task_timing_continuation(arguments):
                 await asyncio.sleep(.1)
         proof['task_timing'] = await configured_task_timing(
             arguments, service, attachment, name, sender, stage, addend=21)
+        from agent_comms.acp_extension import CompactionChangedUpdate
+        events = tuple(item.event for packet in packets
+                       for item in decode_updates(packet['update'].get('_meta'))
+                       if isinstance(item, CompactionChangedUpdate))
+        assert {'start', 'progress', 'end'} <= {event.phase for event in events}, \
+            'Optional compaction did not publish continuous ACP progress and completion'
+        proof['continuous_compaction_phases'] = [event.phase for event in events]
         # The original shared effect records the second new reference in its receipt.
     except BaseException as error:
         failure = f'{type(error).__name__}: {error}'

@@ -1,0 +1,54 @@
+{
+  "scope": "S4 task-quality scorer and original completed native-result receiver only",
+  "core_import": "/home/ts/wt/toad-command-source-closure-20261002/.artifacts/runtime-command297-merged-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "scorer_source_sha256": "760f34ab15d7cde733eff7490d71ddf557a890babfca7284f53a88f1281a2003",
+  "sanity": {
+    "full_batch": {
+      "command": "python -m unittest discover -s tests -p test_compaction_retention_fixture.py -v",
+      "passed": 14,
+      "seconds": 1.355,
+      "exit_code": 0
+    },
+    "final_distinction_case": {
+      "reason": "distinguish obsolete approved actions from actions never authorized by the authored fixture",
+      "passed": 1,
+      "seconds": 0.007,
+      "exit_code": 0
+    }
+  },
+  "recorded_cli": {
+    "command": "python tests/compaction_retention_fixture.py --native-probes .artifacts/535-recorded-native-consumer01/original-probes.json --condition full-context",
+    "exit_code": 0,
+    "original_completed_native_calls": 2,
+    "new_native_or_provider_calls": 0,
+    "questions": 21,
+    "controlled_correct": 7,
+    "missing": 14,
+    "measurements": {
+      "recall": {
+        "questions": 18,
+        "correct": 6,
+        "missing": 12
+      },
+      "prohibition": {
+        "questions": 3,
+        "correct": 1,
+        "missing": 2
+      }
+    }
+  },
+  "original_hashes": {
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/535-recorded-native-consumer01/fixture/test_recorded_native_recall_co0/sessions/enrolled-b895848a3a9d42dda7e7ee98835ed6ec.jsonl": "03d61d24cc9bb8acabd4a53c89bfa849e6e7460183c10a598f9f01770108fed0",
+    "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/535-recorded-native-consumer01/fixture/test_recorded_native_recall_co0/sessions/enrolled-b895848a3a9d42dda7e7ee98835ed6ec.jsonl.input-proof": "7be3edda9c7f2e67003af00b7c03490c46bd20fc2098ee48c4b7a39c50d90f87"
+  },
+  "original_hashes_unchanged": true,
+  "authored_source_cuts": {
+    "research": 3,
+    "goal": 3
+  },
+  "real_research_or_goal_checkpoints": 0,
+  "limits": [
+    "No model-retention, revised action execution, canonical revision-mass, final provider prompt presence or condition construction claim.",
+    "No matched provider experiment, production source/runtime format/default change or public action."
+  ]
+}

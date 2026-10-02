@@ -1,13 +1,14 @@
 """Derive continued-session coverage from existing native and input authorities.
 
-This creates no enrollment or recovery record. A visible session alone cannot
-cover history: each user entry needs a recorded native start or verified native
-context evidence. All UNKNOWN rows remain unchanged.
+This creates no enrollment or recovery record. Retained source ancestry is
+distinct from managed input delivery. Only corroborated live-recorded contexts
+bind historical ancestry to the admitted session; UNKNOWN rows stay unchanged.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .input_disposition import InputDocument
@@ -27,8 +28,10 @@ def verify_continued_private_session(
     source: SelectedSource,
     raw_ids: frozenset[str],
     inputs: InputDocument,
+    *,
+    journal_db: sqlite3.Connection,
 ) -> None:
-    """Reprove complete saved user history; never promote an unresolved attempt."""
+    """Check retained source and managed inputs without promoting an attempt."""
     before = SessionRevision.observe(str(session))
     if not before.matches(source.reserved_revision):
         raise ValueError("Continued private source identity changed")
@@ -38,6 +41,8 @@ def verify_continued_private_session(
             raise ValueError("Continued private session needs a strict native header")
         identity = NativeSessionIdentity(header.id, str(session))
         tracked = NativeEntry.tracked_users(entries)
+        covered = evidence.covered_prefix(entries, journal_db)
+        required = tuple(entry for entry in entries if entry.id not in covered)
         rows = inputs.rows
         # The locked document already excludes proven process-local future inputs.
         # Every other unresolved owner input except the exact original remains a stop.
@@ -61,15 +66,23 @@ def verify_continued_private_session(
             else {}
         )
         retained = (
-            NativeContextProof.read_history_evidence(session, header, entries)
-            if tracked.keys() - (started.keys() | recorded.keys())
+            NativeContextProof.read_history_evidence(
+                session, header, entries, recorded=tuple(recorded.values())
+            )
+            if recorded or NativeEntry.tracked_users(required).keys() - started.keys()
             else {}
         )
+        covered |= evidence.recorded_source_prefix(entries, recorded.values())
         observed = set()
         for entry in entries:
             if not entry.is_message or not entry.message.user:
                 continue
             native_id = entry.input_id
+            # Source ancestry never settles managed input. Raw markers need
+            # their own live receipt; started inputs keep their exact text check.
+            if (entry.id in covered and native_id not in raw_ids
+                    and native_id not in started and native_id not in recorded):
+                continue
             if native_id is None or native_id not in tracked:
                 raise ValueError("Continued private user history lacks unique tracked input")
             message = entry.message
@@ -81,15 +94,9 @@ def verify_continued_private_session(
                     TextContent(text),
                 ) or message.input_digest != native_request_digest(text):
                     raise ValueError("Continued private user differs from recorded native start")
-            elif native_id in recorded:
-                proof = recorded[native_id]
-                if proof.session_entry_id != entry.id or proof != NativeContextProof.read_evidence(
-                    session, native_id, request_generation=proof.request_generation, evidence=evidence
-                ):
-                    raise ValueError("Continued private user differs from live-recorded context")
-            elif native_id not in retained:
+            elif native_id not in recorded and native_id not in retained:
                 raise ValueError("Continued private user has no verified retained context")
-        if not observed or not raw_ids.issubset(observed & recorded.keys()):
+        if not (observed or covered) or not raw_ids.issubset(observed & recorded.keys()):
             raise ValueError("Continued private raw input remains UNKNOWN")
         if not source.reserved_revision.current(str(session)):
             raise ValueError("Continued private history changed during coverage check")

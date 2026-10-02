@@ -1,0 +1,921 @@
+...............FFFFFFFFFFFFFFFFF                                         [100%]
+=================================== FAILURES ===================================
+__ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[None] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64de0c5b50>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = None
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:190: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[context] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64de0c6090>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'context'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:190: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[unsettled] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64dddb7a10>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'unsettled'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:190: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[foreign] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64dddb4940>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'foreign'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:190: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[no-marker] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddf14b90>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'no-marker'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:190: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[extended] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64de178f50>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'extended'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:190: TypeError
+__ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[null] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddbf5400>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'null'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:190: TypeError
+_ test_live_recorded_raw_context_covers_marker_without_erasing_unknown[opaque] _
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64de15fbd0>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'opaque'
+
+    @pytest.mark.parametrize(
+        "damage", [None, "context", "unsettled", "foreign", "no-marker", "extended", "null", "opaque"]
+    )
+    def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continued, damage):
+        from agent_comms.assignment_states import TriagePendingAssignment
+        from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
+        from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
+        from agent_comms.coordinator import Coordination
+        from agent_comms.native_runtime_input import NativeRuntimeInput
+        from agent_comms.native_admission_epoch import RecordedNativeAdmission
+    
+        journal, session, inputs, source = continued
+        inputs.update(lambda document: replace(document, rows={"acp:new": document.rows["acp:new"]}))
+        if damage != "no-marker":
+            journal.private_inputs.reserve(session, "a" * 32)
+        if damage in {"extended", "null", "opaque"}:
+            entries = [json.loads(line) for line in session.read_text().splitlines()]
+            part = entries[1]["message"]["content"][0]
+            if damage == "extended":
+                part["extension"] = {"provenance": "opaque"}
+            elif damage == "null":
+                part["textSignature"] = None
+            else:
+                part["type"] = "extension"
+            session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        proof = dict(
+            schema=1,
+            type="context_committed",
+            sessionId="session",
+            inputId="a" * 32,
+            sessionEntryId="user",
+            requestGeneration=1,
+            llmContextDigest="b" * 64,
+        )
+        proof_file = Path(str(session) + ".input-proof")
+        write_proof_rows(session, [proof])
+        # Native schema fixture: the immutable result columns represent an already
+        # recorded live result; the journal must only corroborate those columns.
+        with Coordination(str(journal.path.parent / "coordination.sqlite3")) as store:
+            store.participants.register("f" * 32, "owner", "owner", committed=True)
+            store.assignments.accept(
+                WakeAssignment(
+                    assignment_id="claim",
+                    recipient="owner",
+                    recipient_lookup="f" * 32,
+                    wire_seq=1,
+                    message_id="message",
+                    audience=MessageAudience.COLLECTIVE,
+                    lifecycle=TriagePendingAssignment(),
+                    accepted_at_ms=1,
+                    updated_at_ms=1,
+                )
+            )
+            install_native_runtime_schema(store)
+            with store.session.transaction() as db:
+>               NativeRuntimeInput(
+                    input_id="a" * 32,
+                    stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
+                    assignment_id="claim",
+                    owner_lookup="f" * 32,
+                    owner_thread="foreign" if damage == "foreign" else "owner",
+                    owner_generation=1,
+                    owner_token_digest="c" * 64,
+                    sent_owner_admission_generation=RecordedNativeAdmission(1),
+                    session_id=None if damage == "unsettled" else "session",
+                    session_file=None if damage == "unsettled" else str(session),
+                    session_entry_id=None if damage == "unsettled" else "user",
+                    request_generation=None if damage == "unsettled" else 1,
+                    llm_context_digest=(
+                        None if damage == "unsettled" else ("d" if damage == "context" else "b") * 64
+                    ),
+                    verdict=IgnoreSelectedTriage,
+                ).insert(db)
+E               TypeError: NativeRuntimeInput.__init__() got an unexpected keyword argument 'assignment_id'
+
+tests/test_continued_private_session.py:190: TypeError
+________ test_original_committed_cut_covers_inherited_prefix_only[None] ________
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64dde896d0>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = None
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+_ test_original_committed_cut_covers_inherited_prefix_only[missing-operation] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddc4d860>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'missing-operation'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+_ test_original_committed_cut_covers_inherited_prefix_only[unknown-operation] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddc4dfd0>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'unknown-operation'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+______ test_original_committed_cut_covers_inherited_prefix_only[summary] _______
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddc4e6d0>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'summary'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+________ test_original_committed_cut_covers_inherited_prefix_only[cut] _________
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddc4eba0>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'cut'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+_______ test_original_committed_cut_covers_inherited_prefix_only[parent] _______
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddc4f700>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'parent'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+____ test_original_committed_cut_covers_inherited_prefix_only[foreign-file] ____
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddc4ea50>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'foreign-file'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+__ test_original_committed_cut_covers_inherited_prefix_only[untracked-suffix] __
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddc80280>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'untracked-suffix'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+____ test_original_committed_cut_covers_inherited_prefix_only[raw-unknown] _____
+
+continued = (<agent_comms.compaction_journal.CompactionJournal object at 0x7f64ddc80520>, PosixPath('/home/ts/wt/comms-retained-hu...=2, target='owner', source_text='new', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={})),))))
+damage = 'raw-unknown'
+
+    @pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+        "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+    def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+        """A recorded original cut is distinct from file-only or copied coverage."""
+        from agent_comms.compaction_records import CompactionOperation
+        from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+        from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.pi_summary_payloads import SummaryFiles
+        from agent_comms.private_path import FileRevision
+    
+        journal, session, inputs, source = continued
+        entries = [json.loads(line) for line in session.read_text().splitlines()]
+        entries.insert(1, dict(type="message", id="public-user", parentId=None,
+            message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+        entries[2]["parentId"] = "public-user"
+        session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+        witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+>       payload = NativeSummaryPayload("original summary", 100, SummaryFiles((), ()), None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeSummaryPayload.__init__() takes 1 positional argument but 5 were given
+
+tests/test_continued_private_session.py:239: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[None]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[context]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[unsettled]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[foreign]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[no-marker]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[extended]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[null]
+FAILED tests/test_continued_private_session.py::test_live_recorded_raw_context_covers_marker_without_erasing_unknown[opaque]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[None]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[missing-operation]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[unknown-operation]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[summary]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[cut]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[parent]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[foreign-file]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[untracked-suffix]
+FAILED tests/test_continued_private_session.py::test_original_committed_cut_covers_inherited_prefix_only[raw-unknown]
+17 failed, 15 passed in 1.83s

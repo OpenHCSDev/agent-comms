@@ -48,7 +48,11 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
 
     class Bridge:
         native = SimpleNamespace(package_dir="test-owned-package")
-        registry = SimpleNamespace(snapshot=lambda: None)
+        @staticmethod
+        def snapshot():
+            pytest.fail("Mandatory compaction read an unused registry snapshot")
+
+        registry = SimpleNamespace(snapshot=snapshot)
         def require_source_current(self, *_args):
             pass
 

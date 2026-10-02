@@ -268,7 +268,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
             goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
             # Freeze original membership before deriving the byte-preserved
             # partition. Goal members have their own preimage/row/DDL proof.
-            unchanged = self.runtime_installation.unchanged_protected(paths).difference(goals.paths)
+            unchanged = self.runtime_installation.unchanged_protected(paths, runtime).difference(goals.paths)
             invariant = {str(path): protected[str(path)] for path in unchanged}
             original_files = self.runtime_installation.retain_protected(paths, directory)
             retain_file(ROOT / 'registry.json', directory / 'registry.json')

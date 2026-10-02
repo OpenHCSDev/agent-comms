@@ -1,0 +1,21 @@
+{
+  "compiled_production": [
+    {
+      "path": "dist/core/compaction/agent-comms-policy.js",
+      "added": 6,
+      "deleted": 11
+    },
+    {
+      "path": "dist/core/compaction/compaction.js",
+      "added": 4,
+      "deleted": 8
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js",
+      "added": 3,
+      "deleted": 1
+    }
+  ],
+  "added": 13,
+  "deleted": 20
+}

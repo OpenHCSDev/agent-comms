@@ -25,6 +25,13 @@ class SummaryOperationIdentity:
 
 
 @dataclass(frozen=True)
+class NativeCommitIdentity:
+    commit_id: str = field(metadata={"wire_name": "commitId"})
+    payload_digest: str = field(metadata={"wire_name": "payloadDigest"})
+    metadata_digest: str = field(metadata={"wire_name": "metadataDigest"})
+
+
+@dataclass(frozen=True)
 class SelectedCommitReference:
     """The selected-summary portion of the journal's native commit intent.
 

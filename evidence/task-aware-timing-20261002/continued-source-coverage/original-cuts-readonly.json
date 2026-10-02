@@ -1,0 +1,38 @@
+[
+  {
+    "root": "/home/ts/wt/a520s102",
+    "source": "/home/ts/wt/a520s102/forks/2026-10-02T10-04-06-010Z_01a0fc12-31fb-7183-99dc-e9c4b8b28618.jsonl",
+    "header": "01a0fc12-31fb-7183-99dc-e9c4b8b28618",
+    "entries": 9552,
+    "users": 1023,
+    "covered_prefix_entries": 9523,
+    "covered_untracked_users": 834,
+    "remaining_untracked_users": 0,
+    "elapsed_seconds": 2.786378668039106,
+    "input_sent": false,
+    "provider_calls": 0,
+    "journal_writes": false,
+    "admission_grant": false,
+    "source_sha256_before": "df8981df8bfb19082ef9f3cee5c70a4a1dcb3863286e9beaabfc0442a42957c6",
+    "source_sha256_after": "df8981df8bfb19082ef9f3cee5c70a4a1dcb3863286e9beaabfc0442a42957c6",
+    "source_unchanged": true
+  },
+  {
+    "root": "/home/ts/wt/a520s201",
+    "source": "/home/ts/wt/a520s201/forks/2026-10-02T13-18-51-419Z_01a0fcc4-801c-7231-831b-e9af4ac9a2da.jsonl",
+    "header": "01a0fcc4-801c-7231-831b-e9af4ac9a2da",
+    "entries": 9558,
+    "users": 1025,
+    "covered_prefix_entries": 0,
+    "covered_untracked_users": 0,
+    "remaining_untracked_users": 834,
+    "elapsed_seconds": 2.6773811180028133,
+    "input_sent": false,
+    "provider_calls": 0,
+    "journal_writes": false,
+    "admission_grant": false,
+    "source_sha256_before": "544c6132701c2542ffffcbed1feb377c0c26fad18d4a0492aad2f2b95f478b0e",
+    "source_sha256_after": "544c6132701c2542ffffcbed1feb377c0c26fad18d4a0492aad2f2b95f478b0e",
+    "source_unchanged": true
+  }
+]

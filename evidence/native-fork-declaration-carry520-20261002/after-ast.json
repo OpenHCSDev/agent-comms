@@ -1,0 +1,443 @@
+{
+  "revision": "de60e38e",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omitted": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omitted": []
+    },
+    {
+      "root": "tests",
+      "parsed": 357,
+      "omitted": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 88,
+      "node": "Name",
+      "name": "JournalTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_journal.py",
+      "line": 139,
+      "node": "Name",
+      "name": "JournalTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 79,
+      "node": "ClassDef",
+      "name": "JournalTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 92,
+      "node": "Name",
+      "name": "JournalTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 272,
+      "node": "Name",
+      "name": "JournalTable"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 301,
+      "node": "Name",
+      "name": "JournalTable"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 29,
+      "node": "ClassDef",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 251,
+      "node": "ClassDef",
+      "name": "RuntimeNativeFiles"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 491,
+      "node": "FunctionDef",
+      "name": "capture_requests"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 505,
+      "node": "FunctionDef",
+      "name": "carry_compaction"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 627,
+      "node": "ClassDef",
+      "name": "NativeSchemaCarryPlan"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 710,
+      "node": "FunctionDef",
+      "name": "prepare"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 153,
+      "node": "FunctionDef",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 156,
+      "node": "FunctionDef",
+      "name": "require_carry_target"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 175,
+      "node": "FunctionDef",
+      "name": "capture_requests"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 181,
+      "node": "FunctionDef",
+      "name": "empty_journal_members"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 187,
+      "node": "FunctionDef",
+      "name": "carry_journal_members"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 630,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 631,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 446,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 508,
+      "node": "Attribute",
+      "name": "require_carry_target"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 516,
+      "node": "Attribute",
+      "name": "empty_journal_members"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 712,
+      "node": "Attribute",
+      "name": "require_carry_target"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 745,
+      "node": "Name",
+      "name": "NativeSchemaCarryPlan"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 176,
+      "node": "Attribute",
+      "name": "require_carry_target"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 179,
+      "node": "Name",
+      "name": "capture_requests"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 192,
+      "node": "Attribute",
+      "name": "require_carry_target"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 201,
+      "node": "Attribute",
+      "name": "empty_journal_members"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 420,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 421,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 445,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 498,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 512,
+      "node": "Attribute",
+      "name": "carry_journal_members"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 623,
+      "node": "Name",
+      "name": "carry_compaction"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 635,
+      "node": "Attribute",
+      "name": "require_carry_target"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 711,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 87,
+      "node": "Name",
+      "name": "JournalTable"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 145,
+      "node": "Name",
+      "name": "NativeSchemaCarryPlan"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 163,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 165,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 165,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 165,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 638,
+      "node": "Name",
+      "name": "RuntimeNativeFiles"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 726,
+      "node": "Attribute",
+      "name": "capture_requests"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 196,
+      "node": "Name",
+      "name": "JournalTable"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 636,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 666,
+      "node": "Name",
+      "name": "NativeSchemaCarryPlan"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 720,
+      "node": "Name",
+      "name": "RuntimeNativeFiles"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 771,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 772,
+      "node": "Name",
+      "name": "prepare"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 643,
+      "node": "Name",
+      "name": "RuntimeNativeFiles"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 763,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 651,
+      "node": "Name",
+      "name": "RuntimeNativeFiles"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 765,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 35,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 77,
+      "node": "Attribute",
+      "name": "require_carry_target"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 82,
+      "node": "Attribute",
+      "name": "capture_requests"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 127,
+      "node": "Name",
+      "name": "prepare"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 76,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 88,
+      "node": "Name",
+      "name": "carry_compaction"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 104,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 105,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 177,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 178,
+      "node": "Attribute",
+      "name": "release_versions"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 122,
+      "node": "Name",
+      "name": "RuntimeNativeFiles"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 175,
+      "node": "Name",
+      "name": "JournalTable"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 154,
+      "node": "Name",
+      "name": "RuntimeNativeFiles"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 59,
+      "node": "Name",
+      "name": "NativeSchemaCarryPlan"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 19,
+      "node": "Name",
+      "name": "NativeSchemaDeclaration"
+    }
+  ],
+  "limits": "Python syntax census; no proof of dynamic dispatch or SQLite/JS external resolution"
+}

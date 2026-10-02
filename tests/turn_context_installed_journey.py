@@ -54,7 +54,7 @@ async def run_configured(options):
     from agent_comms.comms import Comms
     from agent_comms.field_codec import FieldCodec
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_fork import ForkSessionRequest
     from agent_comms.native_entries import NativeEntry
     from agent_comms.native_package import verify_native_package
     from agent_comms.threads import Thread
@@ -86,11 +86,12 @@ async def run_configured(options):
         project = root / 'project'
         project.mkdir(mode=0o700)
         environment = dict(captured.retained.environment)
-        identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
+        service = Comms(root / 'wire')
+        from agent_comms.compaction_journal import CompactionJournal
+        identity = await CompactionJournal(service.root / 'compaction-commits.sqlite3').private_inputs.fork(ForkSessionRequest(str(package),
             str(original_file), str(project), str(root / 'native-forks')), cwd=project, env=environment)
         assert Path(identity.session_file).is_relative_to(root)
         captured.require_current()
-        service = Comms(root / 'wire')
         root_id = service.messaging.initialize_private_initial_protocol()
         runtime = Path(sys.executable).parent
         environment.update(AGENT_COMMS_ROOT=str(service.root),

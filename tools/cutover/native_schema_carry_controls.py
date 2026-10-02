@@ -8,6 +8,7 @@ that mode explicitly does not qualify the public stopped-custody installation.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from contextlib import closing
 import json
 from pathlib import Path
@@ -19,8 +20,8 @@ import sys
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_path import PrivateDirectoryRole
 from native_schema_carry import (
-    NativeSchemaDeclaration, RuntimeNativeFiles, capture_requests,
-    carry_compaction, inventory, prepare, row_digest,
+    NativeSchemaDeclaration, NativeSchemaCarryPlan, RuntimeNativeFiles,
+    carry_compaction, inventory, row_digest,
 )
 from publish_openhcs_recovery import digest
 from retained_summary_reset import RuntimeCompactionFiles
@@ -45,10 +46,18 @@ def journal_observation(path):
             db.execute('ROLLBACK')
 
 
-def require_journal_preserved(before, after):
+def require_journal_preserved(before, after, original, target):
     from agent_comms.compaction_records import SelectedSummaryAttempt
 
     name = SelectedSummaryAttempt.declared_name
+    if original.version == target.version:
+        if any(after[key] != values for key, values in before.items()):
+            raise AssertionError('Original journal facts changed during additive carry')
+        added = target.compaction_columns.keys() - original.compaction_columns.keys()
+        if after.keys() != before.keys() | added or any(after[key] for key in added):
+            raise AssertionError('Added declaration members must remain empty')
+        return {'rows': {key: len(values) for key, values in before.items()},
+                'unchanged_tables_sha256': row_digest(before), 'created_empty_tables': sorted(added)}
     unchanged = {key:values for key,values in before.items() if key != name}
     if any(after[key] != values for key,values in unchanged.items()):
         raise AssertionError('Original operation/publication/enrollment/UNKNOWN rows changed')
@@ -66,13 +75,12 @@ def run_journal_inventory(base, source_python, inventory_path):
     base.mkdir(mode=0o700)
     original = original_declaration(source_python)
     target = NativeSchemaDeclaration.observe()
-    if original.release_versions != (9,3,3,5) or target.release_versions != (9,3,3,6):
-        raise ValueError('Matched original Native5 and current Native6 declarations required')
+    original.require_carry_target(target)
     before_sha = digest(inventory_path)
     candidate = base/'compaction-commits.sqlite3'
     shutil.copyfile(inventory_path, candidate)
     candidate.chmod(0o600)
-    requests = capture_requests(candidate, source_python, original)
+    requests = target.capture_requests(candidate, source_python, original)
     before = journal_observation(candidate)
     with closing(sqlite3.connect(candidate)) as db, db:
         db.execute('PRAGMA foreign_keys=OFF')
@@ -80,7 +88,7 @@ def run_journal_inventory(base, source_python, inventory_path):
         db.execute('BEGIN IMMEDIATE')
         evidence = carry_compaction(db, original, target, requests)
     after = journal_observation(candidate)
-    relation = require_journal_preserved(before, after)
+    relation = require_journal_preserved(before, after, original, target)
     if digest(inventory_path) != before_sha:
         raise AssertionError('Original running-source inventory changed')
     # The actual current journal entrypoint authenticates target DDL and reads
@@ -117,35 +125,34 @@ def run(base, source_python, root):
     before_journal = journal_observation(root/'compaction-commits.sqlite3')
     if not before_journal['selected_summary_attempts']:
         raise ValueError('Actual historical selected summary evidence is required')
-    plan = prepare(root, base/'matched-candidate', original, source_python)
-    if source_hashes != {name:digest(root/name) for name in source_hashes}:
-        raise AssertionError('Original stores changed during candidate preparation')
-    installed = CarryNativeRuntimeInstallation(goal_schema=original.goal, plan=plan)
+    installed = CarryNativeRuntimeInstallation(
+        original=original,
+        source_python=source_python, candidate=base/'matched-candidate')
     if FieldCodec.decode(RuntimeInstallation, FieldCodec.encode(installed)) != installed:
         raise AssertionError('Canonical runtime installation declaration does not round-trip')
+    if installed.original_goal() is not installed.original.goal:
+        raise AssertionError('Carry goal declaration is not derived from original source')
     refused = []
     # One-use custody refusals operate on ONLY this private copy, with exact
     # original bytes restored afterward. No original session or proof is edited.
-    for case in ('candidate-change','existing-attempt','companion'):
+    for case in ('existing-candidate','existing-attempt','companion'):
         try:
-            if case == 'candidate-change':
-                path=plan.candidate/'compaction-commits.sqlite3'
-                prior=path.read_bytes()
-                path.write_bytes(prior+b'changed')
-                try:
-                    plan.require_candidate()
-                finally:
-                    path.write_bytes(prior)
+            member = replace(installed, candidate=base/(case+'-candidate'))
+            if case == 'existing-candidate':
+                member.candidate.mkdir(mode=0o700)
+                with RuntimeCompactionFiles(root).acquire() as acquired:
+                    member.install(acquired, base/'existing-candidate-preimages')
             elif case == 'existing-attempt':
                 destination=base/'preexisting-attempt'
                 destination.mkdir(mode=0o700)
-                plan.install(destination)
+                with RuntimeCompactionFiles(root).acquire() as acquired:
+                    member.install(acquired, destination)
             else:
                 path=root/'compaction-commits.sqlite3-wal'
                 write_original(path,b'owned control companion')
                 try:
-                    with RuntimeNativeFiles(root).acquire():
-                        pass
+                    with RuntimeCompactionFiles(root).acquire() as acquired:
+                        member.install(acquired, base/'companion-preimages')
                 finally:
                     path.unlink()
         except (ValueError,RuntimeError,FileExistsError):
@@ -155,14 +162,41 @@ def run(base, source_python, root):
         if source_hashes != {name:digest(root/name) for name in source_hashes}:
             raise AssertionError('Custody refusal changed original stores')
     with RuntimeCompactionFiles(root).acquire() as acquired:
+        protected = frozenset(root/name for name in source_hashes)
+        if installed.unchanged_protected(protected, acquired):
+            raise AssertionError('Native declared members remain in unchanged partition')
+        if installed.candidate.exists():
+            raise AssertionError('Native candidate was derived before installation custody')
         receipt = installed.install(acquired, base/'original-preimages')
+    plan = FieldCodec.decode(NativeSchemaCarryPlan, json.loads(
+        (base/'original-preimages/reviewed-carry.json').read_text()))
+    path=plan.candidate/'compaction-commits.sqlite3'
+    prior=path.read_bytes()
+    path.write_bytes(prior+b'changed')
+    try:
+        try:
+            plan.require_candidate()
+        except (ValueError,RuntimeError):
+            refused.append('candidate-change')
+        else:
+            raise AssertionError('Changed installed candidate was accepted')
+    finally:
+        path.write_bytes(prior)
     if any(digest(base/'original-preimages'/name) != sha for name,sha in source_hashes.items()):
         raise AssertionError('Original preimages were not retained exactly')
-    relation=require_journal_preserved(before_journal,journal_observation(root/'compaction-commits.sqlite3'))
+    relation=require_journal_preserved(before_journal,journal_observation(root/'compaction-commits.sqlite3'),
+                                      original, plan.target)
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.compaction_records import JournalTable
+    from agent_comms.typed_table import TypedTable
+    with CompactionJournal(root/'compaction-commits.sqlite3').transaction() as db:
+        installed_rows = {table.declared_name: len(table.select(db))
+                          for table in TypedTable.members_with(JournalTable)}
     result={'classification':'private-stopped-copy-installed-operator-control',
             'original_release':list(original.release_versions),
             'target_release':list(plan.target.release_versions),
-            'relation':relation, 'custody_refusals':refused, 'installation':receipt,
+            'relation':relation, 'installed_typed_rows':installed_rows,
+            'custody_refusals':refused, 'installation':receipt,
             'provider_calls':0, 'native_inputs':0, 'owner_signals':0,
             'public_cutover_qualified':False}
     write_original(base/'receipt.json',(json.dumps(result,indent=2)+'\n').encode())

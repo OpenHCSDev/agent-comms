@@ -1,4 +1,4 @@
-"""One-use Native5 to Native6 carry under the existing stopped custody.
+"""One-use declared native carry under the existing stopped custody.
 
 Original declarations authenticate the source. Current declarations own target
 DDL. Only matched clones are transformed; original files remain preimages.
@@ -152,6 +152,68 @@ class NativeSchemaDeclaration:
     @property
     def release_versions(self):
         return self.coordination_version, self.snapshot_version, self.response_version, self.version
+
+    def require_carry_target(self, target):
+        """Authenticate the reviewed source conversion or additive journal DDL.
+
+        A same-release declaration change cannot reinterpret any original fact.
+        New journal members start empty; only their actual producer can create
+        enrollment, native coverage or fork evidence later.
+        """
+        if self.release_versions == (9, 3, 3, 5) and target.release_versions == (9, 3, 3, 6):
+            return
+        if self.release_versions != target.release_versions or target.release_versions != (9, 3, 3, 6):
+            raise ValueError('Unreviewed native release conversion')
+        if (self.runtime_objects != target.runtime_objects or self.binding != target.binding
+                or self.writable_columns != target.writable_columns
+                or self.metadata_rows != target.metadata_rows):
+            raise ValueError('Same-release carry cannot change original native declarations')
+        if (not self.compaction_columns.items() <= target.compaction_columns.items()
+                or not self.compaction.items() <= target.compaction.items()):
+            raise ValueError('Additive journal carry cannot reinterpret original declarations')
+
+    def capture_requests(self, path, source_python, original):
+        original.require_carry_target(self)
+        if original.version == self.version:
+            return []
+        return capture_requests(path, source_python, original)
+
+    def empty_journal_members(self, original):
+        if not original.compaction_columns.keys() <= self.compaction_columns.keys():
+            raise ValueError('Carry cannot discard original journal members')
+        return {name: (self.compaction_columns[name], [])
+                for name in self.compaction_columns.keys() - original.compaction_columns.keys()}
+
+    def carry_journal_members(self, db, original):
+        """Create declaration-owned empty members without rewriting old rows."""
+        from agent_comms.compaction_records import JournalTable
+        from agent_comms.typed_table import TypedTable
+
+        original.require_carry_target(self)
+        original.require_compaction(db)
+        if db.execute('PRAGMA foreign_key_check').fetchall():
+            raise ValueError('Original journal relations require their owning review')
+        tables = {table.declared_name: table for table in TypedTable.members_with(JournalTable)}
+        identities = {
+            name: rows(db, name, fields if tables[name].without_rowid else ('rowid', *fields))
+            for name, fields in original.compaction_columns.items()
+        }
+        additions = self.empty_journal_members(original)
+        rebuild(db, self.compaction, additions)
+        self.require_compaction(db)
+        for name, before in identities.items():
+            fields = original.compaction_columns[name]
+            if rows(db, name, fields if tables[name].without_rowid else ('rowid', *fields)) != before:
+                raise ValueError('Additive journal carry changed original row identities or facts')
+        if any(tables[name].select(db) for name in additions):
+            raise ValueError('New journal members cannot contain inferred historical evidence')
+        if db.execute('PRAGMA foreign_key_check').fetchall():
+            raise ValueError('Carried journal relations violate foreign keys')
+        return {'created_empty_tables': sorted(additions),
+                'original_identity_rows_sha256': row_digest(identities),
+                'original_rows': {name: len(values) for name, values in identities.items()},
+                'original_source_bytes_preserved': True,
+                'admission_receipts_minted': 0, 'input_replays': 0}
 
     @property
     def runtime_objects(self):
@@ -443,11 +505,15 @@ def capture_requests(path, source_python, original):
 def carry_compaction(db, original, target, requests):
     from agent_comms.compaction_records import SelectedSummaryAttempt, SelectedSummarySource
 
+    original.require_carry_target(target)
+    if original.version == target.version:
+        if requests:
+            raise ValueError('Additive journal carry cannot convert historical requests')
+        return target.carry_journal_members(db, original)
     original.require_compaction(db)
     before_rows = inventory(db)
     name = SelectedSummaryAttempt.declared_name
-    if set(original.compaction_columns) != set(target.compaction_columns):
-        raise ValueError('Carry cannot discard or invent journal table authorities')
+    additions = target.empty_journal_members(original)
     for table, fields in original.compaction_columns.items():
         expected = tuple(f for f in target.compaction_columns[table] if f != 'request') if table == name else target.compaction_columns[table]
         if fields != expected:
@@ -467,7 +533,8 @@ def carry_compaction(db, original, target, requests):
         request.journal_json()  # Existing retained-payload/control bound.
         values.append((rowid, operation_id, session_file, source_json,
                        request_field.encode(request), state))
-    rebuild(db, target.compaction, {name:(('rowid', *target.compaction_columns[name]), values)})
+    rebuild(db, target.compaction, {name:(('rowid', *target.compaction_columns[name]), values),
+                                    **additions})
     target.require_compaction(db)
     after_rows = inventory(db)
     untouched = {table:data for table,data in before_rows.items() if table != name}
@@ -485,7 +552,10 @@ def carry_compaction(db, original, target, requests):
                 SelectedCommitReference.from_intent(intent).require_source(attempt.source_json)
     if db.execute('PRAGMA foreign_key_check').fetchall():
         raise ValueError('Carry changed original journal references')
-    return {'attempts':len(values), 'original_selected_rows_sha256':row_digest(prior),
+    if any(rows(db, table) for table in additions):
+        raise ValueError('Added journal declarations acquired invented historical evidence')
+    return {'attempts':len(values), 'created_empty_tables':sorted(additions),
+            'original_selected_rows_sha256':row_digest(prior),
             'unchanged_tables_sha256':row_digest(untouched),
             'original_source_bytes_preserved':True, 'admission_receipts_minted':0,
             'input_replays':0}
@@ -561,9 +631,48 @@ class NativeSchemaCarryPlan:
     target: NativeSchemaDeclaration
     stores: tuple[CarriedNativeStore, ...]
 
+    @classmethod
+    def prepare(cls, root, candidate, original, source_python):
+        target = NativeSchemaDeclaration.observe()
+        original.require_carry_target(target)
+        if not source_python.is_absolute() or not source_python.is_file():
+            raise ValueError('Authentic original installed interpreter is required')
+        root, candidate = root.absolute(), candidate.absolute()
+        if candidate == root or candidate.is_relative_to(root):
+            raise ValueError('Candidate must be separate persistent owned storage')
+        candidate.mkdir(mode=0o700)
+        stores = []
+        with RuntimeNativeFiles(root).acquire() as acquired:
+            if not any(item.path.name == 'coordination.sqlite3' for item in acquired.originals):
+                raise ValueError('No original native coordinator to carry')
+            for item in acquired.originals:
+                retain_file(item.path, candidate / item.path.name)
+            compaction = candidate / CompactionNativeStore.name
+            requests = target.capture_requests(compaction, source_python, original) if compaction.exists() else []
+            owners = {store.name:store for store in CarriedNativeStore.members_with(NativeReleaseStore)}
+            for item in acquired.originals:
+                path = candidate / item.path.name
+                with closing(sqlite3.connect(path, isolation_level=None)) as db:
+                    db.execute('PRAGMA foreign_keys=OFF')
+                    db.execute('PRAGMA synchronous=FULL')
+                    db.execute('BEGIN IMMEDIATE')
+                    try:
+                        evidence = owners[item.path.name].carry(db, original, target, requests)
+                        db.execute('COMMIT')
+                    except BaseException:
+                        db.execute('ROLLBACK')
+                        raise
+                with path.open('rb') as saved:
+                    os.fsync(saved.fileno())
+                stores.append(owners[item.path.name](item.sha256, digest(path), evidence))
+            acquired.require_original()
+        fsync_directory(candidate)
+        plan = cls(root, candidate, original, target, tuple(stores))
+        plan.require_candidate()
+        return plan
+
     def require_candidate(self):
-        if self.original.release_versions != (9, 3, 3, 5) or self.target.release_versions != (9, 3, 3, 6):
-            raise ValueError('Only reviewed Native5 release9/3/3/5->Native6 release9/3/3/6 carry is authorized')
+        self.original.require_carry_target(self.target)
         if NativeSchemaDeclaration.observe() != self.target:
             raise ValueError('Matched target declarations changed after carry preparation')
         declared_paths = RuntimeNativeFiles(self.candidate).paths
@@ -638,46 +747,6 @@ class NativeSchemaCarryPlan:
         return result
 
 
-def prepare(root, candidate, original, source_python):
-    target = NativeSchemaDeclaration.observe()
-    if original.release_versions != (9, 3, 3, 5) or target.release_versions != (9, 3, 3, 6):
-        raise ValueError('Original9/3/3/5 and matched target9/3/3/6 declarations are required')
-    if not source_python.is_absolute() or not source_python.is_file():
-        raise ValueError('Authentic original installed interpreter is required')
-    root, candidate = root.absolute(), candidate.absolute()
-    if candidate == root or candidate.is_relative_to(root):
-        raise ValueError('Candidate must be separate persistent owned storage')
-    candidate.mkdir(mode=0o700)
-    stores = []
-    with RuntimeNativeFiles(root).acquire() as acquired:
-        if not any(item.path.name == 'coordination.sqlite3' for item in acquired.originals):
-            raise ValueError('No original native coordinator to carry')
-        for item in acquired.originals:
-            retain_file(item.path, candidate / item.path.name)
-        compaction = candidate / CompactionNativeStore.name
-        requests = capture_requests(compaction, source_python, original) if compaction.exists() else []
-        owners = {store.name:store for store in CarriedNativeStore.members_with(NativeReleaseStore)}
-        for item in acquired.originals:
-            path = candidate / item.path.name
-            with closing(sqlite3.connect(path, isolation_level=None)) as db:
-                db.execute('PRAGMA foreign_keys=OFF')
-                db.execute('PRAGMA synchronous=FULL')
-                db.execute('BEGIN IMMEDIATE')
-                try:
-                    evidence = owners[item.path.name].carry(db, original, target, requests)
-                    db.execute('COMMIT')
-                except BaseException:
-                    db.execute('ROLLBACK')
-                    raise
-            with path.open('rb') as saved:
-                os.fsync(saved.fileno())
-            stores.append(owners[item.path.name](item.sha256, digest(path), evidence))
-        acquired.require_original()
-    fsync_directory(candidate)
-    plan = NativeSchemaCarryPlan(root, candidate, original, target, tuple(stores))
-    plan.require_candidate()
-    return plan
-
 
 if __name__ == '__main__':
     import argparse
@@ -685,11 +754,6 @@ if __name__ == '__main__':
     parser.add_argument('--declaration', action='store_true')
     parser.add_argument('--compaction-requests', type=Path)
     parser.add_argument('--goal-declaration', action='store_true')
-    parser.add_argument('--root', type=Path)
-    parser.add_argument('--candidate', type=Path)
-    parser.add_argument('--original-declaration', type=Path)
-    parser.add_argument('--original-python', type=Path)
-    parser.add_argument('--plan', type=Path)
     args = parser.parse_args()
     if args.goal_declaration:
         print(json.dumps(NativeSchemaDeclaration.observe_goal()))
@@ -698,9 +762,4 @@ if __name__ == '__main__':
     elif args.compaction_requests:
         print(json.dumps(original_compaction_requests(args.compaction_requests), allow_nan=False))
     else:
-        if not all((args.root,args.candidate,args.original_declaration,args.original_python,args.plan)):
-            parser.error('Preparation requires stopped root, candidate, original declaration/interpreter and fresh plan')
-        original = FieldCodec.decode(NativeSchemaDeclaration,json.loads(args.original_declaration.read_text()))
-        plan = prepare(args.root,args.candidate,original,args.original_python)
-        write_original(args.plan,(json.dumps(FieldCodec.encode(plan),indent=2)+'\n').encode())
-        print(json.dumps({'plan':str(args.plan),'stores':len(plan.stores),'source_unchanged':True}))
+        parser.error('Only declaration or original-request observation is supported; carry is owned by stopped RuntimeInstallation')

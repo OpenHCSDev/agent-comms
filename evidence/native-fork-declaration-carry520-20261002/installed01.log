@@ -1,0 +1,140 @@
+{
+  "classification": "private-stopped-copy-installed-operator-control",
+  "original_release": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "target_release": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "relation": {
+    "rows": {
+      "operations": 1,
+      "selected_summary_attempts": 1,
+      "publications": 1,
+      "private_raw_inputs": 4,
+      "enrolled_private_sessions": 0
+    },
+    "unchanged_tables_sha256": "fcdf59c43feb52cdb347039195c7cdbda73d6a5625154083ca28792ac0570d74",
+    "created_empty_tables": [
+      "native_fork_creation"
+    ]
+  },
+  "custody_refusals": [
+    "candidate-change",
+    "existing-attempt",
+    "companion"
+  ],
+  "installation": {
+    "classification": "runtime/native6-original-source-carry",
+    "stores": [
+      {
+        "kind": "coordination",
+        "original_sha256": "b27d759689b57f5f790814342502d8897c001f3c77bdda53052727e22b30ded6",
+        "candidate_sha256": "b09fe03e3d330f0485d5f259aa46a7f6211cef65cd628b12672a5a92c1fd545f",
+        "evidence": {
+          "original_release": [
+            9,
+            3,
+            3,
+            6
+          ],
+          "target_release": [
+            9,
+            3,
+            3,
+            6
+          ],
+          "unchanged_rows_sha256": "7ce22b7aa9c6e19a5a01def3eecc9c4e158746cd1ce04456fed01d25a36d3f4d",
+          "original_rows": {
+            "wake_claims": 3,
+            "execution_claims": 2,
+            "participants": 1,
+            "participant_aliases": 1,
+            "owner_generations": 1,
+            "attempts": 2,
+            "replay_assessments": 0,
+            "current_executions": 1,
+            "executions": 2,
+            "schema_meta": 1,
+            "publication_intents": 2,
+            "publication_receipts": 2,
+            "connectivity": 0,
+            "recovery_audit": 0,
+            "obligations": 2,
+            "native_runtime_schema_meta": 1,
+            "native_runtime_input": 5,
+            "current_native_cursor": 1,
+            "native_runtime_triage_sources": 3,
+            "cohort_schema_meta": 1,
+            "claim_batch_receipts": 3,
+            "claim_batch_members": 3,
+            "cohort_delivery_receipts": 3,
+            "awareness_schema_meta": 1,
+            "awareness_claim_generations": 3,
+            "response_schema_meta": 1,
+            "publication_append_dispatches": 2
+          }
+        }
+      },
+      {
+        "kind": "prompt_binding",
+        "original_sha256": "5b6be7c96232c15e6e2ea1982f41b794c394d01db9af660778ffd485e7ba0329",
+        "candidate_sha256": "5b6be7c96232c15e6e2ea1982f41b794c394d01db9af660778ffd485e7ba0329",
+        "evidence": {
+          "original_bindings": 5,
+          "unchanged_rows_sha256": "6bdb8126beaced58104ad9c39783120eee15bbc60ac48bd6125fcc9484a1d407"
+        }
+      },
+      {
+        "kind": "compaction",
+        "original_sha256": "eacffa12a4f33de6a0d73a754eec483006188b89524e14f35932eefe8eadcc1b",
+        "candidate_sha256": "e36de09f9d47ed3b1320426cbe2cdbad1dcf7365ec976529bb51493322c127cd",
+        "evidence": {
+          "created_empty_tables": [
+            "native_fork_creation"
+          ],
+          "original_identity_rows_sha256": "45e04f918867198c43fdc887e5ff0ba17d6f995863532e632a5ad0e1c725e315",
+          "original_rows": {
+            "operations": 1,
+            "selected_summary_attempts": 1,
+            "publications": 1,
+            "private_raw_inputs": 4,
+            "enrolled_private_sessions": 0
+          },
+          "original_source_bytes_preserved": true,
+          "admission_receipts_minted": 0,
+          "input_replays": 0
+        }
+      }
+    ],
+    "original_preimages": "/home/ts/.cache/agent-scratch/mendel-native-fork-carry538-20261002/original-preimages",
+    "retired": [],
+    "reconstructed_proofs": 0,
+    "input_replays": 0,
+    "compaction_original_files": [
+      {
+        "path": "/home/ts/.cache/agent-scratch/mendel-native-fork-carry538-20261002/root/compaction-commits.sqlite3",
+        "sha256": "eacffa12a4f33de6a0d73a754eec483006188b89524e14f35932eefe8eadcc1b",
+        "revision": {
+          "identity": {
+            "device": 2084,
+            "inode": 7905568
+          },
+          "size": 57344,
+          "mtime_ns": 1790936755007547966,
+          "ctime_ns": 1790960993550856279
+        }
+      }
+    ]
+  },
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "owner_signals": 0,
+  "public_cutover_qualified": false
+}

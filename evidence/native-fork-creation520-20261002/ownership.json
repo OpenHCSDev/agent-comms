@@ -1,0 +1,9 @@
+{
+  "owner": "Schrodinger",
+  "source": "a14141e7f27a39f40ed192af7695bfbf5c465f69",
+  "purpose": "One normal native fork creation artifact; no provider, public changes or extra environment",
+  "scratch": "/home/ts/.cache/agent-scratch/native-fork-creation520-20261002",
+  "current_package_protected": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-00c2c11feaaf6e53",
+  "expected_peak_bytes": 335544320,
+  "started_at": 1790955284.7456064
+}
