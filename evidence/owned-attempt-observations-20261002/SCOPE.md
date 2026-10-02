@@ -24,3 +24,20 @@ The385 finish-to-publication intervals are not per-function spans. This source
 closure does not establish their attribution or claim public reply latency fixed.
 Pattern BOUND-2/IMPL-13: complete the existing resource seam, not a competing reader.
 AST owner/consumer closure precedes edits; focused resource/finality checks come last.
+
+
+Child retirement joins the same closure: ChildProcess now owns a single synchronous
+physical plan driver, borrowed by async retirement through existing executor and
+join_retirement, and by SynchronousProcess.stop_sync in its original guarded thread.
+The async pipe-release/reap remains on the event loop, only after the owned worker
+has proved the exact original group absent. Every existing scan/birth/guard/deadline
+remains; no process membership snapshot/cache is substituted. Required scans move
+off-loop, and the duplicated synchronous driver is deleted. The original385 timings
+still do not assign elapsed time to those scans.
+
+Worker observation borrows its AttemptStore only inside DurableTurn.using_attempts;
+the original object/fence is updated by each actual transaction and restored resource
+lifetime even on failure/cancellation. It creates no second DurableTurn, state snapshot,
+parallel connection registry or async event queue. Nested phase dispatch remains in
+the same operation. Unhandled events use existing handler declarations and open no
+connection. Stage/terminal/publication consumers retain their existing guarded paths.

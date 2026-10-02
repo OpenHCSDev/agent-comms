@@ -6,6 +6,9 @@ tools. Recovery-only historical phases remain readable without manufacturing
 recovery events from a successful result.
 """
 
+from contextlib import contextmanager
+from functools import partial
+
 from . import pi_events as pi
 from .agent_events import NativePhaseChanged
 from .attempt_states import (
@@ -18,6 +21,7 @@ from .attempt_states import (
 )
 from .attempt_store import AttemptStore
 from .coordination_errors import IdentityConflict
+from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
 from .turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
 
@@ -28,6 +32,28 @@ class DurableTurn(MroDispatch):
         self.fence = fence
         self.pointer_revision = pointer_revision
         self.input_id = input_id
+
+    @contextmanager
+    def using_attempts(self, attempts):
+        """Borrow only this operation's connection; keep the original fence owner."""
+        original = self.attempts
+        self.attempts = attempts
+        try:
+            yield
+        finally:
+            self.attempts = original
+
+    async def dispatch(self, event):
+        if not tuple(self.handlers_for(event)):
+            return event
+        return await Coordination.run_async(
+            self.attempts.session.path, partial(self.observe_owned, event)
+        )
+
+    def observe_owned(self, event, resource):
+        """Consume one native observation through joined, worker-owned SQLite."""
+        with self.using_attempts(resource.attempts):
+            return self.dispatch_sync(event)
 
     @property
     def current(self):
@@ -49,12 +75,12 @@ class DurableTurn(MroDispatch):
         self.fence = result.fence
 
     @handles(pi.Response)
-    async def accepted(self, event):
+    def accepted(self, event):
         if event.id == "native-prompt" and event.success and self.current.starting:
             self.advance(PromptAcceptedAttempt)
 
     @handles(pi.ContextCommitted)
-    async def context(self, event):
+    def context(self, event):
         if event.input_id != self.input_id or self.model_started:
             return
         if self.current.starting:
@@ -62,33 +88,33 @@ class DurableTurn(MroDispatch):
         self.advance(ModelRunningAttempt)
 
     @handles(NativePhaseChanged)
-    async def excursion(self, event):
+    def excursion(self, event):
         if self.model_started:
-            await self.dispatch(event.phase)
+            self.dispatch_sync(event.phase)
 
     @handles(ModelWaitPhase)
-    async def model(self, phase):
+    def model(self, phase):
         self.advance(ModelRunningAttempt)
 
     @handles(ToolRunningPhase)
-    async def tool(self, phase):
+    def tool(self, phase):
         self.advance(ToolRunningAttempt)
 
     @handles(CompactionPhase)
-    async def compaction(self, phase):
+    def compaction(self, phase):
         self.advance(CompactionAttempt)
 
     def finish(self):
         """Native child is reaped and any explicit owner effect has completed."""
         if not self.model_started:
             raise IdentityConflict("native completion lacks model progress")
-        self.advance(SettlingAttempt)
         self.fence = self.attempts.advance(
             self.fence,
             SettlingAttempt,
             expected_pointer_revision=self.pointer_revision,
             backend_done=True,
             process_dead=True,
+            progress=True,
         ).value.fence
         return self.fence
 
