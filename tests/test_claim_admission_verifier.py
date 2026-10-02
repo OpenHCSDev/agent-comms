@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -31,6 +32,7 @@ from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmiss
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -122,6 +124,16 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 attempt_ordinal=1,
             )
             verify_selected_wake(comms, store, admission, owner.name)
+            # A turn with no acquired coding resources has no release to
+            # serialize behind another wire writer. Use the same real selected
+            # owner; the worker must not borrow this caller's SQL connection.
+            with ThreadPoolExecutor(max_workers=1) as worker:
+                with _store_lock(comms._wire_lock_path):
+                    empty_release = worker.submit(
+                        claim_admission.release_selected_resources,
+                        comms, store, admission, owner.name, (),
+                    )
+                    empty_release.result(timeout=2)
             with pytest.raises(IdentityConflict):
                 publish_selected_resource_claim(
                     comms,

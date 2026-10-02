@@ -16,6 +16,14 @@ The existing release owner now returns for an empty resource collection before e
 
 There is one production release caller: `CodingToolOwner.finish`; `CodingToolMode.finish` consumes that same owner through the existing `NativeToolMode` contract. `ClaimEnvelope` already rejects an empty transition as meaningless. `claim-retirement-before-ast.json` enumerates the owning declarations and consumers with the existing NRA parser:311 production modules, zero parse omissions. Sch and Arendt were notified of the exact file claims; Arendt confirmed no overlap.
 
+Final production delta across both changes:28 deleted /29 added,3 files. `claim-retirement-after-ast.json` retains the complete existing owner/caller family. The two final source checks pass in4.73s: actual runtime/native context without provider/input, including prepared-child exit; and real selected-owner/registry/SQL claim controls, including empty release while another wire writer holds the original lock. These are source-import checks, not installed acceptance.309 owns the paired installed context/Tree journey through a normally staged existing receiving holder.
+
+## Authorized historical cleanup declaration
+
+Original `dedicated-worktree-cleanup-20261001` explicitly declared a cleanup task with no provider process or goal, but its historical record omitted `execution`. The current `Thread` declaration therefore decoded it as native. Its present process was a normally restarted `agent_comms.worker`; liveness did not establish native intent. Current CLI registration already defaults to existing `ExternalThreadExecution`;297's producer family was not rebuilt or changed.
+
+After owner authorization, the current installed `Registration._declare_in` corrected only this transport through its existing wire/registry/catalog lifetime and `UpdatedRegistration` effects. `OwnerRestartSelection` attested original incarnation, owner/admission and PID702428/birth44958513; actual process and idle state were checked under custody. The entire Thread stayed equal except execution; other Thread/status/alias records and original input rows stayed equal. Existing owner/admission counters advanced because receiving capability changed. Process remains alive; no stop, provider, new input, replay or default change. Original Thread preimage and applied operation are retained separately. This is explicit original intent, not model-absence conversion or a reader fallback. Actual new UI paint is not claimed by the registry receipt.
+
 ## Terminal-tail source findings
 
 Original418 spans8.450274s and15.819279s end after `TrackedTurnSession.complete` exits its original `AsyncExitStack`. `PrivateSendAdmission.execute` records that return before success verification and reply publication. Thus later publication cannot explain those particular spans. Model-request completion is not native `AgentSettled`.
