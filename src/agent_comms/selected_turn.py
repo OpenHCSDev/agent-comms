@@ -46,8 +46,7 @@ class SelectedPrompt:
 
     def context(self, segments) -> TurnContext:
         owner = self.participant.owner.thread
-        lease = owner.turn_lease
-        assert lease is not None
+        lease = owner.require_turn_lease()
         return TurnContext(
             owner.incarnation,
             RecordedContextTurn(TurnId(lease.turn_id), lease.identity),
