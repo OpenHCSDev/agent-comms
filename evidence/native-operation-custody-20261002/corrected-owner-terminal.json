@@ -1,0 +1,32 @@
+{
+  "scope": "private saved-source owner for actual installed309 UI",
+  "root": "/home/ts/.cache/agent-scratch/m547ctx/w",
+  "source": "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/native-forks/2026-10-02T19-00-31-323Z_01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8.jsonl",
+  "root_id": "8f2a9345a8fd44fabd652b1903ebca01",
+  "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent",
+  "name": "context547",
+  "process": {
+    "pid": 817272,
+    "start_time": 45314548
+  },
+  "python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python",
+  "core_module": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/lib/python3.14/site-packages/agent_comms/comms.py",
+  "before_source_hashes": {
+    "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/native-forks/2026-10-02T19-00-31-323Z_01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8.jsonl": "c1137f89f1a79704c834bad0f84369cd0fb38d100ee3e6e6924ad2b817f09bae",
+    "/home/ts/.cache/agent-scratch/mendel-configured-sdk542-20261002/native-forks/2026-10-02T19-00-31-323Z_01a0fdfd-4de2-707c-bc2e-b2209f8cdbd8.jsonl.input-proof": "b19f73c9f8fcb434e3ba318ba6ce7c3ddc762f9fcf15ac99e9864b192d4eb9b5"
+  },
+  "configured_model": "openai-codex/gpt-6.1-sol",
+  "thinking": "off",
+  "auto_wake": false,
+  "prompt_dispatched": false,
+  "reattached_original_private_root": true,
+  "native_process": {
+    "pid": 817343,
+    "start_time": 45314947
+  },
+  "prepared_child_alive": true,
+  "native_child_exited": true,
+  "source_hashes_unchanged": true,
+  "result": "PASS",
+  "owner_runtime_closed": true
+}
