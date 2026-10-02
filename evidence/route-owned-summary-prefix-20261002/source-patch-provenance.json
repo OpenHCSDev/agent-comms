@@ -1,0 +1,60 @@
+{
+  "source": "Read-only protected native9f12 original; only source files copied for patch authoring/AST; no package/env/product execution or overlay",
+  "files": [
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/types.d.ts",
+      "original_sha256": "845edb9a4509f79bf973310a37dafa7adb1110dd77e88bfbe5e1c00292dbac68",
+      "after_sha256": "3a8dc3e37eb12859c4825bfbe8bc27c7e8cdb3f5f5f82d64933d3de803735ae2"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/models.d.ts",
+      "original_sha256": "062bef91c97e54c4539bf17dbd941c32362071a46e241dde621bd77fd0233c18",
+      "after_sha256": "9cf1b0aa760939a0c5105d1578034c565ba4a244f724e64329d31f0e153f244e"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/models.js",
+      "original_sha256": "42610d47fe293d99f4b05b147971e181c7312ea47c9be2906a4803955276a8a4",
+      "after_sha256": "88221494cbd6249e6e01dbe510e3dff3733c318635e72d7be1409cbb82f244f5"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/lazy.js",
+      "original_sha256": "4b8083fd71cbbe2ed01be00fc6ae9bc67f84aa7bf50ef815f7863e156a3e003c",
+      "after_sha256": "6e69fe1f29cb5e8461d4de2dfb6c32e8f526c75a589d82b090ea7b4efc4bfc6c"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/lazy.d.ts",
+      "original_sha256": "31d8ac51123fc2c68c0fb228225ca79e6453e77ad19fed4de2a894a26dc1b052",
+      "after_sha256": "0ced572ae47cc547f707f663ebbf85ce0ce6f4018df34fde9011f1329f04e183"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.lazy.js",
+      "original_sha256": "cc69ef7cb93175b8ae30e9b6f749cc5c978cd0c168d0bf379ed48a3d7e9c120a",
+      "after_sha256": "9c703f129585903b015c51fc7f07ae52b51a758658fac41863320b40b0c8aaf4"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.js",
+      "original_sha256": "9ce603078e7ad9fc79ea1d6713adf08b8eeb99c6e050c6108907df1e8fe0f2cf",
+      "after_sha256": "06a4680c58af0f25da396da8f59a32d52c7f61f1fc8e2fdf4124c22bcc58f35d"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-codex-responses.d.ts",
+      "original_sha256": "a1e45bf4733690b417c463f450c36c0c42b8060cfa14213b9281c0d35770d030",
+      "after_sha256": "9423f3a379c3eb0c285d5ad29d0892c00107bb51cd533c73d42c1927564c33a8"
+    },
+    {
+      "path": "dist/core/provider-composer.js",
+      "original_sha256": "8eca507009d00768130e46cd9a0831e4fa2f98b81435ae0a8d5079a1d27e13cd",
+      "after_sha256": "ef231c5e9df156d650fd73c53ee404724263ed5de19b4bb055c1137113e6c570"
+    },
+    {
+      "path": "dist/core/provider-composer.d.ts",
+      "original_sha256": "b1bb3ebad4b13e0d538cc86c63af4afc97fd74894e49efb5700707a54c841a8d",
+      "after_sha256": "773c333828b38d0605a6fcebe412a470bda65d3d2db0a114c2ceb1b6694761c1"
+    },
+    {
+      "path": "dist/core/compaction/compaction.js",
+      "original_sha256": "2c41563287283e83d899254aa7ff4a6d070c044835dc7fde95d90b987a480622",
+      "after_sha256": "415969b78bdedfaaa377559c5d55eb878a45b21fa7ba90a8d7f2e23d92fe070d"
+    }
+  ]
+}

@@ -24,6 +24,7 @@ def main(path: Path) -> None:
         'import * as crypto from "node:crypto";',
         'import * as crypto from "node:crypto";\n'
         'import { CompactionPolicy } from "../../core/compaction/agent-comms-policy.js";\n'
+        'import { SessionContext } from "../../core/session-context.js";\n'
         'import { compact, prepareCompaction } from "../../core/compaction/index.js";\n'
         'import { AssistantMessageEventStream } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";')
     helper = Path(__file__).with_name("native-compaction-selected-summary.mjs").read_text()

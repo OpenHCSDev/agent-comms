@@ -315,6 +315,17 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             request.customInstructions, slot.controller.signal, "low", selectedStream, undefined,
             { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
             { onSummaryText: progress,
+              summaryPrefix: async (messages, instructions, options) => {
+                  // A context hook can transform the original request. Its
+                  // absence here is a route admission fact, not an alias/mirror.
+                  if (binding.runner.hasHandlers("context")) return undefined;
+                  const context = await SessionContext.summaryPrefix(session, messages.prefixMessages());
+                  if (!acSummaryCurrent(session, request, binding)) throw new Error("Selected prefix source changed");
+                  const provider = binding.modelRuntime.getProvider(binding.model.provider);
+                  return provider?.summaryPrefix?.(binding.model, context, instructions,
+                      { ...options, cacheRetention: undefined,
+                        sessionId: session.agent.sessionId, transport: session.agent.transport });
+              },
               onSummaryProgress: source => progress("", source),
               onSummaryStart: source => progress("", source),
               onSummaryResponse: (_usage, source) => progress("", source) }, undefined);

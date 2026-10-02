@@ -1,28 +1,27 @@
 # S3 route-owned prefix summary reuse
 
-Owner: Mendel. Original requirement: PR428 S3-CACHE.md (merged17a43e), current
-source base155b00076312626e025861efc3ed14549adca5c0. No paid or external provider
-work is authorized in this lane. #524 originals/installed donor remain protected.
+Owner: Singer, reassigned by Tristan from Mendel on 2026-10-02. Existing PR527,
+original PR428/S3-CACHE.md. Reused finished context-manifest checkout after an
+actual borrower screen; all original artifacts remain. No new worktree, environment,
+native build, provider request or paid comparison.
 
-Confirmed source gap: native completeSummarization hardcodes cacheRetention none;
-HistorySummarySource serializes narrative into fresh summary prompts. Selected
-stream reuse already preserves selected authentication/transport, not an exact
-original request prefix. The existing provider/route capability must select
-admissible prefix formation before a request; unsupported/oversized sources use
-existing bounded strategy before any provider attempt, never as uncertain retry.
+Extend ProviderStreams / original API declaration, lazyApi, createProvider,
+composeModelProvider, EntryMessageRange, HistorySummarySource and SessionContext.
+Streaming and prefix capability use one effective-route selector. An extension
+replacing the stream cannot borrow the base route's support. The original Codex
+API owns admissible endpoint, suffix formation and tool_choice:none. Other
+routes make no support claim and choose the original bounded strategy before send.
+Original native contextMetadata, selected SDK converter, current instructions,
+tools and session routing derive the source prefix; no prompt-body mirror/store.
 
-Claims: existing native strategy/source/provider capability family and its callers,
-subject to direct shared method agreement. Einstein520 grants strategy/provider
-capability seam; his CompactionPolicy timing and SessionContext.sourceBudget remain
-protected. Singer521 retained inspection/task projections remain protected;
-Arendt owns lifecycle/commit resources. Sch owns native artifact/pin publication.
+Einstein520 and Arendt533 explicitly grant the source/request capability closure.
+CompactionPolicy calculations, task timing, acquisition, sourceBudget meaning,
+output limits, cancellation, terminal evidence and atomic commits stay with their
+existing owners. Sch's current receiving candidate is frozen independently;
+this source will need a future single normal builder artifact, not a second gate.
 
-Before editing: use existing NRA Package AST mapping and native dependency semantic
-source read; record omissions explicitly. Extend the original transport/provider
-registration, native source/strategy and existing usage/outcome owners. No new
-transport/client/auth reader/cache/store/registry/model-name switch. Preserve
-ordered source, source/witness refusal, action exclusion, cancellation/UNKNOWN,
-output accounting and atomic native/journal commit. Measured cache/cost/latency
-and model recall are distinct; neither authored oracle nor synthetic cache usage
-proves real-provider savings. Final affected installed path comes after the
-coherent source batch; real paid comparison remains budget-blocked.
+Implementation comes before batched checks. Source-only patch generation and
+AST mapping do not execute a product or qualify a native package. No cache hits,
+cost reduction, latency improvement or recall result is claimed. A separate paid
+cache comparison still needs a budget grant. The original bounded/branch leaf
+retention remains none; only an admitted prefix inherits native route retention.
