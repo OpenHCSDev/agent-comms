@@ -1,0 +1,4 @@
+CONFIGURED_SAVED_COMPACTION_STARTED
+PEER_PUBLISHED_DURING_SUMMARY
+CONFIGURED_DISTINCT_INPUT_STARTED
+{"complete": true, "public_inputs": 0, "input_replays": 0, "installed_UI": false, "acceptance_scope": "configured SDK/ACP/native saved-source compaction and distinct input", "model": "openai-codex/gpt-6.1-sol", "thinking": "high", "source_bytes": 42924939, "original_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14", "fork_bytes": 42924903, "manual_commit": "66794184f1674babbe9845610979960b", "peer_messages_during_summary": 1, "original_inputs_before_new_prompt": 0, "distinct_input_started_once": true, "distinct_answer": true, "elapsed_seconds": 162.0823046020232, "original_source_unchanged": true, "native_children_closed": true}

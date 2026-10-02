@@ -48,6 +48,22 @@ The installed529 reader was also run read-only against the actual current journa
 
 The distinct private fork used the original 42,924,939-byte saved state, configured Sol/HIGH settings and native5184, through the installed SDK/ACP/native path with automatic extensions. A real peer reply was published while its summary streamed. The provider then exceeded the plan's output budget: retained 5,534, reasoning 0, budget 4,096. The native guard refused it before commit; the original follow-up prompt was never issued. Source bytes stayed identical and children closed. The failed attempt remains preserved without replay at `/home/ts/wt/s52901`.
 
-This is a **failed final gate**, not acceptance of commit/admission or a physical UI test. The independent summary-budget owner was notified. The source closure and original-record read verification remain reviewable; readiness requires an actually completed configured path, without replaying this uncertain provider attempt or weakening the budget guard.
+This original gate **failed**. It is not acceptance of commit/admission or a physical UI test. The independent summary-budget owner received its exact request/state and accounting evidence. The failure and UNKNOWN remain preserved; the distinct qualifying operation below did not replay them.
 
 Focused final source checks:32 passed for original input, task decisions, recipient scope and native/source declarations. After the521 API integration,5 affected retained-inspection/export and recipient checks passed, covering the changed constructor and stream lifetime. Those results do not replace the failed configured gate.
+
+## Qualified coherent checkpoint
+
+Normally integrated frozen520 budget/native source `beb54a1a` into529, producing **Core761864c828b08eccd157445f1e5476276bcec0b3**. The source guard and existing `RetainedSegment` constructor are byte-identical to67b. Current source includes the ordinary main525/528 observer/transcript changes and521 certified-reader lifetime. It requires the coupled native **ad533a9f08581561d00d5524a576bda00f6368221cc4f74ba3c68513ede8fc04**, tree **adb2969a4d57cb8993a92d30b924b969ca76772de5dadb31cc7b2f294ee120e9**; the old5184 receipt does not qualify this artifact.
+
+Sch's single normal69 receiver verified all311 Core Python files and resources, direct URLs, paired Toad/Textual sources, SDK0.12.1, installed helper and full native manifest/tree trust. Exact prefix: `/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-recovery529-installed-20261002`.
+
+The **new distinct** configured SDK/ACP/native journey completed with exit0 in **162.082 seconds**:
+
+- Original42,924,939-byte saved state forked with the current configured Sol/HIGH settings, auth and automatic extensions.
+- A real private peer reply was published during summary streaming. It did not invalidate the exact captured task facts.
+- The native summary committed as `66794184f1674babbe9845610979960b` and the manual request linked to that committed outcome. It admitted no original user input.
+- One new human input then started exactly once and produced its required marker answer; the owner returned idle and native children closed.
+- Original source SHA remained `f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14`. Original52901 UNKNOWN files also stayed hash-identical. No public input, replay, recovery grant or default change occurred.
+
+Evidence: `configured-installed02.json`, raw `configured-installed02.log`, `installed-source-proof.json` and `failed-original-preserved.json` under `evidence/compaction-source-successor-20261002`. This qualifies installed **configured saved-source compaction, peer publication and distinct input continuation**. It is not a physical TUI test, overall stability or provider-latency result. Parent owns any public pairing/activation.
