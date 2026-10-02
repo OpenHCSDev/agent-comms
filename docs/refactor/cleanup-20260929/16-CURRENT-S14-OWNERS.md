@@ -1,3 +1,11 @@
+## Latest concrete checkpoints
+
+Core545 and546 merged: the original boundaries source-floor check passed with its original NotSent row, full input document and source in2.454s, with no replay or changed bytes. Receiver337 is READY and is the sole next cutover;336 remains preserved as evidence. Public334 stays installed until current Toad clients/drafts permit cutover.
+
+Toad340 merged: the existing review command now processes failed real recordings, derives scroll intervals from the recorded journey, emits consecutive frames and links original CPU/writer evidence. The original335 failed capture produced six48-frame intervals; all six original hashes and its failure result remain unchanged. Parent inspected input-held-up and reversal: visible history, repeated positions then discrete advances; smoothness remains incomplete. Original sampling command now owns retained profile rate.
+
+Toad341 starts U1 in Einstein's reused finished280 checkout. Kepler retains338 shared channel history, Heisenberg retains339 and frame/viewport context. No unnecessary implementation handoff. Cleanup totals48 closed published unborrowed worktrees plus7 obsolete environments,3,386,568,704 exclusive bytes reclaimed; fresh reported headroom5,622,067,200 bytes.
+
 ## Headless UI fold-in and current ownership
 
 Tristan supplied [the headless UI package](../headless-ui/README.md). [Current owners](../headless-ui/00-CURRENT-OWNERS.md) fold U3 into existing338 and U7 into existing340; Einstein starts independent U1 after completed546, with U2 following the same owner. Heisenberg retains Window/frame/anchor context and339 preparation; parent takeover was cancelled after Tristan corrected unnecessary handoffs. Parent owns the existing recording harness in a reused clean checkout. No new environment/worktree. Current qualified fixes do not wait for a new frontend.
