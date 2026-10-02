@@ -49,6 +49,16 @@ and 2,412 turn_changed records. This establishes publication amplification,
 not the amount of elapsed delay attributable to the callback or provider.
 The original attempt has since committed; it must not be replayed.
 
+The original last source observation was at 23:21:42.251; its native commit
+was at 23:35:53.485, a gap of 851.234 seconds. This is a source-observation
+to commit interval, **not a provider-terminal to commit interval**. Source
+consumption can finish before generation or reduction finishes. The progress
+producer's source counters and observation clock do not supply a separate
+provider-terminal witness. The interval includes remaining native work and
+downstream delivery/publication; no sole-cause timing attribution is claimed.
+The declaration fix removes leaf-driven whole-turn changes; the existing two
+registry reads on progress delivery remain a separate measured-work question.
+
 Patterns: IDEN-1/3, IMPL-5, AGENT-6. Existing owner first; declaration equality
 closes the required relation across every consumer. No new classes or copied
 decisions. Wire/store/native formats unchanged. Final batched sanity and an
@@ -72,3 +82,11 @@ unchanged whole-operation work does not become a new turn state. They are not
 an installed configured native/UI qualification. That remains unfilled and
 must join the existing receiving configured compaction journey, without
 replaying the completed original 95fe or creating a competing provider fixture.
+
+The receiving qualification uses the existing fresh canonical fork
+`compaction501-live-architecture-memory`, original saved source 42,044,813 bytes,
+configured Sol/HIGH, at Core `29248ed`, Toad `2f4eff`, native `5184`.
+Parent owns fork/binding and Heisenberg owns the single UI input. Arendt only
+observes raw ACP progress, whole-turn publications and terminal witnesses.
+Package readiness is verified; journey completion is not yet claimed. Public
+defaults and the completed original attempt remain unchanged.
