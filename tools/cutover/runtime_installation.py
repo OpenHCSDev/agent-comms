@@ -71,8 +71,8 @@ class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
         original_evidence = acquired.evidence()
         # The publisher has stopped its original audience and holds the wire
         # custody before invoking this member. No live-store plan is admitted.
-        plan = NativeSchemaCarryPlan.prepare(acquired.paths[0].parent, self.candidate,
-                       self.original, self.source_python)
+        plan = NativeSchemaCarryPlan.prepare(
+            acquired.paths[0].parent, self.candidate, self.original, self.source_python)
         carried = plan.install(destination)
         changed = {plan.root / item.name for item in plan.stores}
         acquired.unchanged_by(changed).require_original()
