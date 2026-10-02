@@ -1,0 +1,84 @@
+{
+  "state": "READY",
+  "qualification": "Shared installed stopped-owner failure/recovery and both original manifest callbacks; no public mutation or provider qualification",
+  "installed_source_head": "65a28ad2eff9285e3812953a7366af44c63c3a25",
+  "final_source_equivalent_head_before_receipt": "49d13ef54da170f1f407f37ced2af4199ed8368b",
+  "production_and_package_metadata_equal_installed": true,
+  "python": "/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-stage/runtime/bin/python",
+  "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "native_full_trust": true,
+  "wheel_sha256": "f224243914d92f449423e826f5a7808ef258bfdd85fdf7870135e2bab6c74ea7",
+  "source_inventory_sha256": "b6c71ccbe3463b14e5133f21b89b1a8ca0fcafa626062f9019a0fde2e4372b99",
+  "source_overlay": false,
+  "checks": [
+    {
+      "workflow": "Existing real two-owner native batch with controlled installation failure and protected-byte refusal",
+      "result": "PASS",
+      "includes": [
+        "actual inherited OFD retained through failure",
+        "same original launch arguments/environment/goals restored through existing child",
+        "changed originals refuse recovery without launching",
+        "wire released only after disposition",
+        "history and input proofs unchanged"
+      ]
+    },
+    {
+      "workflow": "Initial complete affected batch",
+      "result": "3 passed, 5 failed in 47.60s",
+      "failure": "Old release fixture omitted actual AGENT_COMMS_AGENT_BIN/ARGS declaration; preserved raw failure"
+    },
+    {
+      "workflow": "Only five failed release cases after actual launch declaration correction",
+      "result": "5 passed, 2 deselected in 13.12s",
+      "command": "env -u PYTHONPATH <installed-python> -m pytest -o pythonpath= -o addopts= tests/test_owner_release_restart.py -k \"not voluntary and not stop\" --basetemp=.artifacts/stopped-failure-fixture02 -q"
+    },
+    {
+      "workflow": "Same-prefix TurnProgress/SelectedParticipant callbacks and installed context CLI",
+      "result": "PASS",
+      "receipt": "evidence/context-manifest-resource-owner-20261002/installed-callback-cli-receipt.json"
+    },
+    {
+      "workflow": "Required debt ratchet across seven changed production files",
+      "result": "exit 0",
+      "head": "65a28ad2eff9285e3812953a7366af44c63c3a25"
+    }
+  ],
+  "ownership": {
+    "batch_resource": "StoppedOwnerBatch",
+    "witness_and_launch_loop": "OwnerRestartHandoff._launch",
+    "failure_disposition": "OwnerCutover",
+    "source_process_boundary": "phased_owner_kernel / run_cutover_child",
+    "joined_recording": "ManifestData"
+  },
+  "callers_closed": [
+    "CLI restart",
+    "resident restart queue",
+    "retained-summary publisher",
+    "OpenHCS recovery publisher",
+    "retained index/routing cutover",
+    "retained task source carry",
+    "thread retirement"
+  ],
+  "deleted_production_lines": {
+    "518_core": 10,
+    "518_tools": 1,
+    "515_core": 7,
+    "combined": 18
+  },
+  "scope_limits": [
+    "No public installation or original input replay",
+    "No provider call or native input",
+    "Acquired all-stopped phase only; earlier retirement errors remain original",
+    "Changed originals preserve committed target state and UNKNOWN; no source rollback",
+    "AST leaf calls are candidates, not dynamic dispatch proof"
+  ],
+  "proofs": {
+    "evidence/stopped-cutover-failure-custody-20261002/source-proof.json": "5aaf3a94f34717393966a0e4cd561b127ce1a9311696c67a8c05b07053bacb37",
+    "evidence/stopped-cutover-failure-custody-20261002/affected-batch01.log": "0b401fac7d3528a1d7f2f685320d33de6caa635f28578f06f731af99a6f6d742",
+    "evidence/stopped-cutover-failure-custody-20261002/affected-fixture-correction02.log": "65f5b0367d76642e8245cb0b1fd9a3248725d66816eeacab093963979e383241",
+    "evidence/stopped-cutover-failure-custody-20261002/required-ratchet01.json": "9117a26238937b4f8d5c3eb65f7be4d050754ab142247b9ca49de92a9cd3c8e2",
+    "evidence/stopped-cutover-failure-custody-20261002/before-owner-consumers.json": "7e5a48016f6dc349810eeb23c7f3a43f120da0ea4c7f59c14260f5e04292d0e8",
+    "evidence/stopped-cutover-failure-custody-20261002/after-owner-consumers.json": "bb9ee42ebf24a8b43fec5d5e8ca32494800542c001af7884a9ee1e5a64091db7",
+    "evidence/context-manifest-resource-owner-20261002/installed-callback-cli-receipt.json": "880c92d2810e0e73c2f2f88ee40ca6755370b0af9c4ba038e6b406eb2086d059"
+  }
+}
