@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-command-discovery-handoff/.artifacts/context-explorer309/physical_context.py", line 46, in <module>
+    if __name__=='__main__': main()
+                             ~~~~^^
+  File "/home/ts/wt/toad-command-discovery-handoff/.artifacts/context-explorer309/physical_context.py", line 45, in main
+    recorder.main()
+    ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/toad-command-discovery-handoff/tests/tools/record_installed_tui.py", line 2115, in main
+    print(review_recording(args) if args.review_recording else record(args))
+                                                               ~~~~~~^^^^^^
+  File "/home/ts/wt/toad-command-discovery-handoff/tests/tools/record_installed_tui.py", line 1564, in record
+    receipt["runtime_before"] = selection.receipt(owner, env, command)
+                                ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-command-discovery-handoff/tests/tools/record_installed_tui.py", line 426, in receipt
+    raise ValueError("Candidate activation and actual ACP native launch must match")
+ValueError: Candidate activation and actual ACP native launch must match

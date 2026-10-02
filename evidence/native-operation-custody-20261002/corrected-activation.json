@@ -1,0 +1,33 @@
+{
+  "activation": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/activation.json",
+  "sha256": "08391516b0a348ca43d9e1782b6760e8e9dca40dde0d0c7e07e3c99c698d698b",
+  "schema": {
+    "stage": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002",
+    "pins": {
+      "agent_comms": "a0efe81dbcb1b4c9a7c7f52ef88de41415b993c5",
+      "toad": "2b55f0b5509ced222186a6d962f6386f3c24ef7f",
+      "textual": "8015662a86de0c4e1a6fba858039043a690ea8da"
+    },
+    "sdk": "0.12.1",
+    "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+    "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent",
+    "state": "Normal69 matching installed joined client custody548/343 and original native/context547/309; final actual paired context journey pending",
+    "staging_receipt": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/client-custody548-context547309-20261002/source-proof.json",
+    "bins": {
+      "python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python",
+      "toad": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+      "agent-comms": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms",
+      "agent-comms-acp": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-acp",
+      "agent-comms-agent": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/agent-comms-agent",
+      "pi-comms-native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/pi-comms-native"
+    },
+    "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+    "native_manifest": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+    "native_tree": "01de56aa9550de0fe8bf93b5df8815429cba26c64b676704a9653ebf831e0e9d",
+    "native_configuration_note": "Released old520 holder reused without new environment/native; actual547 prepared native configuration and original saved source; no provider/public changes; current334/333/frozen337 protected."
+  },
+  "physical_prelaunch_failure": "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-20261002/capture/receipt.json",
+  "packages_changed": false,
+  "source_overlay": false,
+  "public_mutation": false
+}

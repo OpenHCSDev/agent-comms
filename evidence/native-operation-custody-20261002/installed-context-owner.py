@@ -30,13 +30,27 @@ def digest(path):
 
 async def main(args):
     root, source, evidence = args.root, args.source, args.evidence
-    root.mkdir(mode=0o700, parents=True, exist_ok=False)
+    reattachment = root.exists()
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
     evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
     original = {str(path): digest(path) for path in
                 (source, source.with_suffix(source.suffix + '.input-proof'))}
     os.environ['PI_COMPACTION_TEST_PACKAGE'] = str(args.package)
     comms = Comms(root)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    if reattachment:
+        with comms.bus.log.locked():
+            metadata = comms.bus.log.read_metadata_unlocked()
+        if not metadata.private:
+            raise AssertionError('Reattachment requires the original private root')
+        root_id = metadata.root_id
+        previous = comms.registry.require('context547')
+        previous.require_idle()
+        if previous.require_process().alive():
+            raise AssertionError('Original private owner is still alive')
+        if previous.session_file != str(source):
+            raise AssertionError('Reattachment changed the original saved source')
+    else:
+        root_id = comms.messaging.initialize_private_initial_protocol()
     os.environ.update({ROOT_ID_ENV: root_id, PACKAGE_ENV: str(args.package),
                        'AGENT_COMMS_ROOT': str(root)})
     owner = CommsAgent(
@@ -56,23 +70,25 @@ async def main(args):
                'process': FieldCodec.encode(process), 'python': sys.executable,
                'core_module': inspect.getfile(Comms), 'before_source_hashes': original,
                'configured_model': thread.model, 'thinking': 'off',
-               'auto_wake': False, 'prompt_dispatched': False}
+               'auto_wake': False, 'prompt_dispatched': False,
+               'reattached_original_private_root': reattachment}
     try:
         await owner._runtime.start()
         comms.registry.declare(thread)
         await owner.load_session(thread.worktree, name)
-        connection = RuntimeConnection(comms, name, socket_path(root, process.pid))
-        try:
+        if not reattachment:
+            connection = RuntimeConnection(comms, name, socket_path(root, process.pid))
             try:
-                await connection.request('context')
-            except RuntimeError as error:
-                if 'requires an acquired native child' not in str(error):
-                    raise
-                receipt['unopened_refused'] = str(error)
-            else:
-                raise AssertionError('Unopened context inspection acquired a child')
-        finally:
-            await connection.close()
+                try:
+                    await connection.request('context')
+                except RuntimeError as error:
+                    if 'requires an acquired native child' not in str(error):
+                        raise
+                    receipt['unopened_refused'] = str(error)
+                else:
+                    raise AssertionError('Unopened context inspection acquired a child')
+            finally:
+                await connection.close()
         if original != {path: digest(Path(path)) for path in original}:
             raise AssertionError('Unopened observation altered original source')
         await owner.turns.prepare_selected_session(name, thread)
@@ -89,8 +105,9 @@ async def main(args):
             lambda: asyncio.StreamReaderProtocol(control), sys.stdin
         )
         try:
-            async with asyncio.timeout(180):
-                await control.readline()
+            # The sole physical recorder bounds its run; its explicit cleanup
+            # releases this original local stdin lifetime. EOF also retires it.
+            await control.readline()
         finally:
             transport.close()
         await owner.turns.persistent_backends[name].close_idle()
