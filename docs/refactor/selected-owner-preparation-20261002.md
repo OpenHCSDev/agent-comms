@@ -1,6 +1,6 @@
 # Selected owner preparation closure
 
-Einstein owns #506 source and caller closure. Arendt owns runtime/custody and the proof contract; Mendel #510 owns stopped historical carry; Sch owns native compaction policy and payload. Current production checkpoint: `2eac51df`, integrated source/fixtures `34c5a666`. Source reasoning precedes implementation, then final validation.
+Einstein owns #506 source and caller closure. Arendt owns runtime/custody and the proof contract; Mendel #510 owns stopped historical carry; Sch owns native compaction policy and payload. Content-owner correction: `2eac51df`, source/fixtures `34c5a666`; current resource integration: `93f1f5e6`. Source reasoning precedes implementation, then final validation.
 
 ## One original content owner
 
@@ -35,3 +35,11 @@ This content-owner correction deletes 27 production lines and adds 80 across nin
 Final acceptance remains one coherent installed Native6 saved configured fork through compaction, native/ACP input, original proof preservation and cleanup. It must exercise plural admission and same-child skip/strict reopen through the actual application, not a substitute fresh journal. Installation remains paused for architecture alignment; no default, original bus, provider input or native donor was changed here.
 
 Patterns: IDEN-5 separates durable identity, captured content and original native proof; TIME-9 removes the old scalar representation beneath the ordered source; BOUND-8 keeps source behavior across reservation, recovery and admission; IMPL-12 puts shared preparation lifetime on its existing owner.
+
+## Shared resource integration
+
+Normal merge `cec407c2` incorporates Arendt's published #509 `1059126a`, with the current selected-session and retained-content owners preserved. `SelectedParticipant.require_current(resource)` receives a worker-owned coordination resource; saved preparation uses existing `Coordination.run_async`. Context and phase publication use the same joined worker mechanism; `93f1f5e6` closes native identity publication through it too, assigning only the returned canonical owner. The three original synchronous main-thread callers keep their own resource. No connection crosses workers.
+
+The original raw admission now commits UNKNOWN and the exact `NativeSessionIdentity` under its existing fences, closes those resources, then yields to the one raw writer. Its native identity, acquired-operation measurements and one-use token are retained. Deleted the old `_exclusion` raw-write lifetime; no second custody state or replay path. Asynchronous selection and cursor capture retain the current awaited `SelectedSession.prepare(..., package)` factory.
+
+The 66 passing checks above cover the earlier retained-content correction, not this resource integration. No repeated slice checks were run. Final validation stays one installed saved configured-fork workflow after the coherent Native6 artifact and #510 carry exist: detect lost plural membership/content, second cold preparation children, wrong saved session selection, changed historical proof bytes, and premature/duplicate admission. No separate fixture or serial gate is added. Existing source maps remain qualified to their recorded commits; #509's resource-family census is included by normal ancestry.
