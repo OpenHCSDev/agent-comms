@@ -36,6 +36,9 @@ class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
     def wire_sources(self) -> tuple[Message, ...]:
         return ()
 
+    def original_sources(self):
+        return tuple((source.reference, source) for source in self.wire_sources())
+
     def for_tasks(self, current: frozenset[MessageReference]) -> ExactTaskFact:
         return self
 
@@ -171,6 +174,9 @@ class GoalTaskFact(ExactTaskFact):
 class InputTaskFact(ExactTaskFact):
     source: StoredInput
 
+    def original_sources(self):
+        return ((self.source.context_provenance(), self.source),)
+
 
 @dataclass(frozen=True)
 class NativeArtifactTaskFact(ExactTaskFact):
@@ -237,9 +243,9 @@ class RetainedTaskFacts:
             raise ValueError("Compaction journal control metadata exceeds bound")
         return payload.decode()
 
-    def original_text_source(self, message: Message) -> Message:
-        originals = {source.reference: source for fact in self.facts
-                     for source in fact.wire_sources()}
+    def original_text_source(self, message: Message) -> Message | StoredInput:
+        originals = {reference: source for fact in self.facts
+                     for reference, source in fact.original_sources()}
         if originals.get(message.reference) != message:
             raise RelationViolationError("Authored source is outside this captured read")
         return message.task.original_text_source(message, originals)
@@ -266,7 +272,10 @@ class RetainedTaskFacts:
 
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""
-        current = frozenset(message.reference for message in self.current_authored_sources(owner, registry))
+        selected = self.current_authored_sources(owner, registry)
+        for message in selected:
+            self.original_text_source(message)
+        current = frozenset(message.reference for message in selected)
         return RetainedTaskFacts(tuple(fact.for_tasks(current).for_owner(owner, registry)
                                        for fact in self.facts))
 

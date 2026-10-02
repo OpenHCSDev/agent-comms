@@ -26,6 +26,11 @@ if TYPE_CHECKING:
 class Provenance(DeclaredFamily, affix="Provenance"):
     """A source coordinate, not permission to execute or replay it."""
 
+    def require_human_input(self):
+        from .errors import RelationViolationError
+
+        raise RelationViolationError("Source is not an original human input")
+
 
 @dataclass(frozen=True)
 class FileProvenance(Provenance):

@@ -76,3 +76,119 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     reopened = Comms(comms.root)
     restored = reopened.bus.log.retained_context(owner.name, reopened.registry)
     assert restored.text() == comms.bus.log.retained_context(owner.name, comms.registry).text()
+
+
+def original_input_consumer_journey(tmp_path, command):
+    """Reuse the original ACP reservation fixture; never dispatch its inputs."""
+    from test_acp_queue_contract import _owner
+    from test_current_input_origin import Client, capture
+    from agent_comms.queued_input import QueuedInput
+    from agent_comms.store_files import _store_lock
+
+    comms, agent, _, _ = _owner(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    origin = capture(comms)
+    wording = "Never replay UNKNOWN.\nPreserve original λ /source/owned bytes."
+    originals = []
+    with _store_lock(comms._wire_lock_path):
+        for _ in range(2):
+            queued, _ = QueuedInput.capture(
+                agent.inputs, "beta", text=wording, prompt=wording, echo=True,
+                images=(), controller=Client(), origin=origin)
+            originals.append(agent.inputs.dispositions.read().lookup(queued.key))
+        assert agent.inputs.dispositions.record(
+            "neutral-original", seq=None, owner="beta",
+            admission=origin.admission.admission_generation, target="beta", text=wording)
+    inputs = agent.inputs.dispositions
+    original_inputs = inputs.path.read_bytes()
+    other = comms.registry.declare(Thread("unaddressed", frozenset(), origin.project))
+
+    def invoke(*args):
+        result = command(comms.root, args)
+        assert inputs.path.read_bytes() == original_inputs
+        assert comms.registry.require("beta").turn_lease is None
+        return result
+
+    def reference(ref):
+        return f"{ref['seq']}:{ref['message_id']}"
+
+    pins = []
+    for row in (originals[0], originals[0], originals[1]):
+        code, result = invoke("pin-input-constraint", "beta", "--source", row.key,
+                              "--worktree", origin.project)
+        assert code == 0
+        assert result["source"] == FieldCodec.encode(row.context_provenance())
+        pins.append(reference(result["pin"]))
+    snapshot = comms.bus.log.retained_context("beta", comms.registry)
+    assert FieldCodec.decode(RetainedSegment, FieldCodec.encode(snapshot)) == snapshot
+    assert all(row.context_provenance() in snapshot.provenance for row in originals)
+    code, inspected = invoke("retained-context", "beta")
+    assert code == 0 and inspected["input_supplied"] is False
+    assert all(FieldCodec.encode(row.context_provenance()) in inspected["provenance"]
+               for row in originals)
+
+    destination = comms.root / "original-input-context.md"
+    code, result = invoke("export-retained", "beta", "--output", str(destination))
+    assert code == 0 and result["exported_messages"] == 2
+    artifact = destination.read_bytes()
+    assert artifact.count(wording.encode()) == 2
+    assert all(row.key.encode() in artifact for row in originals)
+    assert b'"author":"user"' in artifact and b'"author_role":"user"' in artifact
+    code, _ = invoke("export-retained", "beta", "--output", str(destination))
+    assert code == 1 and destination.read_bytes() == artifact
+    before_refusal = (comms.root / "bus.jsonl").read_bytes()
+    for recipient, key in ((other.name, originals[0].key), ("beta", "absent"),
+                           ("beta", "neutral-original")):
+        code, _ = invoke("pin-input-constraint", recipient, "--source", key,
+                         "--worktree", origin.project)
+        assert code == 1
+        assert (comms.root / "bus.jsonl").read_bytes() == before_refusal
+
+    comms.registry.rename("beta", "renamed-beta")
+
+    def renamed(*args):
+        result = command(comms.root, args)
+        assert inputs.path.read_bytes() == original_inputs
+        assert comms.registry.require("renamed-beta").turn_lease is None
+        return result
+
+    code, result = renamed("export-retained", "renamed-beta", "--output", str(destination),
+                           "--overwrite")
+    assert code == 0 and result["exported_messages"] == 2
+    replacement = "Keep only the human's corrected original instruction."
+    code, _ = renamed("supersede-constraint", "renamed-beta", "--source", pins[1],
+                      "--body", replacement, "--worktree", origin.project)
+    assert code == 0
+    code, result = renamed("export-retained", "renamed-beta", "--output", str(destination),
+                           "--overwrite")
+    assert code == 0 and result["exported_messages"] == 2
+    assert destination.read_text().count(wording) == 1
+    assert replacement in destination.read_text()
+    code, _ = renamed("drop-constraint", "renamed-beta", "--source", pins[2],
+                      "--worktree", origin.project)
+    assert code == 0
+    code, result = renamed("export-retained", "renamed-beta", "--output", str(destination),
+                           "--overwrite")
+    assert code == 0 and result["exported_messages"] == 1
+    assert wording not in destination.read_text() and replacement in destination.read_text()
+    assert snapshot.original_text_source(snapshot.retained.current_authored_sources(
+        comms.registry.require("renamed-beta"), comms.registry.snapshot())[0]) == originals[0]
+    from agent_comms.comms import Comms
+    reopened = Comms(comms.root)
+    code, inspected = renamed("retained-context", "renamed-beta")
+    assert code == 0
+    assert inspected["text"] == reopened.bus.log.retained_context(
+        "renamed-beta", reopened.registry).text()
+    assert all(inputs.read().lookup(row.key) == row and row.unresolved for row in originals)
+    return {"original_inputs": 2, "distinct_equal_wording": True, "pins": 3,
+            "refusals": 4, "rename_correction_drop_reopen": True,
+            "original_input_bytes_preserved": True, "native_inputs": 0,
+            "provider_calls": 0, "public_changes": []}
+
+
+def test_original_input_pin_query_export_correction_and_drop(tmp_path, capsys):
+    def command(root, args):
+        code = main(["--root", str(root), *args])
+        return code, json.loads(capsys.readouterr().out)
+
+    original_input_consumer_journey(tmp_path, command)

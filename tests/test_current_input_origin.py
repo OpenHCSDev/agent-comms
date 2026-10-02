@@ -183,3 +183,82 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
     assert not restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     with pytest.raises(ValueError, match="goal changed"):
         comms.registry.require("beta").require_goal_checkpoint(goal.checkpoint)
+
+
+def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tmp_path):
+    from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop, UserTaskSupersession
+    from agent_comms.retained_task_facts import RetainedTaskFacts
+    from agent_comms.threads import Thread
+    from agent_comms.turn_context import WireProvenance
+
+    comms, agent, _, _ = _owner(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    origin = capture(comms)
+    exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
+    with _store_lock(comms._wire_lock_path):
+        queued, _ = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
+                                        echo=True, images=(), controller=Client(), origin=origin)
+    inputs = agent.inputs.dispositions
+    row = inputs.read().lookup(queued.key)
+    original_inputs = inputs.path.read_bytes()
+    subject = row.context_provenance()
+    pin = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
+    assert pin.notice and not pin.starts_turn and exact not in pin.body
+    assert 'source_turn' not in FieldCodec.encode(pin.task)
+    assert FieldCodec.decode(type(pin), FieldCodec.encode(pin)) == pin
+
+    def captured(name):
+        owner = comms.registry.require(name)
+        with comms.bus.log.locked():
+            _, wire_facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+        input_facts = tuple(r.origin.retained_fact(r) for r in inputs.read().rows.values())
+        return RetainedTaskFacts(wire_facts + input_facts).for_owner(owner, comms.registry.snapshot())
+
+    snapshot = comms.registry.snapshot()
+    retained = captured('beta')
+    assert retained.current_authored_sources(snapshot.require('beta'), snapshot) == (pin,)
+    assert retained.original_text_source(pin) == row
+    assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
+    with comms.bus.log.locked():
+        _, wire_only = comms.bus.log.compaction_messages_unlocked(snapshot.require('beta').incarnation)
+    with pytest.raises(RelationViolationError, match='original captured wording'):
+        RetainedTaskFacts(wire_only).for_owner(snapshot.require('beta'), snapshot)
+    repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
+    assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (repeated,)
+    before = (comms.root / 'bus.jsonl').read_bytes()
+    comms.registry.declare(Thread('unaddressed', frozenset(), origin.project))
+    with pytest.raises(RelationViolationError, match='did not receive'):
+        comms.messaging.pin_input_constraint('unaddressed', subject, worktree=origin.project)
+    with pytest.raises(RelationViolationError, match='provenance'):
+        comms.messaging.pin_input_constraint('beta', replace(subject, key='absent'), worktree=origin.project)
+    with pytest.raises(RelationViolationError, match='provenance'):
+        comms.messaging.pin_input_constraint('beta', replace(subject, origin=replace(origin, root_id='f'*32)),
+                                             worktree=origin.project)
+    with pytest.raises(RelationViolationError, match='original human input'):
+        comms.messaging.pin_input_constraint('beta', WireProvenance(MessageReference(1, 'not-input')),
+                                             worktree=origin.project)
+    assert (comms.root / 'bus.jsonl').read_bytes() == before
+    assert inputs.path.read_bytes() == original_inputs
+
+    # Same text, separately reserved original inputs never acquire one identity.
+    with _store_lock(comms._wire_lock_path):
+        second, _ = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
+                                        echo=True, images=(), controller=Client(), origin=origin)
+    second_subject = inputs.read().lookup(second.key).context_provenance()
+    second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=origin.project)
+    assert second_subject != subject
+    assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (repeated, second_pin)
+    comms.registry.rename('beta', 'renamed-beta')
+    owner = comms.registry.require('renamed-beta')
+    assert row.matches_owner(owner.incarnation)
+    assert not row.matches_owner(replace(owner.incarnation, created_at=owner.created_at + 1))
+    assert captured(owner.name).original_text_source(second_pin) == inputs.read().lookup(second.key)
+    revised = comms.messaging.send_user_message(owner.name, 'Exact human correction.', worktree=origin.project,
+        task=UserTaskSupersession(CorrectionTaskChange(repeated.reference)))
+    current = captured(owner.name)
+    assert current.current_authored_sources(owner, comms.registry.snapshot()) == (revised, second_pin)
+    comms.messaging.send_user_message(owner.name, 'Drop the second original.', worktree=origin.project,
+        task=UserTaskDrop(CorrectionTaskChange(second_pin.reference)))
+    assert captured(owner.name).current_authored_sources(owner, comms.registry.snapshot()) == (revised,)
+    assert inputs.read().lookup(row.key) == row
+    assert inputs.read().lookup(second.key).unresolved

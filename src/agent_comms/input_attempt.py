@@ -63,6 +63,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
         return False
 
+    def require_original_provenance(self, source: InputProvenance):
+        raise RelationViolationError("Constraint lacks its original input provenance")
+
     def matches_admission(self, admission: int) -> bool:
         return False
 
@@ -122,6 +125,12 @@ class StoredInput(InputAttempt):
 
     def context_provenance(self) -> InputProvenance:
         return InputProvenance(self.key, self.origin)
+
+    def require_original_provenance(self, source: InputProvenance):
+        if self.context_provenance() != source:
+            raise RelationViolationError("Constraint lacks its original input provenance")
+        self.origin.require_human()
+        return self
     key: str = field(metadata={"public_exclude": True})
     sequence: int | None
     owner: str = field(metadata={"public_exclude": True})
@@ -163,9 +172,9 @@ class StoredInput(InputAttempt):
         return TextDigest.of(self.source_text)
 
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
-        # The selected source must separately match the live full incarnation.
-        # Historical rows never recorded creation time and cannot attest it.
-        return self.owner == source_owner.name
+        # Attributed original inputs own their recorded birth; neutral historical
+        # rows have only a name and never acquire an inferred incarnation.
+        return self.origin.matches_owner(self.owner, source_owner)
 
     def matches_admission(self, admission: int) -> bool:
         return self.admission == admission

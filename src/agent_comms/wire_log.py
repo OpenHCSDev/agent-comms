@@ -129,6 +129,7 @@ class WireLog:
     def retained_context(self, name: str, registry):
         """One certified source cut for read-only context inspection/export."""
         from .exporting import WireExportBoundary
+        from .input_disposition import InputDispositions
         from .retained_context import RetainedSegment
         from .retained_task_facts import RetainedTaskFacts
         from .turn_context import OwnerProvenance
@@ -137,9 +138,15 @@ class WireLog:
             snapshot = registry.snapshot()
             owner = snapshot.require(name)
             digest, facts = self.compaction_messages_unlocked(owner.incarnation)
-            retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
-            return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest),
-                owner, snapshot, WireExportBoundary(self._private_marker_unlocked().last_seq, time.time()))
+            with InputDispositions(self.path.parent / InputDispositions.filename).reading() as inputs:
+                originals = {original.key: original for fact in facts
+                             for message in fact.wire_sources()
+                             for original in message.task.original_input_sources(inputs)}
+                input_facts = tuple(original.origin.retained_fact(original)
+                                    for original in originals.values())
+                retained = RetainedTaskFacts((*facts, *input_facts)).for_owner(owner, snapshot)
+                return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest),
+                    owner, snapshot, WireExportBoundary(self._private_marker_unlocked().last_seq, time.time()))
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""

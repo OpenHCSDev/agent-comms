@@ -8,11 +8,15 @@ from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .goals import GoalRevision
 from .message_reference import MessageReference
-from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from .thread_identity import ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
+from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
+    from .input_attempt import StoredInput
+    from .input_disposition import InputDocument
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -187,6 +191,19 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 
     def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return message
+
+    def original_wording(self, original: Message) -> str:
+        return original.body
+
+    def original_wording_context_source(self, original: Message) -> Provenance:
+        return WireProvenance(original.reference)
+
+    def original_input_sources(self, inputs: InputDocument) -> tuple[StoredInput, ...]:
+        return ()
+
+    def original_wording_provenance(self, original: Message) -> dict[str, object]:
+        return dict(wording=FieldCodec.encode(original.reference),
+                    author=original.sender, author_role=original.sender_role.value)
 
     def selected_sources(self, message: Message) -> tuple[Message, ...]:
         return (message,)
@@ -433,24 +450,27 @@ class HumanConstraintPin(ScopedTaskDeclaration):
             raise RelationViolationError("USER pin must address its original recipient")
 
     def require_publication(self, sender, registry, original_source):
-        from .private_bus_checkpoint import delivery_references_unlocked
-        from .bus_publication import stable_thread_lookup
-
         registry.require(sender).role.require_user()
         self.require_user_revision(sender, registry)
         if original_source is None:
             raise RelationViolationError("USER pin requires the certified original message")
+        self.require_wording_publication(registry, original_source)
+        if not self.recipient.current(registry):
+            raise RelationViolationError("USER pin recipient was replaced")
+        owner = registry.require(self.recipient.resolved(registry).name)
+        self.scope.require_human_context(owner)
+        self.change.require_publication(self, registry, original_source)
+
+    def require_wording_publication(self, registry, original_source):
+        from .private_bus_checkpoint import delivery_references_unlocked
+        from .bus_publication import stable_thread_lookup
+
         delivery, = delivery_references_unlocked(original_source, (self.subject,))
         delivery.message.sender_role.require_user()
         if delivery.audience.sender_lookup != stable_thread_lookup(self.source_user.created_at):
             raise RelationViolationError("USER pin differs from its original human author")
         if not delivery.audience.includes_lookup(stable_thread_lookup(self.recipient.created_at)):
             raise RelationViolationError("USER pin recipient did not receive its original message")
-        if not self.recipient.current(registry):
-            raise RelationViolationError("USER pin recipient was replaced")
-        owner = registry.require(self.recipient.resolved(registry).name)
-        self.scope.require_human_context(owner)
-        self.change.require_publication(self, registry, original_source)
 
     def user_task_facts(self, message):
         from .retained_task_facts import HumanConstraintTaskFact
@@ -459,6 +479,48 @@ class HumanConstraintPin(ScopedTaskDeclaration):
 
     def retained_task_facts(self, message):
         return ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeInputConstraintPin(HumanConstraintPin):
+    """The same USER pin relation, addressed to an original direct ACP input."""
+
+    subject: Provenance
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.subject.require_human_input()
+
+    def original_wording(self, original: StoredInput) -> str:
+        return original.source_text
+
+    def original_wording_context_source(self, original: StoredInput) -> Provenance:
+        return original.context_provenance()
+
+    def original_input_sources(self, inputs: InputDocument) -> tuple[StoredInput, ...]:
+        return (self.subject.require_human_input().require_original(inputs),)
+
+    def original_wording_provenance(self, original: StoredInput) -> dict[str, object]:
+        origin = original.origin.require_human()
+        return dict(wording=FieldCodec.encode(original.context_provenance()),
+                    author=origin.author.sender, author_role=ThreadRole.USER.value)
+
+    def require_wording_publication(self, registry, original_source):
+        from .input_disposition import InputDispositions
+
+        original_source.require_current()
+        with InputDispositions(original_source.path.parent / InputDispositions.filename).reading() as inputs:
+            row = self.subject.require_human_input().require_original(inputs)
+        origin = row.origin.require_human()
+        if origin.root_id != original_source.witness.root_id:
+            raise RelationViolationError("USER input pin belongs to another wire root")
+        original_author = ThreadIncarnation(origin.author.sender, origin.author.created_at)
+        if original_author.resolved(registry) != self.source_user.resolved(registry):
+            raise RelationViolationError("USER input pin differs from its original human author")
+        if origin.admission.incarnation.resolved(registry) != self.recipient.resolved(registry):
+            raise RelationViolationError("USER input pin recipient did not receive its original input")
+        if origin.project != self.scope.project:
+            raise RelationViolationError("USER input pin belongs to another project")
 
 
 @dataclass(frozen=True, kw_only=True)
