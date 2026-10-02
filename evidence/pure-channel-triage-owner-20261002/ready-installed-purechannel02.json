@@ -1,0 +1,173 @@
+{
+  "state": "READY installed affected pure-channel manyowner native/ACP workflow; public default/manyowner wave parent-owned",
+  "production": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+  "driver": "d0a3506f0593cb255a98c97aea899ac21dcd3a29",
+  "prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-purechannel502-20261002",
+  "receiving_source_proof": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/purechannel502-receiving-20261002/source-proof.json",
+  "elapsed_seconds": 21.120126006018836,
+  "affected_originals": 3,
+  "proved_original_triage": 3,
+  "created_full_executions": 3,
+  "proved_original_full": 3,
+  "route_receipts": 3,
+  "acp_facts": 25,
+  "peak_overlapping_admitted_unproven_native_owners": 3,
+  "saved_original_bytes": 127926416,
+  "originals_and_configuration_byte_unchanged": true,
+  "all_owned_workers_retired": true,
+  "public_inputs": 0,
+  "original_seq326_replays": 0,
+  "total_final_durable_native_inputs": 9,
+  "final_proved_native_inputs": 6,
+  "extra_followup_reservations": 3,
+  "extra_admission_recorded": 1,
+  "extra_unrecorded_admission": 2,
+  "followup_source_memberships": [
+    {
+      "input_id": "a3c0ab5a314751201a2757393b05197a",
+      "owner_thread": "purechannel-owner-1",
+      "wire_seq": 2,
+      "assignment_id": "cohort-v1:c3373ffa12634ac9034bc84824443b5e234b4919db591f5492634210d394464a",
+      "recipient": "purechannel-owner-1",
+      "disposition": "deferred",
+      "revision": 2
+    },
+    {
+      "input_id": "a3c0ab5a314751201a2757393b05197a",
+      "owner_thread": "purechannel-owner-1",
+      "wire_seq": 3,
+      "assignment_id": "cohort-v1:069fe947ef154382b4480014ce6dfb832609170fd0d9919e5009baca371ef200",
+      "recipient": "purechannel-owner-1",
+      "disposition": "deferred",
+      "revision": 2
+    },
+    {
+      "input_id": "af198bcb86ca8268faf36f580c7c6400",
+      "owner_thread": "purechannel-owner-2",
+      "wire_seq": 2,
+      "assignment_id": "cohort-v1:eae586d70c3ff5394fd4480e7fa9041c27c96c09ef876daa9cb62375224664e3",
+      "recipient": "purechannel-owner-2",
+      "disposition": "deferred",
+      "revision": 2
+    },
+    {
+      "input_id": "ca7c897fcf58e36e4220193233adccf6",
+      "owner_thread": "purechannel-owner-0",
+      "wire_seq": 3,
+      "assignment_id": "cohort-v1:09c3570b489a4b204d06ea940949c00b51e4d57781eec2d5fb24f427d17442e8",
+      "recipient": "purechannel-owner-0",
+      "disposition": "deferred",
+      "revision": 2
+    }
+  ],
+  "final_native_rows": [
+    {
+      "input_id": "c048e2e8a2baf74288cbf7e8162f278c",
+      "owner_thread": "purechannel-owner-0",
+      "stage": "full",
+      "verdict": null,
+      "sent_owner_admission_generation": 5,
+      "session_id": "01a0fa78-ecea-7030-a7e6-8a819b1f0b88",
+      "session_entry_id": "b57361f6",
+      "request_generation": 2
+    },
+    {
+      "input_id": "ca7c897fcf58e36e4220193233adccf6",
+      "owner_thread": "purechannel-owner-0",
+      "stage": "triage",
+      "verdict": null,
+      "sent_owner_admission_generation": 5,
+      "session_id": null,
+      "session_entry_id": null,
+      "request_generation": null
+    },
+    {
+      "input_id": "d64245064c006ac76e9d8a5580594526",
+      "owner_thread": "purechannel-owner-0",
+      "stage": "triage",
+      "verdict": "full",
+      "sent_owner_admission_generation": 5,
+      "session_id": "01a0fa78-ecea-7030-a7e6-8a819b1f0b88",
+      "session_entry_id": "f38eebfe",
+      "request_generation": 1
+    },
+    {
+      "input_id": "19e8957e871a7cb6ea3bb9a352718e6f",
+      "owner_thread": "purechannel-owner-1",
+      "stage": "full",
+      "verdict": null,
+      "sent_owner_admission_generation": 6,
+      "session_id": "01a0fa78-ed1d-769b-ac7a-415f9751623d",
+      "session_entry_id": "5dcf1044",
+      "request_generation": 2
+    },
+    {
+      "input_id": "a3c0ab5a314751201a2757393b05197a",
+      "owner_thread": "purechannel-owner-1",
+      "stage": "triage",
+      "verdict": null,
+      "sent_owner_admission_generation": null,
+      "session_id": null,
+      "session_entry_id": null,
+      "request_generation": null
+    },
+    {
+      "input_id": "a7381adc71a95b3582ce4261ee1cd9af",
+      "owner_thread": "purechannel-owner-1",
+      "stage": "triage",
+      "verdict": "full",
+      "sent_owner_admission_generation": 6,
+      "session_id": "01a0fa78-ed1d-769b-ac7a-415f9751623d",
+      "session_entry_id": "66488f44",
+      "request_generation": 1
+    },
+    {
+      "input_id": "aa36dc73a2afecd2bf8b693a38822851",
+      "owner_thread": "purechannel-owner-2",
+      "stage": "full",
+      "verdict": null,
+      "sent_owner_admission_generation": 7,
+      "session_id": "01a0fa78-ed6c-7207-be0f-c5c287e1a3d0",
+      "session_entry_id": "51dbb430",
+      "request_generation": 2
+    },
+    {
+      "input_id": "98a7215931f02f3cd3c65347d38e5efc",
+      "owner_thread": "purechannel-owner-2",
+      "stage": "triage",
+      "verdict": "full",
+      "sent_owner_admission_generation": 7,
+      "session_id": "01a0fa78-ed6c-7207-be0f-c5c287e1a3d0",
+      "session_entry_id": "9f2141a8",
+      "request_generation": 1
+    },
+    {
+      "input_id": "af198bcb86ca8268faf36f580c7c6400",
+      "owner_thread": "purechannel-owner-2",
+      "stage": "triage",
+      "verdict": null,
+      "sent_owner_admission_generation": null,
+      "session_id": null,
+      "session_entry_id": null,
+      "request_generation": null
+    }
+  ],
+  "unknown_policy": "All3 extra TRIAGE context/verdict absent records and original private01 partial publications retained; no retries, inferred terminality, reclassification or replay",
+  "amplification_observation": "Before cleanup,2 agent channel replies produced4 additional selected claims groupedinto3 reservations (membership cardinalities1,2,1). This does not prove6 provider calls total nor eliminate N\u00d7N audience fanout. Parent/Kepler original policy owner gets census; no competing policy edit.",
+  "no_further_provider_calls": true,
+  "actual_native_provider_stream_overlap_ms": {
+    "triage": {
+      "owners": 3,
+      "latest_native_dispatch_ms": 1790908624828,
+      "earliest_native_stream_end_ms": 1790908626439,
+      "all_owner_provider_stream_overlap_ms": 1611
+    },
+    "full": {
+      "owners": 3,
+      "latest_native_dispatch_ms": 1790908630199,
+      "earliest_native_stream_end_ms": 1790908632475,
+      "all_owner_provider_stream_overlap_ms": 2276
+    }
+  },
+  "native_request_progress_receipt": "native-request-progress-overlap02.json"
+}

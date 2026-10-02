@@ -21,7 +21,7 @@ from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
-from .selected_turn import SelectedAttempt, SelectedConsideration
+from .selected_turn import SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
 
 
@@ -104,12 +104,4 @@ class SelectedExecution:
                 self.selected_thinking_level,
                 self.native_package,
             )
-            session, ignored = await SelectedConsideration(participant).run(
-                self.native_package, session
-            )
-            if ignored is not None:
-                return ignored
-            attempt = SelectedAttempt.engage(participant)
-            return await attempt.run(
-                self.native_package, session, self.action(session), self.write_authority
-            )
+            return await SelectedConsideration(participant).run(self, session)

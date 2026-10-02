@@ -39,7 +39,7 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     def settle(self, store, db, current: WakeAssignment) -> None: ...
 
     @abstractmethod
-    def continue_turn(self, participant, session, input_id): ...
+    async def continue_turn(self, participant, session, input_id, execution, settled): ...
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
             updated_at_ms=store.session.now(now),
         )
 
-    def continue_turn(self, participant, session, input_id):
+    async def continue_turn(self, participant, session, input_id, execution, settled):
         from .selected_result import CoordinatedTurn
 
         participant.consume_reply_wait()
@@ -86,8 +86,19 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         # Deferred until the execution owner atomically engages this exact claim.
         pass
 
-    def continue_turn(self, participant, session, input_id):
-        return None
+    async def continue_turn(self, participant, session, input_id, execution, settled):
+        from .coordination_tables.executions import ExecutionOrigin
+        from .selected_turn import SelectedAttempt
+
+        participant.require_current()
+        created = participant.store.executions.create_after_triage(
+            participant.batch.execution_id, ExecutionOrigin.WIRE,
+            participant.lookup, participant.owner.thread.name, 1,
+            sources=participant.batch.sources, settled=settled,
+        ).value
+        attempt = SelectedAttempt.engage(participant, created)
+        return await attempt.run(execution.native_package, session,
+                                 execution.action(session), execution.write_authority)
 
 
 class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
@@ -101,10 +112,10 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
             return RejectedTriageOutcome(error)
 
     @abstractmethod
-    def settle(self, participant, stage, admission, context) -> None: ...
+    def settle(self, participant, stage, admission, context) -> tuple[WakeAssignment, ...]: ...
 
     @abstractmethod
-    def continue_turn(self, participant, session, input_id): ...
+    async def continue_turn(self, participant, session, input_id, execution, settled): ...
 
 
 @dataclass(frozen=True)
@@ -112,11 +123,11 @@ class DecidedTriageOutcome(SelectedTriageOutcome):
     decision: SelectedTriage
 
     def settle(self, participant, stage, admission, context):
-        stage.commit(participant.store, participant.identity, admission.input_id,
-                     admission.token_digest, context, self.decision)
+        return stage.commit(participant.store, participant.identity, admission.input_id,
+                            admission.token_digest, context, self.decision)
 
-    def continue_turn(self, participant, session, input_id):
-        return self.decision.continue_turn(participant, session, input_id)
+    async def continue_turn(self, participant, session, input_id, execution, settled):
+        return await self.decision.continue_turn(participant, session, input_id, execution, settled)
 
 
 @dataclass(frozen=True)
@@ -126,13 +137,14 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     def settle(self, participant, stage, admission, context):
         from .selected_result import publish_native_failure
 
-        stage.reject(participant.store, participant.identity, admission.input_id,
-                     admission.token_digest, context)
+        settled = stage.reject(participant.store, participant.identity, admission.input_id,
+                               admission.token_digest, context)
         publish_native_failure(participant, admission.input_id,
                                "The selected model returned an invalid triage decision.",
                                source_error=self.error)
+        return settled
 
-    def continue_turn(self, participant, session, input_id):
+    async def continue_turn(self, participant, session, input_id, execution, settled):
         from .selected_result import CoordinatedTurn
 
         return CoordinatedTurn.capture(participant, session, input_id, FailedAssignment)
