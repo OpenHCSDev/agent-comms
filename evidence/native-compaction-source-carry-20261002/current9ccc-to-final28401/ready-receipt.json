@@ -1,0 +1,34 @@
+{
+  "state": "READY-historical-private-carry-installed-final28401",
+  "source_head": "c0135047625945ad1c2115a86a3181a8d16c3ab3",
+  "source_release": [
+    9,
+    3,
+    3,
+    5
+  ],
+  "target_release": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "source_capture_receipt": "capture-receipt.json",
+  "installed_carry_receipt": "receipt.json",
+  "installed_readers_receipt": "installed-readers.json",
+  "operator_manifest_sha256": "506bd52e5602fe564ff42b80ca5e19105af712d8aa6f0ce8253848852800ef22",
+  "original_goal": "goal/preserve; current9ccc declaration, snapshot bytes unchanged",
+  "native_inputs_and_bindings": 639,
+  "original_selected_attempts": 4,
+  "native_operations_and_publications": 3,
+  "original_raw_UNKNOWN": 394,
+  "original_enrollments": 0,
+  "oldest_four_source_json_hashes_preserved": true,
+  "public_mutations": 0,
+  "public_stops": 0,
+  "provider_calls": 0,
+  "input_replays": 0,
+  "owned_scratch": "/home/ts/.cache/agent-scratch/comms-native-compaction-source-carry-20261002/current9ccc-historical01",
+  "allocated_scratch_bytes": 17379328,
+  "limits": "Original public source remained running. Read-only consistent snapshots qualify the private historical transformation and installed consumers, not execution of public stopped publication. No fresh original admission or enrollment minted."
+}

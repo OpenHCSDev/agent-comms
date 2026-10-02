@@ -1,0 +1,70 @@
+{
+  "state": "PASS-installed-Native6-historical-original-readers",
+  "installed_direct_url": {
+    "url": "https://github.com/OpenHCSDev/agent-comms.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "28401d70228237936d6489cba419271764edb905",
+      "requested_revision": "28401d70228237936d6489cba419271764edb905"
+    }
+  },
+  "typed_journal_rows": {
+    "operations": 3,
+    "selected_summary_attempts": 4,
+    "publications": 3,
+    "private_raw_inputs": 394,
+    "enrolled_private_sessions": 0
+  },
+  "oldest_four_source_digests_unchanged": true,
+  "original_committed_links": [
+    {
+      "operation_id_sha256": "804ca81300b2c24faad978a86ba2943735a379bd6b23f9ec97b6d9180d2950e5",
+      "source_digest": "842498cd819287b62de80c2cbb7142b222e11b6dacbfa629755d2aa85b6e12d9",
+      "original_source_digest_unchanged": true
+    },
+    {
+      "operation_id_sha256": "44d7b3f43765090abf3be808970c3b5e3b56a23e16a3bb5e0f9a342be7f13c77",
+      "source_digest": "e62f161689056663e6dd21560d8eb552ad3274a813083f30f9a411b81e797925",
+      "original_source_digest_unchanged": true
+    },
+    {
+      "operation_id_sha256": "f4359770b92fff38fd5656b70d8a601e927bbf75c9580cf8f73b48fc5b0ff1bb",
+      "source_digest": "9016e62b46db2d6e282dc4f5bfc63636083ff6734e533043228c03ff4c69a6f9",
+      "original_source_digest_unchanged": true
+    }
+  ],
+  "outcome_readers": [
+    {
+      "operation_id_sha256": "804ca81300b2c24faad978a86ba2943735a379bd6b23f9ec97b6d9180d2950e5",
+      "typed_outcomes": 0,
+      "native_source_exists": true
+    },
+    {
+      "operation_id_sha256": "8e9af26656a13c820e4c56776567b8eb6cbe28e561fbbd2f362ce567f00c43d9",
+      "typed_outcomes": 1,
+      "native_source_exists": true
+    },
+    {
+      "operation_id_sha256": "44d7b3f43765090abf3be808970c3b5e3b56a23e16a3bb5e0f9a342be7f13c77",
+      "typed_outcomes": 0,
+      "native_source_exists": true
+    },
+    {
+      "operation_id_sha256": "f4359770b92fff38fd5656b70d8a601e927bbf75c9580cf8f73b48fc5b0ff1bb",
+      "typed_outcomes": 0,
+      "native_source_exists": true
+    }
+  ],
+  "typed_native_inputs": 639,
+  "typed_prompt_bindings": 639,
+  "typed_native_cursors": 48,
+  "original_goal_classification": "goal/preserve",
+  "original_goal_snapshot_bytes_unchanged": true,
+  "physical_public_preimage_retained_separately": true,
+  "source_revision_observations": "Original reserved session/proof revisions and paths preserved; no rewriting or re-admission. Presence reports do not grant native input proof.",
+  "public_writes": 0,
+  "public_stops": 0,
+  "provider_calls": 0,
+  "input_replays": 0,
+  "limits": "Private historical carry of consistent running-source snapshot; public stopped publication remains release-owner work."
+}
