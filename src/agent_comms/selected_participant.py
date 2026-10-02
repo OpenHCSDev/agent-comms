@@ -6,6 +6,7 @@ import secrets
 from collections.abc import Generator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from functools import partial
 
 from .agent_events import NativePhaseChanged
 from .pi_events import TurnContextObserved
@@ -65,16 +66,20 @@ class SelectedParticipant(MroDispatch):
 
     @handles(TurnContextObserved)
     async def observe_context(self, event: TurnContextObserved) -> None:
+        await Coordination.run_worker(partial(self.record_context, event))
+
+    def record_context(self, event: TurnContextObserved) -> None:
         self.owner.require_active_turn()
-        lease = self.owner.thread.turn_lease
-        assert lease is not None
+        lease = self.owner.thread.require_turn_lease()
         event.context.record(self.bus.log, self.owner.thread, lease)
 
     @handles(NativePhaseChanged)
     async def native_phase(self, event: NativePhaseChanged) -> None:
+        await Coordination.run_worker(partial(self.record_native_phase, event))
+
+    def record_native_phase(self, event: NativePhaseChanged) -> None:
         current = self.comms.registry.require(self.owner.thread.name).turn_state.phase
-        lease = self.owner.thread.turn_lease
-        assert lease is not None
+        lease = self.owner.thread.require_turn_lease()
         for observation in event.phase.request_observations:
             record_request_progress(self.comms.root, lease, observation,
                                     native_process=event.native_process)
