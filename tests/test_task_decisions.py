@@ -541,9 +541,7 @@ async def test_explicit_subtask_observation_correction_drop_and_turn_continuity(
     def boundary():
         snapshot = comms.registry.snapshot()
         current = snapshot.require(owner.name)
-        with comms.bus.log.locked():
-            _, facts = comms.bus.log.compaction_messages_unlocked(current.incarnation)
-        retained = RetainedTaskFacts(facts)
+        retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
         assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
         return retained.optional_boundary(current, snapshot)
 
@@ -554,9 +552,7 @@ async def test_explicit_subtask_observation_correction_drop_and_turn_continuity(
     assert boundary() == (original.reference,)
     assert original.body == request["text"]
     assert original.task.source_turn == owner.turn_identity
-    with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
-    retained = RetainedTaskFacts(facts)
+    retained = comms.bus.log.retained_context(owner.name, comms.registry).retained
     loop_thread = threading.get_ident()
     reads = []
     registry_type = type(comms.registry)
