@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .cli_commands import CliCommand
 from .comms import wire
+from .owner_restart import StoppedOwnerFailure
 
 
 def _emit(payload: object) -> None:
@@ -56,6 +57,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             route_guard.enter_context(guard_default_route_write(comms.root))
         _emit(command.apply(comms))
+    except StoppedOwnerFailure as exc:
+        # This JSON adapter is one-shot. It cannot silently discard acquired
+        # custody as though the error had preceded retirement.
+        exc.abandon()
+        return _fail(f'{exc}; original failure: {exc.__cause__}')
     except Exception as exc:
         return _fail(str(exc))
     finally:
