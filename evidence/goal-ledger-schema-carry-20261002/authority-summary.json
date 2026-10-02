@@ -1,0 +1,97 @@
+{
+  "source_head": "9ccc04c8",
+  "parsed_modules": 363,
+  "unparsed": [],
+  "classification": "lexical-AST-not-dynamic-resolution",
+  "limits": [
+    "Python source and cutover boundaries; JS/native ABI not parsed",
+    "short-name hits and MRO closure are leads adjudicated by source reading",
+    "existing full dependency-root census remains protected in510; no zero-by-omission claim"
+  ],
+  "definitions": {
+    "FailedTurnEvidence": [
+      {
+        "path": "src/agent_comms/goal_failure_observation.py",
+        "line": 54
+      }
+    ],
+    "FailureReason": [
+      {
+        "path": "src/agent_comms/diagnostics.py",
+        "line": 48
+      }
+    ],
+    "GoalAttemptSchema": [
+      {
+        "path": "src/agent_comms/goal_attempts.py",
+        "line": 313
+      }
+    ],
+    "GoalAttemptStore": [
+      {
+        "path": "src/agent_comms/goal_attempts.py",
+        "line": 509
+      }
+    ],
+    "GoalLedgerTable": [
+      {
+        "path": "src/agent_comms/goal_failure_observation.py",
+        "line": 34
+      }
+    ],
+    "AcquiredRuntimeFiles": [
+      {
+        "path": "tools/cutover/retained_summary_reset.py",
+        "line": 46
+      }
+    ],
+    "CarriedNativeStore": [
+      {
+        "path": "tools/cutover/native_schema_carry.py",
+        "line": 465
+      }
+    ],
+    "NativeSchemaCarryPlan": [
+      {
+        "path": "tools/cutover/native_schema_carry.py",
+        "line": 473
+      }
+    ],
+    "NativeSchemaDeclaration": [
+      {
+        "path": "tools/cutover/native_schema_carry.py",
+        "line": 26
+      }
+    ],
+    "PublishRetainedSummary": [
+      {
+        "path": "tools/cutover/publish_retained_summary.py",
+        "line": 200
+      }
+    ],
+    "RuntimeCompactionFiles": [
+      {
+        "path": "tools/cutover/retained_summary_reset.py",
+        "line": 90
+      }
+    ],
+    "RuntimeGoalFiles": [
+      {
+        "path": "tools/cutover/retained_summary_reset.py",
+        "line": 124
+      }
+    ],
+    "RuntimeInstallation": [
+      {
+        "path": "tools/cutover/runtime_installation.py",
+        "line": 13
+      }
+    ],
+    "RuntimeNativeFiles": [
+      {
+        "path": "tools/cutover/native_schema_carry.py",
+        "line": 171
+      }
+    ]
+  }
+}

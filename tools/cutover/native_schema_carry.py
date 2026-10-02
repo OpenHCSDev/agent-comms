@@ -33,6 +33,7 @@ class NativeSchemaDeclaration:
     snapshot_version: int
     response_version: int
     coordination: dict[str, str]
+    goal: dict[str, str]
     writable_columns: dict[str, tuple[str, ...]]
     metadata_rows: dict[str, tuple[tuple[Any, ...], ...]]
 
@@ -48,6 +49,9 @@ class NativeSchemaDeclaration:
         from agent_comms.coordination_response import ResponseTable, ResponseSchemaMeta, _response_schema, _response_digest
         from agent_comms.native_runtime_input import NativeRuntimeTable
         from agent_comms.typed_table import TypedTable
+        # The original interpreter need not expose a target-only schema helper.
+        # Both authentic producers declare membership through this capability.
+        goal = cls.observe_goal()
         coordination_meta = SchemaMeta.current()
         response_version = get_args(get_type_hints(ResponseSchemaMeta)['version'])[0]
         native_version = get_args(get_type_hints(NativeRuntimeSchemaMeta)['version'])[0]
@@ -76,7 +80,60 @@ class NativeSchemaDeclaration:
                     for table in TypedTable.members_with(family)}
         return cls(native_version, runtime, _digest(runtime), binding_schema(PromptBinding), binding_digest(PromptBinding),
                    coordination_meta.schema_version, coordination_meta.snapshot_version, response_version,
-                   coordination, writable, metadata)
+                   coordination, goal, writable, metadata)
+
+    @staticmethod
+    def observe_goal():
+        from agent_comms.goal_attempts import GoalLedgerTable
+        from agent_comms.typed_table import TypedTable
+        return {name: sql for table in TypedTable.members_with(GoalLedgerTable)
+                for name, sql in table.schema_objects().items()}
+
+    def require_goal(self, db):
+        from agent_comms.goal_attempts import assert_goal_attempt_schema
+        if objects(db) != self.goal:
+            raise ValueError('Goal ledger differs from the target declaration')
+        assert_goal_attempt_schema(db)
+
+    def synchronize_goal(self, acquired, destination, original_schema):
+        """Derive the stopped carry from actual DDL, never a version number."""
+        acquired.require_original()
+        if not acquired.originals:
+            return {'classification': 'goal/absent', 'created': False}
+        original, = acquired.originals
+        with closing(sqlite3.connect(original.path.as_uri()+'?mode=ro', uri=True)) as db:
+            if objects(db) == self.goal:
+                self.require_goal(db)
+                return {'classification': 'goal/preserve', 'original_files': acquired.evidence()}
+            if objects(db) != original_schema:
+                raise ValueError('Original goal ledger differs from its authentic declaration preimage')
+        candidate = destination.with_name(destination.name + '.candidate')
+        candidate.mkdir(mode=0o700)
+        name = str(original.path.relative_to(acquired.paths[0].parents[1]))
+        path = candidate / name
+        path.parent.mkdir(mode=0o700)
+        retain_file(original.path, path)
+        with closing(sqlite3.connect(path, isolation_level=None)) as db:
+            db.execute('PRAGMA foreign_keys=OFF')
+            db.execute('PRAGMA synchronous=EXTRA')
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                evidence = carry_goal(db, self)
+                db.execute('COMMIT')
+            except BaseException:
+                db.execute('ROLLBACK')
+                raise
+        with path.open('rb') as stream:
+            os.fsync(stream.fileno())
+        fsync_directory(path.parent)
+        fsync_directory(candidate)
+        store = CarriedNativeStore(name, original.sha256, digest(path), evidence)
+        result = NativeSchemaCarryPlan.install_prepared(
+            acquired.paths[0].parents[1], candidate, (store,), acquired, destination, self,
+            classification='goal/declaration-preserve')
+        with closing(sqlite3.connect(original.path.as_uri()+'?mode=ro', uri=True)) as db:
+            self.require_goal(db)
+        return result
 
     @property
     def release_versions(self):
@@ -197,6 +254,58 @@ def rebuild(db, schema, table_rows):
             if sql.lstrip().startswith('CREATE TABLE'):
                 raise ValueError('Carry removed an unrelated original table: ' + name)
             db.execute(sql)
+
+
+def carry_goal(db, target):
+    """Rebuild generated constraints as one family, preserving every fact row."""
+    from agent_comms.goal_attempts import GoalAttemptSchema, GoalLedgerTable
+    from agent_comms.typed_table import TypedTable
+    before_objects, before_rows = objects(db), inventory(db)
+    if db.execute('PRAGMA integrity_check').fetchall() != [('ok',)]:
+        raise ValueError('Original goal ledger integrity is uncertain')
+    if db.execute('PRAGMA foreign_key_check').fetchall():
+        raise ValueError('Original goal ledger relations require their owning review')
+    tables = {table.declared_name: table for table in TypedTable.members_with(GoalLedgerTable)}
+    if not before_rows.keys() <= tables.keys():
+        raise ValueError('Carry cannot discard an original goal table')
+    payload, identity_rows = {}, {}
+    for name, table in tables.items():
+        fields = tuple(item.name for item in table._fields() if item.column.generated is None)
+        if table is GoalAttemptSchema:
+            if len(before_rows.get(name, ())) != 1:
+                raise ValueError('Original goal declaration marker is uncertain')
+            current = GoalAttemptSchema.current()
+            payload[name] = (fields, [tuple(getattr(current, field) for field in fields)])
+            continue
+        if name not in before_rows:
+            payload[name] = (fields, [])
+            continue
+        old_fields = tuple(row[1] for row in db.execute(f'PRAGMA table_xinfo({quoted(name)})')
+                           if row[6] == 0)
+        if old_fields != fields:
+            raise ValueError('Goal fact columns need an explicit semantic carry: ' + name)
+        identities = fields if table.without_rowid else ('rowid', *fields)
+        identity_rows[name] = rows(db, name, identities)
+        payload[name] = (identities, identity_rows[name])
+    rebuild(db, target.goal, payload)
+    target.require_goal(db)
+    after_rows = inventory(db)
+    for name in before_rows.keys() - {GoalAttemptSchema.declared_name}:
+        if after_rows[name] != before_rows[name]:
+            raise ValueError('Goal carry changed an original fact or generated fact: ' + name)
+        if rows(db, name, payload[name][0]) != identity_rows[name]:
+            raise ValueError('Goal carry changed an original physical row identity: ' + name)
+    if db.execute('PRAGMA integrity_check').fetchall() != [('ok',)] or db.execute('PRAGMA foreign_key_check').fetchall():
+        raise ValueError('Carried goal ledger constraints are not satisfied')
+    return {'original_ddl_sha256': row_digest(before_objects),
+            'target_ddl_sha256': row_digest(target.goal),
+            'original_rows': {name: len(values) for name, values in before_rows.items()},
+            'carried_rows': {name: len(values) for name, values in after_rows.items()},
+            'unchanged_rows_sha256': row_digest({name: before_rows[name] for name in sorted(identity_rows)}),
+            'row_identity_sha256': row_digest(identity_rows),
+            'changed_schema_objects': sorted(name for name in before_objects.keys() | target.goal.keys()
+                                             if before_objects.get(name) != target.goal.get(name)),
+            'metadata_owner': GoalAttemptSchema.declared_name}
 
 
 def carry_coordination(db, original, target):
@@ -398,39 +507,56 @@ class NativeSchemaCarryPlan:
                 raise ValueError('Original native store membership changed')
             if any(by_name[item.name].sha256 != item.original_sha256 for item in self.stores):
                 raise ValueError('Original native preimage changed after review')
-            destination.mkdir(mode=0o700)
-            for item in self.stores:
-                retain_file(self.root / item.name, destination / item.name)
-            write_original(destination / 'reviewed-carry.json', (json.dumps(FieldCodec.encode(self), indent=2)+'\n').encode())
-            fsync_directory(destination)
-            fsync_directory(destination.parent)
-            acquired.require_original()
-            # All preimages and both candidates exist before the first replace.
-            # Any exception leaves the existing stopped batch and this attempt
-            # directory intact. No implicit rollback, launch or retry.
-            for item in self.stores:
-                staging = destination / (item.name + '.target')
-                retain_file(self.candidate / item.name, staging)
-                if digest(staging) != item.candidate_sha256:
-                    raise ValueError('Staged candidate differs from reviewed carry')
-            acquired.require_original()
-            for item in self.stores:
-                staging = destination / (item.name + '.target')
-                if item.name == 'native_prompt_bindings.sqlite3':
-                    # Reuse the original sidecar snapshot durability owner,
-                    # including its UNKNOWN intent and no automatic recovery.
-                    _publish(binding_directory, item.name, binding_snapshot[1], staging.read_bytes())
-                    staging.unlink()
-                else:
-                    staging.replace(self.root / item.name)
-                    fsync_directory(self.root)
-            if any(digest(self.root / item.name) != item.candidate_sha256 for item in self.stores):
-                raise ValueError('Installed native carry differs; remain stopped')
-            result = {'classification':'runtime/complete490-release-preserve', 'stores':FieldCodec.encode(self.stores),
-                      'original_preimages':str(destination), 'retired':[], 'reconstructed_proofs':0, 'input_replays':0}
-            write_original(destination / 'installed.json', (json.dumps(result,indent=2)+'\n').encode())
-            fsync_directory(destination)
-            return result
+            return self.install_prepared(self.root, self.candidate, self.stores,
+                                         acquired, destination, self, binding_directory, binding_snapshot)
+
+    @staticmethod
+    def install_prepared(root, candidate, stores, acquired, destination, review,
+                         binding_directory=None, binding_snapshot=None,
+                         classification='runtime/complete490-release-preserve'):
+        """One retained-preimage/publication lifetime for every carried store."""
+        from agent_comms.private_sidecar import _publish
+        destination.mkdir(mode=0o700)
+        PrivateDirectoryRole.require(destination.lstat())
+        write_original(destination / 'reviewed-carry.json',
+                       (json.dumps(FieldCodec.encode(review), indent=2)+'\n').encode())
+        for item in stores:
+            parent = (destination / item.name).parent
+            if parent != destination:
+                parent.mkdir(mode=0o700, exist_ok=True)
+            retain_file(root / item.name, destination / item.name)
+            fsync_directory(parent)
+        write_original(destination / 'reviewed-stores.json',
+                       (json.dumps(FieldCodec.encode(stores), indent=2)+'\n').encode())
+        fsync_directory(destination)
+        fsync_directory(destination.parent)
+        acquired.require_original()
+        # All preimages and both candidates exist before the first replace.
+        # Any exception leaves the existing stopped batch and this attempt
+        # directory intact. No implicit rollback, launch or retry.
+        for item in stores:
+            staging = destination / (item.name + '.target')
+            retain_file(candidate / item.name, staging)
+            if digest(staging) != item.candidate_sha256:
+                raise ValueError('Staged candidate differs from reviewed carry')
+        acquired.require_original()
+        for item in stores:
+            staging = destination / (item.name + '.target')
+            if item.name == 'native_prompt_bindings.sqlite3':
+                # Reuse the original sidecar snapshot durability owner,
+                # including its UNKNOWN intent and no automatic recovery.
+                _publish(binding_directory, item.name, binding_snapshot[1], staging.read_bytes())
+                staging.unlink()
+            else:
+                staging.replace(root / item.name)
+                fsync_directory((root / item.name).parent)
+        if any(digest(root / item.name) != item.candidate_sha256 for item in stores):
+            raise ValueError('Installed native carry differs; remain stopped')
+        result = {'classification':classification, 'stores':FieldCodec.encode(stores),
+                  'original_preimages':str(destination), 'retired':[], 'reconstructed_proofs':0, 'input_replays':0}
+        write_original(destination / 'installed.json', (json.dumps(result,indent=2)+'\n').encode())
+        fsync_directory(destination)
+        return result
 
 
 def prepare(root, candidate, original):
@@ -481,12 +607,15 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--declaration', action='store_true')
+    parser.add_argument('--goal-declaration', action='store_true')
     parser.add_argument('--root', type=Path)
     parser.add_argument('--candidate', type=Path)
     parser.add_argument('--original-declaration', type=Path)
     parser.add_argument('--plan', type=Path)
     args = parser.parse_args()
-    if args.declaration:
+    if args.goal_declaration:
+        print(json.dumps(NativeSchemaDeclaration.observe_goal()))
+    elif args.declaration:
         print(json.dumps(FieldCodec.encode(NativeSchemaDeclaration.observe())))
     else:
         if not all((args.root,args.candidate,args.original_declaration,args.plan)):
