@@ -80,7 +80,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     from agent_comms.input_origin import HumanInputOrigin
     from agent_comms.goals import AbsentGoalCheckpoint, PresentGoalCheckpoint
     from agent_comms.goal_actions import ClearGoalAction
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_fork import ForkSessionRequest
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
     from agent_comms.compaction_journal import CompactionJournal
     from agent_comms.compaction_states import ManualCommittedSummary
@@ -139,7 +139,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     peer = Thread("context-peer", frozenset({'team'}), str(project),
                   process_identity=ProcessIdentity.capture(os.getpid()))
     owner._comms.registry.declare(peer)
-    c_identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
+    c_identity = await CompactionJournal(owner._comms.root / 'compaction-commits.sqlite3').private_inputs.fork(ForkSessionRequest(str(package),
         str(fixture.session), str(project), str(fixture.root.parent / 'c-native-fork')),
         cwd=project, env=dict(os.environ))
     receiver = Thread('context-receiver', frozenset({'team'}), str(project),

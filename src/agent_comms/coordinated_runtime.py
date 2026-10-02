@@ -8,10 +8,12 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 from __future__ import annotations
 
 import threading
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .pi_vocabulary import ThinkingLevel
+from .agent_events import CompactionEvent
 from .comms import Comms
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked
 from .coordinator import Coordination
@@ -79,7 +81,7 @@ class SelectedExecution:
             return self.selected_existing_file_write
         return session.default_action()
 
-    async def run(self) -> CoordinatedTurn | None:
+    async def run(self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None) -> CoordinatedTurn | None:
         if not self._run_permit.acquire(blocking=False):
             raise IdentityConflict("Selected execution cannot be reused")
         self.root = Path(self.root).absolute()
@@ -92,6 +94,7 @@ class SelectedExecution:
                 self.wire_root_id,
                 self.owner_name,
                 self.after_seq,
+                on_compaction=on_compaction,
             ) as participant:
                 if participant is None:
                     return None

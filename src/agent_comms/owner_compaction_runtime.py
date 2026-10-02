@@ -124,7 +124,7 @@ async def compact_owner_once(
             settings_paths=settings_paths,
         )
         async def at_cut(prepared: NativePreparation) -> CompactionResult:
-            if not settings.boundary_current(source.retained, owner, bridge.registry.snapshot()):
+            if not await settings.boundary_current(source.retained, owner, bridge.registry):
                 return RefusedCompactionResult("Authored subtask boundary changed; optional compaction skipped")
             if on_event is not None:
                 await on_event(CompactionStart(reason="adaptive"))

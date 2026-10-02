@@ -530,7 +530,10 @@ class ThreadManagement:
                 f"Parent thread {spec.parent!r} has no session file to fork."
             )
 
-        session = fork_native_session(parent.session_file, parent.worktree, pi_bin)
+        from .compaction_journal import CompactionJournal
+
+        session = fork_native_session(parent.session_file, parent.worktree, pi_bin,
+            private_inputs=CompactionJournal(self.root / "compaction-commits.sqlite3").private_inputs)
         child = Thread(
             name=spec.name,
             tags=parent.tags if spec.tags is None else spec.tags,

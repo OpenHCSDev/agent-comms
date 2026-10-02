@@ -1342,7 +1342,7 @@
      }
      /**
       * Fork a session from another project directory into the current project.
-@@ -1362,45 +1267,31 @@
+@@ -1362,45 +1267,47 @@
       * @param sessionDir Optional session directory. If omitted, uses default for targetCwd.
       */
      static forkFrom(sourcePath, targetCwd, sessionDir, options) {
@@ -1399,10 +1399,26 @@
 +            pr48WriterLock(file, () => {
 +                const fd = openSync(file, 'wx', 0o600);
 +                try {
-+                    writeFileSync(fd, JSON.stringify(header) + '\n');
-+                    for (const entry of source.entries()) writeFileSync(fd, JSON.stringify(entry) + '\n');
++                    const digest = createHash('sha256');
++                    let entryCount = 0;
++                    const writeEntry = entry => {
++                        const bytes = JSON.stringify(entry) + '\n';
++                        writeFileSync(fd, bytes);
++                        digest.update(bytes, 'utf8');
++                        entryCount++;
++                    };
++                    writeEntry(header);
++                    for (const entry of source.entries()) writeEntry(entry);
++                    source.assertCurrent();
 +                    fsyncSync(fd);
 +                    acSyncParents(dirname(file));
++                    const observed = fstatSync(fd, {bigint: true});
++                    // Publish only within the original source/child writer lifetime.
++                    options?.onForkCreated?.({sessionId: id, sessionFile: realpathSync(file),
++                        source: {sessionId: source.header.id, sessionFile: realpathSync(sourcePath)},
++                        sourceRevision: source.revision,
++                        revision: `${observed.dev}:${observed.ino}:${observed.size}:${observed.mtimeNs}:${observed.ctimeNs}`,
++                        prefixDigest: {value: digest.digest('hex')}, entryCount});
 +                } catch (cause) { throw new Error("Native fork outcome unknown; no replay", {cause}); }
 +                finally { closeSync(fd); }
 +            });

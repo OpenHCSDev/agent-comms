@@ -199,7 +199,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
 
         persistent = agent.turns.persistent_backends["retained"]
         if mode == "manual":
-            assert not persistent.available and persistent.custody.session_file == str(session)
+            assert not persistent.available and persistent.custody.identity.session_file == str(session)
             await agent.turns.prepare_selected_session(
                 "retained", comms.registry.require("retained")
             )

@@ -24,7 +24,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_states import ManualCommittedSummary
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+from agent_comms.native_fork import ForkSessionRequest
 from agent_comms.native_package import verify_native_package
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.pi_vocabulary import ThinkingLevel
@@ -53,10 +53,11 @@ async def run(stage, package, source_file):
     launch = RetainedOwnerLaunch.capture(original, snapshot)
     original_hash = digest(source_file)
     verify_native_package(package)
-    fork = await ForkSessionHelper.run(ForkSessionRequest(
+    service = Comms(stage/'wire')
+    from agent_comms.compaction_journal import CompactionJournal
+    fork = await CompactionJournal(service.root/'compaction-commits.sqlite3').private_inputs.fork(ForkSessionRequest(
         str(package), str(source_file), original.worktree, str(stage/'forks')),
         cwd=Path(original.worktree), env=dict(launch.environment))
-    service = Comms(stage/'wire')
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     binary = Path(sys.executable).with_name('pi-comms-native')

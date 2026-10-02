@@ -14,7 +14,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import PublicationReceipts
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+from agent_comms.native_fork import ForkSessionRequest
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.native_package import verify_native_package
 from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -56,13 +56,14 @@ async def run(stage, package):
             settings_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
-    fork = await ForkSessionHelper.run(
+    service = Comms(stage / 'w')
+    from agent_comms.compaction_journal import CompactionJournal
+    fork = await CompactionJournal(service.root / 'compaction-commits.sqlite3').private_inputs.fork(
         ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),
         env=environment,
     )
     assert Path(fork.session_file).is_relative_to(stage)
-    service = Comms(stage / 'w')
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     binary = Path(sys.executable).with_name('pi-comms-native')

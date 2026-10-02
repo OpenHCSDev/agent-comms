@@ -17,7 +17,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import NotSentInput
-from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+from agent_comms.native_fork import ForkSessionRequest
 from agent_comms.native_package import verify_native_package
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.native_session_prepare import NativeSessionPreparation
@@ -87,10 +87,10 @@ async def run(stage, package):
             'original_request_unchanged': True})
     assert len(receipt['original_classification']) == 4
     verify_native_package(package)
-    fork = await ForkSessionHelper.run(ForkSessionRequest(
+    service = Comms(stage/'w')
+    fork = await CompactionJournal(service.root/'compaction-commits.sqlite3').private_inputs.fork(ForkSessionRequest(
         str(package), original.require_saved_session(), original.worktree, str(stage/'forks')),
         cwd=Path(original.worktree), env=dict(launch.environment))
-    service = Comms(stage/'w')
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     environment = dict(launch.environment)

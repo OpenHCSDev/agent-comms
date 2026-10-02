@@ -37,3 +37,11 @@ The selected read-only probe exception previously inherited plain RuntimeError a
 
 
 A bounded read-only observation used the same preserved session and original launch/configuration through NativeSessionPreparation. The actual native selected-settings RPC returned `unneeded` without a source boundary and `task_boundary` with the original authored notice. No native prompts or provider calls were sent; saved source and original input rows were unchanged and the normally restarted private owner retired. This proves the native policy/decoder decision, not optional summary commit or input continuation. The remaining failure lies after that decision and before recorded prompt admission. Arendt owns the shared CompactionSource guard/rejection closure; no separate capture guard is introduced here.
+
+## Boundary registry read ownership
+
+The only runtime boundary-current caller now passes the existing Registration resource and awaits the existing CompactionReason family. Manual/overflow/threshold/base reasons return without acquiring a snapshot; missing authored boundaries refuse optional compaction without a read. TaskBoundaryCompactionReason alone acquires and resolves the original registry snapshot in one asyncio.to_thread operation. No registry API, new state, cache, timer, native source, commit/custody fence or provider configuration changed. The later require_source_current and commit fences remain intact.
+
+Before AST: all Core src/tests/tools roots parsed (311/356/53 modules, zero parse omissions); one runtime caller, one decision forwarding method, base and task-boundary definitions. Native/generated/dynamic dispatch is explicitly outside this Python syntax map, not claimed as resolved. Production delta: 12 added / 6 deleted in three files.
+
+End sanity: 5 passed in 1.28s. The original authored-subtask/correction/drop journey checks mandatory reasons and empty optional boundaries perform zero reads, a populated boundary reads once off the loop, and a mismatched boundary refuses. Existing owner runtime cancellation controls now refuse any unused mandatory snapshot read. These are source checks; no installed speed or optional native journey claim. The accepted configured529 saved-source receipt is unchanged; zero extra provider calls or saved-history reruns. Optional S1 compaction/next-answer acceptance remains unfinished.

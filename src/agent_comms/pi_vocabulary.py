@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from .declared_family import DeclaredFamily
 
 
@@ -128,7 +130,7 @@ class CompactionReason(DeclaredFamily, affix="CompactionReason"):
         result.require_prepared()
 
     @classmethod
-    def boundary_current(cls, retained, boundary, owner, registry):
+    async def boundary_current(cls, retained, boundary, owner, registry):
         return True
 
     @classmethod
@@ -177,8 +179,12 @@ class TaskBoundaryCompactionReason(CompactionReason):
         return RefusedCompactionResult(f"Optional subtask compaction skipped: {data.reason}")
 
     @classmethod
-    def boundary_current(cls, retained, boundary, owner, registry):
-        return bool(boundary) and retained.optional_boundary(owner, registry) == boundary
+    async def boundary_current(cls, retained, boundary, owner, registry):
+        # Only authored-task timing needs this read. Read and resolve its scope
+        # together off the owner loop, through the original registry resource.
+        return bool(boundary) and await asyncio.to_thread(
+            lambda: retained.optional_boundary(owner, registry.snapshot()) == boundary
+        )
 
     @classmethod
     def prepare(cls, preparation):
