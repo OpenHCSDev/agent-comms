@@ -20,6 +20,7 @@ from .messages import Message
 from .message_reference import MessageReference
 from .thread_identity import ThreadRole
 from .native_file_artifact import NativeFileArtifact
+from .text_digest import TextDigest
 from .turn_context import JournalProvenance
 
 if TYPE_CHECKING:
@@ -236,6 +237,11 @@ class RetainedTaskFacts:
     facts: tuple[ExactTaskFact, ...]
 
     journal_control_bytes: ClassVar[int] = 65536
+
+    @property
+    def source_digest(self) -> TextDigest:
+        """Describe this exact captured payload, never unrelated bus activity."""
+        return TextDigest.of(self.canonical_journal_bytes(FieldCodec.encode(self)).decode())
 
     def original_input_facts(self, inputs: InputDocument) -> tuple[ExactTaskFact, ...]:
         """Resolve pins through their original declarations and input owner.

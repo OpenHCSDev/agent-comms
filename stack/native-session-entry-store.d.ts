@@ -26,6 +26,7 @@ export declare class EntryMetadata {
     inputDigest: string | null;
     commitId: string | null;
     firstKeptEntryId: string | null;
+    contextMessageCount: number;
     model: {provider: string; modelId: string} | null;
     thinkingLevel: string | null;
     label: {targetId: string; label: string | null; timestamp: string} | null;
@@ -55,8 +56,11 @@ export declare abstract class EntryStore {
     branchContains(leafId: string | null, id: string): boolean;
     commonAncestor(leftId: string | null, rightId: string | null): string | null;
     latest(leafId: string | null, type: SessionEntry['type']): SessionEntry | undefined;
+    latestMetadata(leafId: string | null, type: SessionEntry['type']): EntryMetadata | undefined;
     contextSettings(leafId?: string | null): {model: EntryMetadata['model']; thinkingLevel: string};
     contextEntries(leafId?: string | null): IterableIterator<SessionEntry>;
+    contextMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
+    contextMessageCount(leafId?: string | null): number;
     trackedMetadata(): IterableIterator<EntryMetadata>;
     trackedInputMetadata(inputId: string): EntryMetadata | undefined;
     trackedInputs(): IterableIterator<SessionEntry>;

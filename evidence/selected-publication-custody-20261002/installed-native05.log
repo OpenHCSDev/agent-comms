@@ -1,0 +1,64 @@
+{"installed_python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/bin/python", "core_module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/native_package.py", "source_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14", "source_bytes": 42924939, "private_root": "/home/ts/wt/m530/wire", "paid_calls": 0, "public_inputs": 0, "complete": false, "clock": "One Python process perf_counter_ns. Nested/overlapping spans are not additive.", "error": {"type": "NativePiUnavailable", "detail": "Native batch answer does not match its original reply routes"}, "duration_ms": 12016.290223, "provider_posts": 2, "original_unchanged": true, "owned_native_children": 2, "owned_native_cleanup_complete": true}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_source_batch.py", line 113, in response_messages
+    replies = FieldCodec.decode(tuple[Message, ...], json.loads(text))
+                                                     ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/json/decoder.py", line 363, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 186, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 154, in main
+    result=await SelectedExecution(root=root,wire_root_id=rid,owner_name='beta',
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                  native_package=PACKAGE,session_file=saved).run()
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 105, in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 63, in wrapped
+    result=await method(*args,**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_turn.py", line 321, in run
+    return await outcome.continue_turn(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        participant, continued, request.admission.input_id, execution, settled
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_triage.py", line 135, in continue_turn
+    return await self.decision.continue_turn(participant, session, input_id, execution, settled)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_triage.py", line 105, in continue_turn
+    return await attempt.run(execution.native_package, session,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                             execution.action(session), execution.write_authority)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 63, in wrapped
+    result=await method(*args,**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_turn.py", line 261, in run
+    replies = participant.batch.response_messages(result.text, participant.owner.thread.name)
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_source_batch.py", line 126, in response_messages
+    raise NativePiUnavailable("Native batch answer does not match its original reply routes") from error
+agent_comms.native_pi.NativePiUnavailable: Native batch answer does not match its original reply routes

@@ -1,0 +1,74 @@
+{
+  "source": "installed normal Core531 wheel",
+  "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent",
+  "instruction_file": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/canonical-instructions531/installed/agent_comms/_native/APPEND_SYSTEM.md",
+  "instruction_sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6",
+  "native_trust": "original matching Core529 verifier passed before inspection",
+  "prompt_commands": 0,
+  "provider_calls": 0,
+  "public_mutations": [],
+  "journeys": [
+    {
+      "configured_owner": "nra-architecture",
+      "cwd": "/home/ts/code/projects/nominal-refactor-advisor",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "off",
+      "cwd_append_exists": true,
+      "append_cli_count": 1,
+      "pid": 3975413,
+      "state": "PASS",
+      "canonical_file_count": 1,
+      "discovered_cwd_append_count": 0,
+      "full_canonical_content_count": 1,
+      "system_layers": 1,
+      "loaded_file_sources": [
+        {
+          "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+          "sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a"
+        },
+        {
+          "path": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/canonical-instructions531/installed/agent_comms/_native/APPEND_SYSTEM.md",
+          "sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6"
+        }
+      ],
+      "commands": [
+        "get_state",
+        "agent_comms_inspect_context"
+      ],
+      "child_retired": true,
+      "stderr_bytes": 0,
+      "elapsed_seconds": 1.325
+    },
+    {
+      "configured_owner": "openhcs-helper2",
+      "cwd": "/home/ts/code/projects/openhcs",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "cwd_append_exists": false,
+      "append_cli_count": 1,
+      "pid": 3975456,
+      "state": "PASS",
+      "canonical_file_count": 1,
+      "discovered_cwd_append_count": 0,
+      "full_canonical_content_count": 1,
+      "system_layers": 1,
+      "loaded_file_sources": [
+        {
+          "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+          "sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a"
+        },
+        {
+          "path": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/canonical-instructions531/installed/agent_comms/_native/APPEND_SYSTEM.md",
+          "sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6"
+        }
+      ],
+      "commands": [
+        "get_state",
+        "agent_comms_inspect_context"
+      ],
+      "child_retired": true,
+      "stderr_bytes": 0,
+      "elapsed_seconds": 1.325
+    }
+  ]
+}

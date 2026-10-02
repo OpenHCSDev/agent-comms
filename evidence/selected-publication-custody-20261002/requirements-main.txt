@@ -1,0 +1,15 @@
+agent-client-protocol==0.12.1
+agent-comms[all] @ file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-selected-publication530-main/agent_comms-0.1.0-py3-none-any.whl
+annotated-types==0.8.0
+iniconfig==2.3.0
+metaclass-registry==0.2.2
+nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@d392c5e4cd189ce1203127a746337ad498a0330d#subdirectory=skills/refactor-audit
+packaging==26.3
+pluggy==1.6.0
+pydantic==2.13.5
+pydantic-core==2.46.5
+pygments==2.21.0
+pytest==9.1.1
+pytest-asyncio==1.4.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4

@@ -1,0 +1,15 @@
+{
+  "source_commit": "c19d02cd02c1d21465b6e298d3502b06656996a7",
+  "source_sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6",
+  "wheel_sha256": "7c966c974636c4e64d6fee6d4137f27428e1e0f87fabd3df2666f14748725497",
+  "sdist_sha256": "e0adf449bbbc709683b82f585d34596fa404c52dfdf27eaca01437e83bfae2b8",
+  "installed_instruction_file": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/canonical-instructions531/installed/agent_comms/_native/APPEND_SYSTEM.md",
+  "normal_wheel_and_sdist_preserve_exact_canonical_bytes": true,
+  "placed_paths_verified": [
+    "/home/ts/.agent-comms/.pi/APPEND_SYSTEM.md",
+    "/home/ts/.codex/AGENTS.md",
+    "/home/ts/.pi/agent/APPEND_SYSTEM.md"
+  ],
+  "dependency_environment_reused": "retained-inspection521/install/runtime",
+  "new_full_environment": false
+}

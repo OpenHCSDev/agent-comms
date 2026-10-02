@@ -1,0 +1,995 @@
+{
+  "installed_python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/bin/python",
+  "core_module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/native_package.py",
+  "source_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+  "source_bytes": 42924939,
+  "private_root": "/home/ts/wt/m530/wire",
+  "spans": [
+    {
+      "operation": "agent_comms.native_package.verify_native_package",
+      "phase": "call",
+      "begin_ns": 418965403944635,
+      "end_ns": 418966151134148,
+      "duration_ms": 747.189513
+    },
+    {
+      "operation": "Registration.transition_turn",
+      "phase": "call",
+      "begin_ns": 418966196120902,
+      "end_ns": 418966202676076,
+      "duration_ms": 6.555174
+    },
+    {
+      "operation": "SelectedSession.prepare",
+      "phase": "call",
+      "begin_ns": 418966202807304,
+      "end_ns": 418967430101303,
+      "duration_ms": 1227.293999
+    },
+    {
+      "operation": "Registration.transition_turn",
+      "phase": "call",
+      "begin_ns": 418967430691912,
+      "end_ns": 418967438352171,
+      "duration_ms": 7.660259
+    },
+    {
+      "operation": "PrivateSendAdmission.reserve",
+      "phase": "call",
+      "begin_ns": 418967439405948,
+      "end_ns": 418967479703825,
+      "duration_ms": 40.297877
+    },
+    {
+      "operation": "SelectedRequest.reserve",
+      "phase": "call",
+      "begin_ns": 418967439402031,
+      "end_ns": 418967479712802,
+      "duration_ms": 40.310771
+    },
+    {
+      "operation": "Registration.transition_turn",
+      "phase": "call",
+      "begin_ns": 418967479855172,
+      "end_ns": 418967487886313,
+      "duration_ms": 8.031141
+    },
+    {
+      "operation": "agent_comms.native_package.verify_native_package",
+      "phase": "call",
+      "begin_ns": 418967865520386,
+      "end_ns": 418968594846512,
+      "duration_ms": 729.326126
+    },
+    {
+      "operation": "NativePiRpcLaunch.tracked",
+      "phase": "call",
+      "begin_ns": 418967865274720,
+      "end_ns": 418968948079066,
+      "duration_ms": 1082.804346
+    },
+    {
+      "operation": "NativeStartupAdmission.acquire",
+      "phase": "call",
+      "begin_ns": 418968948226706,
+      "end_ns": 418968948389485,
+      "duration_ms": 0.162779
+    },
+    {
+      "operation": "PiSessionChild.start",
+      "phase": "call",
+      "begin_ns": 418968948417327,
+      "end_ns": 418968966039467,
+      "duration_ms": 17.62214
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418968967032759,
+      "end_ns": 418970805030218,
+      "duration_ms": 1837.997459
+    },
+    {
+      "operation": "NativeStartupAdmission.release",
+      "phase": "call",
+      "begin_ns": 418970805090843,
+      "end_ns": 418970805108827,
+      "duration_ms": 0.017984
+    },
+    {
+      "operation": "Registration.attach_native_session",
+      "phase": "call",
+      "begin_ns": 418970805217162,
+      "end_ns": 418970808496608,
+      "duration_ms": 3.279446
+    },
+    {
+      "operation": "TrackedTurnSession.attest",
+      "phase": "call",
+      "begin_ns": 418968966158783,
+      "end_ns": 418970808699122,
+      "duration_ms": 1842.540339
+    },
+    {
+      "operation": "PrivateSendAdmission.prepare_context",
+      "phase": "call",
+      "begin_ns": 418970808708640,
+      "end_ns": 418970897381372,
+      "duration_ms": 88.672732
+    },
+    {
+      "operation": "PrivateSendAdmission._admit_once",
+      "phase": "call",
+      "begin_ns": 418970900742342,
+      "end_ns": 418970932751529,
+      "duration_ms": 32.009187
+    },
+    {
+      "operation": "TrackedTurnSession.admit_prompt",
+      "phase": "call",
+      "begin_ns": 418970897385830,
+      "end_ns": 418970933034034,
+      "duration_ms": 35.648204
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418970933040386,
+      "end_ns": 418970936255871,
+      "duration_ms": 3.215485
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418970936508900,
+      "end_ns": 418970937091314,
+      "duration_ms": 0.582414
+    },
+    {
+      "operation": "Registration.observe_native_phase",
+      "phase": "call",
+      "begin_ns": 418970937507303,
+      "end_ns": 418971038667532,
+      "duration_ms": 101.160229
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971038969364,
+      "end_ns": 418971039730938,
+      "duration_ms": 0.761574
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971039945124,
+      "end_ns": 418971041631129,
+      "duration_ms": 1.686005
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971041801101,
+      "end_ns": 418971124842260,
+      "duration_ms": 83.041159
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971125145154,
+      "end_ns": 418971125854298,
+      "duration_ms": 0.709144
+    },
+    {
+      "operation": "TrackedTurnSession.committed_input",
+      "phase": "call",
+      "begin_ns": 418971125888022,
+      "end_ns": 418971844539407,
+      "duration_ms": 718.651385
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971844680183,
+      "end_ns": 418971846606314,
+      "duration_ms": 1.926131
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971856295919,
+      "end_ns": 418971856848326,
+      "duration_ms": 0.552407
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418971856870167,
+      "end_ns": 418971856871900,
+      "duration_ms": 0.001733
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971856955659,
+      "end_ns": 418971857156971,
+      "duration_ms": 0.201312
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418971857182158,
+      "end_ns": 418971857183902,
+      "duration_ms": 0.001744
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971857279794,
+      "end_ns": 418971857428836,
+      "duration_ms": 0.149042
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418971857447561,
+      "end_ns": 418971857448163,
+      "duration_ms": 0.000602
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971857516783,
+      "end_ns": 418971857634556,
+      "duration_ms": 0.117773
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418971857651708,
+      "end_ns": 418971857652279,
+      "duration_ms": 0.000571
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971857719537,
+      "end_ns": 418971857832361,
+      "duration_ms": 0.112824
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418971857849263,
+      "end_ns": 418971857849764,
+      "duration_ms": 0.000501
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971857916651,
+      "end_ns": 418971858035355,
+      "duration_ms": 0.118704
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418971858052748,
+      "end_ns": 418971858056796,
+      "duration_ms": 0.004048
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971858124434,
+      "end_ns": 418971862623041,
+      "duration_ms": 4.498607
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971901082703,
+      "end_ns": 418971901359197,
+      "duration_ms": 0.276494
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971901784343,
+      "end_ns": 418971901988630,
+      "duration_ms": 0.204287
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971902291314,
+      "end_ns": 418971902466857,
+      "duration_ms": 0.175543
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971902766385,
+      "end_ns": 418971902966273,
+      "duration_ms": 0.199888
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971903244922,
+      "end_ns": 418971903432237,
+      "duration_ms": 0.187315
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971903725743,
+      "end_ns": 418971903922355,
+      "duration_ms": 0.196612
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971904223015,
+      "end_ns": 418971904404499,
+      "duration_ms": 0.181484
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971904650606,
+      "end_ns": 418971904824806,
+      "duration_ms": 0.1742
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971905078597,
+      "end_ns": 418971908692987,
+      "duration_ms": 3.61439
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971908825629,
+      "end_ns": 418971909069411,
+      "duration_ms": 0.243782
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971909375842,
+      "end_ns": 418971909538620,
+      "duration_ms": 0.162778
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971909791459,
+      "end_ns": 418971910577449,
+      "duration_ms": 0.78599
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971910713537,
+      "end_ns": 418971910888208,
+      "duration_ms": 0.174671
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971911148581,
+      "end_ns": 418971911598554,
+      "duration_ms": 0.449973
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971911725354,
+      "end_ns": 418971911952315,
+      "duration_ms": 0.226961
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971912081750,
+      "end_ns": 418971912240060,
+      "duration_ms": 0.15831
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971912485195,
+      "end_ns": 418971912772960,
+      "duration_ms": 0.287765
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971912884011,
+      "end_ns": 418971913055215,
+      "duration_ms": 0.171204
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971913331669,
+      "end_ns": 418971913492113,
+      "duration_ms": 0.160444
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971913749812,
+      "end_ns": 418971913969358,
+      "duration_ms": 0.219546
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971914082502,
+      "end_ns": 418971914442003,
+      "duration_ms": 0.359501
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418971914537454,
+      "end_ns": 418971914806354,
+      "duration_ms": 0.2689
+    },
+    {
+      "operation": "TrackedTurnSession.context_proof",
+      "phase": "call",
+      "begin_ns": 418971914879042,
+      "end_ns": 418971946572481,
+      "duration_ms": 31.693439
+    },
+    {
+      "operation": "PiSessionChild.close",
+      "phase": "call",
+      "begin_ns": 418971946752983,
+      "end_ns": 418971990880227,
+      "duration_ms": 44.127244
+    },
+    {
+      "operation": "NativeStartupAdmission.release",
+      "phase": "call",
+      "begin_ns": 418971990900546,
+      "end_ns": 418971990902760,
+      "duration_ms": 0.002214
+    },
+    {
+      "operation": "PrivateSendAdmission.verify",
+      "phase": "call",
+      "begin_ns": 418971993408429,
+      "end_ns": 418972408898270,
+      "duration_ms": 415.489841
+    },
+    {
+      "operation": "Registration.transition_turn",
+      "phase": "call",
+      "begin_ns": 418972409591534,
+      "end_ns": 418972417597367,
+      "duration_ms": 8.005833
+    },
+    {
+      "operation": "Registration.transition_turn",
+      "phase": "call",
+      "begin_ns": 418972468654797,
+      "end_ns": 418972478792260,
+      "duration_ms": 10.137463
+    },
+    {
+      "operation": "SelectedAttempt.engage",
+      "phase": "call",
+      "begin_ns": 418972444607590,
+      "end_ns": 418972478820233,
+      "duration_ms": 34.212643
+    },
+    {
+      "operation": "OptionalAwarenessProjection.for_selected",
+      "phase": "call",
+      "begin_ns": 418972479267912,
+      "end_ns": 418972484743379,
+      "duration_ms": 5.475467
+    },
+    {
+      "operation": "OptionalAwarenessProjection.segments",
+      "phase": "call",
+      "begin_ns": 418972484746816,
+      "end_ns": 418972502052816,
+      "duration_ms": 17.306
+    },
+    {
+      "operation": "SelectedPrompt.full",
+      "phase": "call",
+      "begin_ns": 418972478845852,
+      "end_ns": 418972506151735,
+      "duration_ms": 27.305883
+    },
+    {
+      "operation": "PrivateSendAdmission.reserve",
+      "phase": "call",
+      "begin_ns": 418972506163257,
+      "end_ns": 418972531143352,
+      "duration_ms": 24.980095
+    },
+    {
+      "operation": "SelectedRequest.reserve",
+      "phase": "call",
+      "begin_ns": 418972506158658,
+      "end_ns": 418972531149653,
+      "duration_ms": 24.990995
+    },
+    {
+      "operation": "SelectedAttempt.prepare",
+      "phase": "call",
+      "begin_ns": 418972478832486,
+      "end_ns": 418972531152910,
+      "duration_ms": 52.320424
+    },
+    {
+      "operation": "Registration.transition_turn",
+      "phase": "call",
+      "begin_ns": 418972531434864,
+      "end_ns": 418972545224359,
+      "duration_ms": 13.789495
+    },
+    {
+      "operation": "agent_comms.native_package.verify_native_package",
+      "phase": "call",
+      "begin_ns": 418972550475251,
+      "end_ns": 418973294903160,
+      "duration_ms": 744.427909
+    },
+    {
+      "operation": "NativePiRpcLaunch.tracked",
+      "phase": "call",
+      "begin_ns": 418972550283308,
+      "end_ns": 418973645222613,
+      "duration_ms": 1094.939305
+    },
+    {
+      "operation": "NativeStartupAdmission.acquire",
+      "phase": "call",
+      "begin_ns": 418973645610548,
+      "end_ns": 418973645651636,
+      "duration_ms": 0.041088
+    },
+    {
+      "operation": "PiSessionChild.start",
+      "phase": "call",
+      "begin_ns": 418973645671835,
+      "end_ns": 418973664095894,
+      "duration_ms": 18.424059
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418973664541568,
+      "end_ns": 418975464030561,
+      "duration_ms": 1799.488993
+    },
+    {
+      "operation": "NativeStartupAdmission.release",
+      "phase": "call",
+      "begin_ns": 418975464088141,
+      "end_ns": 418975464103480,
+      "duration_ms": 0.015339
+    },
+    {
+      "operation": "Registration.attach_native_session",
+      "phase": "call",
+      "begin_ns": 418975464221543,
+      "end_ns": 418975465196601,
+      "duration_ms": 0.975058
+    },
+    {
+      "operation": "TrackedTurnSession.attest",
+      "phase": "call",
+      "begin_ns": 418973664175845,
+      "end_ns": 418975465286171,
+      "duration_ms": 1801.110326
+    },
+    {
+      "operation": "PrivateSendAdmission.prepare_context",
+      "phase": "call",
+      "begin_ns": 418975465290229,
+      "end_ns": 418975518281684,
+      "duration_ms": 52.991455
+    },
+    {
+      "operation": "PrivateSendAdmission._admit_once",
+      "phase": "call",
+      "begin_ns": 418975519286719,
+      "end_ns": 418975545532122,
+      "duration_ms": 26.245403
+    },
+    {
+      "operation": "TrackedTurnSession.admit_prompt",
+      "phase": "call",
+      "begin_ns": 418975518286844,
+      "end_ns": 418975545822612,
+      "duration_ms": 27.535768
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418975545829195,
+      "end_ns": 418975549578250,
+      "duration_ms": 3.749055
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418975564016846,
+      "end_ns": 418975564359085,
+      "duration_ms": 0.342239
+    },
+    {
+      "operation": "Registration.observe_native_phase",
+      "phase": "call",
+      "begin_ns": 418975566012759,
+      "end_ns": 418975580991508,
+      "duration_ms": 14.978749
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418975581424549,
+      "end_ns": 418975581815490,
+      "duration_ms": 0.390941
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418975582196402,
+      "end_ns": 418975582651104,
+      "duration_ms": 0.454702
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418975582867734,
+      "end_ns": 418975583376008,
+      "duration_ms": 0.508274
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418975583728806,
+      "end_ns": 418975584076074,
+      "duration_ms": 0.347268
+    },
+    {
+      "operation": "TrackedTurnSession.committed_input",
+      "phase": "call",
+      "begin_ns": 418975584127833,
+      "end_ns": 418976324740300,
+      "duration_ms": 740.612467
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976324920151,
+      "end_ns": 418976325198408,
+      "duration_ms": 0.278257
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976325550055,
+      "end_ns": 418976325687846,
+      "duration_ms": 0.137791
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418976325706922,
+      "end_ns": 418976325707984,
+      "duration_ms": 0.001062
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976325798035,
+      "end_ns": 418976325912321,
+      "duration_ms": 0.114286
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418976325929644,
+      "end_ns": 418976325930165,
+      "duration_ms": 0.000521
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976326024614,
+      "end_ns": 418976326136667,
+      "duration_ms": 0.112053
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418976326152988,
+      "end_ns": 418976326153508,
+      "duration_ms": 0.00052
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976326245503,
+      "end_ns": 418976326354239,
+      "duration_ms": 0.108736
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418976326370019,
+      "end_ns": 418976326370530,
+      "duration_ms": 0.000511
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976326455331,
+      "end_ns": 418976326561963,
+      "duration_ms": 0.106632
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418976326577883,
+      "end_ns": 418976326578424,
+      "duration_ms": 0.000541
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976326669366,
+      "end_ns": 418976326777231,
+      "duration_ms": 0.107865
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418976326792850,
+      "end_ns": 418976326793401,
+      "duration_ms": 0.000551
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976326877661,
+      "end_ns": 418976326984544,
+      "duration_ms": 0.106883
+    },
+    {
+      "operation": "TrackedTurnSession.committed_context",
+      "phase": "call",
+      "begin_ns": 418976327006926,
+      "end_ns": 418976327011024,
+      "duration_ms": 0.004098
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976338917670,
+      "end_ns": 418976341101600,
+      "duration_ms": 2.18393
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976370600058,
+      "end_ns": 418976370852216,
+      "duration_ms": 0.252158
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976371269647,
+      "end_ns": 418976371440140,
+      "duration_ms": 0.170493
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976371728517,
+      "end_ns": 418976371898860,
+      "duration_ms": 0.170343
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976372173991,
+      "end_ns": 418976372343232,
+      "duration_ms": 0.169241
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976372630807,
+      "end_ns": 418976372812792,
+      "duration_ms": 0.181985
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976373088835,
+      "end_ns": 418976373249640,
+      "duration_ms": 0.160805
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976373530863,
+      "end_ns": 418976373699252,
+      "duration_ms": 0.168389
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976373957361,
+      "end_ns": 418976374124538,
+      "duration_ms": 0.167177
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976374380854,
+      "end_ns": 418976374725828,
+      "duration_ms": 0.344974
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976374852548,
+      "end_ns": 418976375022781,
+      "duration_ms": 0.170233
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976375301719,
+      "end_ns": 418976375462344,
+      "duration_ms": 0.160625
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976375737175,
+      "end_ns": 418976375973643,
+      "duration_ms": 0.236468
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976376141411,
+      "end_ns": 418976376300062,
+      "duration_ms": 0.158651
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976376564733,
+      "end_ns": 418976376775873,
+      "duration_ms": 0.21114
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976376917482,
+      "end_ns": 418976377159090,
+      "duration_ms": 0.241608
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976377300758,
+      "end_ns": 418976377460801,
+      "duration_ms": 0.160043
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976377744659,
+      "end_ns": 418976378011946,
+      "duration_ms": 0.267287
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976378132955,
+      "end_ns": 418976378289723,
+      "duration_ms": 0.156768
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976378548082,
+      "end_ns": 418976378701904,
+      "duration_ms": 0.153822
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976378953932,
+      "end_ns": 418976379130095,
+      "duration_ms": 0.176163
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976379232309,
+      "end_ns": 418976379362456,
+      "duration_ms": 0.130147
+    },
+    {
+      "operation": "TrackedTurnSession.next_event",
+      "phase": "call",
+      "begin_ns": 418976379466052,
+      "end_ns": 418976379546064,
+      "duration_ms": 0.080012
+    },
+    {
+      "operation": "TrackedTurnSession.context_proof",
+      "phase": "call",
+      "begin_ns": 418976379607250,
+      "end_ns": 418976407556933,
+      "duration_ms": 27.949683
+    },
+    {
+      "operation": "PiSessionChild.close",
+      "phase": "call",
+      "begin_ns": 418976426881028,
+      "end_ns": 418976479648378,
+      "duration_ms": 52.76735
+    },
+    {
+      "operation": "NativeStartupAdmission.release",
+      "phase": "call",
+      "begin_ns": 418976479790287,
+      "end_ns": 418976479791700,
+      "duration_ms": 0.001413
+    },
+    {
+      "operation": "PrivateSendAdmission.verify",
+      "phase": "call",
+      "begin_ns": 418976480648344,
+      "end_ns": 418976893339920,
+      "duration_ms": 412.691576
+    },
+    {
+      "operation": "SelectedAttempt.run",
+      "phase": "call",
+      "begin_ns": 418972478829942,
+      "end_ns": 418976984717108,
+      "duration_ms": 4505.887166
+    },
+    {
+      "operation": "SelectedConsideration.run",
+      "phase": "call",
+      "begin_ns": 418967430116051,
+      "end_ns": 418976984723520,
+      "duration_ms": 9554.607469
+    }
+  ],
+  "paid_calls": 0,
+  "public_inputs": 0,
+  "complete": false,
+  "clock": "One Python process perf_counter_ns. Nested/overlapping spans are not additive.",
+  "error": {
+    "type": "NativePiUnavailable",
+    "detail": "Native batch answer does not match its original reply routes"
+  },
+  "duration_ms": 12016.290223,
+  "provider_posts": 2,
+  "original_unchanged": true,
+  "owned_native_children": 2,
+  "owned_native_cleanup_complete": true
+}

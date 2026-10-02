@@ -1,0 +1,8 @@
+{
+  "removed_path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/532-native-read01/forks",
+  "removed_file_bytes": 42924971,
+  "qualifying_copy_retained": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/532-native-read01/global/session.jsonl",
+  "qualifying_copy_sha256": "b190a927715c28e8a41aaf33c7adf58bdbb7eee5649b2eee700b41336f1d3d32",
+  "active_borrowers": [],
+  "original529_and372_untouched": true
+}

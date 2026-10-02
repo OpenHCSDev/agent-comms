@@ -416,6 +416,7 @@ class OwnedTurn:
                 public_id, native_id, text, already_bound=True
             ),
             native_start=admission.native_start,
+            request_observer=self.progress.record_request_progress,
             persistent_session=self.runner.persistent_backends.setdefault(
                 self.session_id, backend.PersistentPiSession()
             ),

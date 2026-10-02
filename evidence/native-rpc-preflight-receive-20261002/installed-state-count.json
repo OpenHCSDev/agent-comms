@@ -1,0 +1,27 @@
+{
+  "scope": "fresh matched native RPC saved-history state read with four automatic globals; selector count, fork/compaction suffix and revision refusal; not prompt/provider/UI or historic timeout attribution",
+  "ok": true,
+  "native_manifest": "0b306dac5a8b9b603949cc245f0629a9cbfc01bc4534090f2c88ca2561c1f34e",
+  "native_tree": "1e27f3ff7d93232528b26693fe462052f067bbd4ec6efd30216eb1b6ddd0575e",
+  "saved_session_bytes": 42924971,
+  "state_received_seconds": 2.3939965729950927,
+  "message_count": 27,
+  "automatic_globals": 4,
+  "network": "kernel-denied",
+  "native_child_retired": true,
+  "provider_prompts": 0,
+  "public_inputs": 0,
+  "original_attempt_replays": 0,
+  "source_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14",
+  "original_source_unchanged": true,
+  "count_controls": {
+    "ok": true,
+    "retained_message_count": 27,
+    "provider_inputs": 0,
+    "body_reads_for_count": 0,
+    "branches_and_revision_refusal": true
+  },
+  "raw_read_receipt_path": ".artifacts/532-native-read01/global.log",
+  "raw_read_receipt_sha256": "3c38c19df04f96b31e4462960d21ce49c735de96c4eadaee69c85f02edcbcdf4",
+  "raw_first_control_import_refusal_path": ".artifacts/532-native-read01/controls.log"
+}

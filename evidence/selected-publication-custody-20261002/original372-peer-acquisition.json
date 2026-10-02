@@ -1,0 +1,158 @@
+[
+  {
+    "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/a02b021bd1549bc0c7f39e2cf1a8f7e7.requests.jsonl",
+    "sha256": "bd55e9db7a40b5737863a4db9c95d4e417550360d13bf7c21c6162c5b8c171d7",
+    "records": [
+      {
+        "turn": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-models",
+              "created_at": 1790873447.6164267
+            },
+            "generation": 48
+          },
+          "turn_id": "a02b021bd1549bc0c7f39e2cf1a8f7e7",
+          "admission_generation": 1836
+        },
+        "input_id": "0884315c2eb20a75054e8a49d98a19f1",
+        "acquisition": {
+          "count": 0,
+          "total_ns": 0,
+          "maximum_ns": 0,
+          "maximum_started_ns": 0,
+          "maximum_finished_ns": 0,
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 2385,
+              "maximum_ns": 2385,
+              "maximum_started_ns": 415389253522982,
+              "maximum_finished_ns": 415389253525367,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 1,
+              "total_ns": 20389228,
+              "maximum_ns": 20389228,
+              "maximum_started_ns": 415389253531138,
+              "maximum_finished_ns": 415389273920366,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 90772,
+              "maximum_ns": 90772,
+              "maximum_started_ns": 415389253581153,
+              "maximum_finished_ns": 415389253671925,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 20197084,
+              "maximum_ns": 20197084,
+              "maximum_started_ns": 415389253703545,
+              "maximum_finished_ns": 415389273900629,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 1,
+              "total_ns": 1058526,
+              "maximum_ns": 1058526,
+              "maximum_started_ns": 415389274013263,
+              "maximum_finished_ns": 415389275071789,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 1,
+              "total_ns": 19999911110,
+              "maximum_ns": 19999911110,
+              "maximum_started_ns": 415389275078642,
+              "maximum_finished_ns": 415409274989752,
+              "operations": {}
+            }
+          }
+        },
+        "recorded_monotonic_ns": 415411367744083
+      }
+    ]
+  },
+  {
+    "path": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/f53393a2110b4b42dbe730bc8ce0bd3a.requests.jsonl",
+    "sha256": "a26b333bbace568c4f694a9899eaf8a33a716c81d8c0b4c62e5668ac5d1d671d",
+    "records": [
+      {
+        "turn": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-boundaries",
+              "created_at": 1790873473.1996155
+            },
+            "generation": 49
+          },
+          "turn_id": "f53393a2110b4b42dbe730bc8ce0bd3a",
+          "admission_generation": 1837
+        },
+        "input_id": "087471776b85cd8040b9e94bf2db0d25",
+        "acquisition": {
+          "count": 0,
+          "total_ns": 0,
+          "maximum_ns": 0,
+          "maximum_started_ns": 0,
+          "maximum_finished_ns": 0,
+          "operations": {
+            "open_transport": {
+              "count": 1,
+              "total_ns": 2134,
+              "maximum_ns": 2134,
+              "maximum_started_ns": 415389243426254,
+              "maximum_finished_ns": 415389243428388,
+              "operations": {}
+            },
+            "native_open": {
+              "count": 1,
+              "total_ns": 20400850,
+              "maximum_ns": 20400850,
+              "maximum_started_ns": 415389243434109,
+              "maximum_finished_ns": 415389263834959,
+              "operations": {}
+            },
+            "startup_slot": {
+              "count": 1,
+              "total_ns": 65925,
+              "maximum_ns": 65925,
+              "maximum_started_ns": 415389243484835,
+              "maximum_finished_ns": 415389243550760,
+              "operations": {}
+            },
+            "native_spawn": {
+              "count": 1,
+              "total_ns": 20243442,
+              "maximum_ns": 20243442,
+              "maximum_started_ns": 415389243578793,
+              "maximum_finished_ns": 415389263822235,
+              "operations": {}
+            },
+            "get_state_send": {
+              "count": 1,
+              "total_ns": 582524,
+              "maximum_ns": 582524,
+              "maximum_started_ns": 415389263886687,
+              "maximum_finished_ns": 415389264469211,
+              "operations": {}
+            },
+            "get_state_receive": {
+              "count": 1,
+              "total_ns": 18003808655,
+              "maximum_ns": 18003808655,
+              "maximum_started_ns": 415389264473630,
+              "maximum_finished_ns": 415407268282285,
+              "operations": {}
+            }
+          }
+        },
+        "recorded_monotonic_ns": 415411104366681
+      }
+    ]
+  }
+]

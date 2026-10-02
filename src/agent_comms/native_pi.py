@@ -22,6 +22,7 @@ from uuid import uuid4
 
 from . import pi_events as pi
 from .native_arguments import NativeArguments
+from .native_package import OWNER_INSTRUCTIONS
 from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
 from .native_input_record import NativeInputCommit, NativeInputIdText
@@ -102,8 +103,10 @@ def main() -> int:
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
+    environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
-        cli, tuple(sys.argv[1:]), Path.cwd(), dict(os.environ)
+        cli, tuple(sys.argv[1:]), Path.cwd(), environment,
+        RestartEnvironment.inherit(environment),
     )
     os.execvpe(argv[0], list(argv), environment)
     return 0
@@ -319,7 +322,9 @@ class NativeContextProof(NativeContextRecord):
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         NativeInputIdText.decode(input_id)
         session_file = Path(session_file).absolute()
-        with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
+        from .native_entries import NativeInputEvidenceRead
+
+        with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
             header, entries = evidence.observe()
             tracked = NativeEntry.tracked_users(entries)
             if input_id not in tracked:
@@ -400,6 +405,10 @@ class NativePiRpcLaunch:
     @classmethod
     def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment):
         """Encode the held launch configuration at the native process boundary."""
+        try:
+            instructions = OWNER_INSTRUCTIONS.resolve(strict=True)
+        except OSError as error:
+            raise NativePiUnavailable("Canonical owner instruction asset is unavailable") from error
         env = dict(environment)
         for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
             env.pop(name, None)
@@ -413,7 +422,7 @@ class NativePiRpcLaunch:
             "node", "--no-global-search-paths",
             "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
             "--import", str(cli.with_name("agent-comms-project-bootstrap.mjs")),
-            str(cli), *arguments,
+            str(cli), *arguments, "--append-system-prompt", str(instructions),
         )
         return argv, env
 
@@ -810,7 +819,9 @@ def read_tracked_input_digest(
     """Corroborating digest only; this cannot authorize recovery or input replay."""
     NativeInputIdText.decode(input_id)
     session_file = Path(session_file).absolute()
-    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
+    from .native_entries import NativeInputEvidenceRead
+
+    with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
         _header, entries = evidence.observe()
         users = NativeEntry.tracked_users(entries)
         if input_id not in users:
