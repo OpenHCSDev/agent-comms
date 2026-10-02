@@ -117,3 +117,77 @@ commit verification continues hashing only the untouched original bytes.
 The published determining-owner production checkpoint and complete Native5 to
 Native6 schema relation remain prerequisites for extending the carry operator.
 The original root is still running and no stopped donor is claimed.
+
+
+## Published source-contract implementation checkpoint
+
+Einstein published `62719ea96dc646d6dff0d717ae747d9bc6ceacb3` for mandatory
+`SelectedSummaryAttempt.request`, after compact-reference checkpoint `de7cd35f`.
+Arendt confirmed the determining release tuple: original `9/3/3/5`, target
+`9/3/3/6`. Cohort schema 2 is separate; prompt binding has a DDL digest, no
+invented numeric binding version. The target journal has exactly one current
+request and opaque historical original bytes. No product code is changed here.
+
+Four existing outside-src files now close the producer/resource/consumer path:
+
+- `native_schema_carry.py`: derives both old/current journal DDL from actual
+  `JournalTable` members. Native5 coordination/binding facts remain identical;
+  only declared Native6 DDL/metadata and the journal's required request column
+  change. Existing `CarriedNativeStore` is now a declared operation family;
+  filenames, carry and physical publication derive from its members rather
+  than filename dispatch spread across acquisition/prepare/install.
+- Original decoding runs in the actual installed Native5 interpreter. Its
+  original classes read and round-trip frozen source bytes. Required refs
+  derive from certified retained `InputTaskFact` objects, including the only
+  nested input-provenance task consumer, `NativeInputConstraintPin.subject`.
+  Missing or ambiguous original evidence refuses conversion. No mutable input
+  ledger/registry join, generic JSON walker, FieldCodec subclass or old product
+  reader is introduced. Goal/GoalMentionSource own different identities and
+  need no guessed digest.
+- The target uses current `FieldCodec`/`SelectedSummarySource` and the actual
+  request column's declared SQL representation. Original selected rowids,
+  operation/session IDs, source bytes and state cells remain exact; operation,
+  publication, UNKNOWN raw-input and enrollment rows are unchanged. Every
+  original native source reference is checked against untouched source bytes.
+- `retained_summary_reset.py` projects the same acquired descriptors for files
+  a declared carry leaves unchanged. `runtime_installation.py` verifies all
+  originals before publication, retains original evidence and then verifies
+  remaining resources. It no longer claims the replaced journal's named inode
+  is unchanged after a successful declared publication.
+- `native_schema_carry_controls.py` removes the old Native4 synthetic session/
+  proof seeder. The final control consumes an actual private stopped Native5
+  copy. A separate explicit running-inventory mode exercises only conversion
+  of the real journal backup and never claims stopped release custody. Both
+  use the same existing carry implementation; neither launches a native owner,
+  prompts a provider, fabricates a fresh enrollment or grants input admission.
+
+Measured code-only diff across these four tools: **411 lines deleted / 451
+added**. Obsolete Native4-to5 column removal, TRIAGE singleton construction,
+route construction and fixture proof writing are deleted. New-case check: one
+store member owns its file/carry/publication; acquisition/prepare/install derive
+membership. There is one current format, with no earlier-release branch.
+
+Sanity performed after the source change: all four operator/caller files parse,
+`git diff --check` passes, the actual old interpreter emits the authentic
+`9/3/3/5` declarations and successfully projects all four real frozen requests.
+`authentic-original-producer-check.json` records sanitized output. Raw request
+transfer stays private 0600 in the named scratch directory.
+
+**Not Ready for carry activation.** Arendt and Einstein confirm no coherent
+installed Native6 target prefix exists yet. Source-overlay checks do not
+substitute for that installed target. Final Native6 source freeze/one normal
+receiving package is required, then invoke the existing installed operator
+against this real running-inventory backup for an explicitly limited control:
+
+```sh
+<reviewed-Native6-prefix>/bin/python tools/cutover/native_schema_carry_controls.py \
+  /home/ts/.cache/agent-scratch/comms-native-compaction-source-carry-20261002/journal-control01 \
+  --source-python <original-Native5-prefix>/bin/python \
+  --running-journal-inventory /home/ts/.cache/agent-scratch/comms-native-compaction-source-carry-20261002/running-source-inventory01/compaction-commits.running-inventory.sqlite3
+```
+
+The final whole operator uses `--stopped-original` with a privately retained
+actual stopped Native5 root under its control directory; parent provides the
+stopped-custody grant. The running-source backup is never substituted for that
+release qualification. No duplicate package/native build, provider repeat or
+public cutover was performed to manufacture acceptance.
