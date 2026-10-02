@@ -84,9 +84,9 @@ class NativeCustody(ABC):
     def idle(self) -> RetainedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
-    async def inspect_context(self, persistent, prepare):
-        await prepare()
-        return await persistent.custody.idle().inspect_context(persistent, prepare)
+    async def inspect_context(self, persistent):
+        """Observe acquired custody; browsing cannot acquire a native writer."""
+        raise NativePiUnavailable("Native context requires an acquired native child")
 
     async def expected(self, launch, require_input_id) -> NativeAttestation:
         return launch.session.attestation()
@@ -169,7 +169,7 @@ class BorrowedNative(NativeCustody):
     successor: NativeCustody
     available = True
 
-    async def inspect_context(self, persistent, prepare):
+    async def inspect_context(self, persistent):
         from .pi_commands import AgentCommsInspectContext
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
@@ -213,7 +213,7 @@ class RetainedNative(NativeCustody):
             raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
         return self.idle()
 
-    async def inspect_context(self, persistent, prepare):
+    async def inspect_context(self, persistent):
         from .pi_commands import AgentCommsInspectContext
         async with persistent.lock:
             current = persistent.custody.idle()

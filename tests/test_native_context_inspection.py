@@ -7,6 +7,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from agent_comms.comms import Comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
@@ -40,14 +42,20 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
             session_file=str(fixture.session), model="response-local/fixture")
         owner._comms.registry.declare(thread)
         await owner.load_session(str(fixture.project), thread.name)
-        # Selected startup owns SDK model/thinking declarations. Establish that
-        # original prepared source before asking for read-only context inspection.
-        await owner.turns.prepare_selected_session(thread.name, thread)
-        selected_before = fixture.session.read_bytes()
         connection = RuntimeConnection(owner._comms, thread.name,
             socket_path(owner._comms.root, thread.require_process().pid))
         try:
             async with asyncio.timeout(20):
+                # Browsing an unopened native source cannot acquire its writer.
+                with pytest.raises(RuntimeError, match="requires an acquired native child"):
+                    await connection.request("context")
+                assert not owner.turns.persistent_backends[thread.name].available
+                assert fixture.session.read_bytes() == before
+                # Explicit selected startup owns SDK model/thinking declarations.
+                await owner.turns.prepare_selected_session(thread.name, thread)
+                selected_before = fixture.session.read_bytes()
+                prepared_child = owner.turns.persistent_backends[thread.name].custody.idle().child.proc
+                assert prepared_child.alive()
                 first = FieldCodec.decode(NativeContextData, await connection.request("context"))
                 second = FieldCodec.decode(NativeContextData, await connection.request("context"))
             assert first.identity == second.identity
@@ -64,6 +72,7 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
         assert fixture.provider.posts == 0
         assert fixture.session.read_bytes().startswith(before)
         assert fixture.saved_inputs() == []
+    assert not prepared_child.alive()
 
 
 async def test_context_manifest_native_acp_and_cli_continuous(

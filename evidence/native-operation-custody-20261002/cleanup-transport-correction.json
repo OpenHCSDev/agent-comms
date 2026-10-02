@@ -1,0 +1,37 @@
+{
+  "result": "PASS",
+  "owner": "Mendel",
+  "operation": "Existing installed Registration._declare_in via RegistryStore.editing",
+  "api_source": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/lib/python3.14/site-packages/agent_comms/registration.py",
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "thread": "dedicated-worktree-cleanup-20261001",
+  "incarnation": {
+    "name": "dedicated-worktree-cleanup-20261001",
+    "created_at": 1790874801.3895755
+  },
+  "process": {
+    "pid": 702428,
+    "start_time": 44958513
+  },
+  "idle_verified": true,
+  "original_task_no_provider_or_goal": true,
+  "before_execution": "native",
+  "after_execution": "external",
+  "whole_thread_equal_except_execution": true,
+  "other_threads_status_aliases_equal": true,
+  "original_inputs_unchanged": true,
+  "original_input_count": 0,
+  "before_owner_generation": 2145,
+  "after_owner_generation": 2148,
+  "before_admission": 2109,
+  "after_admission": 2112,
+  "process_alive_after": true,
+  "signal": false,
+  "provider_calls": 0,
+  "new_input": false,
+  "replay": false,
+  "default_changed": false,
+  "elapsed_seconds": 0.11281659500673413,
+  "original_thread_preimage": "/home/ts/.cache/agent-scratch/mendel-native-operation547-20261002/cleanup-original-thread.json",
+  "original_thread_preimage_sha256": "b946edf7b9c7e6050ffabbf50e728dff2eebe6de921eccf79fe942b39e2570fc"
+}

@@ -1,0 +1,39 @@
+{
+  "owner": "Mendel",
+  "pr": 547,
+  "production_source": "771519f6dd0367cb6801c08f08cf1bff773dcccd",
+  "production_delta": {
+    "files": 3,
+    "added": 29,
+    "deleted": 28
+  },
+  "boundary": "source-import sanity; installed acceptance pending309 receiving pair",
+  "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-owned-observation536/bin/python",
+  "import_root": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src",
+  "controls": [
+    {
+      "test": "test_original_context_query_preserves_native_journal_and_dispatches_no_prompt",
+      "failure_detected": "Context inspection starts native before explicit preparation, changes original journal, sends input or leaks prepared child",
+      "actual": "RuntimeConnection original Unix socket and native960; unopened refusal, prepared two reads, source unchanged, child alive then shutdown exit, zero provider posts/inputs"
+    },
+    {
+      "test": "test_selected_wake_verifier_refuses_no_wake_and_stale_authority",
+      "failure_detected": "Empty release blocks behind wire writer, or actual claim guards lose owner/generation/resource fencing",
+      "actual": "Real Comms/registry/coordinator rows; actual wire lock held while empty release completes; existing nonempty claim negative/physical-write controls retained"
+    }
+  ],
+  "result": "2 passed in 4.73s",
+  "log": "/home/ts/.cache/agent-scratch/mendel-native-operation547-20261002/final-source-sanity.log",
+  "log_sha256": "15b2874a37986f36d0fe16efe6c61006271e9bc68fc0fab47d5aa1c921b4cf68",
+  "native": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+  "new_provider_calls": 0,
+  "public_mutation": false,
+  "uncertain_input_replayed": false,
+  "terminal_tail_attribution": "Not established; awaiting parent-owned actual544 spans",
+  "scratch": {
+    "path": "/home/ts/.cache/agent-scratch/mendel-native-operation547-20261002",
+    "purpose": "bounded native/runtime and claim-resource source sanity; retain logs and fixture originals until paired acceptance"
+  },
+  "new_environment": false,
+  "new_worktree": false
+}

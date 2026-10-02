@@ -1,0 +1,219 @@
+{
+  "source": "13f8fa33c54ca286bafe6e3164f5b23f15cc3875",
+  "parser": "refactor-audit Package.load",
+  "parsed": 311,
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 74,
+      "name": "CodingToolOwner",
+      "source": "@dataclass\nclass CodingToolOwner:\n    comms: Comms\n    store: Coordination\n    admission: WakeAdmission\n    owner_name: str\n    session_dir: Path\n    input_id: str\n    claims: dict[str, ClaimOwner] = field(default_factory=dict)\n\n    def for_original(self, assignment, operation_id) -> CodingToolOwner:\n        \"\"\"Project the same native grant onto an actually included original.\"\"\"\n        from .native_runtime_input import NativeRuntimeInput\n        with self.store.session.read():\n            native = NativeRuntimeInput.one(self.store.session._connection, input_id=self.input_id)\n            if native is None or assignment.assignment_id not in native.execution.source_assignment_ids(self.store.session._connection, self.input_id):\n                raise SelectedToolDenied('Tool original is absent from the reserved native batch')\n        return replace(self, admission=replace(self.admission, source_seq=assignment.wire_seq, source_message_id=assignment.message_id, wake_assignment_id=assignment.assignment_id, wake_revision=assignment.revision, operation_id=operation_id))\n\n    def admit(self, call: CodingCall) -> None:\n        verify_sent_full_input(self.store, self.admission, self.owner_name, self.input_id)\n        verify_selected_wake(self.comms, self.store, self.admission, self.owner_name)\n        consume_selected_slot(self.session_dir, call.slot(self.input_id), call.slot(self.input_id))\n        resource = call.tool.claim\n        if resource is not None:\n            owner = self.comms.registry.require(self.owner_name)\n            canonical = resource.normalized(Path(owner.worktree))\n            prior = self.claims.get(canonical)\n            claim_admission = prior.admission if prior is not None else replace(self.admission, operation_id=call.slot(self.input_id))\n            claimed = publish_selected_resource_claim(self.comms, self.store, claim_admission, self.owner_name, resource)\n            self.claims[canonical] = claimed\n\n    def finish(self) -> None:\n        release_selected_resources(self.comms, self.store, self.admission, self.owner_name, tuple(self.claims.values()))\n        self.claims.clear()"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 129,
+      "name": "CodingToolMode",
+      "source": "@dataclass(frozen=True)\nclass CodingToolMode(NativeToolMode):\n    owner: CodingToolOwner\n\n    def launch_arguments(self, package: Path) -> tuple[str, ...]:\n        extension = Path(package) / 'dist/channel_coding_tools.mjs'\n        if not extension.is_file():\n            raise SelectedToolDenied('Native coding extension is not installed')\n        return ('--tools', ','.join(CodingTool.names()), '-e', str(extension))\n\n    def socket(self, directory: Path, token: str) -> OwnerToolSocket:\n        return CodingToolSocket(directory, token, self.owner)\n\n    def finish(self) -> None:\n        self.owner.finish()"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 120,
+      "name": "_selected_claim_boundary",
+      "source": "@contextmanager\ndef _selected_claim_boundary(comms: Comms, store: Coordination, admission: WakeAdmission, owner_name: str):\n    \"\"\"One wire/bus/registry boundary for claim acquisition and exact release.\"\"\"\n    if type(comms) is not Comms or type(store) is not Coordination:\n        raise TypeError('Wake claim requires the actual wire and coordinator stores')\n    if type(admission) is not WakeAdmission or type(owner_name) is not str:\n        raise IdentityConflict('Wake claim admission is not typed')\n    if store.session.path.resolve() != (comms.root / 'coordination.sqlite3').resolve():\n        raise IdentityConflict('Wake coordinator does not belong to this wire root')\n    bus = comms.bus\n    with _store_lock(comms._wire_lock_path), bus.log.locked(), _store_lock(comms.registry.store.path):\n        registry = comms.registry.store._read_unlocked().snapshot()\n        canonical = registry.aliases.get(owner_name, owner_name)\n        try:\n            captured = RegistryOwner.capture(registry, canonical, 'Selected wake owner stopped or changed')\n            captured.require_active_turn()\n        except StaleFence as error:\n            raise IdentityConflict('Selected wake owner stopped or changed') from error\n        owner, generation = (captured.thread, captured.admission_generation)\n        _require_no_private_owner_rename(comms.root)\n        metadata = bus.log._private_marker_unlocked()\n        if metadata.root_id != admission.wire_root_id:\n            raise IdentityConflict('Selected wake belongs to another wire root')\n        if admission.source_seq <= metadata.admission_after_seq:\n            raise IdentityConflict('Selected wake precedes the current admission floor')\n        initial = next((row for record in bus.log.verified_records_unlocked(metadata) for row in record.deliveries() if row.message.seq == admission.source_seq), None)\n        if initial is None:\n            raise IdentityConflict('Selected wake has no committed initial row')\n        with store.session.read():\n            _verify_selected_wake_state(initial, owner, generation, store, admission)\n            yield (bus, metadata, registry, owner, initial)"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 230,
+      "name": "release_selected_resources",
+      "source": "def release_selected_resources(comms: Comms, store: Coordination, admission: WakeAdmission, owner_name: str, claims: tuple[ClaimOwner, ...]) -> None:\n    \"\"\"Release only these observed generations under their current selected owner.\"\"\"\n    with _selected_claim_boundary(comms, store, admission, owner_name) as (bus, metadata, registry, owner, initial):\n        projection, _ = bus.log._claim_projection_unlocked(metadata)\n        if any((projection.get(assignment.resource) != assignment for assignment in claims)):\n            raise IdentityConflict('Coding claim changed before release')\n        if claims:\n            target = initial.message.sender if initial.message.sender != owner.name else BuiltinChannel.ALL.value\n            bus.publisher.publish_claim_envelope(Message(owner.name, target, 'Completed coding tool claims released', MessageType.INFO, notice=True), worktree=Path(owner.worktree), incarnation=str(owner.created_at), releases=tuple((assignment.resource for assignment in claims)), _locked_registry_snapshot=registry, _bus_locked=True)"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 266,
+      "name": "ClaimOwner",
+      "source": "@dataclass(frozen=True, slots=True)\nclass ClaimOwner:\n    resource: str\n    owner: str\n    incarnation: str\n    generation: str\n    seq: int\n    message_id: str\n    admission: WakeAdmission | None = None\n\n    def __post_init__(self) -> None:\n        _resource(self.resource)\n        _text(self.owner, 'Owner')\n        _text(self.incarnation, 'Incarnation')\n        _generation(self.generation)\n        _text(self.message_id, 'Message ID')\n        if type(self.seq) is not int or self.seq <= 0:\n            raise ClaimTransitionError('Claim sequence must be a positive exact integer.')\n        if self.admission is not None and type(self.admission) is not WakeAdmission:\n            raise ClaimTransitionError('Claim owner requires a typed wake admission.')"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 78,
+      "name": "NativeToolMode",
+      "source": "class NativeToolMode(ABC):\n    \"\"\"Owner-bound native tool policy shared by selected and normal coding turns.\"\"\"\n\n    @abstractmethod\n    def launch_arguments(self, package: Path) -> tuple[str, ...]:\n        \"\"\"Return the native tool selection and reviewed extension.\"\"\"\n\n    def finish(self) -> None:\n        \"\"\"Release completed coding claims; selected proof keeps its old semantics.\"\"\"\n        return None\n\n    @abstractmethod\n    def socket(self, directory: Path, token: str) -> OwnerToolSocket:\n        \"\"\"Create the existing authenticated owner transport for this policy.\"\"\""
+    }
+  ],
+  "consumers": [
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 129,
+      "source": "NativeToolMode"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 83,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 130,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 81,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 122,
+      "source": "release_selected_resources"
+    },
+    {
+      "path": "src/agent_comms/channel_coding_tools.py",
+      "line": 151,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 172,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 338,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 179,
+      "source": "_selected_claim_boundary"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 219,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 238,
+      "source": "_selected_claim_boundary"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 352,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "line": 235,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 304,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 288,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 33,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 292,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 347,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 298,
+      "source": "ClaimOwner"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 522,
+      "source": "NativeToolMode"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 539,
+      "source": "NativeToolMode"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 145,
+      "source": "NativeToolMode"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 84,
+      "source": "NativeToolMode"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 27,
+      "source": "NativeToolMode"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 27,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 30,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 84,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 87,
+      "source": "CodingToolMode"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 106,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_actions.py",
+      "line": 136,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 95,
+      "source": "NativeToolMode"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 189,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 207,
+      "source": "CodingToolOwner"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 193,
+      "source": "NativeToolMode"
+    }
+  ],
+  "limits": [
+    "Conservative spelling candidates; dynamic dispatch and native JS excluded. Tests consumer rg read separately."
+  ]
+}
