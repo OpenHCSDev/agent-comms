@@ -1,0 +1,387 @@
+{
+  "revision": "519cbd327f083b4758bbeb81d407f9cbf3c8128e",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "modules": 311,
+      "parse_failures": [],
+      "declarations": [
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 828,
+          "name": "ChildProcess",
+          "bases": [
+            "Sealed",
+            "ABC"
+          ],
+          "methods": [
+            {
+              "name": "__init__",
+              "async": false,
+              "source": "def __init__(self, identity: ProcessIdentity):\n    self.identity = identity\n    self.platform = Platform.current()\n    self._stop_task: asyncio.Task[ChildOutcome] | None = None"
+            },
+            {
+              "name": "pid",
+              "async": false,
+              "source": "@property\ndef pid(self) -> int:\n    return self.identity.pid"
+            },
+            {
+              "name": "alive",
+              "async": false,
+              "source": "def alive(self) -> bool:\n    return self.platform.matches(self.identity)"
+            },
+            {
+              "name": "force",
+              "async": false,
+              "source": "def force(self) -> None:\n    \"\"\"Signal the original owned group, including an exited leader's members.\"\"\"\n    self.platform.force_group(self.identity)"
+            },
+            {
+              "name": "retired",
+              "async": false,
+              "source": "@property\ndef retired(self) -> bool:\n    \"\"\"Exact child and its owned group are gone, independent of pipe callbacks.\"\"\"\n    return not self.alive() and (not self.platform.group_members(self.identity))"
+            },
+            {
+              "name": "wait",
+              "async": true,
+              "source": "@abstractmethod\nasync def wait(self) -> ChildOutcome:\n    ..."
+            },
+            {
+              "name": "_stop_plan",
+              "async": false,
+              "source": "def _stop_plan(self, guard):\n    with guard():\n        self.platform.terminate_group(self.identity)\n    deadline = time.monotonic() + STOP_GRACE_SECONDS\n    stage = GracefulStopOutcome\n    while self.platform.group_members(self.identity):\n        if time.monotonic() >= deadline:\n            stage = ForcedStopOutcome\n            with guard():\n                self.platform.force_group(self.identity)\n            break\n        yield 0.02\n    while self.platform.group_members(self.identity):\n        if time.monotonic() >= deadline + STOP_GRACE_SECONDS:\n            raise RuntimeError('Child process group did not retire')\n        yield 0.02\n    return stage"
+            },
+            {
+              "name": "_retire_group",
+              "async": false,
+              "source": "def _retire_group(self, guard):\n    \"\"\"Run the same guarded physical plan for synchronous and async custody.\"\"\"\n    plan = self._stop_plan(guard)\n    while True:\n        try:\n            delay = next(plan)\n        except StopIteration as done:\n            return done.value\n        time.sleep(delay)"
+            },
+            {
+              "name": "_stop",
+              "async": true,
+              "source": "async def _stop(self) -> ChildOutcome:\n    pending = asyncio.get_running_loop().run_in_executor(None, self._retire_group, nullcontext)\n    stage = await join_retirement(pending)\n    self._release_retired_io()\n    async with asyncio.timeout(STOP_GRACE_SECONDS):\n        return stage(await self.wait())"
+            },
+            {
+              "name": "_release_retired_io",
+              "async": false,
+              "source": "def _release_retired_io(self) -> None:\n    \"\"\"Release owned IO after the identity-bound process group has retired.\"\"\"\n    return None"
+            },
+            {
+              "name": "stop",
+              "async": true,
+              "source": "async def stop(self) -> ChildOutcome:\n    if self._stop_task is None:\n        self._stop_task = asyncio.create_task(self._stop())\n    return await join_retirement(self._stop_task)"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1207,
+          "name": "SynchronousProcess",
+          "bases": [
+            "ChildProcess"
+          ],
+          "methods": [
+            {
+              "name": "require_stop_authority",
+              "async": false,
+              "source": "def require_stop_authority(self) -> None:\n    \"\"\"A retained parent handle already establishes stop/reap authority.\"\"\""
+            },
+            {
+              "name": "force",
+              "async": false,
+              "source": "def force(self) -> None:\n    self.platform.require(self.identity)\n    super().force()"
+            },
+            {
+              "name": "stop",
+              "async": true,
+              "source": "async def stop(self) -> ChildOutcome:\n    if self._stop_task is None:\n        self.require_stop_authority()\n    return await super().stop()"
+            },
+            {
+              "name": "reap",
+              "async": false,
+              "source": "@abstractmethod\ndef reap(self) -> ChildOutcome:\n    ..."
+            },
+            {
+              "name": "stop_sync",
+              "async": false,
+              "source": "def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:\n    self.require_stop_authority()\n    stage = self._retire_group(guard)\n    return stage(self.reap())"
+            }
+          ]
+        },
+        {
+          "path": "src/agent_comms/durable_turn.py",
+          "line": 29,
+          "name": "DurableTurn",
+          "bases": [
+            "MroDispatch"
+          ],
+          "methods": [
+            {
+              "name": "__init__",
+              "async": false,
+              "source": "def __init__(self, attempts: AttemptStore, fence, pointer_revision, input_id):\n    self.attempts = attempts\n    self.fence = fence\n    self.pointer_revision = pointer_revision\n    self.input_id = input_id"
+            },
+            {
+              "name": "using_attempts",
+              "async": false,
+              "source": "@contextmanager\ndef using_attempts(self, attempts):\n    \"\"\"Borrow only this operation's connection; keep the original fence owner.\"\"\"\n    original = self.attempts\n    self.attempts = attempts\n    try:\n        yield\n    finally:\n        self.attempts = original"
+            },
+            {
+              "name": "dispatch",
+              "async": true,
+              "source": "async def dispatch(self, event):\n    if not tuple(self.handlers_for(event)):\n        return event\n    return await Coordination.run_async(self.attempts.session.path, partial(self.observe_owned, event))"
+            },
+            {
+              "name": "observe_owned",
+              "async": false,
+              "source": "def observe_owned(self, event, resource):\n    \"\"\"Consume one native observation through joined, worker-owned SQLite.\"\"\"\n    with self.using_attempts(resource.attempts):\n        return self.dispatch_sync(event)"
+            },
+            {
+              "name": "current",
+              "async": false,
+              "source": "@property\ndef current(self):\n    return type(self.attempts.require_fence(self.fence)[1].lifecycle)"
+            },
+            {
+              "name": "model_started",
+              "async": false,
+              "source": "@property\ndef model_started(self):\n    return self.current.has_model_context"
+            },
+            {
+              "name": "advance",
+              "async": false,
+              "source": "def advance(self, state):\n    if state is self.current:\n        return\n    result = self.attempts.advance(self.fence, state, expected_pointer_revision=self.pointer_revision, progress=True).value\n    self.fence = result.fence"
+            },
+            {
+              "name": "accepted",
+              "async": false,
+              "source": "@handles(pi.Response)\ndef accepted(self, event):\n    if event.id == 'native-prompt' and event.success and self.current.starting:\n        self.advance(PromptAcceptedAttempt)"
+            },
+            {
+              "name": "context",
+              "async": false,
+              "source": "@handles(pi.ContextCommitted)\ndef context(self, event):\n    if event.input_id != self.input_id or self.model_started:\n        return\n    if self.current.starting:\n        self.advance(PromptAcceptedAttempt)\n    self.advance(ModelRunningAttempt)"
+            },
+            {
+              "name": "excursion",
+              "async": false,
+              "source": "@handles(NativePhaseChanged)\ndef excursion(self, event):\n    if self.model_started:\n        self.dispatch_sync(event.phase)"
+            },
+            {
+              "name": "model",
+              "async": false,
+              "source": "@handles(ModelWaitPhase)\ndef model(self, phase):\n    self.advance(ModelRunningAttempt)"
+            },
+            {
+              "name": "tool",
+              "async": false,
+              "source": "@handles(ToolRunningPhase)\ndef tool(self, phase):\n    self.advance(ToolRunningAttempt)"
+            },
+            {
+              "name": "compaction",
+              "async": false,
+              "source": "@handles(CompactionPhase)\ndef compaction(self, phase):\n    self.advance(CompactionAttempt)"
+            },
+            {
+              "name": "finish",
+              "async": false,
+              "source": "def finish(self):\n    \"\"\"Native child is reaped and any explicit owner effect has completed.\"\"\"\n    if not self.model_started:\n        raise IdentityConflict('native completion lacks model progress')\n    self.fence = self.attempts.advance(self.fence, SettlingAttempt, expected_pointer_revision=self.pointer_revision, backend_done=True, process_dead=True, progress=True).value.fence\n    return self.fence"
+            },
+            {
+              "name": "fail_unknown",
+              "async": false,
+              "source": "def fail_unknown(self):\n    \"\"\"Retire the reaped local backend without granting acceptance or replay.\n\n        The caller holds the live registry owner boundary. Native execution has\n        returned through child/tool cleanup; possible remote effects stay UNKNOWN.\n        Coordination owns the atomic replay/finality/slot mutation.\n        \"\"\"\n    return self.attempts.fail_unknown(self.fence, expected_pointer_revision=self.pointer_revision).value"
+            },
+            {
+              "name": "fail_terminal",
+              "async": false,
+              "source": "def fail_terminal(self):\n    \"\"\"Settle the corroborated failed input after its native child is reaped.\"\"\"\n    final = self.attempts.advance(self.fence, self.current, expected_pointer_revision=self.pointer_revision, backend_done=True, process_dead=True, reason_code='native_terminal_failure').value\n    return self.attempts.settle_nonpublication(final.fence, expected_pointer_revision=final.snapshot.pointer_revision, outcome=AttemptFailedAttempt(), reason_code='native_terminal_failure').value"
+            }
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 210,
+          "reference": "self.group_members"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 860,
+          "reference": "self.platform.group_members"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 867,
+          "reference": "self.platform.group_members"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 875,
+          "reference": "self._stop_plan"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 885,
+          "reference": "self._retire_group"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1227,
+          "reference": "self._retire_group"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1075,
+          "reference": "self.child.stop_sync"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1298,
+          "reference": "self.stop_sync"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 850,
+          "reference": "self.platform.group_members"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 246,
+          "reference": "self.members_of_group"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1157,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1154,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 278,
+          "reference": "ObservedProcess(identity).stop_sync"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 312,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 177,
+          "reference": "DurableTurn"
+        }
+      ]
+    },
+    {
+      "root": "tools",
+      "modules": 53,
+      "parse_failures": [],
+      "declarations": [],
+      "references": [
+        {
+          "path": "tools/cutover/thread_retirement_installed_pilot.py",
+          "line": 173,
+          "reference": "process.stop_sync"
+        }
+      ]
+    },
+    {
+      "root": "tests",
+      "modules": 357,
+      "parse_failures": [],
+      "declarations": [],
+      "references": [
+        {
+          "path": "tests/test_child_process.py",
+          "line": 76,
+          "reference": "child.platform.group_members"
+        },
+        {
+          "path": "tests/test_child_process.py",
+          "line": 304,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_child_process.py",
+          "line": 301,
+          "reference": "stale.stop_sync"
+        },
+        {
+          "path": "tests/test_child_process.py",
+          "line": 465,
+          "reference": "observed.stop_sync"
+        },
+        {
+          "path": "tests/test_coordination_nominal.py",
+          "line": 180,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "tests/test_input_drain.py",
+          "line": 237,
+          "reference": "foreign.stop_sync"
+        },
+        {
+          "path": "tests/test_native_pi.py",
+          "line": 978,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "tests/test_native_unknown_recovery.py",
+          "line": 266,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "tests/test_native_unknown_recovery.py",
+          "line": 275,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 80,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 137,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 58,
+          "reference": "ObservedProcess(current.process_identity).stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 106,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 164,
+          "reference": "ObservedProcess(owner.process_identity).stop_sync"
+        },
+        {
+          "path": "tests/test_owner_release_restart.py",
+          "line": 81,
+          "reference": "ObservedProcess(current.process_identity).stop_sync"
+        },
+        {
+          "path": "tests/test_private_nk_entrypoint.py",
+          "line": 216,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_runtime.py",
+          "line": 40,
+          "reference": "child.stop_sync"
+        }
+      ]
+    }
+  ],
+  "limits": "Same declared roots as before; dynamic dotted receiver ambiguity retained. External native/SDK/OS not parsed and unchanged; source semantics read separately. Existing MroDispatch and ChildProcess own new-case discovery/driver; no second registry."
+}
