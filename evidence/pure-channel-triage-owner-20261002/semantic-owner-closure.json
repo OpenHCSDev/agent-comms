@@ -1,0 +1,27 @@
+{
+  "production_source": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+  "original_fact": "AssignmentStore.get -> WakeAssignment current lifecycle/revision; sealed CommittedDelivery identity retained independently",
+  "wire_relation_declaration": "selected_source_batch.SelectedSource (assignment_id, store, delivery); no retained mutable claim copy",
+  "distinct_existing_owner": "selected_source.SelectedSource native summary/session revision DeclaredFamily; unrelated domain, unchanged",
+  "canonical_mutation": "ExecutionStore._create single shared algorithm under existing transaction; direct create and create_after_triage are entrypoints, not parallel algorithms",
+  "continuation_owner": "SelectedTriage/SelectedTriageOutcome existing async members FULL/IGNORE/rejection; no runner None-result decision",
+  "fence": "Original TriageNativeSend.commit same context/verdict transaction settled-row witness; exact current tuple comparison inside create_after_triage write then revision CAS",
+  "registry_identity_owner": "SelectedParticipant.require_current delegates original RegistryOwner/ParticipantOwner before creation and attempt start",
+  "attempt_owner": "SelectedAttempt.engage consumes created RecoverySnapshot; AttemptStart execution/pointer revision and NativeSendStage captured claim fences unchanged",
+  "execution_identity": "SelectedSourceBatch.execution_id derives original ordered IDs; previous selected runner hash construction removed",
+  "failure_owner": "Proved TRIAGE request context ends before FULL continuation; FULL SelectedRequest owns FULL cleanup/failure/UNKNOWN",
+  "caller_proof": "existing-owner-caller-search.txt; all direct constructor and continuation callers migrated",
+  "deleted": [
+    "mutable SelectedSource.assignment field",
+    "cached/current equality comparison",
+    "optional expected_assignments param and conditional",
+    "run third-return None and ignored-is-not-None decision",
+    "FullSelectedTriage continuation None sentinel",
+    "runner execution hash construction"
+  ],
+  "new_classes": 0,
+  "new_stores": 0,
+  "public_seq326_mutations": 0,
+  "original_inputs_replayed": 0,
+  "final_acceptance": "Actual installed configured saved-fork purechannel02 PASS21.12s; public default/cutover parent-owned"
+}

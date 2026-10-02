@@ -1,0 +1,58 @@
+{
+  "elapsed_seconds": 186.26471643598052,
+  "failure": "TimeoutError: ",
+  "settings": [
+    {
+      "source_owner": "openhcs-helper",
+      "private_owner": "purechannel-owner-0",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "off",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42932905,
+      "source_session_sha256": "4c7dad1d4669bce0258cbc6fbd17c382628657cac38c919f13f129c9f12eca11",
+      "owned_fork": "/home/ts/wt/p502c01/config/sessions/--home-ts-code-projects-openhcs--/2026-10-02T02-28-36-107Z_01a0fa71-2c8b-73ac-91cc-fec0701814c4.jsonl",
+      "original_task_sha256": "86a9832a42b0e71bbfd659e29da6a28d03940d63d1236a9c7c52fc53dd2fc373"
+    },
+    {
+      "source_owner": "openhcs-helper2",
+      "private_owner": "purechannel-owner-1",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42948707,
+      "source_session_sha256": "f68d4241c054cf1533a664df8d39db64fb0b17eb7b93839ef30b8b1fdc3b327c",
+      "owned_fork": "/home/ts/wt/p502c01/config/sessions/--home-ts-code-projects-openhcs--/2026-10-02T02-28-38-249Z_01a0fa71-34ea-73d9-84bb-8dae21536193.jsonl",
+      "original_task_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "source_owner": "openhcs-architecture-memory",
+      "private_owner": "purechannel-owner-2",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42044804,
+      "source_session_sha256": "a46d4826d76cac0dfab481586e05cad9583170526155ffdf17b2c2e5a095acdb",
+      "owned_fork": "/home/ts/wt/p502c01/config/sessions/--home-ts-code-projects-openhcs--/2026-10-02T02-28-40-386Z_01a0fa71-3d42-7390-b6da-227a698086bf.jsonl",
+      "original_task_sha256": "079c2d9fcf2bc90817641ff295f5e0ce24b2c51af9cb8bdb91f3bea70a8a1500"
+    }
+  ],
+  "installed_interpreter": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-purechannel502-20261002/bin/python",
+  "original_sequences": [
+    1
+  ],
+  "proof": {},
+  "public_inputs": 0,
+  "original_seq326_replays": 0,
+  "provider": "actual configured provider",
+  "all_owned_workers_retired": true,
+  "configured_sources_unchanged": true
+}
