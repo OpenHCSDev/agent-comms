@@ -320,9 +320,13 @@ class NativeEvidenceRead:
         return tuple(reversed(branch))
 
     def covered_prefix(self, entries, db):
+        from .compaction_records import NativeForkCreation
+
+        inherited = NativeForkCreation.recorded_prefix(db, self, entries)
         branch = self.branch(entries[-1].require_entry_id(), entries)
-        entry = next((entry for entry in reversed(branch) if isinstance(entry, CompactionEntry)), entries[0])
-        return entry.covered_prefix(self, branch, db)
+        entry = next((entry for entry in reversed(branch)
+            if entry.require_entry_id() not in inherited and isinstance(entry, CompactionEntry)), entries[0])
+        return inherited | entry.covered_prefix(self, branch, db)
 
 
 class NativeInputEvidenceRead(NativeEvidenceRead):

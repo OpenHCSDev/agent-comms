@@ -20,6 +20,7 @@ from .compaction_journal_role import JournalRole
 from .compaction_records import (
     CompactionOperation,
     EnrolledPrivateSession,
+    NativeForkCreation,
     PrivateRawInput,
     SelectedSummaryAttempt,
     SessionJournalHistory,
@@ -28,6 +29,7 @@ from .field_codec import FieldCodec
 from .diagnostics import PublicationMeasurements
 from .input_disposition import InputDispositions, InputDocument
 from .selected_source import SelectedSource
+from .private_path import FileRevision
 from .thread_identity import GenerationCounter, ThreadIncarnation
 
 if TYPE_CHECKING:
@@ -40,6 +42,28 @@ _returned_fresh_enrollments: WeakKeyDictionary[FreshPrivateSession, ReturnedFres
 
 
 class PrivateInputs(JournalRole):
+    async def fork(self, request, *, cwd: Path, env=None):
+        """Capture the returned SDK creation before exposing the child to input.
+
+        Reading a header or passing an old receipt cannot enter this operation:
+        it always invokes the canonical new-file fork once. Unknown creation or
+        journal publication is never retried or inferred from an orphan file.
+        """
+        from .native_fork import ForkSessionHelper
+        from .native_entries import NativeEntry
+
+        created = await ForkSessionHelper.run(request, cwd=cwd, env=env)
+        created.source.require_session(request.file)
+        with self.journal.transaction() as db:
+            SessionJournalHistory.require_pristine(db, created.session_file)
+            with NativeEntry.open_evidence(created.path) as evidence:
+                _, entries = evidence.observe()
+                if FileRevision.from_stat(created.path.stat()) != created.revision:
+                    raise CompactionJournalError("Native fork changed before creation publication")
+                created.covered_prefix(evidence, entries)
+                created.insert(db)
+        return created
+
     def requires_raw_marker(self, session_file: Path) -> bool:
         """The journal's allocated writer namespace requires prewrite custody.
 
@@ -87,7 +111,7 @@ class PrivateInputs(JournalRole):
             if raw_ids:
                 raise CompactionJournalError("Fresh raw input remains UNKNOWN; never replay")
             return
-        if enrollment is not None or raw_ids or self.requires_raw_marker(session_file):
+        if SessionJournalHistory.exists(db, canonical) or self.requires_raw_marker(session_file):
             from .continued_private_session import verify_continued_private_session
 
             try:

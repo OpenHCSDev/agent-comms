@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from .child_process import ProcessIdentity
 from .compaction_errors import CompactionJournalError
@@ -23,6 +23,9 @@ from .compaction_states import (
     sql_names,
 )
 from .field_codec import FieldCodec
+from .native_revision_text import NativeRevisionText
+from .native_session_reopen import NativeSessionIdentity
+from .private_path import FileRevision
 from .input_disposition import InputDocument
 from .owner_compaction_settings import PiCompactionSettings
 from .pi_summary_payloads import SelectedModel
@@ -93,11 +96,15 @@ class SessionJournalHistory(JournalTable):
     """Declared history families that exclude enrolling an allegedly fresh file."""
 
     @classmethod
-    def require_pristine(cls, db: sqlite3.Connection, canonical: str) -> None:
-        if any(
+    def exists(cls, db: sqlite3.Connection, canonical: str) -> bool:
+        return any(
             table.select(db, where="session_file=? LIMIT 1", parameters=(canonical,))
             for table in TypedTable.members_with(cls)
-        ):
+        )
+
+    @classmethod
+    def require_pristine(cls, db: sqlite3.Connection, canonical: str) -> None:
+        if cls.exists(db, canonical):
             raise CompactionJournalError("Fresh-session history already exists")
 
 
@@ -335,7 +342,7 @@ class PrivateRawInput(SessionJournalHistory, TypedTable, declared_name="private_
 
 
 @dataclass(frozen=True)
-class EnrolledPrivateSession(JournalTable, TypedTable, declared_name="enrolled_private_sessions"):
+class EnrolledPrivateSession(SessionJournalHistory, TypedTable, declared_name="enrolled_private_sessions"):
     session_file: str = field(metadata={"sql": Column(primary_key=True)})
     session_id: str = field(metadata={"sql": Column(unique=True)})
     device: int
@@ -361,6 +368,46 @@ class EnrolledPrivateSession(JournalTable, TypedTable, declared_name="enrolled_p
         if admission_generation is not None and admission_generation != self.admission_generation:
             raise CompactionJournalError("Fresh private owner coverage differs: admission")
         fresh.verify_saved_identity()
+
+
+@dataclass(frozen=True)
+class NativeForkCreation(NativeSessionIdentity, SessionJournalHistory, TypedTable):
+    """The SDK's returned creation, not an enrollment reconstructed from history.
+
+    One record owns the original source relationship and exact newly written
+    child prefix. It covers inherited context only, never another input's
+    disposition, an unresolved raw marker, or permission to replay.
+    """
+
+    session_file: str = field(metadata={"wire_name": "sessionFile", "sql": Column(primary_key=True)})
+    source: NativeSessionIdentity
+    source_revision: Annotated[FileRevision, NativeRevisionText] = field(metadata={"wire_name": "sourceRevision"})
+    revision: Annotated[FileRevision, NativeRevisionText]
+    prefix_digest: TextDigest = field(metadata={"wire_name": "prefixDigest"})
+    entry_count: int = field(metadata={"wire_name": "entryCount"})
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.same_session(self.source) or FieldCodec.decode(int, self.entry_count) < 1:
+            raise CompactionJournalError("Native fork creation requires a distinct original source")
+
+    def covered_prefix(self, evidence, entries):
+        self.require_session(str(evidence.source.path))
+        header = entries[0]
+        if (
+            header.id != self.session_id
+            or header.parent_session != self.source.session_file
+            or evidence.source.identity != self.revision.identity
+            or len(entries) < self.entry_count
+        ):
+            raise CompactionJournalError("Original native fork source differs")
+        evidence.source.verify_snapshot(self.revision.size, bytes.fromhex(self.prefix_digest.value))
+        return frozenset(entry.require_entry_id() for entry in entries[:self.entry_count])
+
+    @classmethod
+    def recorded_prefix(cls, db, evidence, entries):
+        return frozenset().union(*(creation.covered_prefix(evidence, entries)
+            for creation in cls.for_session(db, str(evidence.source.path))))
 
 
 @dataclass(frozen=True)

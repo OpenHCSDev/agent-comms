@@ -102,7 +102,7 @@ async def configured_pure_channel(arguments):
     copied into the private coordinator or submitted as new inputs.
     """
     from agent_comms.comms import wire
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_fork import ForkSessionRequest
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.selected_triage import FullSelectedTriage
     from agent_comms.coordination_tables.publications import PublicationReceipts
@@ -133,7 +133,8 @@ async def configured_pure_channel(arguments):
         before = hashlib.sha256(original.read_bytes()).hexdigest()
         # Existing SessionManager fork owns strict saved-history creation under
         # its native source lock. Its output stays under the owned profile.
-        fork = await ForkSessionHelper.run(
+        from agent_comms.compaction_journal import CompactionJournal
+        fork = await CompactionJournal(service.root / 'compaction-commits.sqlite3').private_inputs.fork(
             ForkSessionRequest(str(arguments.package), str(original), source.worktree, str(stage / 'forks')),
             cwd=Path(source.worktree), env=dict(os.environ),
         )
