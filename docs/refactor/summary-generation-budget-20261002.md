@@ -59,3 +59,25 @@ No fresh configured-provider fork or replay is needed to investigate this cause.
 
 Patterns: IDEN-1 (usage versus retained size), IDEN-2 (two meanings of summary
 tokens), TIME-7 (a second prompt allowance), BOUND-2 (bypassing the context owner).
+
+## Native artifact and final sanity
+
+The normal stock recipe produced immutable native `ad533a9f08581561` from corrected
+source `d5236843`. Full tree and import inventory are verified in the builder's
+`evidence/summary-generation-policy520-native-20261002/artifact-receipt.json`.
+The first patch-anchor failure is preserved separately; no provider input was
+sent by either preparation. This artifact changes three compiled production
+files: 20 lines deleted, 13 added. No native schema changes.
+
+The affected compiled batch passed in 0.267 seconds: short source (27 bytes) and
+map/synthesis source (765000 bytes) kept the same 4096 generation target, complete
+progress and original accumulated provider usage of 5534 per response. Shared
+Responses decoding distinguishes absent reasoning, measured zero and measured
+1000. This is native/SDK sanity with controlled responses, not subscription
+endpoint enforcement or configured saved-owner S1 completion.
+
+After AST: 58 files parsed, zero errors, zero remaining `requireSummaryOutput`
+declarations or references. Source and compiled `CompactionPolicy` are two
+representations of the same build declaration, not separate semantic owners.
+The original529 receipt hash is recorded unchanged. The installed RPC check
+remains pending the matching wheel and package resources.
