@@ -1,0 +1,665 @@
+{
+  "path": "/home/ts/.cache/agent-scratch/context-explorer309-paired-f810-tree-20261002/capture/receipt.json",
+  "sha256": "71d8679aa9bddfd8d8270c583f6c1037d672701bd6787f8119208fc85c0dbeb1",
+  "completed": true,
+  "capture_completed": true,
+  "assessment": "unreviewed",
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 825752,
+        "start_ticks": 45341094,
+        "returncode": 0
+      },
+      {
+        "pid": 825891,
+        "start_ticks": 45341277,
+        "returncode": 0
+      },
+      {
+        "pid": 825893,
+        "start_ticks": 45341287,
+        "returncode": 0
+      },
+      {
+        "pid": 825894,
+        "start_ticks": 45341293,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 825895,
+        "start_ticks": 45341294,
+        "returncode": 0
+      },
+      {
+        "pid": 825907,
+        "start_ticks": 45341305,
+        "returncode": 0
+      },
+      {
+        "pid": 825908,
+        "start_ticks": 45341315,
+        "returncode": 0
+      },
+      {
+        "pid": 825909,
+        "start_ticks": 45341326,
+        "returncode": 255
+      },
+      {
+        "pid": 826348,
+        "start_ticks": 45342328,
+        "returncode": 0
+      },
+      {
+        "pid": 826366,
+        "start_ticks": 45342360,
+        "returncode": 0
+      },
+      {
+        "pid": 826373,
+        "start_ticks": 45342394,
+        "returncode": 0
+      },
+      {
+        "pid": 826378,
+        "start_ticks": 45342426,
+        "returncode": 0
+      },
+      {
+        "pid": 826399,
+        "start_ticks": 45342528,
+        "returncode": 0
+      },
+      {
+        "pid": 826404,
+        "start_ticks": 45342592,
+        "returncode": 0
+      },
+      {
+        "pid": 826411,
+        "start_ticks": 45342695,
+        "returncode": 0
+      },
+      {
+        "pid": 826426,
+        "start_ticks": 45342797,
+        "returncode": 0
+      },
+      {
+        "pid": 826442,
+        "start_ticks": 45342845,
+        "returncode": 0
+      },
+      {
+        "pid": 826456,
+        "start_ticks": 45342947,
+        "returncode": 0
+      },
+      {
+        "pid": 826469,
+        "start_ticks": 45343011,
+        "returncode": 0
+      },
+      {
+        "pid": 826475,
+        "start_ticks": 45343115,
+        "returncode": 0
+      },
+      {
+        "pid": 826625,
+        "start_ticks": 45343217,
+        "returncode": 0
+      },
+      {
+        "pid": 826630,
+        "start_ticks": 45343279,
+        "returncode": 0
+      },
+      {
+        "pid": 826631,
+        "start_ticks": 45343293,
+        "returncode": 0
+      },
+      {
+        "pid": 826662,
+        "start_ticks": 45343311,
+        "returncode": 0
+      },
+      {
+        "pid": 826731,
+        "start_ticks": 45343325,
+        "returncode": 0
+      },
+      {
+        "pid": 826804,
+        "start_ticks": 45343337,
+        "returncode": 0
+      },
+      {
+        "pid": 827269,
+        "start_ticks": 45343439,
+        "returncode": 0
+      },
+      {
+        "pid": 827461,
+        "start_ticks": 45343479,
+        "returncode": 0
+      },
+      {
+        "pid": 827483,
+        "start_ticks": 45343580,
+        "returncode": 0
+      },
+      {
+        "pid": 827488,
+        "start_ticks": 45343638,
+        "returncode": 0
+      },
+      {
+        "pid": 827489,
+        "start_ticks": 45343651,
+        "returncode": 0
+      },
+      {
+        "pid": 827490,
+        "start_ticks": 45343663,
+        "returncode": 0
+      },
+      {
+        "pid": 827492,
+        "start_ticks": 45343727,
+        "returncode": 0
+      },
+      {
+        "pid": 827516,
+        "start_ticks": 45343829,
+        "returncode": 0
+      },
+      {
+        "pid": 827521,
+        "start_ticks": 45343899,
+        "returncode": 0
+      },
+      {
+        "pid": 827522,
+        "start_ticks": 45343912,
+        "returncode": 0
+      },
+      {
+        "pid": 827524,
+        "start_ticks": 45343926,
+        "returncode": 0
+      },
+      {
+        "pid": 827525,
+        "start_ticks": 45343939,
+        "returncode": 0
+      },
+      {
+        "pid": 827526,
+        "start_ticks": 45343951,
+        "returncode": 0
+      },
+      {
+        "pid": 827563,
+        "start_ticks": 45344053,
+        "returncode": 0
+      },
+      {
+        "pid": 827704,
+        "start_ticks": 45344164,
+        "returncode": 0
+      },
+      {
+        "pid": 827718,
+        "start_ticks": 45344266,
+        "returncode": 0
+      },
+      {
+        "pid": 827733,
+        "start_ticks": 45344331,
+        "returncode": 0
+      },
+      {
+        "pid": 827735,
+        "start_ticks": 45344345,
+        "returncode": 0
+      },
+      {
+        "pid": 827737,
+        "start_ticks": 45344447,
+        "returncode": 0
+      },
+      {
+        "pid": 827741,
+        "start_ticks": 45344490,
+        "returncode": 0
+      },
+      {
+        "pid": 827789,
+        "start_ticks": 45344592,
+        "returncode": 0
+      },
+      {
+        "pid": 827795,
+        "start_ticks": 45344662,
+        "returncode": 0
+      },
+      {
+        "pid": 827796,
+        "start_ticks": 45344681,
+        "returncode": 0
+      },
+      {
+        "pid": 827800,
+        "start_ticks": 45344783,
+        "returncode": 0
+      },
+      {
+        "pid": 827815,
+        "start_ticks": 45344828,
+        "returncode": 0
+      },
+      {
+        "pid": 827827,
+        "start_ticks": 45344930,
+        "returncode": 0
+      },
+      {
+        "pid": 827843,
+        "start_ticks": 45345103,
+        "returncode": 0
+      },
+      {
+        "pid": 827849,
+        "start_ticks": 45345137,
+        "returncode": 0
+      },
+      {
+        "pid": 827991,
+        "start_ticks": 45345201,
+        "returncode": 0
+      },
+      {
+        "pid": 828031,
+        "start_ticks": 45345384,
+        "returncode": 0
+      },
+      {
+        "pid": 828044,
+        "start_ticks": 45345595,
+        "returncode": 0
+      }
+    ]
+  },
+  "command": [
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/toad",
+    "acp",
+    "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-generation-policy520-installed-20261002/bin/python -m agent_comms.acp",
+    "/home/ts/.agent-comms",
+    "--session",
+    "context547"
+  ],
+  "owner": "context-explorer309",
+  "started_utc": "2026-10-02T21:49:31.752429+00:00",
+  "physical_journey": "context_inspection",
+  "artifacts": {
+    "terminal.mp4": {
+      "bytes": 5352087,
+      "sha256": "76ec04b338fb9f4eaaedd7729e4813abda1e78ed20ef1fbd85fcb08840c5a8b7"
+    },
+    "before.png": {
+      "bytes": 106301,
+      "sha256": "19d00012da4012f48cfb179dba08f53e0af650db0eecb98aa332f76ca00a6161"
+    },
+    "after.png": {
+      "bytes": 117568,
+      "sha256": "aa498d143aefaa6ae5f79564371d0516dc22387a044ce7b1dd2ee4d6ed6d8279"
+    },
+    "before-state.json": {
+      "bytes": 497809,
+      "sha256": "7d3789d02f5858f7a7cc78ce2ad1cfb12b5b33673b926a78d5c5f2b0ddd98260"
+    },
+    "before-state.pickle": {
+      "bytes": 88273,
+      "sha256": "b94d69e57b19e1cca395c3150d23387c7965b87e84f245e0724acc578e5badc8"
+    },
+    "before-screen.svg": {
+      "bytes": 61608,
+      "sha256": "9875917ba5ad74db0fc45c3fb6eb88f874b74113abb7637983240fb53830c6ee"
+    },
+    "before-remote.py": {
+      "bytes": 1368,
+      "sha256": "1b639b9da0952c3c8e34c711247924c121d15c69a4defecb66805692f28de710"
+    },
+    "before-state-metadata.json": {
+      "bytes": 497783,
+      "sha256": "53acaec04128ff5a71fd5ac346f76a26a3dc3ddd468fe3cbbc4484cd9ddae510"
+    },
+    "before-state-frames.json": {
+      "bytes": 117,
+      "sha256": "2b8a1a3f536859fa9e1e0b53e1a8b9349b5bebb5f97f71d699650699b0798646"
+    },
+    "before-manifest.json": {
+      "bytes": 564,
+      "sha256": "e17ba4ebd5f167abc3ae8ccdcc817f8f7be8778b53a54066a0c520251000bda6"
+    },
+    "before-screen.json": {
+      "bytes": 172,
+      "sha256": "2734f31092e16945feba8b46e35e2f433137b7f880b18a9a6917d2d707efe728"
+    },
+    "before-capture.log": {
+      "bytes": 105,
+      "sha256": "0f0e75c089ef9cfbd427cb57428d5c0279e6dade55c47f4621abddcc8b8af049"
+    },
+    "after-screen.svg": {
+      "bytes": 90749,
+      "sha256": "be16e8f5bb8f3ca3ee9e6a16c0ad37fa7f729abcfd3fbb9fa01e4e2a4d586e79"
+    },
+    "after-state-metadata.json": {
+      "bytes": 469384,
+      "sha256": "ba58bf8b40f78c7cf29767ce6463d25a2506ae2e2b3434f9b517df1666a5b26f"
+    },
+    "after-remote.py": {
+      "bytes": 1366,
+      "sha256": "8bfd9565b7a24cbf281bc146a8bc25918fccf9dbab5f5ce2981dae02e636f737"
+    },
+    "after-manifest.json": {
+      "bytes": 562,
+      "sha256": "18845ba458925c0a9728922b4a31d32e632b4232b2b3655415e7b9a88ecd4d6c"
+    },
+    "after-state-frames.json": {
+      "bytes": 34983,
+      "sha256": "1b2e19c29cea1257d4526f3d0888c2b4bed5d6c846e9a507aded6efe3f76f35d"
+    },
+    "after-capture.log": {
+      "bytes": 104,
+      "sha256": "22a90d4b89c26bf57ab52372cc33cd8744aafd7027310a0e104e07c8a41fa099"
+    },
+    "after-state.json": {
+      "bytes": 469410,
+      "sha256": "6039863a269c680c3fe66f6d063dd1e4c4ffb02cfbcc7fca36c29965e59942ac"
+    },
+    "after-state.pickle": {
+      "bytes": 91348,
+      "sha256": "fa9f5ffce8e5416481e4c4cab4b85a13b0d770e3cf5b52f50c59eb252d98e27c"
+    },
+    "after-screen.json": {
+      "bytes": 171,
+      "sha256": "89094f71c879f6737a5763c64f3d8bd911d7b6f96a5f95759db5efe3d9e6db5e"
+    },
+    "phase-system-detail-state.pickle": {
+      "bytes": 104973,
+      "sha256": "d69f8cf93e1872e4a50df7a705e3e154737bd179bca3095c66743ee54916ce09"
+    },
+    "phase-reference-detail-capture.log": {
+      "bytes": 121,
+      "sha256": "8defba5388b333907b982dcb5f51f41fb1a6f9d6a08f5b823b7eb297485feb32"
+    },
+    "phase-returned.png": {
+      "bytes": 117568,
+      "sha256": "aa498d143aefaa6ae5f79564371d0516dc22387a044ce7b1dd2ee4d6ed6d8279"
+    },
+    "phase-returned-state-metadata.json": {
+      "bytes": 636913,
+      "sha256": "b2a8d2c4d22cc9429e7de0d201af38c423b70dc016ca00934e80caf73f7c4a18"
+    },
+    "phase-reference-detail-state.json": {
+      "bytes": 628505,
+      "sha256": "20c9f72e9bc6c6b8e4eecb02e77a7220964fd687633ca32c5adfff9db39d614d"
+    },
+    "phase-system-detail-remote.py": {
+      "bytes": 997,
+      "sha256": "87b8320dcee46fcb194ba12395b10b58b98407fca96f65f73d2e74796edd5657"
+    },
+    "phase-irc-state-frames.json": {
+      "bytes": 25728,
+      "sha256": "da499fd42b9c7d31bffb21719fd4ed997a5dc9c7ffee9fce1ad57dbc20891222"
+    },
+    "phase-system-detail-capture.log": {
+      "bytes": 118,
+      "sha256": "54bf4a526fee47e956b44794c2b9b1aa7e2ea19eaf3511502b90723b91ad91a7"
+    },
+    "phase-sidebar-open-state-metadata.json": {
+      "bytes": 623229,
+      "sha256": "ba375ac8c34f55e245d98a97d318139e708bce9ceb541be522d33c9f2308ac41"
+    },
+    "phase-irc-capture.log": {
+      "bytes": 108,
+      "sha256": "af31e14e6b5c0ccaafa53a57ddeb29f71fabacf9f7fb48dd5195b78555212319"
+    },
+    "phase-returned-state.json": {
+      "bytes": 636940,
+      "sha256": "3c2f7dee56c69f2eac65e23cbee3de7c4c44500459c7c370cf93d82f13898d0c"
+    },
+    "phase-irc.png": {
+      "bytes": 23751,
+      "sha256": "dcf3f22f1d447ba104a03674770cc93f3fc8e5cce0122bfd359a8441fa0af955"
+    },
+    "phase-startup.png": {
+      "bytes": 106321,
+      "sha256": "7a3c5ecfe340af786ab5946eee73b5a86c73891fd836e89eaa7b8b4d03e6f3b5"
+    },
+    "phase-sidebar-open-remote.py": {
+      "bytes": 996,
+      "sha256": "a8c510e027417ccdb2fe79060edd2e39a52a75ce05ba5fd8050afc36c2bf9a44"
+    },
+    "phase-startup-state-frames.json": {
+      "bytes": 877,
+      "sha256": "5a82b534c074508a8e241849d8133ff96ccecef04561a79565776f54bde54b10"
+    },
+    "phase-startup-capture.log": {
+      "bytes": 112,
+      "sha256": "9a4f22fecffd5a6ddb65ee202d4cc197923e1bfbc5d30bc5fcb6b69a6db1782c"
+    },
+    "phase-sidebar-open-state-frames.json": {
+      "bytes": 6368,
+      "sha256": "d9fa18a0623ee09f564226e2e71e97ec44a5fde82ebd0de23f9cc70065fe8ab3"
+    },
+    "phase-context-panel-state.json": {
+      "bytes": 623105,
+      "sha256": "793de8dac66532a1e7a47bad6f0ea9ad40b8642e6615d89042b297ebc54f93b2"
+    },
+    "phase-startup-state.json": {
+      "bytes": 497807,
+      "sha256": "b7a1e6910fc57b9c6afddd8e132fe0d081c50b4ec3b3d1f12afeb9aae433aaec"
+    },
+    "phase-context-panel.png": {
+      "bytes": 118117,
+      "sha256": "6d8527973afab7cee52c0be0cb481349a3f799fa551d585a9cb77779472fc25e"
+    },
+    "phase-irc-state-metadata.json": {
+      "bytes": 189880,
+      "sha256": "987a588ee63e5fc6e753eec9daf6854ad1b77153b6947c005bdbca7d60cd462b"
+    },
+    "phase-irc-manifest.json": {
+      "bytes": 450,
+      "sha256": "25eec225d579e0b08429e54be8b83f6e342ef04bf883d6ed558021f39a54ed65"
+    },
+    "phase-sidebar-open.png": {
+      "bytes": 117776,
+      "sha256": "1e26d807b468c752439bbeeadbd36818b96164f5e6343b6f28285b64c531922e"
+    },
+    "phase-context-panel-state-frames.json": {
+      "bytes": 7673,
+      "sha256": "2435cbbe4254a3688e0680084f7a5bda1976fa20e7a21034d15c31f977152b7a"
+    },
+    "phase-context-panel-capture.log": {
+      "bytes": 118,
+      "sha256": "9da4de05d65ce911aab58e945e0e765390cab2d1b9f4bc3797e213c1e5b3f089"
+    },
+    "phase-refreshed-state-frames.json": {
+      "bytes": 13968,
+      "sha256": "ad673019af4fbb28e6a00f55993cbda9c382e30a3a47a735ad95f373d8c7091f"
+    },
+    "phase-irc-remote.py": {
+      "bytes": 987,
+      "sha256": "2b254dbb8ac2cbf5aba1c0d282f7bd10a7c83659c47d19b759b2b9db6906ec84"
+    },
+    "phase-irc-state.pickle": {
+      "bytes": 58769,
+      "sha256": "f568e8bdbbec2915d4ead98d77e3e2509f2b1e82e97fac70c37f9afa8f8a6902"
+    },
+    "phase-reference-detail-state-metadata.json": {
+      "bytes": 628478,
+      "sha256": "322ea748ce80a95f1336f9d53d70c08c44cd2eb4492daf5ca555202dadfe0fa4"
+    },
+    "phase-irc-state.json": {
+      "bytes": 189906,
+      "sha256": "d69b6e131850c3773e8106a8f4674f4afeab9830021eea908f0cc8fac64061e3"
+    },
+    "phase-system-detail.png": {
+      "bytes": 120780,
+      "sha256": "d6dbede7a2aca85081b5bbad5f83369bd486a3293dd7b706e412ac4a0be9d99b"
+    },
+    "phase-returned-remote.py": {
+      "bytes": 992,
+      "sha256": "aa57d978e991bc5536010b30f39dd06b2b2063d606eaf280f73d493d7b77efff"
+    },
+    "phase-refreshed-state.pickle": {
+      "bytes": 104973,
+      "sha256": "1687a05fbb763a55a1ad5ba0d8e5f7f1505975ff04e3a4f2630f6c6f21f7b56a"
+    },
+    "phase-system-detail-manifest.json": {
+      "bytes": 460,
+      "sha256": "004efba1ddcb0e27223e4cd7d5595ad3046a79eec8729a1af73de32a760e6cd5"
+    },
+    "phase-sidebar-open-state.json": {
+      "bytes": 623256,
+      "sha256": "465e51d13cea40834b075be38a1389d7138805057ab8487259b771f71f283fb1"
+    },
+    "phase-context-panel-remote.py": {
+      "bytes": 997,
+      "sha256": "ec1cbbaad8b69d82de848746793ebe458140ab2bf6fbebe3863869473b0401e1"
+    },
+    "phase-refreshed.png": {
+      "bytes": 120688,
+      "sha256": "855a9d8d08c8fc963fabf23902c6ac48acd29ef8d079152604c4e76ca32d77ae"
+    },
+    "phase-reference-detail-state-frames.json": {
+      "bytes": 11473,
+      "sha256": "5d61356ba67c857706c9791f5a7e85581260ddc8a5b3a76a4d9f1eec87886c72"
+    },
+    "phase-system-detail-state.json": {
+      "bytes": 628504,
+      "sha256": "8ecd6e1f3dbaafb84ddca6c99d0c6fccc4db796e10e5b811676ce3c2b86825a0"
+    },
+    "phase-reference-detail-remote.py": {
+      "bytes": 1000,
+      "sha256": "bd0626102b90a53fb8231196ec87ec0c89e11bf376bbf7000c215547827df076"
+    },
+    "phase-reference-detail.png": {
+      "bytes": 117652,
+      "sha256": "154783a600a9face732a2082ab41932d32341deeab150d6e2b033ced80864b4c"
+    },
+    "phase-refreshed-capture.log": {
+      "bytes": 114,
+      "sha256": "3ca576744d03ac04d334be381bb7c53daa0056e2109b0ca44fcc90614fc32b6a"
+    },
+    "phase-sidebar-open-state.pickle": {
+      "bytes": 104479,
+      "sha256": "da72d86bf36dc0a646538b29141a21c0a2445473aa526e8514a62f480f632767"
+    },
+    "phase-refreshed-state-metadata.json": {
+      "bytes": 628478,
+      "sha256": "5a0d9d7e80b5aa97cd100f1911f7e951c288c49c88170a3715d48c648b1cdcfc"
+    },
+    "phase-sidebar-open-capture.log": {
+      "bytes": 117,
+      "sha256": "b085ee0447fe9d000a9451f5a40ea987688a08ed41260a3bfc932da537260042"
+    },
+    "phase-refreshed-state.json": {
+      "bytes": 628505,
+      "sha256": "0647d1578e5ce3543466950102893674408e76ead3d4cb022972dfca2e86ba98"
+    },
+    "phase-returned-capture.log": {
+      "bytes": 113,
+      "sha256": "4abc6acfee24bd9242bf7c0cae794496cfded0f8ad34615eaeac1c7eac6c042d"
+    },
+    "phase-context-panel-manifest.json": {
+      "bytes": 460,
+      "sha256": "c325fe7f00b27e28ef20ec5e95112dd5ea79a892ccb31d3cd303ac182e8713b7"
+    },
+    "phase-system-detail-state-metadata.json": {
+      "bytes": 628477,
+      "sha256": "8db4d76ffa3e42a6c0c82120c2af07f728de086e2a219beb8fa79217c018b9b3"
+    },
+    "phase-startup-state-metadata.json": {
+      "bytes": 497781,
+      "sha256": "2c7f91ecb83a35dc6496e4f54b324dcc794acf61c9d9705200e29c1e147dc7ff"
+    },
+    "phase-refreshed-manifest.json": {
+      "bytes": 456,
+      "sha256": "10e0956f9bf42076a4f33206c3088edc216c6c87871185bcb69b58b8b394fa5c"
+    },
+    "phase-startup-manifest.json": {
+      "bytes": 454,
+      "sha256": "4568939500fe25c950ea3ac3ebeb24995050c260bc87130d79e530d16d238c73"
+    },
+    "phase-refreshed-remote.py": {
+      "bytes": 993,
+      "sha256": "e19f7f58853555ad39b9719c08266842cd6a13e6b7f75735a894a9be3d2497b3"
+    },
+    "phase-sidebar-open-manifest.json": {
+      "bytes": 459,
+      "sha256": "079ff0a0e6378bb68c9fdeeca37f888aa6bdcc31edfa72ea0a38a72d52fff3a1"
+    },
+    "phase-returned-state.pickle": {
+      "bytes": 106929,
+      "sha256": "999c8f677ca034e75823def03de058520e5a9aad5677a5e5d6f9912c2ddda957"
+    },
+    "phase-startup-remote.py": {
+      "bytes": 991,
+      "sha256": "576741720b5f5cf0f56822eee66f7d03e37cd0c640a93d0719050b46f15b2512"
+    },
+    "phase-context-panel-state.pickle": {
+      "bytes": 104466,
+      "sha256": "7b7539d78a394f0079382f15517792815bc766d19e35572f582bc4cfcf7243e8"
+    },
+    "phase-returned-manifest.json": {
+      "bytes": 455,
+      "sha256": "7a454d01c14bb654de6f570bebee335003613354218e30cce484fb0dc8ff3308"
+    },
+    "phase-context-panel-state-metadata.json": {
+      "bytes": 623078,
+      "sha256": "7f90ab7f716f1ce8f5b973004e68e43fdbacf5175e257ed42b5163e60091207d"
+    },
+    "phase-reference-detail-state.pickle": {
+      "bytes": 104973,
+      "sha256": "6f65a82c59eebd3804fc178bfb5e4e80c2e3281f7cf1db02413e7451dc6c970d"
+    },
+    "phase-startup-state.pickle": {
+      "bytes": 88273,
+      "sha256": "0f704ebbcee152cfe86cc2f6b5e89bbe1b57c1c845d76334aa41ba2f990a13a3"
+    },
+    "phase-system-detail-state-frames.json": {
+      "bytes": 9738,
+      "sha256": "d892bc4ba44123c3f7328b63fb9ff6bde04d4a43baaa2d5e6dba1599348ec1ae"
+    },
+    "phase-reference-detail-manifest.json": {
+      "bytes": 463,
+      "sha256": "55df4cb902b5194904fac8a093e10484c1bb3d1c2ecdf5c8bd9812f8b3578804"
+    },
+    "phase-returned-state-frames.json": {
+      "bytes": 33885,
+      "sha256": "0c32d95cf1f25b07c4e49ca6684b1741577a2785a07ae9e654fe315790398ab2"
+    },
+    "widget-click-target.json": {
+      "bytes": 490,
+      "sha256": "59998032ecad4f5e4613658c485653fefcb433cc49059be4a73390a604378731"
+    },
+    "frame-delivery.json": {
+      "bytes": 31141,
+      "sha256": "1725200af266e74cc1f9fb197fbd831ddb898087aa8c7b2516137602a13b6784"
+    },
+    "frame-delivery.svg": {
+      "bytes": 3559,
+      "sha256": "baabefe74e06ff6a23857da153ca28cc310e360c5cdfbf7566f05d5dba40e886"
+    }
+  },
+  "scope": "Lovelace sole physical Tree run; her motion review remains separate"
+}
