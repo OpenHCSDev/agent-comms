@@ -49,3 +49,35 @@ then one batched affected sanity and actual configured multi-owner/publication
 and isolated UI read qualification. Original UNKNOWN/native inputs and durable
 bus/session bytes are protected. No public prompt/replay/restart is authorized to
 this worker. Parent owns release publication.
+
+## Working code checkpoint — bounded read capture
+
+`CertifiedSourceRead.capture_deliveries` captures original sealed pointers and
+bounded raw row bytes while the certificate is held. Its returned decoder owns
+only those immutable bytes/pointers and the original root ID: no live stream,
+SQL connection, current marker, owner status or admission authority survives.
+`DeliverySources.read_bytes`/`decode_bytes` retain the single original seq/id and
+frozen sender/audience validation algorithm; the ordinary locked delivery path
+uses these same methods. No new class, store or wire format was introduced.
+
+`WireLog.conversation_sources` and `deliveries_for_references` now finish
+certification and release their publication lock before consuming the captured
+decoder. `SourceCoverage._page` captures its original page witness, addressed
+high-water and marker floor under the same certificate; it decodes after leaving
+the bus lock. Whole-prefix/UNKNOWN and final cursor publication checks remain
+with their existing owners. `TranscriptRoutes` and `TaskSources` consume the
+same API *inside their actual write custody*, preserving original publication
+freshness. Deleted free algorithms `delivery_references_unlocked` and
+`conversation_sources_unlocked`, including every production/test import.
+
+This is a published implementation checkpoint, not Ready. Exact remaining
+relations: physical acquisition still needs the shared async wait algorithm;
+`full_history`/`total_messages` and context-manifest reads still retain a writer
+lock while decoding; goal-wait addressed iteration needs bounded snapshot
+iteration; exact keyed response lookup still resolves under its publication
+transaction. Fresh source/prewrite and publication/cursor transactions must
+consume the original current fence, not a display iterator. Source/admission
+scheduler callsites must use async acquisition without moving live coordinator
+connections across threads. These are owned remaining closure, not hidden
+compatibility fallbacks. No validation or provider journey has been claimed for
+this checkpoint; validation follows the coherent source implementation.

@@ -72,19 +72,17 @@ class WireLog:
 
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
-        from .private_bus_checkpoint import conversation_sources_unlocked
-
         with _store_lock(self.path) as lock:
             if not self.path.exists():
                 return ()
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
             source.require_marker(marker)
-            originals = conversation_sources_unlocked(
-                source, lookup, predicate, parameters, limit=limit, ascending=ascending
+            originals = source.conversation_sources(
+                lookup, predicate, parameters, limit=limit, ascending=ascending
             )
             source.require_current()
-            return originals
+        return tuple(originals)
 
     def full_history(self) -> list[Message]:
         with self.locked():
@@ -409,12 +407,11 @@ class WireLog:
 
     def deliveries_for_references(self, references):
         """One canonical lock/certificate lifetime for a visible source window."""
-        from .private_bus_checkpoint import delivery_references_unlocked
-
         if not references:
             return ()
         with self.certified_read() as source:
-            return delivery_references_unlocked(source, references)
+            originals = source.references(references)
+        return tuple(originals)
 
     def total_messages(self) -> int:
         with _store_lock(self.path):
