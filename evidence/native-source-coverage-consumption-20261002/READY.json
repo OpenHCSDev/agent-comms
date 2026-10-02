@@ -1,0 +1,66 @@
+{
+  "state": "READY_ORIGINAL_SOURCE_FLOOR_AND_SOURCE_FAMILY_CLOSURE",
+  "installed_core": "c2a68017f7d3280e6a30789cd7c5d907b12f959a",
+  "receipt_source_head": "9fce14d1eafd6192958fa7f5466738a29877620e",
+  "source_equal_installed": true,
+  "receiving_pr": 337,
+  "policy_pr": 546,
+  "coverage_pr": 545,
+  "core_module": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-sidebar-owner308-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "installed_python": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-sidebar-owner308-20261002/bin/python",
+  "original_floor_elapsed_seconds": 2.454081420029979,
+  "original_incarnation": {
+    "name": "openhcs-audit-merged-boundaries",
+    "created_at": 1790873473.1996155
+  },
+  "original_input": {
+    "key": "acp:0d9d2784d0f34858947e138b375e83e5",
+    "type": "NotSentInput",
+    "admission": 1205,
+    "attention_unresolved": true,
+    "native_binding": false
+  },
+  "source_bytes": 41932752,
+  "all_original_bytes_unchanged": true,
+  "provider_calls": 0,
+  "native_processes": 0,
+  "public_writes": 0,
+  "inputs_retried": 0,
+  "original_row_disposition_changed": false,
+  "native_manifest": "960296fdddafb01cbbeb75639f7a6a89fa36fd828b3ff5307b108abc20e7c447",
+  "native_tree": "01de56aa9550de0fe8bf93b5df8815429cba26c64b676704a9653ebf831e0e9d",
+  "parsed_modules": 1000,
+  "parse_omissions": 0,
+  "own_production_delta": {
+    "added": 46,
+    "deleted": 39,
+    "files": 2
+  },
+  "joined_production_delta": {
+    "added": 81,
+    "deleted": 59,
+    "files": 5
+  },
+  "policy_source_controls": {
+    "passed": 79,
+    "scope": "source family/continued-history controls, not provider or UI acceptance"
+  },
+  "source_coverage_fake_controls": {
+    "passed": 0,
+    "failed": 6,
+    "pre_changed_path_failure": "obsolete fake_native session_dir parameter"
+  },
+  "limits": [
+    "Historical live334 inner chained cause was not retained; outer floor alone is not attribution.",
+    "Original540 running-source snapshots and current original native/proof paths; not stopped public carry.",
+    "Actual floor/control confirmed; no new provider/native/UI journey or channel latency claim.",
+    "Canonical reader/witness/SQL/owner fences retained; source-only cursor change is reviewed with existing source maps.",
+    "Public paired publication and subsequent configured user journey remain parent-owned."
+  ],
+  "evidence_sha256": {
+    "original-floor-receipt.json": "16e18dab78356dc9de62e8f97da947581325da80b6783d0a07ab6154d7fccd69",
+    "original-floor-read.log": "3b0a4b2971558eb393344b88e5f9c2feed65539c0b3fd7d2071bc5a259bc867a",
+    "original-floor-installed-original-floor-read.py": "12663f9104818e069ce479ffa113daabe562239040ea0092d529b16b91f8023f",
+    "installed-source-proof.json": "c4ed782ffca0e241f76ca78d4fc7d07020692db56a05fbe973f0bf3ee130fbfa"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "classification": "installed read-only original540 authenticated running-source snapshot; not stopped carry",
+  "source_commit": "c2a68017f7d3280e6a30789cd7c5d907b12f959a",
+  "python": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-sidebar-owner308-20261002/bin/python",
+  "installed_module": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001/.artifacts/runtime-sidebar-owner308-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "source": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl",
+  "source_bytes": 41932752,
+  "snapshot_root": "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02",
+  "original_incarnation": {
+    "name": "openhcs-audit-merged-boundaries",
+    "created_at": 1790873473.1996155
+  },
+  "original_input": {
+    "key": "acp:0d9d2784d0f34858947e138b375e83e5",
+    "type": "NotSentInput",
+    "admission": 1205,
+    "attention_unresolved": true,
+    "native_binding": false
+  },
+  "input_document_rows": 215,
+  "pending_input_keys": [],
+  "provider_calls": 0,
+  "native_processes": 0,
+  "inputs": 0,
+  "reservations": 0,
+  "public_writes": 0,
+  "original_inputs_retried": 0,
+  "original_paths_rewritten": false,
+  "before_sha256": {
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl": "eac049ae75c2b98288c2a454135b4659308be6802acc280127060e14154e3b21",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl.input-proof": "ae7abfd5b944fc56f2c75e392a281da0e966f2d9ea1859912397d36260b92136",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/.native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/compaction-commits.sqlite3": "e16e50adfaba585662e5806f2b112dbc7e29e47495b13eee66fe64195d23658e",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/coordination.sqlite3": "b56ab8605c524d6839efad3e2012764baed25d69aad2c6aaa03184a37ed539f9",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/input_dispositions.json": "53d05db733fa7ac34c881fe5d53f253a135aec9caab26b7ba1e4d866ae450252",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/native_prompt_bindings.sqlite3": "c3de47027964ab890ef06e494f5ff92c57bbb44aa05251e9dbc7bc5d65d72cd6",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/registry.json": "8ff4d60197dfcb3ad163e53316aacd9c855f03eaa51dafd855842bbc9e743c8d"
+  },
+  "original_failure_receipt": "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/installed-original-read-receipt.json",
+  "status": "SCOPED_INSTALLED_ORIGINAL_SOURCE_COVERAGE_PASS",
+  "original_source_coverage": "accepted",
+  "after_sha256": {
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl": "eac049ae75c2b98288c2a454135b4659308be6802acc280127060e14154e3b21",
+    "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl.input-proof": "ae7abfd5b944fc56f2c75e392a281da0e966f2d9ea1859912397d36260b92136",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/.native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/compaction-commits.sqlite3": "e16e50adfaba585662e5806f2b112dbc7e29e47495b13eee66fe64195d23658e",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/coordination.sqlite3": "b56ab8605c524d6839efad3e2012764baed25d69aad2c6aaa03184a37ed539f9",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/input_dispositions.json": "53d05db733fa7ac34c881fe5d53f253a135aec9caab26b7ba1e4d866ae450252",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/native_prompt_bindings.sqlite3": "c3de47027964ab890ef06e494f5ff92c57bbb44aa05251e9dbc7bc5d65d72cd6",
+    "/home/ts/.cache/agent-scratch/mendel-original418-coverage540-20261002/readonly-original-store-snapshot02/registry.json": "8ff4d60197dfcb3ad163e53316aacd9c855f03eaa51dafd855842bbc9e743c8d"
+  },
+  "all_original_bytes_unchanged": true,
+  "original_input_unchanged": true,
+  "raw_unknown_checks_retained": true,
+  "elapsed_seconds": 2.454081420029979
+}

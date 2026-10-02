@@ -1,25 +1,25 @@
 {
-  "kind": "after-source-evidence-not-dynamic-resolution",
+  "kind": "final-source-evidence-not-dynamic-resolution",
   "parser": "existing refactor-audit audit.findings.Package.load",
-  "core": "a01774dcbe3bf2679ccca7243005d7181e0936a7",
+  "core": "9fce14d1eafd6192958fa7f5466738a29877620e",
   "coverage": [
     {
       "root": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src",
-      "revision": "a01774dcbe3bf2679ccca7243005d7181e0936a7",
+      "revision": "9fce14d1eafd6192958fa7f5466738a29877620e",
       "parsed": 311,
       "parse_failures": [],
       "enumeration_omissions": []
     },
     {
       "root": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests",
-      "revision": "a01774dcbe3bf2679ccca7243005d7181e0936a7",
-      "parsed": 358,
+      "revision": "9fce14d1eafd6192958fa7f5466738a29877620e",
+      "parsed": 360,
       "parse_failures": [],
       "enumeration_omissions": []
     },
     {
       "root": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools",
-      "revision": "a01774dcbe3bf2679ccca7243005d7181e0936a7",
+      "revision": "9fce14d1eafd6192958fa7f5466738a29877620e",
       "parsed": 53,
       "parse_failures": [],
       "enumeration_omissions": []
@@ -606,28 +606,28 @@
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "src/agent_comms/continued_private_session.py",
-      "line": 107,
+      "line": 101,
       "kind": "Name",
       "source": "NativeContextProof"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "src/agent_comms/continued_private_session.py",
-      "line": 75,
+      "line": 69,
       "kind": "Attribute",
       "source": "evidence.recorded_source_prefix"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "src/agent_comms/continued_private_session.py",
-      "line": 119,
+      "line": 113,
       "kind": "Name",
       "source": "NativeRuntimeInput"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "src/agent_comms/continued_private_session.py",
-      "line": 69,
+      "line": 63,
       "kind": "Name",
       "source": "NativeContextProof"
     },
@@ -763,6 +763,13 @@
       "line": 81,
       "kind": "Name",
       "source": "HistoricalNativeInput"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "src/agent_comms/historical_native_inputs.py",
+      "line": 35,
+      "kind": "Constant",
+      "source": "'HistoricalNativeInput'"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
@@ -1551,28 +1558,28 @@
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "src/agent_comms/tracked_turn.py",
-      "line": 436,
+      "line": 444,
       "kind": "Name",
       "source": "NativeContextProof"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "src/agent_comms/tracked_turn.py",
-      "line": 397,
+      "line": 405,
       "kind": "Attribute",
       "source": "self.evidence"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "src/agent_comms/tracked_turn.py",
-      "line": 445,
+      "line": 453,
       "kind": "Attribute",
       "source": "self.evidence"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "src/agent_comms/tracked_turn.py",
-      "line": 400,
+      "line": 408,
       "kind": "Attribute",
       "source": "self.evidence"
     },
@@ -1663,7 +1670,7 @@
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tests/compaction_source_successor_installed_journey.py",
-      "line": 43,
+      "line": 56,
       "kind": "Attribute",
       "source": "sys.prefix"
     },
@@ -1700,7 +1707,7 @@
       "file": "tests/native_evidence_reader_installed_journey.py",
       "line": 35,
       "kind": "ImportFrom",
-      "source": "from agent_comms.proven_source_coverage import SourceCoverage"
+      "source": "from agent_comms.proven_source_coverage import ProvenSourceCoverage, SourceCoverage"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
@@ -1725,6 +1732,34 @@
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 162,
+      "kind": "Name",
+      "source": "ProvenSourceCoverage"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 162,
+      "kind": "Constant",
+      "source": "'prefix'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 162,
+      "kind": "Constant",
+      "source": "'last_proof'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/native_evidence_reader_installed_journey.py",
+      "line": 162,
+      "kind": "Constant",
+      "source": "'evidence'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tests/reply_relevance_installed_journey.py",
       "line": 20,
       "kind": "ImportFrom",
@@ -1736,6 +1771,13 @@
       "line": 34,
       "kind": "Attribute",
       "source": "sys.prefix"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/reply_relevance_installed_journey.py",
+      "line": 155,
+      "kind": "Constant",
+      "source": "'native_inputs'"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
@@ -1977,6 +2019,13 @@
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_backend.py",
+      "line": 1093,
+      "kind": "Constant",
+      "source": "'evidence'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tests/test_certified_bootstrap.py",
       "line": 16,
       "kind": "ImportFrom",
@@ -2111,14 +2160,35 @@
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tests/test_continued_private_session.py",
-      "line": 145,
+      "line": 162,
       "kind": "ImportFrom",
       "source": "from agent_comms.native_runtime_input import NativeRuntimeInput"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tests/test_continued_private_session.py",
-      "line": 216,
+      "line": 361,
+      "kind": "Constant",
+      "source": "'prefix'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_continued_private_session.py",
+      "line": 330,
+      "kind": "Constant",
+      "source": "'prefix'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_continued_private_session.py",
+      "line": 370,
+      "kind": "Constant",
+      "source": "'prefix'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_continued_private_session.py",
+      "line": 233,
       "kind": "Name",
       "source": "NativeRuntimeInput"
     },
@@ -2419,6 +2489,13 @@
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tests/test_native_evidence_custody.py",
+      "line": 66,
+      "kind": "Constant",
+      "source": "'prefix'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_native_evidence_custody.py",
       "line": 20,
       "kind": "Name",
       "source": "NativeEvidenceScope"
@@ -2429,6 +2506,13 @@
       "line": 34,
       "kind": "Name",
       "source": "NativeEvidenceScope"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_native_evidence_custody.py",
+      "line": 74,
+      "kind": "Constant",
+      "source": "'prefix'"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
@@ -3049,9 +3133,23 @@
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tests/test_native_source_cursor_scale.py",
+      "line": 261,
+      "kind": "Constant",
+      "source": "'prefix'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_native_source_cursor_scale.py",
       "line": 270,
       "kind": "Name",
       "source": "SourceCoverage"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 270,
+      "kind": "Constant",
+      "source": "'prefix'"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
@@ -3066,6 +3164,13 @@
       "line": 294,
       "kind": "Name",
       "source": "SourceCoverage"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_native_source_cursor_scale.py",
+      "line": 294,
+      "kind": "Constant",
+      "source": "'prefix'"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
@@ -3314,6 +3419,13 @@
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_retained_context_operations.py",
+      "line": 265,
+      "kind": "Constant",
+      "source": "'native_inputs'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tests/test_selected_execution_native.py",
       "line": 25,
       "kind": "ImportFrom",
@@ -3398,6 +3510,13 @@
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tests/test_turn_context_wire.py",
+      "line": 161,
+      "kind": "Constant",
+      "source": "'native_inputs'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
       "file": "tools/cutover/native_schema_carry.py",
       "line": 413,
       "kind": "ImportFrom",
@@ -3423,6 +3542,34 @@
       "line": 736,
       "kind": "Attribute",
       "source": "stage.evidence"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tools/cutover/native_schema_carry_controls.py",
+      "line": 108,
+      "kind": "Constant",
+      "source": "'native_inputs'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tools/cutover/native_schema_carry_controls.py",
+      "line": 200,
+      "kind": "Constant",
+      "source": "'native_inputs'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tools/cutover/native_schema_carry_controls.py",
+      "line": 267,
+      "kind": "Constant",
+      "source": "'native_inputs'"
+    },
+    {
+      "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+      "file": "tools/cutover/original_owner_capture_installed_pilot.py",
+      "line": 74,
+      "kind": "Constant",
+      "source": "'native_inputs'"
     },
     {
       "repository": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
@@ -3527,9 +3674,12 @@
     "Python AST identifies declaration/import spellings and candidate receiver members; dynamic dispatch is not proved.",
     "Native JavaScript/SDK and generated code are not parsed by this Python query; this change targets an internal Python read result with no native declaration change."
   ],
-  "query": "Nominal owners from before census; operation spellings recorded explicitly. Conservative receiver candidates; before/after candidate totals are not debt or dynamic proof.",
+  "query": "Existing NRA Package parser; nominal owners from before census, explicit operation spellings, including literal method-name consumers. Conservative receiver candidates, not dynamic dispatch proof or debt counts.",
+  "peer_policy_census": "../input-family-compaction-admission-20261002/after-ast.json (full existing input family and attention/admission/source consumers, contributor229e source)",
   "removed_decisions": [
     "SourceCoverage.evidence",
-    "SourceCoverage.last_proof"
+    "SourceCoverage.last_proof",
+    "continued verifier row.unresolved admission interpretation",
+    "StoredInput active-admission interpretation"
   ]
 }
