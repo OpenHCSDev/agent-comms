@@ -1,0 +1,324 @@
+{
+  "scope": "nine Python launch/startup/channel/watchdog owner files; native module paths inspected in source receipt",
+  "parsed_files": 9,
+  "parse_omissions": [],
+  "dynamic_resolution": "call expressions are source references, not runtime dispatch resolution; JavaScript is not claimed parsed by Python AST",
+  "files": [
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "sha256": "d76ec6740957c3466e1f210094c89b01da36842dbb773723ef6e64c82ce1235e",
+      "classes": [
+        {
+          "name": "TrackedTurnSession",
+          "bases": [
+            "TurnSession",
+            "MroDispatch"
+          ],
+          "methods": [
+            {
+              "name": "complete",
+              "line": 237,
+              "calls": [
+                "AsyncExitStack",
+                "NativePiUnavailable",
+                "custody.callback",
+                "custody.enter_async_context",
+                "custody.push_async_callback",
+                "self.acquire_native",
+                "self.admission.raise_native_failure",
+                "self.admit_prompt",
+                "self.attest",
+                "self.consume_native_event",
+                "self.native.failures",
+                "self.next_event",
+                "self.observe_event",
+                "self.prompt_send_boundary.prepare_context",
+                "self.result",
+                "self.watchdog.reading",
+                "type"
+              ]
+            },
+            {
+              "name": "next_event",
+              "line": 298,
+              "calls": [
+                "NativePiUnavailable",
+                "PiRpcChannel.decode_record",
+                "self.native.proc.finish",
+                "self.watchdog.read",
+                "type"
+              ]
+            },
+            {
+              "name": "send",
+              "line": 315,
+              "calls": [
+                "MaintenanceBarrier",
+                "MaintenanceBarrier(self.maintenance_root / 'registry.json').admit_ingress_async",
+                "NativePiUnavailable",
+                "asyncio.wait_for",
+                "self.native.proc.stdin.drain",
+                "self.native.reader.encode",
+                "self.watchdog.read_timeout",
+                "self.write"
+              ]
+            },
+            {
+              "name": "attest",
+              "line": 333,
+              "calls": [
+                "NativePiUnavailable",
+                "isinstance",
+                "self.launch.session.attest",
+                "self.native.attestation.accept",
+                "self.native.reader.correlate",
+                "self.next_event",
+                "self.observe_event",
+                "self.send",
+                "self.startup.attest",
+                "self.startup.measurements.operation",
+                "self.startup.release",
+                "str"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "sha256": "d8f8564f113c21ed5f1f3a908bb6f4e42c91a89ffbba8302cb7e43edbb86d6e5",
+      "classes": [
+        {
+          "name": "TurnSession",
+          "bases": [],
+          "methods": [
+            {
+              "name": "acquire_native",
+              "line": 501,
+              "calls": [
+                "resources.callback",
+                "self.native_acquisition",
+                "self.open_native",
+                "self.open_transport",
+                "self.startup.measurements.operation"
+              ]
+            },
+            {
+              "name": "initialize_rpc",
+              "line": 715,
+              "calls": [
+                "self.ensure_input_forwarding",
+                "self.inputs.can_forward",
+                "self.native.reader.pending.add",
+                "self.native.reader.pending.cancel_all",
+                "self.watchdog.reading",
+                "set"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_custody.py",
+      "sha256": "56fadcd2a23560ba621464207fd8e67b6c9ca32dc1e9f232bcfe06f926a8cb05",
+      "classes": [
+        {
+          "name": "PiSessionChild",
+          "bases": [],
+          "methods": [
+            {
+              "name": "start",
+              "line": 35,
+              "calls": [
+                "AttachedChild.start",
+                "PiRpcChannel",
+                "asyncio.create_task",
+                "cls",
+                "cls.stderr_tail",
+                "str"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_startup.py",
+      "sha256": "23d821687398637abacae4fc871b2d12c4b43b70024170de3be903665915100e",
+      "classes": [
+        {
+          "name": "NativeStartupAdmission",
+          "bases": [],
+          "methods": [
+            {
+              "name": "acquire",
+              "line": 84,
+              "calls": [
+                "_open_lock",
+                "_try_lock",
+                "asyncio.sleep",
+                "finish_event.is_set",
+                "isinstance",
+                "os.close",
+                "range",
+                "self.directory.mkdir",
+                "self.measurements.operation"
+              ]
+            },
+            {
+              "name": "release",
+              "line": 107,
+              "calls": [
+                "_unlock",
+                "os.close"
+              ]
+            },
+            {
+              "name": "attest",
+              "line": 115,
+              "calls": []
+            }
+          ]
+        },
+        {
+          "name": "SelectedNativeStartupAdmission",
+          "bases": [
+            "NativeStartupAdmission"
+          ],
+          "methods": [
+            {
+              "name": "attest",
+              "line": 151,
+              "calls": [
+                "NativePiUnavailable",
+                "_fresh_selected_revision",
+                "self.fresh.require_runtime"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/pi_rpc.py",
+      "sha256": "2c68cb57bb0d83076a4caf52724dfbd381d4fe0955ea04e8cd1b359e936d3b42",
+      "classes": [
+        {
+          "name": "PiRpcChannel",
+          "bases": [
+            "JsonlStreamReader",
+            "Sealed"
+          ],
+          "methods": [
+            {
+              "name": "receive",
+              "line": 49,
+              "calls": [
+                "self.decode_record",
+                "self.readline"
+              ]
+            },
+            {
+              "name": "encode",
+              "line": 57,
+              "calls": [
+                "self.command_bytes",
+                "self.track"
+              ]
+            },
+            {
+              "name": "correlate",
+              "line": 71,
+              "calls": [
+                "self.pending.take",
+                "self.pending.take_anonymous"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/jsonl_stream.py",
+      "sha256": "4e321f751779ccd516111053089eb9c418dcd97865164bbdf6d962de595ee66a",
+      "classes": [
+        {
+          "name": "JsonlStreamReader",
+          "bases": [],
+          "methods": [
+            {
+              "name": "readline",
+              "line": 9,
+              "calls": [
+                "ValueError",
+                "b''.join",
+                "len",
+                "map",
+                "self.chunks.append",
+                "self.chunks.clear",
+                "self.reader.readexactly",
+                "self.reader.readuntil",
+                "sum"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/turn_watchdog.py",
+      "sha256": "500a5a384b862556ea826a3857427c6a3747b6d4dbff1a1739032fbb15b4e893",
+      "classes": [
+        {
+          "name": "ProgressWatchdog",
+          "bases": [],
+          "methods": [
+            {
+              "name": "reading",
+              "line": 49,
+              "calls": [
+                "NATIVE_STARTUP_POLICY.readiness_timeout",
+                "self.clock"
+              ]
+            },
+            {
+              "name": "read",
+              "line": 125,
+              "calls": [
+                "asyncio.create_task",
+                "asyncio.gather",
+                "asyncio.sleep",
+                "asyncio.wait",
+                "pending.cancel",
+                "pending.done",
+                "read_task.cancel",
+                "read_task.result",
+                "self.expired_wait",
+                "self.read_timeout",
+                "session.finish_event.wait",
+                "session.native.reader.readline",
+                "session.rejected_signal.is_set",
+                "session.rejected_signal.wait",
+                "session.stats.request",
+                "task.done",
+                "tasks.add"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "sha256": "a8af88fa4fe4242a7babfb533f54776b3bece114bcd5f4934866ff3d068c5b40",
+      "classes": []
+    },
+    {
+      "file": "src/agent_comms/native_attestation.py",
+      "sha256": "2e30dec8e63666f5cc31442204a4027d47c4301cf55ee9c873be06b356454e3c",
+      "classes": []
+    }
+  ]
+}
