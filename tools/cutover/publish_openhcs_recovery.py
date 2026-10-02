@@ -26,6 +26,7 @@ from agent_comms.historical_views import HistoryArchive, HistorySource
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
 from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.private_path import FileRevision, PrivateFileRole
@@ -356,8 +357,7 @@ def main():
         raise RuntimeError('Archive source names another root')
     service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
-    owners = tuple(thread for thread in snapshot.threads.values()
-                   if thread.role.executable and snapshot.statuses[thread.name].active and thread.process_alive)
+    owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:
         raise RuntimeError('Empty original owner audience requires review')
     audience = tuple(OwnerRestartSelection.capture(snapshot, thread.name) for thread in owners)
