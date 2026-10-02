@@ -21,6 +21,8 @@ from compaction_retention_fixture import (
     Question,
     RecordedAnswers,
     RecordedNativeProbes,
+    Measurement,
+    RecallScenario,
     coding_scenario,
     decode_answers,
 )
@@ -135,6 +137,58 @@ class RecallMeasurementTests(unittest.TestCase):
                 "round": item.identity,
                 "questions": [question.public() for question in item.questions],
             })
+
+    def test_frozen_research_and_goal_traces_keep_distinctions_and_denominators(self):
+        for name in ("research", "goal"):
+            scenario = RecallScenario.read(Path(__file__).parent / "fixtures/retention" / f"{name}.json")
+            answers = {item.identity: {q.identity: q.expected for q in item.questions}
+                       for item in scenario.rounds}
+            last = scenario.rounds[-1]
+            alternative = next(q for q in last.questions if q.measurement is Measurement.ALTERNATIVE)
+            action = next(q for q in last.questions if q.measurement is Measurement.ACTION)
+            prohibition = next(q for q in last.questions if q.measurement is Measurement.PROHIBITION)
+            answers[last.identity][alternative.identity] = "discarded-alternative"
+            answers[last.identity][action.identity] = action.obsolete[0]
+            del answers[last.identity][prohibition.identity]
+            scored = scenario.score(Condition.TASK_MEMORY, RecordedAnswers(answers))
+            measured = scored.measurement_totals()
+            self.assertEqual((measured["recall"]["questions"], measured["recall"]["correct"]), (9, 9))
+            self.assertEqual((measured["alternative"]["questions"], measured["alternative"]["correct"]), (3, 2))
+            self.assertEqual((measured["action"]["questions"], measured["action"]["stale"]), (3, 1))
+            self.assertEqual((measured["prohibition"]["questions"], measured["prohibition"]["missing"]), (3, 1))
+            self.assertEqual((scored.questions, scored.correct, scored.missing), (18, 15, 1))
+            for item in scenario.rounds:
+                public = json.loads(item.probe_text().split("\n", 1)[1])
+                self.assertTrue(all(set(q) == {"id", "prompt"} for q in public["questions"]))
+            public = scored.public()
+            self.assertEqual(public["measurements"], measured)
+            answers[last.identity][prohibition.identity] = "yes"
+            answers[last.identity][action.identity] = "inspect-held-out" if name == "research" else "retry-input-9"
+            invalid = scenario.score(Condition.TASK_MEMORY, RecordedAnswers(answers)).measurement_totals()
+            self.assertEqual((invalid["action"]["correct"], invalid["action"]["stale"]), (2, 0))
+            self.assertEqual((invalid["prohibition"]["correct"], invalid["prohibition"]["missing"]), (2, 0))
+
+    def test_scenario_loader_rejects_ambiguous_or_missing_source_oracles(self):
+        scenario = coding_scenario()
+        first = scenario.rounds[0]
+        with self.assertRaises(ValueError):
+            replace(first, questions=first.questions + first.questions[:1])
+        with self.assertRaises(ValueError):
+            replace(scenario, rounds=scenario.rounds + scenario.rounds[:1])
+        with self.assertRaises(ValueError):
+            replace(first.questions[0], evidence_ref="")
+        with self.assertRaises(ValueError):
+            replace(first.questions[0], obsolete=(first.questions[0].expected,))
+
+    def test_cli_uses_frozen_scenario_for_public_probe_export(self):
+        path = Path(__file__).parent / "fixtures/retention/research.json"
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("compaction_retention_fixture.py")),
+             "--scenario-file", str(path), "--probe-prompts"],
+            check=True, capture_output=True, text=True, timeout=5,
+        )
+        expected = RecallScenario.read(path)
+        self.assertEqual(json.loads(result.stdout), {item.identity: item.probe_text() for item in expected.rounds})
 
 
 async def test_recorded_native_recall_consumes_original_probe_and_preserves_source(native_backend):

@@ -14,6 +14,20 @@ source revision, unresolved failure and input disposition. Later rounds supersed
 corrections, rename source, replace goal and change commit. They deliberately keep
 failure/input unresolved.
 
+The task-quality continuation adds frozen research and long-running-goal traces
+in `tests/fixtures/retention/`. `--scenario-file` decodes either authored oracle
+into the same `RecallScenario` used by exports and recorded-native scoring. Each
+has three authored source cuts, with retained valid alternatives, a later goal
+that revisits one, explicit corrections and continuing prohibitions. These are
+source fixtures; they are not three completed native compaction checkpoints.
+
+`Question.measurement` labels recall, prohibition, alternative and action-choice
+answers. `ScoreView` derives separate totals with the same exact-answer algorithm.
+A remembered identifier cannot hide a lost prohibition or invalid action choice
+in an aggregate score. The action score measures the frozen approved answer,
+not execution of an action against a runtime constraint. Runtime revision mass,
+provider prompt presence and model-quality margins remain unqualified.
+
 Question owns its expected answer and stale answers; RecallRound computes answer
 outcomes. ScoredRound/ScoredScenario derive counts through the shared ScoreView
 contract, without stored totals or copied source identities. Condition labels are
@@ -35,6 +49,8 @@ than regex, substring credit or an LLM judge.
 python -m unittest discover -s tests -p test_compaction_retention_fixture.py -v
 python tests/compaction_retention_fixture.py
 python tests/compaction_retention_fixture.py --condition task-memory --answers answers.json
+python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/research.json --probe-prompts
+python tests/compaction_retention_fixture.py --scenario-file tests/fixtures/retention/goal.json --native-probes original-probes.json
 ```
 
 All four labels use the same oracle: full-context, bounded, task-memory and
@@ -64,7 +80,7 @@ provider prompts or repair a history after seeing candidate results. Full-contex
 control runs only where the exact same history fits; explicitly mark ineligible
 runs rather than truncate that control silently (BOUND-2).
 
-Add coding, research and long-running-goal traces. Include corrections crossing
+Collect actual native checkpoints for the supplied coding, research and long-running-goal traces. Include corrections crossing
 summary segments and repeated split turns, Unicode/exact paths, and missing
 source evidence. At least three sequential real checkpoints per applicable trace.
 Randomize/repeat controls with same model and report sample counts/distributions.
