@@ -105,7 +105,8 @@ class PersistentPiSession:
             attestation = await self.custody.expected(launch, require_input_id)
             await startup.acquire(finish_event)
             watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
-            child = await PiSessionChild.start(key, attestation)
+            with startup.measurements.operation("native_spawn"):
+                child = await PiSessionChild.start(key, attestation)
             self.custody = BorrowedNative(child, self.custody)
         else:
             watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
@@ -485,11 +486,13 @@ class TurnSession:
         """
         resources.callback(self.startup.release)
         try:
-            await self.open_transport(resources)
-            return await self.native_session.open(
-                self.launch, reuse=reuse, require_input_id=self.require_input_id,
-                startup=self.startup, finish_event=self.finish_event, watchdog=self.watchdog,
-            )
+            with self.startup.measurements.operation("open_transport"):
+                await self.open_transport(resources)
+            with self.startup.measurements.operation("native_open"):
+                return await self.native_session.open(
+                    self.launch, reuse=reuse, require_input_id=self.require_input_id,
+                    startup=self.startup, finish_event=self.finish_event, watchdog=self.watchdog,
+                )
         except (OSError, TimeoutError, SelectedToolDenied, SavedSessionReopenError) as error:
             failure = NativePiUnavailable(
                 f"Native resource acquisition failed: {type(error).__name__}: {error}"

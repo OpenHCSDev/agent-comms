@@ -32,6 +32,7 @@ from .native_pi import (
 from .native_prompt_send import PromptSendFailure, send_fenced_prompt
 from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission
+from .diagnostics import PublicationMeasurements
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
@@ -181,6 +182,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         maintenance_root: Path | None = None,
         selected_tool_mode: NativeToolMode | None = None,
         observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
+        acquisition_measurements: PublicationMeasurements | None = None,
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -208,7 +210,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             model_wait_timeout=model_wait_timeout,
             prompt_send_boundary=prompt_send_boundary,
             maintenance_root=maintenance_root,
-            startup=session.startup_admission(launch, maintenance_root, prompt_send_boundary),
+            startup=session.startup_admission(launch, maintenance_root, prompt_send_boundary,
+                                             measurements=acquisition_measurements),
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
         )
@@ -304,8 +307,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def attest(self) -> None:
         request = self.native.attestation.request
-        await self.send(request)
-        event = await self.next_event()
+        with self.startup.measurements.operation("get_state_send"):
+            await self.send(request)
+        with self.startup.measurements.operation("get_state_receive"):
+            event = await self.next_event()
         if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
             raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
         try:
@@ -320,7 +325,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.startup.release()
         self.startup.attest(state)
         if self.observe_event is not None:
-            await self.observe_event(observed)
+            with self.startup.measurements.operation("attestation_publication"):
+                await self.observe_event(observed)
 
     def write(self, command: commands.PiCommand, payload: bytes) -> None:
         if command is self.command:
@@ -339,11 +345,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if self.prompt_send_boundary is None:
             await self.send(self.command)
         else:
-            await send_fenced_prompt(
-                self.native.proc.stdin,
-                self.native.reader.encode(self.command),
-                self.prompt_boundary,
-            )
+            with self.startup.measurements.operation("prompt_writer_join"):
+                await send_fenced_prompt(
+                    self.native.proc.stdin,
+                    self.native.reader.encode(self.command),
+                    self.prompt_boundary,
+                    measurements=self.startup.measurements,
+                )
 
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:

@@ -45,7 +45,8 @@ def analyze():
     hz = os.sysconf('SC_CLK_TCK')
     for path in ROOT.joinpath('diagnostics').glob('*.requests.jsonl'):
         data = path.read_bytes()
-        records = [json.loads(line) for line in data.splitlines()]
+        records = [record for line in data.splitlines()
+                   if 'native' in (record := json.loads(line))]
         if not records or records[0]['native']['inputId'] not in sources:
             continue
         first, last = records[0], records[-1]

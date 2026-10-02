@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import native_pi, native_prompt_send
+from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
@@ -428,12 +429,12 @@ def test_busy_admission_does_not_spend_write_budget_and_cancel_proves_no_bytes(c
         start = time.monotonic()
         if cancel:
             with pytest.raises(native_prompt_send.PromptSendNotWritten,match="before writing") as caught:
-                native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02)
+                native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02,PublicationMeasurements())
             assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
             with pytest.raises(BlockingIOError):
                 os.read(read_fd,10)
         else:
-            native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02)
+            native_prompt_send._write_fenced(write_fd,b"prompt\n",busy,cancelled,0.02,PublicationMeasurements())
             assert os.read(read_fd,100)==b"prompt\n"
         assert time.monotonic() - start < 1
         assert len(calls) > 1
@@ -464,7 +465,7 @@ def test_admitted_write_never_reenters_after_busy_post_write_failure():
             match="PromptAdmissionBusy: post-write failure is not retryable",
         ) as caught:
             native_prompt_send._write_fenced(
-                write_fd, b"one prompt\n", boundary, threading.Event(), 1
+                write_fd, b"one prompt\n", boundary, threading.Event(), 1, PublicationMeasurements()
             )
         assert entered == [1]
         assert isinstance(caught.value.__cause__, native_prompt_send.PromptAdmissionBusy)
@@ -507,6 +508,7 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
                     historical_admission,
                     threading.Event(),
                     1,
+                    PublicationMeasurements(),
                 )
             assert caught.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
             assert entered == [1]

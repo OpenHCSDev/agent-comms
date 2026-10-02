@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -25,6 +25,7 @@ from .compaction_records import (
     SessionJournalHistory,
 )
 from .field_codec import FieldCodec
+from .diagnostics import PublicationMeasurements
 from .input_disposition import InputDispositions, InputDocument
 from .selected_source import SelectedSource
 from .thread_identity import GenerationCounter, ThreadIncarnation
@@ -168,7 +169,8 @@ class PrivateInputs(JournalRole):
 
     @contextmanager
     def admission(
-        self, session_file: Path, *, blocking: bool = True
+        self, session_file: Path, *, blocking: bool = True,
+        measurements: PublicationMeasurements | None = None,
     ) -> Iterator[PrivateInputSend]:
         """Acquire ALL input/journal custody before consuming raw admission.
 
@@ -177,13 +179,17 @@ class PrivateInputs(JournalRole):
         second connection gap between that checkpoint and the raw send.
         """
         canonical = str(session_file.resolve(strict=False))
-        with (
-            InputDispositions(
-                self.journal.path.parent / InputDispositions.filename
-            ).reading(blocking=blocking) as inputs,
-            self.journal.transaction(blocking=blocking, retain_exclusion=True) as db,
-        ):
-            self.require_clear(db, canonical, inputs)
+        observations = measurements if measurements is not None else PublicationMeasurements()
+        with ExitStack() as custody:
+            with observations.operation("original_input_document"):
+                inputs = custody.enter_context(InputDispositions(
+                    self.journal.path.parent / InputDispositions.filename
+                ).reading(blocking=blocking))
+            with observations.operation("compaction_journal_exclusion"):
+                db = custody.enter_context(self.journal.transaction(
+                    blocking=blocking, retain_exclusion=True))
+            with observations.operation("raw_source_clearance"):
+                self.require_clear(db, canonical, inputs)
             yield PrivateInputSend(self.journal, db, canonical, inputs)
 
     @contextmanager

@@ -12,6 +12,7 @@ from .compaction_journal import CompactionJournal
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import _response_boundary
 from .errors import RelationViolationError
+from .diagnostics import PublicationMeasurements
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .maintenance_barrier import MaintenanceBarrier
 from .native_session_reopen import NativeSessionIdentity, validate_native_reopen
@@ -46,10 +47,11 @@ class SelectedSession:
 
         return PendingAttestation()
 
-    def startup_admission(self, launch, root, boundary):
+    def startup_admission(self, launch, root, boundary, *,
+                          measurements: PublicationMeasurements | None = None):
         from .native_startup import NativeStartupAdmission
 
-        return NativeStartupAdmission.for_launch(launch, root=root)
+        return NativeStartupAdmission.for_launch(launch, root=root, measurements=measurements)
 
     def default_action(self) -> SelectedAction:
         return CodingSelectedAction()
@@ -198,10 +200,11 @@ class FirstSelectedSession(SavedSelectedSession):
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()
 
-    def startup_admission(self, launch, root, boundary):
+    def startup_admission(self, launch, root, boundary, *,
+                          measurements: PublicationMeasurements | None = None):
         from .native_startup import SelectedNativeStartupAdmission
 
-        return SelectedNativeStartupAdmission(root, self.creation, boundary)
+        return SelectedNativeStartupAdmission(root, self.creation, boundary, measurements=measurements)
 
     def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
         return (

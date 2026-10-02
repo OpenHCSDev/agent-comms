@@ -21,6 +21,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict
 from .coordination_response import _response_boundary
 from .coordinator import Coordination
+from .diagnostics import PublicationMeasurements, record_acquisition_progress
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
@@ -55,6 +56,8 @@ class PrivateSendAdmission:
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _journal: CompactionJournal = field(init=False, repr=False)
+    _measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements,
+                                                  init=False, compare=False, repr=False)
 
     @property
     def bus(self) -> MessageBus:
@@ -164,11 +167,17 @@ class PrivateSendAdmission:
                     selected_tool_mode=selected_tool_mode,
                     observe_event=observe_event,
                     prompt_send_boundary=self,
+                    acquisition_measurements=self._measurements,
                 )
             except NativePiTerminalFailure as error:
                 self.verify(store, error.context)
                 self.stage.fail_terminal()
                 raise
+            finally:
+                lease = self.owner.thread.turn_lease
+                assert lease is not None
+                record_acquisition_progress(self.bus.log.path.parent, lease,
+                                            self.input_id, self._measurements)
             self.verify(store, result.context)
             return result
 
@@ -181,17 +190,25 @@ class PrivateSendAdmission:
     ) -> Iterator[tuple[Coordination, RegistrySnapshot, sqlite3.Connection, PrivateInputSend]]:
         with ExitStack() as authority:
             try:
-                store = authority.enter_context(Coordination(str(self.store_path), lock_timeout=0))
-                registry = authority.enter_context(_response_boundary(self.bus, blocking=False))
-                db = authority.enter_context(store.session.irreversible_admission())
-                authority.enter_context(self.stage.bound_prompt(
-                    store, self.input_id, self.participant, self.wire_root_id,
-                    self.prompt, blocking=False,
-                ))
-                saved = self.session.admit(identity, selected_runtime_revision)
-                raw = authority.enter_context(
-                    self._journal.private_inputs.admission(saved, blocking=False)
-                )
+                with self._measurements.operation("coordinator_open"):
+                    store = authority.enter_context(Coordination(str(self.store_path), lock_timeout=0))
+                with self._measurements.operation("response_boundary"):
+                    registry = authority.enter_context(_response_boundary(
+                        self.bus, blocking=False, measurements=self._measurements))
+                with self._measurements.operation("coordinator_exclusive"):
+                    db = authority.enter_context(store.session.irreversible_admission())
+                with self._measurements.operation("prompt_binding"):
+                    authority.enter_context(self.stage.bound_prompt(
+                        store, self.input_id, self.participant, self.wire_root_id,
+                        self.prompt, blocking=False,
+                    ))
+                with self._measurements.operation("selected_source_admission"):
+                    saved = self.session.admit(identity, selected_runtime_revision)
+                with self._measurements.operation("raw_journal_admission"):
+                    raw = authority.enter_context(
+                        self._journal.private_inputs.admission(
+                            saved, blocking=False, measurements=self._measurements)
+                    )
             except BlockingIOError as error:
                 raise PromptAdmissionBusy("Native admission exclusion is busy") from error
             except sqlite3.OperationalError as error:
@@ -215,21 +232,24 @@ class PrivateSendAdmission:
         with self._exclusion(identity, selected_runtime_revision) as (store, registry, db, raw):
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send admission cannot be reused")
-            _require_no_private_owner_rename(self.bus.log.path.parent)
-            MaintenanceBarrier(self.bus._registry.store.path).assert_open_unlocked()
-            self.owner.require_snapshot(
-                registry, "recipient registry owner changed before native send"
-            )
-            assert_native_runtime_schema(db)
-            self.participant.require(store, self.stage.recipient_lookup)
-            reserved = self.stage.require_reservation(
-                db, self.input_id, self.participant, self.token_digest
-            )
-            self.stage.require_claim(store)
+            with self._measurements.operation("admission_checks"):
+                _require_no_private_owner_rename(self.bus.log.path.parent)
+                MaintenanceBarrier(self.bus._registry.store.path).assert_open_unlocked()
+                self.owner.require_snapshot(
+                    registry, "recipient registry owner changed before native send"
+                )
+                assert_native_runtime_schema(db)
+                self.participant.require(store, self.stage.recipient_lookup)
+                reserved = self.stage.require_reservation(
+                    db, self.input_id, self.participant, self.token_digest
+                )
+                self.stage.require_claim(store)
             # Persist UNKNOWN before any byte. Then retain the SAME journal's
             # exclusion through the raw writer; neither ACK nor fake result clears it.
-            raw.mark_unknown(self.input_id)
-            reserved.sent_owner_admission_generation.record(
-                reserved, db, self.owner.admission_generation, identity
-            )
+            with self._measurements.operation("raw_unknown_checkpoint"):
+                raw.mark_unknown(self.input_id)
+            with self._measurements.operation("native_admission_record"):
+                reserved.sent_owner_admission_generation.record(
+                    reserved, db, self.owner.admission_generation, identity
+                )
             yield

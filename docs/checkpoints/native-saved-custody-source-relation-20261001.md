@@ -403,3 +403,38 @@ ordinary `run`. A fixture override of the deleted `open_tools` hook remains an
 explicit migration obligation before end validation. Paused dispatch and Native6
 preservation are still unfinished; this source increment supplies no installed
 or provider qualification.
+# Receiving startup and irreversible-admission observations
+
+The original seq326 witnesses locate a pre-native-user gap of 2.475–74.730s.
+They do not contain readiness-response or raw-writer acquisition clocks, so
+they cannot identify the operation responsible. This increment supplies those
+missing spans through the existing `PublicationMeasurements` resource and
+the existing per-turn `.requests.jsonl` diagnostic stream. It creates no phase,
+readiness, receipt, retry authority or performance store.
+
+`NativeStartupAdmission` owns startup-slot observations; `TurnSession` owns
+transport/native acquisition; `TrackedTurnSession` owns `get_state` send,
+receive, attestation publication and writer join. `PrivateSendAdmission` owns
+the original coordinator/binding/source checks, sharing the SAME counters with
+`_response_boundary`, `PrivateInputs.admission` and `send_fenced_prompt`.
+The physical lock owners expose wire, certified-bus, registry, input-document
+and journal acquisition spans. Lock ordering and original one-use UNKNOWN
+checkpoint remain unchanged. No source, context proof or accepted input is
+retried to collect measurements.
+
+Counters are bounded acquired observations, not independently writable answers
+to lifecycle questions. Their parent monotonic clock remains distinct from
+native request clocks. Acquisition-only records join the original lease and
+input ID; they do not fabricate a native process or native request event. The
+two repository diagnostic readers explicitly select native records before
+reading native-clock fields. Ordinary/preparation callers share the upstream
+acquisition algorithm, but this checkpoint publishes acquisition counters only
+through selected admission; it does not claim ordinary outer-call telemetry.
+
+This is an unfinished source checkpoint. No validation or new native/provider
+input ran during source implementation. Remaining end validation uses the
+ordinary configured private multiowner channel driver, after normal current-main
+integration and direct-call fixture migration. Historical seq326 Deferred/FULL
+and UNKNOWN originals remain unchanged; this observation increment grants no
+execution or recovery capability. Paused native dispatch and Native6 storage
+preservation remain unfinished #489 scope.

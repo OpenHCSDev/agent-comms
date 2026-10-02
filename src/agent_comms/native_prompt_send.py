@@ -15,6 +15,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack, suppress
+from .diagnostics import PublicationMeasurements
 
 _MAX_SEND_SECONDS = 5.0
 
@@ -39,6 +40,7 @@ def _enter_admission(
     fd: int,
     boundary: Callable[[], AbstractContextManager[None]],
     cancelled: threading.Event,
+    measurements: PublicationMeasurements,
 ) -> ExitStack:
     """Acquire cancellable admission without spending an irreversible-write budget.
 
@@ -57,7 +59,8 @@ def _enter_admission(
             raise PromptSendNotWritten("Native pipe closed before prompt admission")
         scope = ExitStack()
         try:
-            scope.enter_context(boundary())
+            with measurements.operation("admission_probe"):
+                scope.enter_context(boundary())
         except PromptAdmissionBusy as error:
             busy = error
             scope.close()
@@ -75,12 +78,15 @@ def _write_fenced(
     boundary: Callable[[], AbstractContextManager[None]],
     cancelled: threading.Event,
     timeout: float,
+    measurements: PublicationMeasurements,
 ) -> None:
     # The dedicated thread has no asyncio loop. Its timeout progresses even if
     # the owner loop is synchronously waiting to stop this registry incarnation.
     written = 0
     try:
-        with _enter_admission(fd, boundary, cancelled):
+        with measurements.operation("admission_wait"):
+            admitted = _enter_admission(fd, boundary, cancelled, measurements)
+        with admitted:
             deadline = time.monotonic() + timeout
             remaining = memoryview(payload)
             while remaining:
@@ -90,7 +96,8 @@ def _write_fenced(
                         "Native prompt send is UNKNOWN after cancellation/deadline"
                     )
                 try:
-                    count = os.write(fd, remaining)
+                    with measurements.operation("raw_pipe_write"):
+                        count = os.write(fd, remaining)
                 except BlockingIOError:
                     # Bounded readiness wait, not input replay or provider retry.
                     select.select([], [fd], [], min(budget, 0.05))
@@ -115,6 +122,7 @@ async def send_fenced_prompt(
     payload: bytes,
     boundary: Callable[[], AbstractContextManager[None]],
     *,
+    measurements: PublicationMeasurements,
     timeout: float = _MAX_SEND_SECONDS,
 ) -> None:
     """Own a duplicated nonblocking pipe fd until the writer has stopped.
@@ -154,7 +162,7 @@ async def send_fenced_prompt(
     def worker() -> None:
         error: BaseException | None = None
         try:
-            _write_fenced(fd, payload, boundary, cancelled, write_timeout)
+            _write_fenced(fd, payload, boundary, cancelled, write_timeout, measurements)
         except BaseException as caught:
             error = caught
         finally:
