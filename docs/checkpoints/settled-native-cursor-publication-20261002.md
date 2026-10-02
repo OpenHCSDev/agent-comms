@@ -35,6 +35,14 @@ refresh only reads. The original determining fact remains, but its projection
 depends on a lost transient caller argument. This is IDEN-5/BOUND-2: reuse the
 original recorded owner/epoch/context, not a last-input mirror or another store.
 
+InputDrain._drain_private_if_changed caches an unchanged idle drain, then invokes
+only CursorPublication.refresh. A second transient refusal can therefore outlive
+the file revision that scheduled it. The publication owner must continue the
+original projection on that existing refresh path. EmptyCursorObservation currently
+inherits needs_refresh=False and can terminate this continuation without a durable
+cursor; its existing family behavior also requires ownership closure. That family
+property is requested from Arendt, without overlapping WireLog edits.
+
 SourceCoverage additionally captures a source witness, while NativeSourceCursor
 independently captures another witness before its unlocked proof scan. Another
 owner's reply can change the full bus witness between observations and commit.
@@ -53,12 +61,34 @@ coverage resource; preserve its exact final writer fence.
 
 No new class, queue, store, cached last-input identity or proof reconstruction.
 No receipt deletion, native/session mutation, public restart or broad tests.
-Arendt must grant the determining CursorOwner.admits method before its edit.
+Arendt granted the determining CursorOwner.admits method as part of this closure.
 Source reasoning and complete caller migration precede end validation; the same
 failed provider journey is preserved and never repeated.
 
 ## Checkpoint
 
-Source investigation complete; scoped implementation preparing. Original scrubbed
+Source investigation complete; scoped implementation uses the existing
+CursorOwner admission relation and SourceCoverage witness in both publication
+and readback. Explicit input assertions, exact final bus witness, all original
+prefix proofs, live owner/participant checks, monotonic SQL CAS and UNKNOWN gaps
+remain. No public API or constructor changes are required. Original scrubbed
 receipt and actual owner/caller searches are in
 `evidence/settled-native-cursor-publication-20261002/`.
+
+CursorPublication.refresh now calls the sole original NativeSourceCursor producer
+before reporting its observation. It selects no claim, creates no native input,
+and caches no completion identity. observe and trusted_metadata remain read-only.
+This continuation is not a rerun of gate01 and does not retroactively qualify its
+missing cursor. Same-admission permission is separate from the still-required
+live process/registry fence; gate01's retired workers are not restarted.
+
+Draft remains incomplete pending Arendt's grant for the existing
+EmptyCursorObservation.needs_refresh family property. The producer and delegated
+refresh edits are visible for review; source checks/installed qualification have
+not run before this coherent consumer closure. The original failed gate is not
+repeated, and no new native inputs are permitted in this investigation.
+
+The global certified snapshot/async publication resource work belongs to Arendt.
+This change borrows existing NativeEvidenceScope and SourceCoverage's original
+PrefixWitness, then preserves the exact locked final comparison. It introduces
+no independent current high-water, lease, alternative store, or WireLog edit.
