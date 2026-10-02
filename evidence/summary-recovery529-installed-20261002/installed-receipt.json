@@ -1,0 +1,23 @@
+{
+  "state": "Matching installed whole source READY for Arendt configured529 path; no whole workflow/live claim",
+  "core": "761864c828b08eccd157445f1e5476276bcec0b3",
+  "toad": "e02250ba4f41c646534a1f98651b92b266877b9f",
+  "textual": "23822923a02b75a1fad10751d97dc009c36b598b",
+  "sdk": "0.12.1",
+  "packages": 69,
+  "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-recovery529-installed-20261002",
+  "python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-recovery529-installed-20261002/bin/python",
+  "source_proof_sha256": "88e74dd19c79078def21f51514342e81b0acf7dd54f45f3bb390f39609bb3e20",
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest": "ad533a9f08581561d00d5524a576bda00f6368221cc4f74ba3c68513ede8fc04",
+  "native_tree": "adb2969a4d57cb8993a92d30b924b969ca76772de5dadb31cc7b2f294ee120e9",
+  "native_full_trust": true,
+  "native_and_dependency_declaration_unchanged_from_beb": true,
+  "frontend_product_unchanged_from_c324": true,
+  "no_overlay_or_dependency_bypass": true,
+  "new_native_build": false,
+  "provider_inputs": 0,
+  "public_mutations": 0,
+  "previous520_prefix_edited": false,
+  "remaining": "Arendt529 actual new distinct configured saved fork/manual compaction+peer reply+human input after Einstein520 sole controlledRPC terminal; original52901UNKNOWN not retried."
+}
