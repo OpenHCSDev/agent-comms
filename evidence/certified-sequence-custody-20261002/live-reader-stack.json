@@ -1,0 +1,343 @@
+{
+  "kind": "nonblocking py-spy, no locals/prompt/provider/control signal",
+  "pid": 2932308,
+  "installed_core": "5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77",
+  "bus_bytes_at_owner_source_review": 3127846,
+  "frames": [
+    {
+      "thread": "asyncio_6",
+      "active": true,
+      "owns_gil": true,
+      "frames": [
+        {
+          "file": "agent_comms/audience_manifest.py",
+          "method": "__post_init__",
+          "line": 120
+        },
+        {
+          "file": "<string>",
+          "method": "__init__",
+          "line": 13
+        },
+        {
+          "file": "agent_comms/field_codec.py",
+          "method": "_decode",
+          "line": 477
+        },
+        {
+          "file": "agent_comms/field_codec.py",
+          "method": "decode",
+          "line": 313
+        },
+        {
+          "file": "agent_comms/field_codec.py",
+          "method": "_decode",
+          "line": 520
+        },
+        {
+          "file": "agent_comms/field_codec.py",
+          "method": "decode",
+          "line": 313
+        },
+        {
+          "file": "agent_comms/field_codec.py",
+          "method": "_decode",
+          "line": 520
+        },
+        {
+          "file": "agent_comms/field_codec.py",
+          "method": "decode",
+          "line": 313
+        },
+        {
+          "file": "agent_comms/bus_publication.py",
+          "method": "attest",
+          "line": 187
+        },
+        {
+          "file": "agent_comms/wire_record.py",
+          "method": "from_wire",
+          "line": 40
+        },
+        {
+          "file": "agent_comms/wire_record.py",
+          "method": "read",
+          "line": 160
+        },
+        {
+          "file": "agent_comms/wire_log.py",
+          "method": "verified_records_unlocked",
+          "line": 232
+        },
+        {
+          "file": "agent_comms/wire_log.py",
+          "method": "_iter_log_unlocked",
+          "line": 431
+        },
+        {
+          "file": "agent_comms/wire_log.py",
+          "method": "<genexpr>",
+          "line": 436
+        },
+        {
+          "file": "agent_comms/wire_log.py",
+          "method": "_max_sequence_unlocked",
+          "line": 435
+        },
+        {
+          "file": "agent_comms/wire_log.py",
+          "method": "latest_sequence",
+          "line": 425
+        },
+        {
+          "file": "toad/channel_preparation.py",
+          "method": "read",
+          "line": 45
+        },
+        {
+          "file": "concurrent/futures/thread.py",
+          "method": "run",
+          "line": 73
+        },
+        {
+          "file": "concurrent/futures/thread.py",
+          "method": "run",
+          "line": 86
+        },
+        {
+          "file": "concurrent/futures/thread.py",
+          "method": "_worker",
+          "line": 119
+        },
+        {
+          "file": "threading.py",
+          "method": "run",
+          "line": 1024
+        },
+        {
+          "file": "threading.py",
+          "method": "_bootstrap_inner",
+          "line": 1082
+        },
+        {
+          "file": "threading.py",
+          "method": "_bootstrap",
+          "line": 1044
+        }
+      ]
+    },
+    {
+      "thread": "asyncio_2",
+      "active": false,
+      "owns_gil": false,
+      "frames": [
+        {
+          "file": "agent_comms/store_files.py",
+          "method": "_store_lock",
+          "line": 104
+        },
+        {
+          "file": "contextlib.py",
+          "method": "__enter__",
+          "line": 141
+        },
+        {
+          "file": "agent_comms/wire_log.py",
+          "method": "_record_snapshot",
+          "line": 354
+        },
+        {
+          "file": "contextlib.py",
+          "method": "__enter__",
+          "line": 141
+        },
+        {
+          "file": "contextlib.py",
+          "method": "enter_context",
+          "line": 530
+        },
+        {
+          "file": "agent_comms/presentation.py",
+          "method": "snapshot",
+          "line": 251
+        },
+        {
+          "file": "contextlib.py",
+          "method": "__enter__",
+          "line": 141
+        },
+        {
+          "file": "agent_comms/history_views.py",
+          "method": "viewer_snapshot",
+          "line": 353
+        },
+        {
+          "file": "concurrent/futures/thread.py",
+          "method": "run",
+          "line": 73
+        },
+        {
+          "file": "concurrent/futures/thread.py",
+          "method": "run",
+          "line": 86
+        },
+        {
+          "file": "concurrent/futures/thread.py",
+          "method": "_worker",
+          "line": 119
+        },
+        {
+          "file": "threading.py",
+          "method": "run",
+          "line": 1024
+        },
+        {
+          "file": "threading.py",
+          "method": "_bootstrap_inner",
+          "line": 1082
+        },
+        {
+          "file": "threading.py",
+          "method": "_bootstrap",
+          "line": 1044
+        }
+      ]
+    },
+    {
+      "thread": "MainThread",
+      "active": false,
+      "owns_gil": false,
+      "frames": [
+        {
+          "file": "pathlib/__init__.py",
+          "method": "stat",
+          "line": 654
+        },
+        {
+          "file": "agent_comms/store_files.py",
+          "method": "file_revision",
+          "line": 167
+        },
+        {
+          "file": "agent_comms/history_views.py",
+          "method": "<genexpr>",
+          "line": 464
+        },
+        {
+          "file": "agent_comms/history_views.py",
+          "method": "revision",
+          "line": 463
+        },
+        {
+          "file": "toad/comms_root.py",
+          "method": "refresh",
+          "line": 129
+        },
+        {
+          "file": "textual/_callback.py",
+          "method": "_invoke",
+          "line": 56
+        },
+        {
+          "file": "textual/_callback.py",
+          "method": "invoke",
+          "line": 96
+        },
+        {
+          "file": "textual/timer.py",
+          "method": "_tick",
+          "line": 199
+        },
+        {
+          "file": "textual/timer.py",
+          "method": "_run",
+          "line": 186
+        },
+        {
+          "file": "textual/timer.py",
+          "method": "_run_timer",
+          "line": 148
+        },
+        {
+          "file": "asyncio/events.py",
+          "method": "_run",
+          "line": 94
+        },
+        {
+          "file": "asyncio/base_events.py",
+          "method": "_run_once",
+          "line": 2046
+        },
+        {
+          "file": "asyncio/base_events.py",
+          "method": "run_forever",
+          "line": 677
+        },
+        {
+          "file": "asyncio/base_events.py",
+          "method": "run_until_complete",
+          "line": 706
+        },
+        {
+          "file": "asyncio/runners.py",
+          "method": "run",
+          "line": 127
+        },
+        {
+          "file": "asyncio/runners.py",
+          "method": "run",
+          "line": 204
+        },
+        {
+          "file": "textual/app.py",
+          "method": "run",
+          "line": 2352
+        },
+        {
+          "file": "toad/cli.py",
+          "method": "run_terminal",
+          "line": 37
+        },
+        {
+          "file": "toad/cli.py",
+          "method": "acp",
+          "line": 319
+        },
+        {
+          "file": "click/core.py",
+          "method": "invoke",
+          "line": 877
+        },
+        {
+          "file": "click/core.py",
+          "method": "invoke",
+          "line": 1308
+        },
+        {
+          "file": "click/core.py",
+          "method": "invoke",
+          "line": 1912
+        },
+        {
+          "file": "click/core.py",
+          "method": "main",
+          "line": 1445
+        },
+        {
+          "file": "click/core.py",
+          "method": "__call__",
+          "line": 1524
+        },
+        {
+          "file": "toad",
+          "method": "<module>",
+          "line": 10
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Observed live active decoding while this process held the bus exclusion; no claim that this allocates all seq327 latency.",
+    "Stacks and kernel wait observations were adjacent reads, not an atomic trace."
+  ]
+}

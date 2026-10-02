@@ -88,15 +88,29 @@ class CertifiedSourceRead:
             raise RelationViolationError("Original source marker changed within its lock.")
 
     def require_current(self) -> None:
+        self.require_open_prefix()
+        self.witness.require_marker(self.marker)
+
+    def require_open_prefix(self) -> None:
+        """Validate the acquired committed bytes independently of reservations.
+
+        Acquisition already checked root and that the sealed sequence does not
+        exceed the marker. A marker may reserve a later sequence before append;
+        that reservation cannot change this original committed prefix.
+        """
         if self.stream.closed:
             raise RelationViolationError("Certified source read has left its lock lifetime.")
         self.marker.seal.check_final(self.witness, _path(self.path))
-        self.witness.require_marker(self.marker)
         if (
             file_revision(os.fstat(self.stream.fileno())) != self.witness.revision
             or file_revision(self.path.stat()) != self.witness.revision
         ):
             raise RelationViolationError("Conversation source needs a current certificate.")
+
+    def committed_sequence(self) -> int:
+        """Global committed high-water; silent observations allocate no sequence."""
+        self.require_open_prefix()
+        return self.witness.through_seq
 
     def delivery(self, seq: int) -> CommittedDelivery:
         """Resolve an exact source sequence through this original opened proof."""
