@@ -1,0 +1,22 @@
+{
+  "source_head": "ad73aefe4666678977de73a82ab9fc9528e98eec",
+  "production_head": "130fb5fc",
+  "python": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/bin/python",
+  "installed_core": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms",
+  "source_files": 329,
+  "source_inventory_sha256": "08c0943e98b87173ca2474ed93909179813ba36e538339e2303a3198cddff9a9",
+  "all_source_bytes_equal": true,
+  "noneditable_install": true,
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-context-history-owner-20261002",
+    "dir_info": {}
+  },
+  "source_validation": {
+    "passed": 4,
+    "elapsed_seconds": 2.71
+  },
+  "installed_cli_queries": 6,
+  "native_prompts": 0,
+  "provider_calls": 0,
+  "public_mutations": 0
+}

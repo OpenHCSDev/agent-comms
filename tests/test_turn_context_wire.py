@@ -68,6 +68,43 @@ def test_observation_family_rejects_message_fields_and_preview(tmp_path):
         WireRecord.from_wire({**row.to_wire(),'seq':40},root_id)
 
 
+def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_path):
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    original = manifest(owner)
+    second = manifest(owner, 2)
+    comms.bus.log.record_context(original)
+    comms.bus.log.record_context(second)
+    comms.registry.rename('Alice', 'Renamed-Alice')
+    renamed = comms.registry.require('Renamed-Alice')
+    same_turn = replace(second, thread=renamed.incarnation,
+                        turn=replace(second.turn,
+                            occurrence=replace(second.turn.occurrence,
+                                               incarnation=renamed.incarnation)))
+    comms.bus.log.record_context(same_turn)
+    future = manifest(renamed, 3)
+    comms.bus.log.record_context(future)
+    raw = comms.bus.log.path.read_bytes()
+    reopened = Comms(comms.root)
+    history = reopened.bus.log.context_manifests('Alice', reopened.registry)
+    assert history == (original, second, same_turn, future)
+    assert reopened.bus.log.context_manifests('Renamed-Alice', reopened.registry) == history
+    assert ContextCliCommand(thread='Renamed-Alice', turn=1).apply(reopened)['manifests'] == FieldCodec.encode((original,))
+    difference = ContextCliCommand(thread='Alice', turn=2, diff=True).apply(reopened)
+    assert difference['previous_turn'] == FieldCodec.encode(original.turn)
+    assert difference['turn'] == FieldCodec.encode(same_turn.turn)
+    assert ContextCliCommand(thread='Renamed-Alice', diff=True).apply(reopened)['previous_turn'] == FieldCodec.encode(same_turn.turn)
+    with pytest.raises(ValueError, match='No preceding recorded turn'):
+        ContextCliCommand(thread='Alice', turn=1, diff=True).apply(reopened)
+    with pytest.raises(ValueError, match='outside the original history'):
+        replace(future, counter='unrecorded').changed_from_history(history)
+    comms.registry.unregister('Renamed-Alice')
+    comms.registry.remove('Renamed-Alice')
+    comms.registry.register(replace(renamed, created_at=18002.0))
+    assert comms.bus.log.context_manifests('Renamed-Alice', comms.registry) == ()
+    assert comms.bus.log.path.read_bytes() == raw
+
+
 def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp_path):
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
@@ -86,3 +123,23 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     decoded = Prompt.from_wire(command.to_rpc())
     assert decoded == command
     assert decoded.message.encode() == raw and decoded.images == images
+
+
+def test_current_relevance_resource_is_frozen_with_coordination_provenance(tmp_path, monkeypatch):
+    from agent_comms.turn_context import CoordinationSegment, InstructionFile
+    from agent_comms.wake_policy import WakePolicy
+
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    original = WakePolicy.relevance_instruction()
+    captured = CoordinationSegment.capture(owner, ())
+    assert original.source in captured.provenance
+    assert hashlib.sha256(original.content.encode()).hexdigest() == original.source.sha256
+
+    def changed_instruction(cls, name):
+        raise AssertionError('Captured instructions must not reread the current file')
+
+    monkeypatch.setattr(InstructionFile, 'read', classmethod(changed_instruction))
+    assert original.content in captured.text()
+    assert original.content in captured.summary_instructions(None)
+    assert captured.response_instruction.source == original.source

@@ -1,0 +1,82 @@
+{
+  "state": "CONFIGURED_SAVED_FORK_NATIVE_CHANNEL_REPLY_HANDLING_PASS",
+  "production_core": "266c8ff8f74497f59ed793c7b2e3dea36ba2b8aa",
+  "production_toad": "7df5e61cb81fc47ddfef35ec17c09f989533e224",
+  "textual": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7",
+  "sdk": "0.12.1",
+  "native_manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "python": "/home/ts/wt/comms-original-reply-handling-20261002/.artifacts/runtime-reply-relevance-505/bin/python",
+  "raw_receipt": "/home/ts/wt/comms-original-reply-handling-20261002/g1/receipt.json",
+  "raw_receipt_sha256": "2219c3e48527727fe27714d2dc85629de36b3b484b1d16e7822e368f5d12e4d9",
+  "source_inventory": "/home/ts/wt/comms-original-reply-handling-20261002/.artifacts/reply-relevance-505-integrated/installed-source-proof.json",
+  "source_inventory_sha256": "7d2cf5d0401e09f70b16732895c5fc7ec733bd187f8ab051490493a7fb1ee733",
+  "source_owner": "openhcs-helper",
+  "provider_model": "openai-codex/gpt-6.1-sol",
+  "declared_thinking": "off",
+  "worktree": "/home/ts/code/projects/openhcs",
+  "original_task_sha256": "86a9832a42b0e71bbfd659e29da6a28d03940d63d1236a9c7c52fc53dd2fc373",
+  "original_config_hashes_unchanged": true,
+  "canonical_fork": {
+    "sessionId": "01a0faaf-c9a4-7175-ae5c-60ae105ad5cf",
+    "sessionFile": "/home/ts/wt/comms-original-reply-handling-20261002/g1/forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T03-36-59-556Z_01a0faaf-c9a4-7175-ae5c-60ae105ad5cf.jsonl"
+  },
+  "fork_bytes": 42932905,
+  "originals": [
+    {
+      "seq": 1,
+      "message_id": "0bf1bd103737"
+    }
+  ],
+  "canonical_reply": {
+    "seq": 2,
+    "from": "reply505",
+    "to": "#openhcs",
+    "ts": 1790912241.190857,
+    "type": "info",
+    "text": "Received 505-20261002-a1.",
+    "sender_role": "agent",
+    "id": "9b3ef6a729bf"
+  },
+  "original_handling": {
+    "recipient_identity": {
+      "recipient_lookup": "a9308c006b6000f95646bcd5da108cf2",
+      "canonical_thread": "reply505"
+    },
+    "state": "Responded",
+    "detail": "The response workflow completed.",
+    "priority": 2,
+    "busy": false,
+    "message": null,
+    "displayed_to": []
+  },
+  "native_input_witnesses": [
+    {
+      "input_id": "2e80aa6b8a39e11b638f9657b30356e2",
+      "stage": "full",
+      "execution_id": "wirev13b7695fe41295fc0e24c10e2c6d12a91a5a6489aa49deace503b14c07f7d2744",
+      "session_file": "/home/ts/wt/comms-original-reply-handling-20261002/g1/w/native-sessions/a9308c006b6000f95646bcd5da108cf2/2026-10-02T03-37-12-343Z_01a0faaf-fb96-7428-b1ff-e3bfc6f436eb.jsonl",
+      "session_entry_id": "a5d2e343",
+      "request_generation": 2,
+      "verdict": null
+    },
+    {
+      "input_id": "c152f4e42e97934f0e3a6038419789b6",
+      "stage": "triage",
+      "execution_id": null,
+      "session_file": "/home/ts/wt/comms-original-reply-handling-20261002/g1/w/native-sessions/a9308c006b6000f95646bcd5da108cf2/2026-10-02T03-37-12-343Z_01a0faaf-fb96-7428-b1ff-e3bfc6f436eb.jsonl",
+      "session_entry_id": "c9ddd0c9",
+      "request_generation": 1,
+      "verdict": "full"
+    }
+  ],
+  "original_historical_source_proofs": 2,
+  "raw_observed_retired_owner": {
+    "pid": 3018877,
+    "start_time": 38786075
+  },
+  "owned_owner_exit_confirmed": true,
+  "public_inputs": 0,
+  "original326_327_replays": 0,
+  "native_rebuilds": 0,
+  "scope_limit": "Saved fork/ACP history and fresh Native5 private cohort journal are distinct original resources; no claim wholesale inherited history entered provider context."
+}

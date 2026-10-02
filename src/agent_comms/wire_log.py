@@ -32,6 +32,7 @@ from .errors import (
 from .field_codec import FieldCodec
 from .messages import Message
 from .store_files import (
+    StoreLock,
     StoreLockContention,
     _atomic_write_text,
     _iter_jsonl_records,
@@ -98,15 +99,21 @@ class WireLog:
             record = ObservationWireRecord(ContextManifestWireObservation(manifest))
             self._append_private_unlocked(marker, record.to_wire())
 
-    def context_manifests(self, incarnation):
-        """Observe original rows; no context sidecar, receipt or sequence index."""
-        with self.locked():
+    def context_manifests(self, name: str, registry):
+        """Read original observations for one registry-owned historical identity.
+
+        The existing wire/bus/registry lock order freezes rename membership for
+        this read. Returned rows retain their recorded names and proof fields.
+        """
+        with _store_lock(self.path.parent / "wire"), self.locked():
+            snapshot = registry.snapshot()
+            incarnation = snapshot.require(name).incarnation
             marker = self._private_marker_unlocked()
             return tuple(
                 manifest
                 for record in self.verified_records_unlocked(marker)
                 for manifest in record.context_manifests()
-                if manifest.thread == incarnation
+                if manifest.thread.resolved(snapshot) == incarnation
             )
 
     def compaction_messages_unlocked(self, recipient: ThreadIncarnation):
@@ -351,18 +358,13 @@ class WireLog:
         Display-only callers do not request a sequence watermark. Every stored
         source has the current marker; history never repairs an absent marker.
         """
-        with _store_lock(self.path):
+        with _store_lock(self.path) as lock:
             metadata = (
                 self._private_marker_unlocked()
                 if self.path.exists() or self.metadata_path.exists()
                 else WireMetadata()
             )
-            if need_sequence and self.claim_gate_enabled():
-                # Metadata reserves a sequence BEFORE the append. A failed
-                # append must never surface as a committed message watermark.
-                through = self._max_sequence_unlocked()
-            else:
-                through = metadata.last_seq if need_sequence else 0
+            through = self._committed_sequence_unlocked(lock) if need_sequence else 0
             try:
                 stream: BinaryIO | None = self.path.open("rb")
             except FileNotFoundError:
@@ -420,10 +422,8 @@ class WireLog:
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
-        with _store_lock(self.path):
-            if self.claim_gate_enabled():
-                return self._max_sequence_unlocked()
-            return self.read_metadata_unlocked().last_seq
+        with _store_lock(self.path) as lock:
+            return self._committed_sequence_unlocked(lock)
 
     def _iter_log_unlocked(self) -> Iterator[Message]:
         if self.path.exists():
@@ -431,11 +431,18 @@ class WireLog:
             for record in self.verified_records_unlocked(marker):
                 yield from record.messages()
 
-    def _max_sequence_unlocked(self) -> int:
-        return max(
-            (message.seq for message in self._iter_log_unlocked()),
-            default=0,
-        )
+    def _committed_sequence_unlocked(self, lock: StoreLock) -> int:
+        """Read the committed cut from the resource acquired by this barrier.
+
+        The certificate's global through_seq is not the addressed page's
+        latest_source_seq or a marker reservation. Claim streams without an
+        installed certificate still require their original strict traversal.
+        """
+        if lock.source is not None:
+            return lock.certified_read().committed_sequence()
+        if self.claim_gate_enabled():
+            return max((message.seq for message in self._iter_log_unlocked()), default=0)
+        return self.read_metadata_unlocked().last_seq
 
     def claim_gate_enabled(self) -> bool:
         # _store_lock is also used for registry, channels, and marker files.
