@@ -1,0 +1,13 @@
+{
+  "resource_declaration": [
+    "src/agent_comms/native_package.py:41:OWNER_INSTRUCTIONS = _resource_root() / \"APPEND_SYSTEM.md\""
+  ],
+  "append_decision": [
+    "src/agent_comms/native_pi.py:423:            str(cli), *arguments, \"--append-system-prompt\", str(instructions),"
+  ],
+  "bootstrap_callers": [
+    "src/agent_comms/native_pi.py:107:    argv, environment = NativePiRpcLaunch.bootstrap(",
+    "src/agent_comms/native_pi.py:404:    def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment):",
+    "src/agent_comms/native_pi.py:429:        argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration)"
+  ]
+}

@@ -8,6 +8,86 @@ from agent_comms.retained_context import RetainedSegment
 from agent_comms.threads import Thread
 
 
+def test_original_retained_source_inspection_diff_and_narrow_export(comms, tmp_path, capsys):
+    """One original-store journey; inspection must neither admit nor export facts."""
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.compaction_records import CompactionOperation, SelectedSummaryAttempt
+    from agent_comms.compaction_states import RefusedSummary, UnknownSummary, UnknownOperation
+    from agent_comms.goals import Goal
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.native_file_artifact import Utf8FileWriteArtifact
+    from agent_comms.retained_task_facts import GoalTaskFact, NativeArtifactTaskFact, RetainedTaskFacts
+    from agent_comms.text_digest import TextDigest
+    from agent_comms.turn_context import JournalProvenance
+    from selected_summary_cases import manual_summary_record
+    from test_task_decisions import saved_source
+    import hashlib
+
+    comms.messaging.initialize_private_initial_protocol()
+    saved = tmp_path / "original.jsonl"
+    saved_source(saved)
+    goal = Goal("Original task goal, not an exported human constraint", "original-goal", revision=7)
+    owner = comms.registry.declare(Thread("reader", frozenset(), str(tmp_path),
+                                        session_file=str(saved), goal=goal))
+    wording = "Original human constraint λ; preserve UNKNOWN and its source."
+    original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
+    comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
+    inputs = InputDispositions(comms.root / InputDispositions.filename)
+    inputs.record("acp:original-unknown", seq=None, owner=owner.name, admission=1,
+                  target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
+    captured = inputs.read()
+    input_facts = captured.retained_task_facts(captured.owner_originals(owner))
+    # Representative persisted artifact facts test the reader, not native production.
+    artifact = NativeArtifactTaskFact(
+        JournalProvenance(str(saved), ("original-request", "original-result")),
+        Utf8FileWriteArtifact(str(tmp_path / "original-artifact.py"), TextDigest.of("λ"), 2))
+    before = RetainedTaskFacts((GoalTaskFact(goal), *input_facts))
+    after = RetainedTaskFacts((*before.facts, artifact, artifact))
+
+    def command(*args):
+        code = main(["--root", str(comms.root), *args])
+        return code, json.loads(capsys.readouterr().out)
+
+    path = comms.root / "compaction-commits.sqlite3"
+    code, current = command("retained-context", owner.name)
+    assert code == 0 and not path.exists(), "Inspection initialized the missing journal"
+    assert current["observations"]["facts"] == FieldCodec.encode(RetainedTaskFacts((
+        *comms.bus.log.retained_context(owner.name, comms.registry).retained.facts,
+        *owner.retained_task_facts(), *input_facts)).for_owner(owner, comms.registry.snapshot()))
+    journal = CompactionJournal(path)
+    first = manual_summary_record(saved, incarnation=owner.incarnation, retained=before)
+    second = manual_summary_record(saved, incarnation=owner.incarnation, retained=after)
+    intent = '{"source":{"original":"one-way view"},"unresolved":"UNKNOWN"}'
+    with journal.transaction() as db:
+        SelectedSummaryAttempt("a" * 32, str(saved), first.journal_json(), first,
+                               RefusedSummary("Original refusal")).insert(db)
+        SelectedSummaryAttempt("b" * 32, str(saved), second.journal_json(), second,
+                               UnknownSummary()).insert(db)
+        CompactionOperation("c" * 32, str(saved), intent, UnknownOperation(), None).insert(db)
+    protected = (saved, path, inputs.path, comms.registry.store.path, comms.root / "bus.jsonl")
+    hashes = {file: hashlib.sha256(file.read_bytes()).hexdigest() for file in protected}
+    code, inspected = command("retained-context", owner.name)
+    assert code == 0 and inspected["input_supplied"] is False
+    tables = inspected["compaction"]["tables"]
+    attempts = tables[SelectedSummaryAttempt.declared_name]
+    assert attempts[0]["request"]["retained"] == FieldCodec.encode(before)
+    assert attempts[1]["request"]["retained"] == FieldCodec.encode(after)
+    assert attempts[1]["state"] == FieldCodec.encode(UnknownSummary())
+    operation, = tables[CompactionOperation.declared_name]
+    assert operation["intent_json"] == intent and operation["intent"] == json.loads(intent)
+    code, diff = command("retained-context", owner.name, "--diff")
+    assert code == 0 and diff["added"] == [FieldCodec.encode(artifact)] * 2 and diff["removed"] == []
+    code, status = command("compaction-status", "--thread", owner.name)
+    assert code == 0 and len(status["attempts"]) == 2
+    destination = tmp_path / "authored-export.md"
+    code, exported = command("export-retained", owner.name, "--output", str(destination))
+    assert code == 0 and exported["exported_messages"] == 1
+    text = destination.read_text()
+    assert wording in text and goal.text not in text
+    assert "Unpinned original UNKNOWN input" not in text and artifact.artifact.operation_path not in text
+    assert all(hashlib.sha256(file.read_bytes()).hexdigest() == digest for file, digest in hashes.items())
+
+
 def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     comms.messaging.initialize_private_initial_protocol()
     owner = comms.registry.declare(Thread("recipient", frozenset(), str(comms.root)))

@@ -172,6 +172,14 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 
     retains_authored_task = False
     permits_agent_revision = False
+    observes_subtask = False
+
+    def optional_boundary(self, message: Message) -> tuple[MessageReference, ...]:
+        """Only an explicit authored completion can request optional timing."""
+        return ()
+
+    def require_subtask(self) -> Subtask:
+        raise RelationViolationError("Original wire message has no subtask observation")
 
     def require_scoped_task(self) -> ScopedTaskDeclaration:
         raise RelationViolationError("Original wire message has no declared scoped task")
@@ -395,6 +403,38 @@ class ModelTaskDeclaration(ScopedTaskDeclaration):
         author.require_turn(self.source_turn_id, registry.admission_generations[sender])
         self.require_emission(author)
         self.change.require_publication(self, registry, original_source)
+
+
+@dataclass(frozen=True, kw_only=True)
+class Subtask(ModelTaskDeclaration):
+    """Explicit completed/unfinished observation, not a turn or goal terminal.
+
+    The boolean is the original author's observation at the tool boundary. It
+    has no independently updated lifecycle: corrections replace the observation
+    through the same original wire lineage as decisions and constraints.
+    """
+    completed: bool
+    observes_subtask = True
+
+    def require_subtask(self):
+        return self
+
+    def require_previous(self, original):
+        return original.task.require_subtask()
+
+    def turn_scope_matches(self, owner, registry):
+        return owner.has_observed_task_turn(self.source_turn.resolved(registry), self.source_turn_id)
+
+    def applies(self, owner, registry):
+        return super().applies(owner, registry) and self.turn_scope_matches(owner, registry)
+
+    def optional_boundary(self, message):
+        return (message.reference,) if self.completed else ()
+
+    def retained_task_facts(self, message):
+        from .retained_task_facts import SubtaskTaskFact
+
+        return (SubtaskTaskFact(message),)
 
 
 @dataclass(frozen=True, kw_only=True)

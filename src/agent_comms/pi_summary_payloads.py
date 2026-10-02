@@ -146,7 +146,7 @@ class SelectedSummaryData(PiResponseData):
     def require_result(self):
         return self
 
-    def manual_summary(self, journal):
+    def manual_summary(self, journal, reason, settle_refusal):
         raise ValueError("Selected summary has no manual result")
 
     def adaptive_summary(self, journal, identity):
@@ -166,24 +166,29 @@ class SummaryDeclinedData(SelectedSummaryData, declared_name="summary_declined")
     def response(self, request, tokens_before):
         return self
 
+    @property
+    def clean_prestart(self):
+        return self.reason in {"split_turn", "unsupported"}
+
+    def require_clean_prestart(self):
+        from .owner_compaction_settings import PiSettingsEvidenceError
+
+        if not self.clean_prestart:
+            raise PiSettingsEvidenceError(
+                f"Selected Pi declined summary ({self.reason}); original remains unbound")
+
     def settle(self, journal):
-        if self.reason not in {"split_turn", "unsupported"}:
+        if not self.clean_prestart:
             journal.summaries.refuse(self.operation_id, self.reason)
 
-    def manual_summary(self, journal):
-        journal.summaries.refuse(self.operation_id, self.reason)
-        raise ValueError(f"Selected Pi declined manual summary ({self.reason})")
+    def manual_summary(self, journal, reason, settle_refusal):
+        return reason.declined_manual(self, journal, settle_refusal)
 
     def adaptive_summary(self, journal, identity):
         from .owner_compaction_runtime import SelectedSummaryDecline
-        from .owner_compaction_settings import PiSettingsEvidenceError
-
-        if self.reason in {"split_turn", "unsupported"}:
-            return SelectedSummaryDecline(
-                journal.summaries.get(self.operation_id), identity, self.reason
-            )
-        raise PiSettingsEvidenceError(
-            f"Selected Pi declined summary ({self.reason}); original remains unbound"
+        self.require_clean_prestart()
+        return SelectedSummaryDecline(
+            journal.summaries.get(self.operation_id), identity, self.reason
         )
 
     def __post_init__(self):
@@ -243,7 +248,7 @@ class SummarySummarizedData(WitnessedSummaryData, declared_name="summary_summari
             raise ValueError("Selected summary result source changed")
         return self
 
-    def manual_summary(self, journal):
+    def manual_summary(self, journal, reason, settle_refusal):
         from .owner_compaction_manual import ManualSelectedSummary
 
         return ManualSelectedSummary(
@@ -299,7 +304,7 @@ class CompactionSettingsData(PiResponseData):
     from .owner_compaction_settings import PiCompactionDecision
 
     strict_fields = True
-    version: Literal[1]
+    version: Literal[2]
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
@@ -312,4 +317,6 @@ class CompactionSettingsData(PiResponseData):
         observed = NativeSessionIdentity(self.session_id, self.session_file)
         if observed != original or self.selected != request.selected:
             raise ValueError("Selected settings source changed")
+        if self.decision.boundary != request.boundary:
+            raise ValueError("Selected timing source changed")
         return self.decision

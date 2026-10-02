@@ -17,7 +17,7 @@ OUTPUT = Path(__file__).resolve().parent
 CORE = Repository(OUTPUT.parents[2])
 TOAD = Repository(Path("/home/ts/wt/toad-receiving-native5-batch490-20261001"))
 SEEDS = {
-    "InputProvenance", "StoredInput", "InputDocument", "InputBatch", "ChannelInputBatch",
+    "Subtask", "SubtaskTaskFact", "CommsSubtaskTool", "TaskBoundaryCompactionReason", "TaskAttachment", "ScopedTaskDeclaration", "ModelTaskDeclaration", "TaskScope", "CommsAuthoredTaskTool", "PiCompactionDecision", "AgentCommsCompactionSettings", "CompactionReason", "InputProvenance", "StoredInput", "InputDocument", "InputBatch", "ChannelInputBatch",
     "OriginalTurnInput", "SelectedSource", "SelectedSourceBatch", "CompactionSource", "HeldCompaction",
     "SelectedSummarySource", "SelectedSummaryAttempt", "SelectedSummaries",
     "SelectedCommitReference", "SelectedSummaryAdmission", "SelectedAdmissionIdentity",

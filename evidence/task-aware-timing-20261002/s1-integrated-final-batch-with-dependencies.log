@@ -1,0 +1,329 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-retained-human-main-20261001
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, anyio-4.15.1, typeguard-4.6.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 21 items
+
+tests/test_task_decisions.py .................                           [ 80%]
+tests/test_owner_compaction_runtime.py FFF.                              [100%]Task exception was never retrieved
+future: <Task finished name='actual-owner-turn' coro=<test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper.<locals>.owner() done, defined at /home/ts/wt/comms-retained-human-main-20261001/tests/test_owner_compaction_runtime.py:77> exception=AttributeError("'object' object has no attribute 'retained'")>
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-retained-human-main-20261001/tests/test_owner_compaction_runtime.py", line 79, in owner
+    await compact_owner_once(
+    ...<7 lines>...
+    )
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 151, in compact_owner_once
+    return await settings.prepare(preparation).compact_owner(perform)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_prepare.py", line 124, in compact_owner
+    return await perform(self)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 149, in perform
+    return await settings.prepare(prepared).compact_owner(at_cut)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_prepare.py", line 124, in compact_owner
+    return await perform(self)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 127, in at_cut
+    if not settings.boundary_current(source.retained, owner, bridge.registry.snapshot()):
+                                     ^^^^^^^^^^^^^^^
+AttributeError: 'object' object has no attribute 'retained'
+Task exception was never retrieved
+future: <Task finished name='actual-owner-turn' coro=<test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper.<locals>.owner() done, defined at /home/ts/wt/comms-retained-human-main-20261001/tests/test_owner_compaction_runtime.py:77> exception=AttributeError("'object' object has no attribute 'retained'")>
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-retained-human-main-20261001/tests/test_owner_compaction_runtime.py", line 79, in owner
+    await compact_owner_once(
+    ...<7 lines>...
+    )
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 151, in compact_owner_once
+    return await settings.prepare(preparation).compact_owner(perform)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_prepare.py", line 124, in compact_owner
+    return await perform(self)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 149, in perform
+    return await settings.prepare(prepared).compact_owner(at_cut)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_prepare.py", line 124, in compact_owner
+    return await perform(self)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 127, in at_cut
+    if not settings.boundary_current(source.retained, owner, bridge.registry.snapshot()):
+                                     ^^^^^^^^^^^^^^^
+AttributeError: 'object' object has no attribute 'retained'
+Task exception was never retrieved
+future: <Task finished name='actual-owner-turn' coro=<test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper.<locals>.owner() done, defined at /home/ts/wt/comms-retained-human-main-20261001/tests/test_owner_compaction_runtime.py:77> exception=AttributeError("'object' object has no attribute 'retained'")>
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-retained-human-main-20261001/tests/test_owner_compaction_runtime.py", line 79, in owner
+    await compact_owner_once(
+    ...<7 lines>...
+    )
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 151, in compact_owner_once
+    return await settings.prepare(preparation).compact_owner(perform)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_prepare.py", line 124, in compact_owner
+    return await perform(self)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 149, in perform
+    return await settings.prepare(prepared).compact_owner(at_cut)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_prepare.py", line 124, in compact_owner
+    return await perform(self)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-retained-human-main-20261001/src/agent_comms/owner_compaction_runtime.py", line 127, in at_cut
+    if not settings.boundary_current(source.retained, owner, bridge.registry.snapshot()):
+                                     ^^^^^^^^^^^^^^^
+AttributeError: 'object' object has no attribute 'retained'
+
+
+=================================== FAILURES ===================================
+_ test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper[owner] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96ba49f1d0>
+shutdown = 'owner'
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1073/test_owner_lock_joins_underlyi0')
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("shutdown", ["owner", "inner_wrapper", "all_tasks"])
+    async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
+        monkeypatch, shutdown, tmp_path
+    ):
+        entered = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        turn_lock = asyncio.Lock()
+        next_entered = asyncio.Event()
+        wrappers = []
+        wrap = asyncio.wrap_future
+    
+        def retained_wrapper(future):
+            result = wrap(future)
+            wrappers.append(result)
+            return result
+    
+        monkeypatch.setattr(owner_compaction_runtime.asyncio, "wrap_future", retained_wrapper)
+    
+        saved = tmp_path / 'saved.jsonl'
+        saved.write_text('Original worker lifetime fixture\n')
+        witness = NativeWitness("session-id", str(saved), "leaf", "kept", FileRevision.from_stat(saved.stat()))
+        prepared = NativePreparation(
+            witness,
+            1, False,
+        )
+        monkeypatch.setattr(owner_compaction_runtime, "prepare_native_source", lambda *_a, **_kw: prepared)
+    
+        class Bridge:
+            native = SimpleNamespace(package_dir="test-owned-package")
+            def require_source_current(self, *_args):
+                pass
+    
+            def prepare_source(self, *_args, **_kwargs):
+                return (
+                    NativePreparation(
+                        witness,
+                        1,
+                        False,
+                    ),
+                    object(),
+                )
+    
+            def commit(self, *_args, **_kwargs):
+                entered.set()
+                assert release.wait(timeout=4), "test release never arrived"
+                finished.set()
+                return SimpleNamespace(status="committed")
+    
+        class Persistent:
+            async def discard_for_external_write(self, *_args):
+                pass
+    
+        async def synthetic_summary(_metadata, _source):
+            return NativeSummary("synthetic, no provider", None, None)
+    
+        async def owner():
+            async with turn_lock:
+                await compact_owner_once(
+                    Bridge(),
+                    SimpleNamespace(require_saved_session=lambda: str(saved)),
+                    1,
+                    Persistent(),
+                    synthetic_summary,
+                    settings=PiCompactionDecision(16384, 20000, True, False, OverflowCompactionReason, ()),
+                    context_window=128000,
+                )
+    
+        task = asyncio.create_task(owner(), name="actual-owner-turn")
+        try:
+>           assert await asyncio.to_thread(entered.wait, 2)
+E           assert False
+
+tests/test_owner_compaction_runtime.py:91: AssertionError
+_ test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper[inner_wrapper] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96ba0c29d0>
+shutdown = 'inner_wrapper'
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1073/test_owner_lock_joins_underlyi1')
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("shutdown", ["owner", "inner_wrapper", "all_tasks"])
+    async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
+        monkeypatch, shutdown, tmp_path
+    ):
+        entered = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        turn_lock = asyncio.Lock()
+        next_entered = asyncio.Event()
+        wrappers = []
+        wrap = asyncio.wrap_future
+    
+        def retained_wrapper(future):
+            result = wrap(future)
+            wrappers.append(result)
+            return result
+    
+        monkeypatch.setattr(owner_compaction_runtime.asyncio, "wrap_future", retained_wrapper)
+    
+        saved = tmp_path / 'saved.jsonl'
+        saved.write_text('Original worker lifetime fixture\n')
+        witness = NativeWitness("session-id", str(saved), "leaf", "kept", FileRevision.from_stat(saved.stat()))
+        prepared = NativePreparation(
+            witness,
+            1, False,
+        )
+        monkeypatch.setattr(owner_compaction_runtime, "prepare_native_source", lambda *_a, **_kw: prepared)
+    
+        class Bridge:
+            native = SimpleNamespace(package_dir="test-owned-package")
+            def require_source_current(self, *_args):
+                pass
+    
+            def prepare_source(self, *_args, **_kwargs):
+                return (
+                    NativePreparation(
+                        witness,
+                        1,
+                        False,
+                    ),
+                    object(),
+                )
+    
+            def commit(self, *_args, **_kwargs):
+                entered.set()
+                assert release.wait(timeout=4), "test release never arrived"
+                finished.set()
+                return SimpleNamespace(status="committed")
+    
+        class Persistent:
+            async def discard_for_external_write(self, *_args):
+                pass
+    
+        async def synthetic_summary(_metadata, _source):
+            return NativeSummary("synthetic, no provider", None, None)
+    
+        async def owner():
+            async with turn_lock:
+                await compact_owner_once(
+                    Bridge(),
+                    SimpleNamespace(require_saved_session=lambda: str(saved)),
+                    1,
+                    Persistent(),
+                    synthetic_summary,
+                    settings=PiCompactionDecision(16384, 20000, True, False, OverflowCompactionReason, ()),
+                    context_window=128000,
+                )
+    
+        task = asyncio.create_task(owner(), name="actual-owner-turn")
+        try:
+>           assert await asyncio.to_thread(entered.wait, 2)
+E           assert False
+
+tests/test_owner_compaction_runtime.py:91: AssertionError
+_ test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper[all_tasks] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f96ba2ad470>
+shutdown = 'all_tasks'
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1073/test_owner_lock_joins_underlyi2')
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("shutdown", ["owner", "inner_wrapper", "all_tasks"])
+    async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
+        monkeypatch, shutdown, tmp_path
+    ):
+        entered = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        turn_lock = asyncio.Lock()
+        next_entered = asyncio.Event()
+        wrappers = []
+        wrap = asyncio.wrap_future
+    
+        def retained_wrapper(future):
+            result = wrap(future)
+            wrappers.append(result)
+            return result
+    
+        monkeypatch.setattr(owner_compaction_runtime.asyncio, "wrap_future", retained_wrapper)
+    
+        saved = tmp_path / 'saved.jsonl'
+        saved.write_text('Original worker lifetime fixture\n')
+        witness = NativeWitness("session-id", str(saved), "leaf", "kept", FileRevision.from_stat(saved.stat()))
+        prepared = NativePreparation(
+            witness,
+            1, False,
+        )
+        monkeypatch.setattr(owner_compaction_runtime, "prepare_native_source", lambda *_a, **_kw: prepared)
+    
+        class Bridge:
+            native = SimpleNamespace(package_dir="test-owned-package")
+            def require_source_current(self, *_args):
+                pass
+    
+            def prepare_source(self, *_args, **_kwargs):
+                return (
+                    NativePreparation(
+                        witness,
+                        1,
+                        False,
+                    ),
+                    object(),
+                )
+    
+            def commit(self, *_args, **_kwargs):
+                entered.set()
+                assert release.wait(timeout=4), "test release never arrived"
+                finished.set()
+                return SimpleNamespace(status="committed")
+    
+        class Persistent:
+            async def discard_for_external_write(self, *_args):
+                pass
+    
+        async def synthetic_summary(_metadata, _source):
+            return NativeSummary("synthetic, no provider", None, None)
+    
+        async def owner():
+            async with turn_lock:
+                await compact_owner_once(
+                    Bridge(),
+                    SimpleNamespace(require_saved_session=lambda: str(saved)),
+                    1,
+                    Persistent(),
+                    synthetic_summary,
+                    settings=PiCompactionDecision(16384, 20000, True, False, OverflowCompactionReason, ()),
+                    context_window=128000,
+                )
+    
+        task = asyncio.create_task(owner(), name="actual-owner-turn")
+        try:
+>           assert await asyncio.to_thread(entered.wait, 2)
+E           assert False
+
+tests/test_owner_compaction_runtime.py:91: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_owner_compaction_runtime.py::test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper[owner]
+FAILED tests/test_owner_compaction_runtime.py::test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper[inner_wrapper]
+FAILED tests/test_owner_compaction_runtime.py::test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper[all_tasks]
+========================= 3 failed, 18 passed in 8.38s =========================
