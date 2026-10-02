@@ -1,0 +1,225 @@
+{
+  "source": "original admitted frames and failure census; no additional application run",
+  "resources": [
+    {
+      "resource": 140438924237728,
+      "first_frame": 5069,
+      "observed_ns": 293450421378852,
+      "first_region": [
+        64,
+        29,
+        88,
+        3
+      ],
+      "visible": true,
+      "in_viewport": true,
+      "claim": "CapturedClaim",
+      "ancestry": [
+        {
+          "resource": 140438924233776,
+          "kind": "TranscriptFragmentView"
+        },
+        {
+          "resource": 140437942508496,
+          "kind": "TranscriptPageView"
+        },
+        {
+          "resource": 140437942510736,
+          "kind": "TranscriptHistory"
+        },
+        {
+          "resource": 140439194763344,
+          "kind": "Contents"
+        },
+        {
+          "resource": 140439194768144,
+          "kind": "ContentsGrid"
+        },
+        {
+          "resource": 140439194768784,
+          "kind": "Window"
+        },
+        {
+          "resource": 140439196147920,
+          "kind": "Conversation"
+        },
+        {
+          "resource": 140439194775504,
+          "kind": "Vertical"
+        },
+        {
+          "resource": 140439194738640,
+          "kind": "Center"
+        },
+        {
+          "resource": 140439196145040,
+          "kind": "MainScreen"
+        },
+        {
+          "resource": 140439194732928,
+          "kind": "Container"
+        },
+        {
+          "resource": 140439194732592,
+          "kind": "Horizontal"
+        },
+        {
+          "resource": 140439197460736,
+          "kind": "WorkspaceScreen"
+        },
+        {
+          "resource": 140439235393392,
+          "kind": "EvidenceApp"
+        }
+      ],
+      "histories": [
+        {
+          "resource": 140437942510736,
+          "registered": true,
+          "cursor": {
+            "session_file": "/home/ts/wt/g460b/u07/application/pi/sessions/--home-ts-wt-g460b-u07-application-project--/2026-10-01T01-23-28-384Z_01a0f50f-2fff-75f3-9057-23745e894acf.jsonl",
+            "offset": 2385,
+            "receipts": {
+              "root": "/home/ts/wt/g460b/u07/private-root/wire",
+              "recipient": {
+                "name": "beta",
+                "created_at": 1790817726.0196621
+              },
+              "sequence": 7
+            },
+            "outcomes": null
+          },
+          "source_state": "LiveTranscript"
+        }
+      ]
+    },
+    {
+      "resource": 140437979124864,
+      "first_frame": 5165,
+      "observed_ns": 293451954336903,
+      "first_region": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "visible": false,
+      "in_viewport": false,
+      "claim": "CapturedClaim",
+      "ancestry": [
+        {
+          "resource": 140439194763344,
+          "kind": "Contents"
+        },
+        {
+          "resource": 140439194768144,
+          "kind": "ContentsGrid"
+        },
+        {
+          "resource": 140439194768784,
+          "kind": "Window"
+        },
+        {
+          "resource": 140439196147920,
+          "kind": "Conversation"
+        },
+        {
+          "resource": 140439194775504,
+          "kind": "Vertical"
+        },
+        {
+          "resource": 140439194738640,
+          "kind": "Center"
+        },
+        {
+          "resource": 140439196145040,
+          "kind": "MainScreen"
+        },
+        {
+          "resource": 140439194732928,
+          "kind": "Container"
+        },
+        {
+          "resource": 140439194732592,
+          "kind": "Horizontal"
+        },
+        {
+          "resource": 140439197460736,
+          "kind": "WorkspaceScreen"
+        },
+        {
+          "resource": 140439235393392,
+          "kind": "EvidenceApp"
+        }
+      ],
+      "histories": [
+        {
+          "resource": 140437942510736,
+          "registered": true,
+          "cursor": {
+            "session_file": "/home/ts/wt/g460b/u07/application/pi/sessions/--home-ts-wt-g460b-u07-application-project--/2026-10-01T01-23-28-384Z_01a0f50f-2fff-75f3-9057-23745e894acf.jsonl",
+            "offset": 2385,
+            "receipts": {
+              "root": "/home/ts/wt/g460b/u07/private-root/wire",
+              "recipient": {
+                "name": "beta",
+                "created_at": 1790817726.0196621
+              },
+              "sequence": 7
+            },
+            "outcomes": null
+          },
+          "source_state": "LiveTranscript"
+        }
+      ]
+    }
+  ],
+  "first_two_visible": {
+    "frame": 5166,
+    "observed_ns": 293451998858578,
+    "histories": [
+      {
+        "resource": 140437942510736,
+        "registered": true,
+        "cursor": {
+          "session_file": "/home/ts/wt/g460b/u07/application/pi/sessions/--home-ts-wt-g460b-u07-application-project--/2026-10-01T01-23-28-384Z_01a0f50f-2fff-75f3-9057-23745e894acf.jsonl",
+          "offset": 2385,
+          "receipts": {
+            "root": "/home/ts/wt/g460b/u07/private-root/wire",
+            "recipient": {
+              "name": "beta",
+              "created_at": 1790817726.0196621
+            },
+            "sequence": 7
+          },
+          "outcomes": null
+        },
+        "source_state": "LiveTranscript"
+      }
+    ]
+  },
+  "saved_to_new_live_seconds": 1.532958051,
+  "accepted_source_user_events": [
+    {
+      "kind": "user",
+      "routing": null,
+      "source": null,
+      "timestamp": 1790817809.03,
+      "text": "Bounded acceptance only. Reply exactly CONTROLLED_RETURN_0.",
+      "native_id": "ccdee9391fc08a56ff878294262f4ea6"
+    }
+  ],
+  "accepted_source_assistant_events": [
+    {
+      "kind": "assistant",
+      "routing": null,
+      "source": null,
+      "timestamp": 1790817809.193,
+      "text": "CONTROLLED_RETURN_0"
+    }
+  ],
+  "checkpoint_worker": {
+    "state": "WorkerState.SUCCESS",
+    "error": "None"
+  }
+}

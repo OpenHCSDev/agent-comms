@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-09-30T12:44:09.212692+00:00",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930",
+  "previous_bin": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin",
+  "paired_ready_head": "95ab9c3948fcef6a45e311340f6b9a0170ca3e6b",
+  "links": [
+    {
+      "command": "agent-comms",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/agent-comms"
+    },
+    {
+      "command": "agent-comms-acp",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/agent-comms-acp"
+    },
+    {
+      "command": "agent-comms-agent",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/agent-comms-agent"
+    },
+    {
+      "command": "agent-comms-nk-foreground",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/agent-comms-nk-foreground"
+    },
+    {
+      "command": "toad",
+      "resolved": "/home/ts/.local/share/agent-comms/runtime-c3-reviewed-pair-20260930/bin/toad"
+    }
+  ],
+  "phase": "paired_installation_complete_actual_default_scoped_attachment_verified_open_defects",
+  "toad_release_merge": "eeb328da1499edad29af753cdacb80e5fe5a09ef",
+  "core_release_merge": "ea1c275ae849c0bb7ac8b32f500096c820fc263a",
+  "owner_cutover_receipt": "c3-paired-cutover.json",
+  "actual_default_acceptance": "c3-default-scoped-review.json; full workflow not certified",
+  "thinking_selection_discrepancy": "Nine original explicit off settings changed during worker load; Arendt owns read-versus-mutation closure; settings retention not claimed"
+}

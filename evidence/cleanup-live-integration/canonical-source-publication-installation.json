@@ -1,0 +1,114 @@
+{
+  "state": "installed-cutover-completed-default-ui-verification-pending",
+  "stage": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930",
+  "previous_links": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-canonical-cursor-tool-20260930/bin/toad"
+  },
+  "links": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/bin/toad"
+  },
+  "restarted_owners": [
+    {
+      "name": "agent-comms-ux",
+      "expected_pid": 2823897,
+      "pid": 2823897,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "nra-architecture",
+      "expected_pid": 2823983,
+      "pid": 2823983,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "nra-class-first-name-review",
+      "expected_pid": 2823985,
+      "pid": 2823985,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "nra-domain-mapping",
+      "expected_pid": 2824036,
+      "pid": 2824036,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "nra-ordered-branch-call-review",
+      "expected_pid": 2824047,
+      "pid": 2824047,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "nra-roster-heuristic-map",
+      "expected_pid": 2824049,
+      "pid": 2824049,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "refactor-r1",
+      "expected_pid": 2824066,
+      "pid": 2824066,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "openhcs-architecture-memory",
+      "expected_pid": 2824136,
+      "pid": 2824136,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "openhcs-pr159-viewer-bind-owner",
+      "expected_pid": 2824216,
+      "pid": 2824216,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "nominal-refactor-advisor-2",
+      "expected_pid": 2824218,
+      "pid": 2824218,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "openhcs-helper",
+      "expected_pid": 2824243,
+      "pid": 2824243,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "openhcs-helper2",
+      "expected_pid": 2824246,
+      "pid": 2824246,
+      "alive": true,
+      "active_turn": false
+    },
+    {
+      "name": "comms428",
+      "expected_pid": 2824257,
+      "pid": 2824257,
+      "alive": true,
+      "active_turn": false
+    }
+  ],
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "provider_inputs_replayed": 0,
+  "private_recovery": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/canonical-source-publication-cutover.json"
+}

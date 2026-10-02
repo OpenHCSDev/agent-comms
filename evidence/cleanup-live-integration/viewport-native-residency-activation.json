@@ -1,0 +1,47 @@
+{
+  "state": "FIVE-DEFAULTS-PUBLISHED-ORDINARY-ACCEPTANCE-PASS",
+  "target": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930",
+  "pins": {
+    "agent-comms": "6feb634ba184d94d763028406152fff07027cccc",
+    "batrachian-toad": "19970f56899674932584138ff5e6fbe533c4af8f",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "sdk": "0.12.1",
+  "native": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+  "ready_receipt": "/home/ts/.cache/agent-scratch/viewport-native-residency-stage-20260930/paired-ready-receipt.json",
+  "ready_sha256": "076c3ff97c21e2380b04322033fd608462c41feadce679d0102c9b20f3a3bbec",
+  "route_before": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "version": 1
+  },
+  "owners_restarted": 0,
+  "schema_resets": 0,
+  "native_inputs": 0,
+  "paid_calls": 0,
+  "ordinary_default_acceptance": {
+    "state": "PASS",
+    "receipt": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence/default-viewport-native-residency-20260930/joint-ready-receipt.json",
+    "duration_seconds": 16.533632564998697,
+    "parent_personally_viewed_physical_frame": true,
+    "fresh_protocol_errors": 0,
+    "original_source_and_owner_unchanged": true,
+    "cleanup_errors": []
+  },
+  "started": 1790794790.3410583,
+  "route_after": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+    "native_package": "/home/ts/.local/share/agent-comms/native-current-593b978a717ae8f6/node_modules/@earendil-works/pi-coding-agent",
+    "version": 1
+  },
+  "defaults": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-viewport-native-residency-20260930/bin/toad"
+  },
+  "finished": 1790794790.7939482
+}

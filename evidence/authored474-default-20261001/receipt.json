@@ -1,0 +1,132 @@
+{
+  "state": "SCOPED_LIVE_PASS",
+  "core_merge": "ee0007815ebc100e6d9448b7977b62f3c8c52344",
+  "toad_merge": "b27b83099d1ae336a308df5c57693bdf59e4f307",
+  "installed_toad": "6fb66ccaa1e9f9b6ed5b4e75b6c09e68f2ad7316",
+  "publication_phase": "retained-batch-launched-configurations-verified-public-ui-pending",
+  "owners_restarted": 17,
+  "protected_original_files_unchanged": 34,
+  "runtime_policy": "runtime/preserve",
+  "source_carry": "Not required: authentic old decoder observed zero populated retired decision fields; whole current source certified with installed target before and during stopped custody",
+  "capture_completed": true,
+  "duration_seconds": 25.219158101012,
+  "owner_before": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "openhcs-helper",
+    "identity": {
+      "pid": 2199116,
+      "start_time": 36225885
+    },
+    "original_owner_alive": true
+  },
+  "owner_after": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "openhcs-helper",
+    "identity": {
+      "pid": 2199116,
+      "start_time": 36225885
+    },
+    "original_owner_alive": true
+  },
+  "runtime_unchanged": true,
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 2201134,
+        "start_ticks": 36229624,
+        "returncode": 0
+      },
+      {
+        "pid": 2201137,
+        "start_ticks": 36229709,
+        "returncode": 0
+      },
+      {
+        "pid": 2201139,
+        "start_ticks": 36229717,
+        "returncode": 0
+      },
+      {
+        "pid": 2201140,
+        "start_ticks": 36229722,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 2201146,
+        "start_ticks": 36229789,
+        "returncode": 0
+      },
+      {
+        "pid": 2201147,
+        "start_ticks": 36229802,
+        "returncode": 0
+      },
+      {
+        "pid": 2201148,
+        "start_ticks": 36229812,
+        "returncode": 255
+      },
+      {
+        "pid": 2201591,
+        "start_ticks": 36231013,
+        "returncode": 0
+      },
+      {
+        "pid": 2201978,
+        "start_ticks": 36232313,
+        "returncode": 0
+      },
+      {
+        "pid": 2202011,
+        "start_ticks": 36232397,
+        "returncode": 0
+      },
+      {
+        "pid": 2202012,
+        "start_ticks": 36232479,
+        "returncode": 0
+      },
+      {
+        "pid": 2202037,
+        "start_ticks": 36232700,
+        "returncode": 0
+      }
+    ]
+  },
+  "physical_review": "Individually viewed after.png: saved user test/agent Received history, openhcs-helper selected, Ready in sidebar and session details, active input caret; no failure modal. Isolated Xvfb/st; desktop not touched. No fresh original prompt or replay.",
+  "remaining": [
+    "493 evidence-reader checkpoint",
+    "275 scrolling checkpoint and broader CPU/warm/raster work",
+    "489 lifecycle semantic closure",
+    "494 compaction retained payload framing",
+    "490 batching with495 preserved schema carry"
+  ],
+  "artifacts": {
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/authored474-20261001/publication.json": {
+      "bytes": 16764,
+      "sha256": "9ad476662cc8023e76fe6f22c6c044c2ddc7472338995e0dc309f198858e81a3"
+    },
+    "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/authored474-20261001/stopped-original-and-startup.log": {
+      "bytes": 2557,
+      "sha256": "d3d774a5d09d6f4192c56fa9deec891d359e084de1678991547108f30ec686f0"
+    },
+    "/home/ts/.cache/agent-scratch/authored474-default-helper-20261001/receipt.json": {
+      "bytes": 22049,
+      "sha256": "4300812060cac96d3647b3dbeb239746e625a253635a6d6267c0cb8903b53c58"
+    },
+    "/home/ts/.cache/agent-scratch/authored474-default-helper-20261001/terminal.mp4": {
+      "bytes": 185607,
+      "sha256": "3a6af28174f0a7e66fa2a074301c03b975236edb2635714c2f0e995c9aa1e923"
+    },
+    "/home/ts/.cache/agent-scratch/authored474-default-helper-20261001/after.png": {
+      "bytes": 39817,
+      "sha256": "1d08d1dbf3afaf7a59bb2c3a77e51c2530ade3816e0f0436c869dfeafe68225f"
+    }
+  },
+  "core_merge_destination": "feat/turn-context-phase1-20261001, not main; parent discovered destination mistake while next493candidate native pin check refused before publication. Accepted live feature remains intact; actual main integration assigned Einstein."
+}

@@ -1,0 +1,220 @@
+{
+  "state": "scoped-default-startup-delete-end-live-verified",
+  "entrypoint": "/home/ts/bin/toad-comms nra-architecture",
+  "source_capture": "/home/ts/.cache/agent-scratch/toad-editor-default-keypad-end-20260930-run03/capture/receipt.json",
+  "capture_sha256": "b84925588a98a4cd758869773dde5090d16a2ba411872d563efc02e8477721c8",
+  "runtime": {
+    "selection": "PATH agent-comms-acp",
+    "bin_directory": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin",
+    "launcher": "/home/ts/.agent-comms/stack/bin/toad-comms",
+    "launcher_sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad",
+    "launcher_links": {
+      "command": {
+        "selected_path": "/home/ts/bin/toad-comms",
+        "resolved_path": "/home/ts/.agent-comms/stack/bin/toad-comms",
+        "sha256": "80382c0f935a0f069c0128c21ca530c8dd277684b6d778611315646ab82040ad"
+      },
+      "acp": {
+        "selected_path": "/home/ts/.local/bin/agent-comms-acp",
+        "resolved_path": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/agent-comms-acp",
+        "sha256": "888cc68bb6180fdc8d447d25e1986812013c8da0c3a99b311d14569788973a27"
+      }
+    },
+    "entrypoints": {
+      "toad": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/toad",
+        "sha256": "ee5ada0be8b6356e2432e0c27fbf86baaf2de732f9f316b3ed572d258b2625c2"
+      },
+      "agent-comms-acp": {
+        "path": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/agent-comms-acp",
+        "sha256": "888cc68bb6180fdc8d447d25e1986812013c8da0c3a99b311d14569788973a27"
+      }
+    },
+    "activation_path": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/activation.json",
+    "activation_sha256": "895cc745456b76ca3fe3c4277a6ed947a990910508a73e2a35d3733563ba15f1",
+    "activation": {
+      "stage": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930",
+      "pins": {
+        "agent-comms": "000a31c562b6d048e26e288b24fcd3f1ac64f803",
+        "batrachian-toad": "9354b391880980c9c987f421e16b9a1fd59b3f3b",
+        "textual": "4e8d13d21bf98e4ad52e610277d7d06c9035ccfa"
+      },
+      "sdk": "0.12.1",
+      "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+      "state": "verified-immutable-cohort",
+      "staging_receipt_sha256": "3c2b920559fd4de3bc4e81690120f22313c084642e90b511d0c68e88ef936245"
+    },
+    "observed": {
+      "python": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/bin/python",
+      "prefix": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930",
+      "packages": {
+        "toad": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/lib/python3.14/site-packages/toad/__init__.py",
+          "module_sha256": "dd5b5084de47f965aef80813e00aaac76cb186af163a9e0fe1a764037aa46337",
+          "source_tree_sha256": "86716939c1d713f97147f10514da7e8e17569ba30f073609c28077ca7cdc6135",
+          "distribution": "batrachian-toad",
+          "version": "0.6.20",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/toad.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "9354b391880980c9c987f421e16b9a1fd59b3f3b",
+              "requested_revision": "9354b391880980c9c987f421e16b9a1fd59b3f3b"
+            }
+          }
+        },
+        "textual": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/lib/python3.14/site-packages/textual/__init__.py",
+          "module_sha256": "fcd1524975df6075497bbb5c47fe564c6909d2b4b9651708e28ead65e7492671",
+          "source_tree_sha256": "37c099bc828f724a755c8434bc0fcf674352d66f91312c95a3482a162d8304cd",
+          "distribution": "textual",
+          "version": "8.2.8",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/textual.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "4e8d13d21bf98e4ad52e610277d7d06c9035ccfa",
+              "requested_revision": "4e8d13d21bf98e4ad52e610277d7d06c9035ccfa"
+            }
+          }
+        },
+        "agent_comms": {
+          "origin": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/lib/python3.14/site-packages/agent_comms/__init__.py",
+          "module_sha256": "302424efabe07e591de8d139721b7de369c362dae6c942d2d23ebf01f7dd617e",
+          "source_tree_sha256": "e465d405f279fd80cc0bee0791f6608e9cc0a9e93992e0d6058118052e14af74",
+          "distribution": "agent-comms",
+          "version": "0.1.0",
+          "direct_url": {
+            "url": "https://github.com/OpenHCSDev/agent-comms.git",
+            "vcs_info": {
+              "vcs": "git",
+              "commit_id": "000a31c562b6d048e26e288b24fcd3f1ac64f803",
+              "requested_revision": "000a31c562b6d048e26e288b24fcd3f1ac64f803"
+            }
+          }
+        }
+      },
+      "route": {
+        "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+        "wire_root_id": "e206f3766e60451a989ca34df0e2a94b",
+        "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent"
+      }
+    }
+  },
+  "duration_seconds": 26.300412828975823,
+  "physical_video": "/home/ts/.cache/agent-scratch/toad-editor-default-keypad-end-20260930-run03/capture/terminal.mp4",
+  "reviewed_frames": {
+    "phase-startup.png": "9cda282a0bc7509e3f849f146ca8f1da769095bd9a9c85ae0e1eb8c8e64e3710",
+    "phase-edited.png": "0e7f5627cbefe34df5fdcce345f4c238dba457655113409b11d9461f24118fac",
+    "phase-end.png": "b5a808ad6a867ecc71f80f74d446e2fca7464637f49602c58aebb97aff8d3578",
+    "phase-stationary.png": "b5a808ad6a867ecc71f80f74d446e2fca7464637f49602c58aebb97aff8d3578"
+  },
+  "parent_directly_viewed": [
+    "phase-end.png",
+    "phase-stationary.png"
+  ],
+  "accepted": [
+    "Original 41 MB retained native history startup readable",
+    "Physical abcdef Left Left Backspace Delete Right yields abcf without Help",
+    "End on the native history window, followed by four stationary seconds, remains readable"
+  ],
+  "original_source_and_owner_unchanged": true,
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 2983287,
+        "start_ticks": 23998136,
+        "returncode": 0
+      },
+      {
+        "pid": 2983290,
+        "start_ticks": 23998206,
+        "returncode": 0
+      },
+      {
+        "pid": 2983292,
+        "start_ticks": 23998214,
+        "returncode": 0
+      },
+      {
+        "pid": 2983293,
+        "start_ticks": 23998220,
+        "custody": "verified launch identity transferred to installed ObservedProcess"
+      },
+      {
+        "pid": 2983299,
+        "start_ticks": 23998271,
+        "returncode": 0
+      },
+      {
+        "pid": 2983300,
+        "start_ticks": 23998283,
+        "returncode": 0
+      },
+      {
+        "pid": 2983301,
+        "start_ticks": 23998292,
+        "returncode": 0
+      },
+      {
+        "pid": 2983302,
+        "start_ticks": 23998301,
+        "returncode": 255
+      },
+      {
+        "pid": 2983828,
+        "start_ticks": 23999503,
+        "returncode": 0
+      },
+      {
+        "pid": 2983833,
+        "start_ticks": 23999530,
+        "returncode": 0
+      },
+      {
+        "pid": 2983838,
+        "start_ticks": 23999574,
+        "returncode": 0
+      },
+      {
+        "pid": 2984327,
+        "start_ticks": 24000876,
+        "returncode": 0
+      },
+      {
+        "pid": 2984404,
+        "start_ticks": 24000901,
+        "returncode": 0
+      },
+      {
+        "pid": 2984411,
+        "start_ticks": 24000979,
+        "returncode": 0
+      },
+      {
+        "pid": 2984413,
+        "start_ticks": 24001052,
+        "returncode": 0
+      },
+      {
+        "pid": 2984442,
+        "start_ticks": 24001243,
+        "returncode": 0
+      }
+    ]
+  },
+  "capture_returncode": 255,
+  "capture_exit_note": "FFmpeg 255 on requested SIGINT; normal owned terminal/UI processes exited zero. Original raw assessment remains unreviewed; this separate receipt owns the scoped review.",
+  "paid_calls": 0,
+  "prompt_inputs": 0,
+  "excluded": [
+    "Full pure history focus/PageUp acceptance",
+    "Warm tab performance",
+    "C3/CPU/header followups default activation",
+    "Whole fleet readiness"
+  ],
+  "earlier_failure": "run02 raw exporter owner mismatch preserved; no End acceptance from it"
+}

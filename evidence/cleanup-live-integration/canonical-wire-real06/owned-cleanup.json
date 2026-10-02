@@ -1,0 +1,16 @@
+[
+  {
+    "name": "alpha",
+    "pid": 2618402,
+    "alive": true,
+    "executing": false,
+    "retired": true
+  },
+  {
+    "name": "beta",
+    "pid": 2618416,
+    "alive": true,
+    "executing": false,
+    "retired": true
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "owner": "parent integration432",
+  "purpose": "remove cached source checkouts and builds of reviewed noneditable installed distributions; installed code and project worktrees untouched",
+  "packages": [
+    "agent-comms",
+    "batrachian-toad",
+    "textual",
+    "textual-diff-view"
+  ],
+  "cache": "/home/ts/.cache/uv",
+  "manager": "uv cache clean --offline --no-config, normal in-use checks, no force",
+  "returncode": 0,
+  "stdout": "",
+  "stderr": "Removed 3348 files (16.4MiB)\n",
+  "before_available_bytes": 9878274048,
+  "after_available_bytes": 9896218624,
+  "observed_available_change_bytes": 17944576,
+  "installation_prefixes_preserved": [
+    "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-batch490-20261001",
+    "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-purechannel502-20261002"
+  ]
+}

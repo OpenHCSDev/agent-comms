@@ -1,0 +1,24 @@
+{
+  "activated_at": 1790779272.5943873,
+  "target": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930",
+  "pins": {
+    "agent-comms": "4295d680a5e63885a3f338a299afc07dbb34bd85",
+    "batrachian-toad": "629cca65be1e342124df0bd6ff673e1d50dd8be3",
+    "textual": "2e49cb838af44d69aa5a6d76b2a1d74cfbe67347"
+  },
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-e36a1dde326b7017/node_modules/@earendil-works/pi-coding-agent",
+  "defaults": {
+    "agent-comms": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930/bin/agent-comms",
+    "agent-comms-acp": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930/bin/agent-comms-acp",
+    "agent-comms-agent": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930/bin/agent-comms-agent",
+    "agent-comms-nk-foreground": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930/bin/agent-comms-nk-foreground",
+    "toad": "/home/ts/.local/share/agent-comms/runtime-goal-observation-20260930/bin/toad"
+  },
+  "backend_owner_restart": false,
+  "public_inputs_replayed": false,
+  "runtime_stores_reset": false,
+  "existing_toad_clients": "not stopped; existing clients require restart to load this UI checkpoint",
+  "affected_installed_candidate_check": "first paint during pending original goal read; navigation lock and atomic selection released; A/B/A and ACP reconnect; original native/journal unchanged",
+  "actual_new_default_ui_check": "pending",
+  "staging_receipt": "/home/ts/wt/toad-first-ui-end-keypad-20260930/evidence/goal-observation-ui-stage-20260930/staging-receipt.json"
+}

@@ -1,0 +1,236 @@
+{
+  "as_of": "2026-10-02T06:31:15.131220+00:00",
+  "scope": "All open PRs in OpenHCSDev agent-comms/toad/textual/textual-diff-view; source/receiving ownership for this goal.",
+  "default_prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002",
+  "prs": [
+    {
+      "createdAt": "2026-10-02T06:21:51Z",
+      "headRefName": "fix/goal-ledger-schema-carry-20261002",
+      "headRefOid": "d1baf0e84961927130e2062e881019d77810ff55",
+      "isDraft": true,
+      "number": 514,
+      "title": "Carry declaration-derived goal ledger schema under stopped installation",
+      "updatedAt": "2026-10-02T06:21:51Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/514",
+      "repo": "agent-comms",
+      "owner": "Mendel",
+      "scope": "Automatic declaration-derived goal ledger carry and preserving installation; original rows and uncertain inputs retained.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
+          "head": "e5aa883478c008a72eac4b42ea0f6952485a0836",
+          "branch": "fix/goal-ledger-schema-carry-20261002",
+          "registered": true,
+          "exists": true,
+          "status": " M tools/cutover/native_schema_carry.py\n M tools/cutover/retained_summary_reset.py\n?? evidence/goal-ledger-schema-carry-20261002/authority-before.json.gz\n"
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-02T06:19:13Z",
+      "headRefName": "fix/goal-ledger-declared-schema-20261002",
+      "headRefOid": "6606d695931b340db24f415efb408e96ca933a26",
+      "isDraft": true,
+      "number": 513,
+      "title": "Derive goal ledger schema identity from its existing table declarations",
+      "updatedAt": "2026-10-02T06:28:33Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/513",
+      "repo": "agent-comms",
+      "owner": "Arendt",
+      "scope": "Goal ledger schema identity derives from its existing table declarations; paired installer514.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/comms-goal-ledger-declared-schema-20261002",
+          "head": "6606d695931b340db24f415efb408e96ca933a26",
+          "branch": "fix/goal-ledger-declared-schema-20261002",
+          "registered": true,
+          "exists": true,
+          "status": ""
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-02T04:23:28Z",
+      "headRefName": "fix/native-compaction-source-carry-20261002",
+      "headRefOid": "ce4db5cd950c674926187c2ecb24096be988a19c",
+      "isDraft": true,
+      "number": 510,
+      "title": "Carry original compaction source proofs across Native6 cutover",
+      "updatedAt": "2026-10-02T05:50:33Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/510",
+      "repo": "agent-comms",
+      "owner": "Mendel",
+      "scope": "Outside-src Native6 carry tool. Preserve original source proofs, history and uncertain inputs; await the corrected Native6 producer for stopped qualification.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/comms-native-compaction-source-carry-20261002",
+          "head": "ce4db5cd950c674926187c2ecb24096be988a19c",
+          "branch": "fix/native-compaction-source-carry-20261002",
+          "registered": true,
+          "exists": true,
+          "status": ""
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-02T03:21:20Z",
+      "headRefName": "fix/selected-preparation-compaction-owner-20261002",
+      "headRefOid": "8d14034d3f991b3e978b20cef89a3f773a9c2de5",
+      "isDraft": true,
+      "number": 506,
+      "title": "fix: journal selected saved-context preparation before input",
+      "updatedAt": "2026-10-02T06:20:54Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/506",
+      "repo": "agent-comms",
+      "owner": "Einstein",
+      "scope": "Same-child saved-context preparation and compaction. Content digest derives from the existing frozen source; migrate all consumers.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/comms-retained-human-main-20261001",
+          "head": "8d14034d3f991b3e978b20cef89a3f773a9c2de5",
+          "branch": "fix/selected-preparation-compaction-owner-20261002",
+          "registered": true,
+          "exists": true,
+          "status": "?? .artifacts/\n"
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-01T18:18:14Z",
+      "headRefName": "fix/request-budget-compaction-custody-20261001",
+      "headRefOid": "65d5788b1bca75e412f382a18a2f8b37b08acc0c",
+      "isDraft": true,
+      "number": 489,
+      "title": "Own native runtime facts and lifecycle through existing nominal authorities",
+      "updatedAt": "2026-10-02T06:00:20Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/489",
+      "repo": "agent-comms",
+      "owner": "Arendt",
+      "scope": "Native turn lifecycle, budget and compaction authority; separate from the Native5 async checkpoint.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/comms-request-budget-compaction-custody-20261001",
+          "head": "9822b8406a586671a0afe8f8290f5737ecbb19aa",
+          "branch": "fix/request-budget-compaction-custody-20261001",
+          "registered": true,
+          "exists": true,
+          "status": "?? .observations/\n"
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-09-30T00:21:49Z",
+      "headRefName": "refactor/cleanup-live-integration-20260929",
+      "headRefOid": "7c58ee6c30651cb516c9c82086b6227d8755b2b2",
+      "isDraft": true,
+      "number": 432,
+      "title": "Track live checkpoint and remaining nominal integration scope",
+      "updatedAt": "2026-10-02T06:16:02Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/432",
+      "repo": "agent-comms",
+      "owner": "Parent",
+      "scope": "Integration checklist, operator artifacts and standing instructions. Do not merge this broad draft wholesale.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+          "head": "7c58ee6c30651cb516c9c82086b6227d8755b2b2",
+          "branch": "refactor/cleanup-live-integration-20260929",
+          "registered": true,
+          "exists": true,
+          "status": "?? .artifacts/\n?? .release-private/\n?? evidence/performance275-feedback-edges-20261001/pr275-body.md\n?? evidence/performance275-feedback-edges-20261001/pr277-body.md\n?? evidence/performance275-feedback-edges-20261001/pr278-ready-body.md\n"
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-02T06:29:14Z",
+      "headRefName": "deploy/native5-goal-receiving-20261002",
+      "headRefOid": "8e5f9c9519a535eb238d7a68ad5af23ce4d51845",
+      "isDraft": true,
+      "number": 312,
+      "title": "Pair declared goal ledger and preserving carry with current Native5 frontend",
+      "updatedAt": "2026-10-02T06:29:14Z",
+      "url": "https://github.com/OpenHCSDev/toad/pull/312",
+      "repo": "toad",
+      "owner": "Unassigned",
+      "scope": "",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/toad-receiving-native5-batch490-20261001",
+          "head": "8e5f9c9519a535eb238d7a68ad5af23ce4d51845",
+          "branch": "deploy/native5-goal-receiving-20261002",
+          "registered": true,
+          "exists": true,
+          "status": "?? .artifacts/\n"
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-02T06:20:27Z",
+      "headRefName": "perf/sidebar-style-after308-20261002",
+      "headRefOid": "30709e96202b646751441dd403c2f1e43f8986e1",
+      "isDraft": true,
+      "number": 311,
+      "title": "Continue sidebar and native style performance after308",
+      "updatedAt": "2026-10-02T06:29:22Z",
+      "url": "https://github.com/OpenHCSDev/toad/pull/311",
+      "repo": "toad",
+      "owner": "Heisenberg",
+      "scope": "Full performance continuation after merged308; shared Styles invalidation is pushed in paired Textual22.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001",
+          "head": "30709e96202b646751441dd403c2f1e43f8986e1",
+          "branch": "perf/sidebar-style-after308-20261002",
+          "registered": true,
+          "exists": true,
+          "status": "?? .artifacts/\n"
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-02T05:46:32Z",
+      "headRefName": "feat/context-tree-inspector-20261002",
+      "headRefOid": "30edca12da1c0870fc4443a20947a9a9562d078d",
+      "isDraft": true,
+      "number": 309,
+      "title": "Draft: plan read-only Textual context tree and detail pane",
+      "updatedAt": "2026-10-02T05:46:32Z",
+      "url": "https://github.com/OpenHCSDev/toad/pull/309",
+      "repo": "toad",
+      "owner": "compaction499-live-architecture-memory; plan only",
+      "scope": "User requested planning-only context Tree/detail pane. No implementation now; temporary worktree intentionally deleted.",
+      "worktrees": []
+    },
+    {
+      "createdAt": "2026-10-02T04:36:30Z",
+      "headRefName": "perf/native-scene-after21-20261002",
+      "headRefOid": "f7770efdf607395c4bdfa0a920f895927cdd3fee",
+      "isDraft": true,
+      "number": 22,
+      "title": "Continue native scene layout and raster ownership after21",
+      "updatedAt": "2026-10-02T06:24:41Z",
+      "url": "https://github.com/OpenHCSDev/textual/pull/22",
+      "repo": "textual",
+      "owner": "Heisenberg",
+      "scope": "Native layout/scene/raster continuation paired with Toad308.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/textual-intrinsic-placement-after18-20261001",
+          "head": "f7770efdf607395c4bdfa0a920f895927cdd3fee",
+          "branch": "perf/native-scene-after21-20261002",
+          "registered": true,
+          "exists": true,
+          "status": "?? .artifacts/\n"
+        }
+      ]
+    }
+  ],
+  "draft_count": 10,
+  "reconciled_since_previous": [
+    "Core509 mergedf913; source includes selected context511",
+    "Core511 merged; zero production delta after509",
+    "Toad308 merged5dab; entire remaining performance continues311/Textual22",
+    "Toad310 mergedb8f2; later combined goal receiving ownedKepler",
+    "Toad296 closed superseded; branch/original negative evidence retained"
+  ]
+}

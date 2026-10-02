@@ -64,8 +64,7 @@ Phase 1 runs the live path on Tristan's saved session with his configured provid
 ## Done when
 
 `agent-comms context <thread>` shows any thread's next-turn context with provenance; every turn writes a manifest; no module outside the assembler adds text to an agent's input; and a constraint exported from one thread reaches a fresh thread intact.
-
-## Current receiving boundary and checkpoints, 2026-10-01
+## Earlier receiving boundary and checkpoints, 2026-10-01
 
 Phase 1 remains incomplete. Source checkpoints `e2be47b2` and `84c1c480`
 publish native context observation/query and frozen-recipient compaction scope.
@@ -89,3 +88,18 @@ original sealed physical source offset/digest, while the original Message
 sequence, audience, wake, unread and display projections ignore them. The older
 #430 delivery-source schema mismatch uses the existing runtime-index installer
 in the release owner lane; it is not an S5 schema migration.
+
+## Current acceptance and owners
+
+The partial S2 foundation is merged in Core475; Einstein473 owns the remaining
+S5 phase1 receiving closure and Einstein474 owns phase2 after the full S2
+retained declarations. Recorded input contributor comparisons, installed39
+and configured saved-session41 are accepted at their named paired foundation.
+Final49 also reaches an actual selected native compaction; provider-free51
+checks goal applicability and recorded context inspection. These scoped results
+do not convert failed whole49 or unreadable summary SVG into full acceptance.
+
+Current473 source4345bfc8 normally includes main482 and the queue-family
+provenance correction. The final changed receiving-only journey, through the
+actual SDK/native/ACP/Toad input path, remains pending a reviewed normal stage.
+No current public installation or complete phase2 journey is claimed.

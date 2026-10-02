@@ -1,0 +1,41 @@
+{
+  "raw_directory": "/home/ts/.cache/agent-scratch/g460-u06-physical-saved-v03-20261001",
+  "preserve_raw_video": true,
+  "files": [
+    {
+      "path": "after.png",
+      "bytes": 100020,
+      "sha256": "edc539dea3c557074c1f75054afd445eb3204c88d48c5283db9df59f44308e0b"
+    },
+    {
+      "path": "before.png",
+      "bytes": 105604,
+      "sha256": "4c3016ae1dd232609d88a7aa157b8e336664889ec9d6b0e7dd19c171ae183bd6"
+    },
+    {
+      "path": "capture.log",
+      "bytes": 109,
+      "sha256": "3d061e121c7e81eb1edc692fb5e570ffcb2cab0f845d4197ed71b684535b9d17"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 19755,
+      "sha256": "66c7ed568cfcf3ffc88bc5a4a09f5cd509655445b4c6aceec660ff94f1c7e2f1"
+    },
+    {
+      "path": "terminal.log",
+      "bytes": 219,
+      "sha256": "dd87c78baa4edd02e8a22afb2f0c417c28bfe5c4612da0e9a962c7896fe92e21"
+    },
+    {
+      "path": "terminal.mp4",
+      "bytes": 338368,
+      "sha256": "ede597198e4c87ec494b96e817d6377c5da7c79efd9f94ce367088b8009caf77"
+    },
+    {
+      "path": "xvfb.log",
+      "bytes": 1634,
+      "sha256": "ee3c08f7e6b04799eb02a81297e0de66e99fee84c3dd27c9b7625972ac4a687f"
+    }
+  ]
+}

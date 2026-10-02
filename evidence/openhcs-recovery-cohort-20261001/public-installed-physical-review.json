@@ -1,0 +1,31 @@
+{
+  "state": "installed; channel and architecture history physically reviewed; cold PR159 paint latency remains; fresh functional check pending",
+  "publication_phase": "retained-batch-launched-configurations-verified-public-ui-pending",
+  "public_owner_count": 13,
+  "pins": {
+    "agent_comms": "cac7bdf337d9e4dba888ce7c2093ddcc55802bc3",
+    "toad": "7572b7b7856b1ac99f7bda5dac760c87c586a73d",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "capture_path": "/home/ts/.cache/agent-scratch/parent-public476-channel-recovery-20261001-01",
+  "capture_receipt_sha256": "d137be00ebe59ce60328d707dc33fd6a3b58fb641fd80b6592183555b2058c8f",
+  "duration_seconds": 32.684914993995335,
+  "physical_frames": 1982,
+  "reviewed_images": [
+    "phase-receiver-before.png",
+    "phase-channel-open.png",
+    "phase-receiver-open.png"
+  ],
+  "architecture_saved_history_visible": true,
+  "channel_history_visible": true,
+  "pr159_blank_at_two_seconds": true,
+  "pr159_history_blocks_at_capture": 8,
+  "pr159_history_blocks_next_capture": 16,
+  "originals_unchanged": true,
+  "cleanup_remaining_owned_pids": [],
+  "cleanup_errors": [],
+  "original_inputs_replayed": 0,
+  "configured_provider_inputs_sent": 0,
+  "default_fully_usable_claim": false,
+  "remaining_finding_owner": "Heisenberg / Toad275"
+}

@@ -1,0 +1,56 @@
+{
+  "provider": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "original_bytes": 41270257,
+  "original_inputs_replayed": 0,
+  "completed_phases": [
+    "original_saved_history_open",
+    "actual_tool_interrupt_settled",
+    "same_open_next_input_answered",
+    "actual_goal_edit_owner_pause_failed_attempt_settlement",
+    "owner_pause_failed_attempt_preserved_ordinary_input_answered"
+  ],
+  "core": "94152909d34a099afc70232f922ba78e0d9af7cd",
+  "toad": "e21363c8",
+  "cancelled_turns": [
+    "71df8b02dc2b4f2ab29417c7beda7001",
+    "d6f5ef3b8665405bbb414ce772e20ed6"
+  ],
+  "complete": true,
+  "elapsed_seconds": 89.168,
+  "children_retired": true,
+  "exit_code": 0,
+  "fixture": "2150bb20",
+  "textual": "412b5a2b5da8875dc2f3dc5be2365abddce0537b",
+  "native_manifest": "b68dfdced9148b50e753e94f8a6660bc8d108d100667f6b32c368eaa31469dba",
+  "native_tree": "614a956de3870ea47d6e217da6ae9b3b1a952d2214d90187b17351625110ff7a",
+  "inputs": [
+    {
+      "inputId": "6736d768e031462fb499b28f9f43b8db",
+      "status": "started"
+    },
+    {
+      "inputId": "e62840ff06034b53904718da49cf21ff",
+      "status": "started"
+    },
+    {
+      "inputId": "ec0998678fbf44c48347136488576812",
+      "status": "started"
+    },
+    {
+      "inputId": "f3a3732a74d24db3b006ca736c184228",
+      "status": "started"
+    }
+  ],
+  "goal_state": {
+    "kind": "paused",
+    "source": {
+      "kind": "owner"
+    }
+  },
+  "goal_revision": 3,
+  "goal_attempt_lifecycle": {
+    "kind": "blocked"
+  },
+  "goal_attempt_generation": 1
+}

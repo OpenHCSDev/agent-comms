@@ -1,0 +1,32 @@
+{
+  "state": "installed; architecture saved history and channel paint verified; PR159 cold attachment unresolved; queue receiving verification pending",
+  "publication_phase": "retained-batch-launched-configurations-verified-public-ui-pending",
+  "public_owner_count": 13,
+  "pins": {
+    "agent_comms": "4345bfc8aac0e4717450d4f79e6fe53e331f3ccf",
+    "toad": "0dd9de96083126d37eb1534a62a91df9674ee120",
+    "textual": "4e9016c1a8f3592eb652efc39ada493a41ee9206",
+    "native": "0064a96bb79c21c13317a37f44173bd0acfb63d628e9f9b31cd3a374c2c25ae1"
+  },
+  "capture_path": "/home/ts/.cache/agent-scratch/parent-public-queue-default-20261001-01",
+  "capture_receipt_sha256": "34ded680c5ef4498b3bc2751129647a6e8639646d771d359ec7c5b3fb953867c",
+  "duration_seconds": 33.09940829500556,
+  "physical_frames": 2013,
+  "reviewed_images": [
+    "phase-receiver-before.png",
+    "phase-channel-open.png",
+    "phase-receiver-open.png"
+  ],
+  "architecture_saved_history_visible": true,
+  "channel_history_visible": true,
+  "pr159_loading_at_two_seconds": true,
+  "pr159_remote_queue_unavailable_during_initializing": true,
+  "queue_classification_owner": "Einstein",
+  "cold_history_owner": "Heisenberg / Toad275",
+  "originals_unchanged": true,
+  "cleanup_remaining_owned_pids": [],
+  "cleanup_errors": [],
+  "original_inputs_replayed": 0,
+  "configured_provider_inputs_sent": 0,
+  "default_fully_usable_claim": false
+}

@@ -1,0 +1,14 @@
+{
+  "previous_negative": "/home/ts/wt/g458j/u02",
+  "previous_elapsed_seconds": 94.30083196598571,
+  "previous_provider_posts": 4,
+  "cause": "new test observer encoded internal ThreadPresentation with TYPE_CHECKING references and armed Ready before original fifth admission",
+  "production_changes": 0,
+  "correction": "original frame/resource telemetry only; after original fifth cancellation compare current consumed TurnState finished ID to original registry last_finished_turn_id, observed source summary/binding and incremental ANSI; no FieldCodec internal presentation/no observer-triggered side effects",
+  "acceptance_unchanged": "full retained source/five original physical inputs/fork/queue/cancel/oncechat/stationary Ready",
+  "sha256": {
+    "run-continuous-retained.py": "e8d9386ec50811e685405cf3da5503da34727fbe142fbc17e8cf258d12f6be1e",
+    "retained-prepare.py": "48cfea2bc043ec1534cf85cb1103b54a8930e101c6d7c2a8dcd87ace95ffef62",
+    "continuous-retained.py": "0521bab188cb81a26462055ad12265e8073246f101d09fe88d8555bd92c3a22b"
+  }
+}

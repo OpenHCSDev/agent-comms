@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/atomic-page-driver/tests/l0a_native_installed_pilot.py", line 52, in until
+    await pilot.pause(0.05)
+  File "/home/ts/.local/share/agent-comms/runtime-atomic-page-handoff-20261001/lib/python3.14/site-packages/textual/pilot.py", line 546, in pause
+    await asyncio.sleep(delay)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 702, in sleep
+    return await future
+           ^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/atomic-page-driver/tests/canonical_wire_conversation_installed_pilot.py", line 516, in acceptance
+    await until(pilot, lambda: sum(body.source == token for body in view.contents.query(AgentResponse)) == 1, 30)
+  File "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/atomic-page-driver/tests/canonical_wire_conversation_installed_pilot.py", line 49, in until
+    return await native_until(pilot, predicate, seconds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/atomic-page-driver/tests/l0a_native_installed_pilot.py", line 50, in until
+    async with asyncio.timeout(seconds):
+               ~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py", line 114, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError

@@ -1,0 +1,14 @@
+{
+  "pr": "https://github.com/OpenHCSDev/toad/pull/224",
+  "reviewed_head": "6f620f616f141e885ac165e224cc86232a901247",
+  "merge_commit": "ce40495ec5504dc58f302bf20ce2f02831b61d05",
+  "merged_at": "2026-09-30T08:27:16Z",
+  "candidate_runtime": "/home/ts/.local/share/agent-comms/runtime-workspace-publication-followup-20260930",
+  "candidate_toad": "e583dc79e5a03e30882687b88facee23623d4fbd",
+  "source_identical_to_reviewed_head": true,
+  "acceptance": "Actual installed isolated ST/Xvfb recording against unchanged original 41 MB journal; held PageUp/PageDown/reverse/End and stationary bottom. 3453 frames screened, End neighbors and minima individually reviewed. No complete-body blank candidate; source, original owner and default runtime unchanged.",
+  "parent_visual_review": "end-minimum-2122.png shows readable original saved transcript during End transition",
+  "scope": "Existing Window publication ownership for native history mutations and End destination retention",
+  "default_installed": false,
+  "remaining": ["high idle CPU", "warm A/B/A rendering reuse", "adaptive partial gaps and full T9", "SnapshotPublication cancellation resource retirement", "actual default entrypoint after installation"]
+}

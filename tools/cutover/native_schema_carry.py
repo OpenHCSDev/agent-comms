@@ -385,13 +385,13 @@ class NativeSchemaCarryPlan:
         self.require_candidate()
         from agent_comms.private_sidecar import _locked_directory, _read_snapshot, _publish
         with ExitStack() as custody:
-            binding_directory = None
-            binding_snapshot = None
-            if any(item.name == 'native_prompt_bindings.sqlite3' for item in self.stores):
-                binding_directory = custody.enter_context(_locked_directory(self.root / 'native_prompt_bindings.sqlite3'))
-                binding_snapshot = _read_snapshot(binding_directory, 'native_prompt_bindings.sqlite3')
-                if binding_snapshot is None:
-                    raise ValueError('Original prompt binding disappeared')
+            snapshots = {}
+            for item in self.stores:
+                directory = custody.enter_context(_locked_directory(self.root / item.name))
+                snapshot = _read_snapshot(directory, item.name)
+                if snapshot is None:
+                    raise ValueError('Original carry store disappeared: ' + item.name)
+                snapshots[item.name] = (directory, snapshot[1])
             acquired = custody.enter_context(RuntimeNativeFiles(self.root).acquire())
             by_name = {item.path.name:item for item in acquired.originals}
             if set(by_name) != {item.name for item in self.stores}:
@@ -416,14 +416,13 @@ class NativeSchemaCarryPlan:
             acquired.require_original()
             for item in self.stores:
                 staging = destination / (item.name + '.target')
-                if item.name == 'native_prompt_bindings.sqlite3':
-                    # Reuse the original sidecar snapshot durability owner,
-                    # including its UNKNOWN intent and no automatic recovery.
-                    _publish(binding_directory, item.name, binding_snapshot[1], staging.read_bytes())
-                    staging.unlink()
-                else:
-                    staging.replace(self.root / item.name)
-                    fsync_directory(self.root)
+                # The retained candidate/preimages may live on another mount.
+                # Existing binary publication creates/fsyncs its staging in the
+                # pinned ROOT directory and atomically replaces there. Its
+                # UNKNOWN intent remains on failure; never replay or repair it.
+                directory, identity = snapshots[item.name]
+                _publish(directory, item.name, identity, staging.read_bytes())
+                staging.unlink()
             if any(digest(self.root / item.name) != item.candidate_sha256 for item in self.stores):
                 raise ValueError('Installed native carry differs; remain stopped')
             result = {'classification':'runtime/complete490-release-preserve', 'stores':FieldCodec.encode(self.stores),

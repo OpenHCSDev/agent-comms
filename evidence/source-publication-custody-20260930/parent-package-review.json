@@ -1,0 +1,93 @@
+{
+  "stage": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+  "pins": {
+    "agent-comms": "970bc527f4ddd9b3bde5522dc671aea11fd27ece",
+    "batrachian-toad": "85d45b512cac88bdf5dd8870f41e53768ab3c009",
+    "textual": "6b5895fa0a72aeec2aeaef7206d5debfa0c1803c"
+  },
+  "package_distributions": 69,
+  "SDK": "0.12.1",
+  "native_full_trust": true,
+  "original_file_counts_equal": {
+    "agent-comms": 303,
+    "batrachian-toad": 304,
+    "textual": 266
+  },
+  "actual_metadata_probe_cleanup": {
+    "remaining_owned_pids": [],
+    "errors": [],
+    "custody": "installed ParentedProcess and Platform process groups; no descendant adoption",
+    "processes": [
+      {
+        "pid": 122097,
+        "start_ticks": 28898609,
+        "returncode": 0
+      }
+    ]
+  },
+  "artifact_hashes": {
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/activation.json": "48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83",
+    "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/staging-receipt.json": "b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf",
+    "/home/ts/.cache/agent-scratch/source-publication-custody-stage-20260930/paired-ready-receipt.json": "9798c46404cb0be8bd7d8bc91c3770ae8e5db5e83b0fad8a7bf07528d7d54388"
+  },
+  "joint_run": "/home/ts/wt/g458h/u02",
+  "joint_run_outcome": "All five continuous functional native/ACP/LinuxDriver controls passed after standard launcher main guard corrected the proven spawn failure. Strict original emitted frame983 duplicates first-fork input and reply after handoff. Terminal1/78.971s; cleanup[]. No activation/waiver; Heisenberg252 owns atomic saved/live publication closure.",
+  "bus_run": "/home/ts/wt/g460b/u06",
+  "bus_run_outcome": "Terminal0/129.467s: scripted actual source/protocol/compositor text journey passes hot replies/handling,31 duplicate-free observations,3 tab-return sends and cold source once. Original color visibility remains unproven because inherited NO_COLOR/TERM=dumb produces black-on-black captures; Schrodinger owns actual terminal qualification.",
+  "same_cohort_user_ready": false,
+  "public_install_unchanged": true,
+  "original_replays": 0,
+  "paid_calls": 0,
+  "fixture_PR255": "Merged34a2ced359170dff8b11b4ef40839095c6fa7ade; test cleanup only, no product/dependency changes",
+  "remaining": "Both actual same-build journeys, stack merge/quiet reset/live acceptance, remaining254/performance and post-stack SessionRevision.",
+  "new_joint_evidence": {
+    "strict_original_emitting_frame": 983,
+    "monotonic_ns": 289591039490334,
+    "first_fork_input_id": "8ea38cfc351845e390d4b91bacd20f9f",
+    "chat_input_count": 2,
+    "chat_reply_count": 2,
+    "pending_queue_items": 0,
+    "optimistic_submissions": 0,
+    "saved_source_postcleanup": "one input/one reply; not failure-instantresource proof",
+    "source_owner": "Heisenberg252",
+    "next_action": "Original history advance/page publication and live retirement must share frame/resource custody; prove causally before new stage/run."
+  },
+  "bus_receipt": "/home/ts/wt/comms-bus-projection-ownership-s14-20260930/evidence/s14-bus-projection/installed-bus-gate/u06/proof/receipt.json",
+  "bus_visual_qualification": "Parent personally viewed original physical-v03/after.png: retained answers CONTROLLED_RETURN_0 and CONTROLLED_RETURN_2 readable once with native headers and Ready. Actual st/Xvfb, no prompt/provider/replay; original u06 hashes unchanged, cleanup empty. Proves retained-source physical visibility, not retrospective hot colored-frame correctness.",
+  "backend_merge": {
+    "main": "9370a6010c80fba75feaad9e2076f1844d2b44ea",
+    "PRs": [
+      456,
+      457,
+      458,
+      459,
+      460,
+      462,
+      467
+    ],
+    "production_stack_pyproject_identical_to_tested_970": true,
+    "scope": "Actual native/ACP and bus source functional checkpoint; not frontend physical-ready or whole S14 closure",
+    "unclosed_S14": [
+      "SessionRevision thirteen-consumer value, Core468",
+      "triage/full execution identity",
+      "unrecorded sent-admission release"
+    ]
+  },
+  "bus_physical_assessment": "evidence/s14-bus-projection/installed-bus-gate/u06/physical-v03/assessment.json",
+  "SessionRevision_followup": {
+    "PR": 468,
+    "worktree": "/home/ts/wt/comms-session-revision-value-20261001",
+    "implementation_owner": "Mendel",
+    "parent_owns_integration": true,
+    "not_in_frozen_release": true
+  },
+  "parallel_rendering": {
+    "PR": 256,
+    "source": "37ae869d2d294c8c36a12facf6ec872abefaf971",
+    "integration": 254,
+    "full_map_baseline": 212,
+    "full_map_candidate": 0,
+    "retained_prepared_resources": "12/12",
+    "scope": "Actual source ToolCall/render workers and native layout; not installed physical readiness"
+  }
+}
