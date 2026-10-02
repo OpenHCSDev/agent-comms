@@ -1,0 +1,32 @@
+{
+  "state": "affected coverage cases pass; broader stale boundary batch failed",
+  "command": "PYTHONPATH=src PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 actual3.14prefixPython, existing3.11 pure pytest appended; -o addopts= serial",
+  "elapsed_seconds": 4.04,
+  "total": 73,
+  "passed": 56,
+  "failed": 17,
+  "affected_continued_cases": 48,
+  "affected_passed": 48,
+  "new_controls": [
+    "valid historical untracked and tracked ancestry",
+    "unanchored user tail refuses",
+    "sidecar alone cannot grant ancestry",
+    "covered raw UNKNOWN refuses",
+    "wrong recorded generation refuses",
+    "covered started text mismatch refuses",
+    "cyclic ancestry refuses"
+  ],
+  "existing_failures": {
+    "tests/test_native_evidence_boundary.py": {
+      "invalid_input_regex": 7,
+      "deleted_session_dir_launch_keyword": 10
+    }
+  },
+  "baseline_classification": "unchanged source NativeInputIdText boundary and NativePiRpcLaunch.tracked signature; no production edits to either in540",
+  "provider_calls": 0,
+  "native_processes": 0,
+  "public_input_or_store_mutation": false,
+  "retained_test_tmp": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/coverage540-sanity",
+  "initial_environment_import_failure": "live3.11venv lacked metaclass_registry; no tests collected, used existing normal3.14 runtime dependencies",
+  "actual_installed_original_acceptance": "Mendel owned, pending"
+}

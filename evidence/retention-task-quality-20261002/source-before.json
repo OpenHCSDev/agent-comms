@@ -1,0 +1,223 @@
+{
+  "scope": "scorer, recorded-reader, production and test lexical consumers; dynamic resolution not inferred",
+  "parse_omissions": [],
+  "sites": [
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 22,
+      "imports": [
+        "RecordedNativeProbe"
+      ],
+      "module": "retained_native_fixture"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 26,
+      "declaration": "RecordedAnswers",
+      "bases": []
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 31,
+      "declaration": "RecordedNativeProbes",
+      "bases": []
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 51,
+      "declaration": "ScoreView",
+      "bases": [
+        "ABC"
+      ]
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 85,
+      "declaration": "ScoredRound",
+      "bases": [
+        "ScoreView"
+      ]
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 106,
+      "declaration": "ScoredScenario",
+      "bases": [
+        "ScoreView"
+      ]
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 130,
+      "declaration": "Question",
+      "bases": []
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 149,
+      "declaration": "RecallRound",
+      "bases": []
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 193,
+      "declaration": "RecallScenario",
+      "bases": []
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 290,
+      "consumer": "RecallScenario"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 183,
+      "consumer": "ScoredRound"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 204,
+      "consumer": "ScoredScenario"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 252,
+      "consumer": "Question"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 255,
+      "consumer": "Question"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 262,
+      "consumer": "Question"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 269,
+      "consumer": "Question"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 272,
+      "consumer": "Question"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 275,
+      "consumer": "Question"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 281,
+      "consumer": "Question"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 293,
+      "consumer": "RecallRound"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 307,
+      "consumer": "RecallRound"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 321,
+      "consumer": "RecallRound"
+    },
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "line": 222,
+      "consumer": "ScoredScenario"
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 25,
+      "declaration": "RecordedNativeCheckpoint",
+      "bases": []
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "line": 69,
+      "declaration": "RecordedNativeProbe",
+      "bases": []
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 16,
+      "imports": [
+        "RecordedNativeProbe"
+      ],
+      "module": "retained_native_fixture"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 19,
+      "imports": [
+        "Question",
+        "RecordedAnswers",
+        "RecordedNativeProbes"
+      ],
+      "module": "compaction_retention_fixture"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 156,
+      "consumer": "RecordedNativeProbes"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 65,
+      "consumer": "Question"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 48,
+      "consumer": "RecordedAnswers"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 53,
+      "consumer": "RecordedAnswers"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 59,
+      "consumer": "RecordedAnswers"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 75,
+      "consumer": "RecordedAnswers"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 84,
+      "consumer": "RecordedAnswers"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 111,
+      "consumer": "RecordedAnswers"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 156,
+      "consumer": "RecordedNativeProbe"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 40,
+      "consumer": "RecordedAnswers"
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "line": 92,
+      "consumer": "RecordedAnswers"
+    }
+  ]
+}

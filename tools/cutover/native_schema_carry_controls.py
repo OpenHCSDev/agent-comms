@@ -8,6 +8,7 @@ that mode explicitly does not qualify the public stopped-custody installation.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from contextlib import closing
 import json
 from pathlib import Path
@@ -19,8 +20,8 @@ import sys
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_path import PrivateDirectoryRole
 from native_schema_carry import (
-    NativeSchemaDeclaration, RuntimeNativeFiles,
-    carry_compaction, inventory, prepare, row_digest,
+    NativeSchemaDeclaration, NativeSchemaCarryPlan, RuntimeNativeFiles,
+    carry_compaction, inventory, row_digest,
 )
 from publish_openhcs_recovery import digest
 from retained_summary_reset import RuntimeCompactionFiles
@@ -124,35 +125,34 @@ def run(base, source_python, root):
     before_journal = journal_observation(root/'compaction-commits.sqlite3')
     if not before_journal['selected_summary_attempts']:
         raise ValueError('Actual historical selected summary evidence is required')
-    plan = prepare(root, base/'matched-candidate', original, source_python)
-    if source_hashes != {name:digest(root/name) for name in source_hashes}:
-        raise AssertionError('Original stores changed during candidate preparation')
-    installed = CarryNativeRuntimeInstallation(goal_schema=original.goal, plan=plan)
+    installed = CarryNativeRuntimeInstallation(
+        original=original,
+        source_python=source_python, candidate=base/'matched-candidate')
     if FieldCodec.decode(RuntimeInstallation, FieldCodec.encode(installed)) != installed:
         raise AssertionError('Canonical runtime installation declaration does not round-trip')
+    if installed.original_goal() is not installed.original.goal:
+        raise AssertionError('Carry goal declaration is not derived from original source')
     refused = []
     # One-use custody refusals operate on ONLY this private copy, with exact
     # original bytes restored afterward. No original session or proof is edited.
-    for case in ('candidate-change','existing-attempt','companion'):
+    for case in ('existing-candidate','existing-attempt','companion'):
         try:
-            if case == 'candidate-change':
-                path=plan.candidate/'compaction-commits.sqlite3'
-                prior=path.read_bytes()
-                path.write_bytes(prior+b'changed')
-                try:
-                    plan.require_candidate()
-                finally:
-                    path.write_bytes(prior)
+            member = replace(installed, candidate=base/(case+'-candidate'))
+            if case == 'existing-candidate':
+                member.candidate.mkdir(mode=0o700)
+                with RuntimeCompactionFiles(root).acquire() as acquired:
+                    member.install(acquired, base/'existing-candidate-preimages')
             elif case == 'existing-attempt':
                 destination=base/'preexisting-attempt'
                 destination.mkdir(mode=0o700)
-                plan.install(destination)
+                with RuntimeCompactionFiles(root).acquire() as acquired:
+                    member.install(acquired, destination)
             else:
                 path=root/'compaction-commits.sqlite3-wal'
                 write_original(path,b'owned control companion')
                 try:
-                    with RuntimeNativeFiles(root).acquire():
-                        pass
+                    with RuntimeCompactionFiles(root).acquire() as acquired:
+                        member.install(acquired, base/'companion-preimages')
                 finally:
                     path.unlink()
         except (ValueError,RuntimeError,FileExistsError):
@@ -162,7 +162,26 @@ def run(base, source_python, root):
         if source_hashes != {name:digest(root/name) for name in source_hashes}:
             raise AssertionError('Custody refusal changed original stores')
     with RuntimeCompactionFiles(root).acquire() as acquired:
+        protected = frozenset(root/name for name in source_hashes)
+        if installed.unchanged_protected(protected, acquired):
+            raise AssertionError('Native declared members remain in unchanged partition')
+        if installed.candidate.exists():
+            raise AssertionError('Native candidate was derived before installation custody')
         receipt = installed.install(acquired, base/'original-preimages')
+    plan = FieldCodec.decode(NativeSchemaCarryPlan, json.loads(
+        (base/'original-preimages/reviewed-carry.json').read_text()))
+    path=plan.candidate/'compaction-commits.sqlite3'
+    prior=path.read_bytes()
+    path.write_bytes(prior+b'changed')
+    try:
+        try:
+            plan.require_candidate()
+        except (ValueError,RuntimeError):
+            refused.append('candidate-change')
+        else:
+            raise AssertionError('Changed installed candidate was accepted')
+    finally:
+        path.write_bytes(prior)
     if any(digest(base/'original-preimages'/name) != sha for name,sha in source_hashes.items()):
         raise AssertionError('Original preimages were not retained exactly')
     relation=require_journal_preserved(before_journal,journal_observation(root/'compaction-commits.sqlite3'),

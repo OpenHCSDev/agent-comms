@@ -337,7 +337,8 @@ class NativeContextProof(NativeContextRecord):
 
     @classmethod
     def read_history_evidence(
-        cls, session_file: Path, header: SessionEntry, entries: tuple[NativeEntry, ...]
+        cls, session_file: Path, header: SessionEntry, entries: tuple[NativeEntry, ...],
+        *, recorded: tuple[NativeContextProof, ...] = (),
     ) -> dict[str, NativeContextProof]:
         """Corroborate retained inputs using indexed, latest context inclusion.
 
@@ -351,6 +352,12 @@ class NativeContextProof(NativeContextRecord):
                 row = NativeContextJournal.for_input(db, input_id)
                 if row is not None:
                     result[input_id] = row.corroborate(session_file, header, tracked)
+            for proof in recorded:
+                if proof.session_file != session_file:
+                    raise NativePiUnavailable("Live-recorded context belongs to another session file")
+                row = NativeContextJournal.for_input(db, proof.input_id, proof.request_generation)
+                if row is None or row.corroborate(session_file, header, tracked) != proof:
+                    raise NativePiUnavailable("Live-recorded context differs from native journal")
         return result
 
 

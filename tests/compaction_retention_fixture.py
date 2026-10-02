@@ -41,6 +41,15 @@ class Condition(str, Enum):
     RECENT_ONLY = "recent-only"
 
 
+class Measurement(str, Enum):
+    """Report labels; all use the same frozen exact-answer scoring algorithm."""
+
+    RECALL = "recall"
+    PROHIBITION = "prohibition"
+    ALTERNATIVE = "alternative"
+    ACTION = "action"
+
+
 @dataclass(frozen=True)
 class AnswerScore:
     correct: bool
@@ -53,32 +62,48 @@ class ScoreView(ABC):
 
     @property
     @abstractmethod
+    def scored_answers(self) -> Iterator[tuple[Question, AnswerScore]]:
+        """Keep the original question beside its outcome through every aggregate."""
+
+    @property
     def outcomes(self) -> Iterator[AnswerScore]:
-        """Yield the authoritative per-answer outcomes for this view."""
+        return (outcome for _, outcome in self.scored_answers)
 
     @property
     def questions(self) -> int:
-        return sum(1 for _ in self.outcomes)
+        return self.public_totals()["questions"]
 
     @property
     def correct(self) -> int:
-        return sum(outcome.correct for outcome in self.outcomes)
+        return self.public_totals()["correct"]
 
     @property
     def stale(self) -> int:
-        return sum(outcome.stale for outcome in self.outcomes)
+        return self.public_totals()["stale"]
 
     @property
     def missing(self) -> int:
-        return sum(outcome.missing for outcome in self.outcomes)
+        return self.public_totals()["missing"]
 
     def public_totals(self) -> dict:
+        return self.totals(self.outcomes)
+
+    @staticmethod
+    def totals(outcomes: Iterator[AnswerScore]) -> dict:
+        measured = tuple(outcomes)
         return {
-            "questions": self.questions,
-            "correct": self.correct,
-            "stale": self.stale,
-            "missing": self.missing,
+            "questions": len(measured),
+            "correct": sum(outcome.correct for outcome in measured),
+            "stale": sum(outcome.stale for outcome in measured),
+            "missing": sum(outcome.missing for outcome in measured),
         }
+
+    def measurement_totals(self) -> dict:
+        grouped = {}
+        for question, outcome in self.scored_answers:
+            grouped.setdefault(question.measurement, []).append(outcome)
+        return {measurement.value: self.totals(iter(outcomes))
+                for measurement, outcomes in grouped.items()}
 
 
 @dataclass(frozen=True)
@@ -91,13 +116,14 @@ class ScoredRound(ScoreView):
         return self.source.identity
 
     @property
-    def outcomes(self) -> Iterator[AnswerScore]:
-        return (outcome for _, outcome in self.answers)
+    def scored_answers(self) -> Iterator[tuple[Question, AnswerScore]]:
+        return iter(self.answers)
 
     def public(self) -> dict:
         return {
             "round": self.identity,
             **self.public_totals(),
+            "measurements": self.measurement_totals(),
             "answers": {question.identity: asdict(outcome) for question, outcome in self.answers},
         }
 
@@ -113,8 +139,8 @@ class ScoredScenario(ScoreView):
         return self.source.identity
 
     @property
-    def outcomes(self) -> Iterator[AnswerScore]:
-        return chain.from_iterable(item.outcomes for item in self.rounds)
+    def scored_answers(self) -> Iterator[tuple[Question, AnswerScore]]:
+        return chain.from_iterable(item.scored_answers for item in self.rounds)
 
     def public(self) -> dict:
         return {
@@ -123,6 +149,7 @@ class ScoredScenario(ScoreView):
             "synthetic": True,
             "rounds": [item.public() for item in self.rounds],
             **self.public_totals(),
+            "measurements": self.measurement_totals(),
         }
 
 
@@ -133,6 +160,13 @@ class Question:
     expected: str
     evidence_ref: str
     obsolete: tuple[str, ...] = ()
+    measurement: Measurement = Measurement.RECALL
+
+    def __post_init__(self) -> None:
+        if not self.identity or not self.prompt or not self.evidence_ref:
+            raise ValueError("A frozen question requires identity, prompt and original evidence")
+        if self.expected in self.obsolete:
+            raise ValueError("A current expected answer cannot also be obsolete")
 
     def score(self, answer: str | None) -> AnswerScore:
         return AnswerScore(
@@ -150,6 +184,13 @@ class RecallRound:
     identity: str
     history: tuple[str, ...]
     questions: tuple[Question, ...]
+
+    def __post_init__(self) -> None:
+        identities = tuple(question.identity for question in self.questions)
+        if len(set(identities)) != len(identities):
+            raise ValueError("A frozen round requires unique question identities")
+        if not self.identity or not self.history or not self.questions:
+            raise ValueError("A frozen round requires identity, history and questions")
 
     def public(self) -> dict:
         return {
@@ -193,6 +234,18 @@ class RecallRound:
 class RecallScenario:
     identity: str
     rounds: tuple[RecallRound, ...]
+
+    def __post_init__(self) -> None:
+        identities = tuple(item.identity for item in self.rounds)
+        if len(set(identities)) != len(identities):
+            raise ValueError("A frozen scenario requires unique round identities")
+        if not self.identity or not self.rounds:
+            raise ValueError("A frozen scenario requires identity and rounds")
+
+    @classmethod
+    def read(cls, path: Path) -> RecallScenario:
+        """Decode an authored frozen oracle once, never from candidate answers."""
+        return FieldCodec.decode(cls, json.loads(path.read_text(), object_pairs_hook=unique_fields))
 
     def public(self) -> dict:
         return {"scenario": self.identity, "rounds": [item.public() for item in self.rounds]}
@@ -284,6 +337,7 @@ def coding_scenario() -> RecallScenario:
                 "UNKNOWN",
                 "input ledger i1",
                 ("STARTED", "COMPLETED"),
+                Measurement.PROHIBITION,
             ),
         )
 
@@ -350,6 +404,8 @@ def decode_answers(text: str) -> RecordedAnswers:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--scenario-file", type=Path,
+                        help="Frozen authored RecallScenario oracle; never sent as provider JSON")
     recorded = parser.add_mutually_exclusive_group()
     recorded.add_argument("--answers", type=Path)
     recorded.add_argument("--native-probes", type=Path)
@@ -358,7 +414,7 @@ def main() -> None:
         "--condition", type=Condition, choices=tuple(Condition), default=Condition.BOUNDED
     )
     args = parser.parse_args()
-    scenario = coding_scenario()
+    scenario = RecallScenario.read(args.scenario_file) if args.scenario_file else coding_scenario()
     result = scenario.public()
     if args.probe_prompts:
         result = {item.identity: item.probe_text() for item in scenario.rounds}

@@ -1,0 +1,284 @@
+{
+  "revision": "9135d6d310a6e976694e54d82e87f3e8f839f385",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "parsed": 311,
+      "omitted": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "omitted": []
+    },
+    {
+      "root": "tests",
+      "parsed": 357,
+      "omitted": []
+    }
+  ],
+  "classes": {
+    "tools/cutover/native_schema_carry.py::NativeSchemaCarryPlan": [
+      "candidate",
+      "original",
+      "root",
+      "stores",
+      "target"
+    ],
+    "tools/cutover/runtime_installation.py::CarryNativeRuntimeInstallation": [
+      "candidate",
+      "original",
+      "source_python"
+    ]
+  },
+  "owner_declaration_sizes": {
+    "src/agent_comms/cohort_schema.py::install": 2,
+    "src/agent_comms/coordination_response.py::install": 2,
+    "src/agent_comms/native_prompt_binding.py::install": 2,
+    "src/agent_comms/native_runtime_input.py::install": 4,
+    "src/agent_comms/owner_compaction_settings.py::prepare": 2,
+    "src/agent_comms/pi_vocabulary.py::prepare": 2,
+    "src/agent_comms/private_registry_guard.py::prepare": 13,
+    "src/agent_comms/private_runtime_schema.py::install": 2,
+    "src/agent_comms/selected_participant.py::prepare": 30,
+    "src/agent_comms/selected_session.py::prepare": 56,
+    "src/agent_comms/selected_turn.py::prepare": 29,
+    "src/agent_comms/turn_runner.py::prepare": 2,
+    "src/agent_comms/wire_watch.py::prepare": 2,
+    "tools/cutover/install_retained_task_source.py::prepare": 31,
+    "tools/cutover/native_schema_carry.py::RuntimeNativeFiles": 18,
+    "tools/cutover/native_schema_carry.py::NativeSchemaCarryPlan": 121,
+    "tools/cutover/native_schema_carry.py::prepare": 38,
+    "tools/cutover/native_schema_carry.py::install": 11,
+    "tools/cutover/runtime_installation.py::RuntimeInstallation": 17,
+    "tools/cutover/runtime_installation.py::PreserveRuntimeInstallation": 10,
+    "tools/cutover/runtime_installation.py::ResetRuntimeInstallation": 7,
+    "tools/cutover/runtime_installation.py::CarryNativeRuntimeInstallation": 25,
+    "tools/cutover/runtime_installation.py::original_goal": 2,
+    "tools/cutover/runtime_installation.py::unchanged_protected": 3,
+    "tools/cutover/runtime_installation.py::install": 11,
+    "tests/channel_drain_readiness_installed_ui.py::prepare": 6,
+    "tests/conftest.py::prepare": 26,
+    "tests/test_native_startup_actual.py::prepare": 31
+  },
+  "calls": [
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "function": "src/agent_comms/coordinated_runtime.py::run",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "function": "src/agent_comms/coordinator.py::install_private_runtime",
+      "constructed_or_called": [
+        "install"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "function": "src/agent_comms/native_custody.py::inspect_context",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "function": "src/agent_comms/owner_compaction_runtime.py::compact_owner_once",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "function": "src/agent_comms/owner_compaction_runtime.py::perform",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "function": "src/agent_comms/owner_compaction_settings.py::prepare",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "function": "src/agent_comms/registry_store.py::_write_unlocked",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "function": "src/agent_comms/selected_participant.py::select",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "function": "src/agent_comms/selected_turn.py::run",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_watch.py",
+      "function": "src/agent_comms/wire_watch.py::observations",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "function": "tools/cutover/install_retained_task_source.py::main",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "function": "tools/cutover/native_schema_carry.py::prepare",
+      "constructed_or_called": [
+        "RuntimeNativeFiles"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "function": "tools/cutover/native_schema_carry.py::require_candidate",
+      "constructed_or_called": [
+        "RuntimeNativeFiles"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "function": "tools/cutover/native_schema_carry.py::install",
+      "constructed_or_called": [
+        "RuntimeNativeFiles"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "function": "tools/cutover/native_schema_carry_controls.py::run",
+      "constructed_or_called": [
+        "CarryNativeRuntimeInstallation",
+        "RuntimeNativeFiles",
+        "install",
+        "original_goal",
+        "unchanged_protected"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "function": "tools/cutover/native_schema_carry_controls.py::goal_journey",
+      "constructed_or_called": [
+        "PreserveRuntimeInstallation"
+      ]
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "function": "tools/cutover/publish_retained_summary.py::after_stopped",
+      "constructed_or_called": [
+        "install",
+        "unchanged_protected"
+      ]
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "function": "tools/cutover/runtime_installation.py::synchronize_goal",
+      "constructed_or_called": [
+        "original_goal"
+      ]
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "function": "tools/cutover/runtime_installation.py::unchanged_protected",
+      "constructed_or_called": [
+        "RuntimeNativeFiles",
+        "unchanged_protected"
+      ]
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "function": "tools/cutover/runtime_installation.py::install",
+      "constructed_or_called": [
+        "install",
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "function": "tests/test_goal_failure_native.py::test_saved_native_autonomous_goal_compacts_before_original_input",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_goal_failure_native.py",
+      "function": "tests/test_goal_failure_native.py::queue_before_prepare",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "function": "tests/test_native_startup_actual.py::test_actual_saved_native_ready_pipe_survives_busy_owner",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "function": "tests/test_native_startup_actual.py::test_actual_unresponsive_native_keeps_deadline",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "function": "tests/test_outbound_transcript_source.py::test_original_page_rejects_relevant_append_during_preparation",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "function": "tests/test_outbound_transcript_source.py::append_after_page",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "function": "tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "function": "tests/test_selected_owner_followup.py::mutate",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "function": "tests/test_task_decisions.py::test_same_native_cut_policy_keeps_hard_preparation_independent",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    },
+    {
+      "path": "tests/test_wire_watch.py",
+      "function": "tests/test_wire_watch.py::test_native_watch_invalidation_and_polling_own_resource_cleanup",
+      "constructed_or_called": [
+        "prepare"
+      ]
+    }
+  ],
+  "limits": "Existing NRA Package parses full roots; class_fields intentionally exposes only classes with >=2 annotated fields, so single-field Preserve and zero-field Runtime are covered by sizes/source reading rather than absent-owner claims. Generic prepare/install/original_goal spellings may be unrelated. Python AST not dynamic resolution, SQL/native/opaque execution proof; historical frozen evidence not active producer roots."
+}
