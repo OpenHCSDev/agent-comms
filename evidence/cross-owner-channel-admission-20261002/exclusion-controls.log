@@ -1,0 +1,595 @@
+FFFFF..FF.F                                                              [100%]
+=================================== FAILURES ===================================
+________ test_pre_send_drift_refuses_all_prompt_bytes[False-generation] ________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-1nvc23fd')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fea181489d0>
+direct = False, drift = 'generation'
+
+    @pytest.mark.parametrize(
+        ("direct", "drift"), [(False, "generation"), (False, "registry"), (True, "registry")]
+    )
+    async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, direct, drift):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+    
+        async def race(*args, **kwargs):
+            if drift == "generation":
+                with Coordination(str(root / "coordination.sqlite3")) as store:
+                    store.participants.advance_generation(
+                        stable_thread_lookup(owner.created_at), owner.name, expected_generation=1
+                    )
+            else:
+                comms.registry.unregister(owner.name)
+            return await fake(*args, **kwargs)
+    
+        monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
+        with pytest.raises(StaleFence):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:105: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:309: in run
+    result = await request.admission.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/private_send_admission.py:155: in execute
+    result = await TrackedTurnSession.execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('/var/tmp/ac-sealed-test-1nvc23fd'),)
+kwargs = {'input_id': '56bc074e84ecf7bd457adf4afd93ec4d', 'prompt': '── comms: 1 selected ──\nselected: [{"source_seq":1,"claim...de5b79f5b0dedd712f5a0447dae761f8907e2172', images=())), 'worktree': PosixPath('/var/tmp/ac-sealed-test-1nvc23fd'), ...}
+
+    async def race(*args, **kwargs):
+        if drift == "generation":
+            with Coordination(str(root / "coordination.sqlite3")) as store:
+                store.participants.advance_generation(
+                    stable_thread_lookup(owner.created_at), owner.name, expected_generation=1
+                )
+        else:
+            comms.registry.unregister(owner.name)
+>       return await fake(*args, **kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: _fake_model.<locals>.fake() missing 1 required keyword-only argument: 'session_dir'
+
+tests/test_native_send_admission.py:48: TypeError
+_________ test_pre_send_drift_refuses_all_prompt_bytes[False-registry] _________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-zoljgngq')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fea18b92570>
+direct = False, drift = 'registry'
+
+    @pytest.mark.parametrize(
+        ("direct", "drift"), [(False, "generation"), (False, "registry"), (True, "registry")]
+    )
+    async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, direct, drift):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+    
+        async def race(*args, **kwargs):
+            if drift == "generation":
+                with Coordination(str(root / "coordination.sqlite3")) as store:
+                    store.participants.advance_generation(
+                        stable_thread_lookup(owner.created_at), owner.name, expected_generation=1
+                    )
+            else:
+                comms.registry.unregister(owner.name)
+            return await fake(*args, **kwargs)
+    
+        monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
+        with pytest.raises(StaleFence):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:105: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:309: in run
+    result = await request.admission.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/private_send_admission.py:155: in execute
+    result = await TrackedTurnSession.execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('/var/tmp/ac-sealed-test-zoljgngq'),)
+kwargs = {'input_id': '9f2954f5bb2869d2044b15d2cf76f75c', 'prompt': '── comms: 1 selected ──\nselected: [{"source_seq":1,"claim...de5b79f5b0dedd712f5a0447dae761f8907e2172', images=())), 'worktree': PosixPath('/var/tmp/ac-sealed-test-zoljgngq'), ...}
+
+    async def race(*args, **kwargs):
+        if drift == "generation":
+            with Coordination(str(root / "coordination.sqlite3")) as store:
+                store.participants.advance_generation(
+                    stable_thread_lookup(owner.created_at), owner.name, expected_generation=1
+                )
+        else:
+            comms.registry.unregister(owner.name)
+>       return await fake(*args, **kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: _fake_model.<locals>.fake() missing 1 required keyword-only argument: 'session_dir'
+
+tests/test_native_send_admission.py:48: TypeError
+_________ test_pre_send_drift_refuses_all_prompt_bytes[True-registry] __________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-54xttvgg')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fea174359d0>
+direct = True, drift = 'registry'
+
+    @pytest.mark.parametrize(
+        ("direct", "drift"), [(False, "generation"), (False, "registry"), (True, "registry")]
+    )
+    async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, direct, drift):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        fake, calls = _fake_model(decision="IGNORE")
+    
+        async def race(*args, **kwargs):
+            if drift == "generation":
+                with Coordination(str(root / "coordination.sqlite3")) as store:
+                    store.participants.advance_generation(
+                        stable_thread_lookup(owner.created_at), owner.name, expected_generation=1
+                    )
+            else:
+                comms.registry.unregister(owner.name)
+            return await fake(*args, **kwargs)
+    
+        monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
+        with pytest.raises(StaleFence):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:105: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:294: in run
+    return await attempt.run(execution.native_package, session,
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:253: in run
+    result = await request.admission.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/private_send_admission.py:155: in execute
+    result = await TrackedTurnSession.execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('/var/tmp/ac-sealed-test-54xttvgg'),)
+kwargs = {'input_id': '8e517412429166fee2671ad4d1825587', 'prompt': '── comms: 1 selected ──\nselected: [{"source_seq":1,"claim...36fa99d8ef13a6eef37c0041efd4178551fdca05', images=())), 'worktree': PosixPath('/var/tmp/ac-sealed-test-54xttvgg'), ...}
+
+    async def race(*args, **kwargs):
+        if drift == "generation":
+            with Coordination(str(root / "coordination.sqlite3")) as store:
+                store.participants.advance_generation(
+                    stable_thread_lookup(owner.created_at), owner.name, expected_generation=1
+                )
+        else:
+            comms.registry.unregister(owner.name)
+>       return await fake(*args, **kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: _fake_model.<locals>.fake() missing 1 required keyword-only argument: 'session_dir'
+
+tests/test_native_send_admission.py:48: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.optional_awareness_projection:optional_awareness_projection.py:232 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+_ test_actual_raw_writes_follow_committed_admission_without_global_exclusions[False-False] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-nha8v37h')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fea16a2cc50>
+direct = False, revoke = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    @pytest.mark.parametrize("revoke", [False, True])
+    async def test_actual_raw_writes_follow_committed_admission_without_global_exclusions(tmp_path, monkeypatch, direct, revoke):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        children = []
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    
+        async def launch(*args, **kwargs):
+            child = await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+            children.append(child)
+            if revoke:
+                comms.registry.unregister(owner.name)
+            return child
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        observed = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            @contextmanager
+            def scope():
+                with boundary():
+                    observed.append(_held(root))
+                    yield
+                    observed.append(_held(root))
+    
+            result = write(fd, payload, scope, cancelled, deadline)
+            # The same production admission cannot write twice even after all locks
+            # are released. Its UNKNOWN journal reservation survives the first send.
+            with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
+                pytest.fail("one-use native admission reopened")
+            return result
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:105: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:309: in run
+    result = await request.admission.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/private_send_admission.py:155: in execute
+    result = await TrackedTurnSession.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:229: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:246: in complete
+    await self.admit_prompt()
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:368: in admit_prompt
+    await send_fenced_prompt(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:182: in send_fenced_prompt
+    await asyncio.shield(done)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def worker() -> None:
+        error: BaseException | None = None
+        try:
+>           _write_fenced(fd, payload, boundary, cancelled, write_timeout, measurements)
+E           TypeError: test_actual_raw_writes_follow_committed_admission_without_global_exclusions.<locals>.probe() takes 5 positional arguments but 6 were given
+E           Original native child stderr:
+E           (empty)
+
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:165: TypeError
+_ test_actual_raw_writes_follow_committed_admission_without_global_exclusions[False-True] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-pa200snj')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fea160f8d70>
+direct = True, revoke = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    @pytest.mark.parametrize("revoke", [False, True])
+    async def test_actual_raw_writes_follow_committed_admission_without_global_exclusions(tmp_path, monkeypatch, direct, revoke):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        children = []
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+    
+        async def launch(*args, **kwargs):
+            child = await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+            children.append(child)
+            if revoke:
+                comms.registry.unregister(owner.name)
+            return child
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        observed = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            @contextmanager
+            def scope():
+                with boundary():
+                    observed.append(_held(root))
+                    yield
+                    observed.append(_held(root))
+    
+            result = write(fd, payload, scope, cancelled, deadline)
+            # The same production admission cannot write twice even after all locks
+            # are released. Its UNKNOWN journal reservation survives the first send.
+            with pytest.raises(IdentityConflict, match="cannot be reused"), boundary():
+                pytest.fail("one-use native admission reopened")
+            return result
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:151: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:105: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:294: in run
+    return await attempt.run(execution.native_package, session,
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:253: in run
+    result = await request.admission.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/private_send_admission.py:155: in execute
+    result = await TrackedTurnSession.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:229: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:246: in complete
+    await self.admit_prompt()
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:368: in admit_prompt
+    await send_fenced_prompt(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:182: in send_fenced_prompt
+    await asyncio.shield(done)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def worker() -> None:
+        error: BaseException | None = None
+        try:
+>           _write_fenced(fd, payload, boundary, cancelled, write_timeout, measurements)
+E           TypeError: test_actual_raw_writes_follow_committed_admission_without_global_exclusions.<locals>.probe() takes 5 positional arguments but 6 were given
+E           Original native child stderr:
+E           (empty)
+
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:165: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.optional_awareness_projection:optional_awareness_projection.py:232 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+_ test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers[False] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-0qr3h_qk')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fea16bf8c00>
+direct = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    async def test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers(
+        tmp_path, monkeypatch, direct
+    ):
+        root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+        children = []
+    
+        async def launch(*_args, **kwargs):
+            child = await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+            children.append(child)
+            return child
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        observations = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            path = root / "coordination.sqlite3"
+            reader = sqlite3.connect(path, isolation_level=None, timeout=0)
+            reader.execute("BEGIN")
+            reader.execute("SELECT * FROM native_runtime_input").fetchall()
+    
+            @contextmanager
+            def checked_admission():
+                try:
+                    with boundary():
+                        assert observations == ["reader refused before bytes"]
+                        # The exact epoch has committed before any raw byte. A
+                        # later reader borrows it without blocking this pipe writer.
+                        late = sqlite3.connect(path, isolation_level=None, timeout=0)
+                        try:
+                            epochs = late.execute(
+                                "SELECT sent_owner_admission_generation FROM native_runtime_input"
+                            ).fetchall()
+                            assert len(epochs) == 1 and epochs[0][0] is not None
+                        finally:
+                            late.close()
+                        assert _held(root) == []
+                        observations.append("original admission committed and released")
+                        yield
+                except native_prompt_send.PromptAdmissionBusy:
+                    assert observations == []
+                    assert not received.exists()  # No raw prompt has reached the child.
+                    observations.append("reader refused before bytes")
+                    reader.execute("ROLLBACK")
+                    raise
+    
+            try:
+                write(fd, payload, checked_admission, cancelled, deadline)
+                observations.append("sent and committed once")
+            finally:
+                reader.close()
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        # The local child supplies capability+reads prompt then exits without proof;
+        # the expected downstream error is NOT a post-write admission failure.
+        with pytest.raises(native_pi.NativePiUnavailable) as caught:
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:594: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:105: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:309: in run
+    result = await request.admission.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/private_send_admission.py:155: in execute
+    result = await TrackedTurnSession.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:229: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:246: in complete
+    await self.admit_prompt()
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:368: in admit_prompt
+    await send_fenced_prompt(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:182: in send_fenced_prompt
+    await asyncio.shield(done)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def worker() -> None:
+        error: BaseException | None = None
+        try:
+>           _write_fenced(fd, payload, boundary, cancelled, write_timeout, measurements)
+E           TypeError: test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers.<locals>.probe() takes 5 positional arguments but 6 were given
+E           Original native child stderr:
+E           (empty)
+
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:165: TypeError
+_ test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers[True] _
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-__ywak63')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fea17513750>
+direct = True
+
+    @pytest.mark.parametrize("direct", [False, True])
+    async def test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers(
+        tmp_path, monkeypatch, direct
+    ):
+        root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
+        create = AttachedChild.start
+        received = tmp_path / "received.json"
+        session = root / "native-sessions" / stable_thread_lookup(owner.created_at) / "s.jsonl"
+        children = []
+    
+        async def launch(*_args, **kwargs):
+            child = await create(
+                (sys.executable, "-c", _CHILD, str(session), str(received), "no"), **kwargs
+            )
+            children.append(child)
+            return child
+    
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        write = native_prompt_send._write_fenced
+        observations = []
+    
+        def probe(fd, payload, boundary, cancelled, deadline):
+            path = root / "coordination.sqlite3"
+            reader = sqlite3.connect(path, isolation_level=None, timeout=0)
+            reader.execute("BEGIN")
+            reader.execute("SELECT * FROM native_runtime_input").fetchall()
+    
+            @contextmanager
+            def checked_admission():
+                try:
+                    with boundary():
+                        assert observations == ["reader refused before bytes"]
+                        # The exact epoch has committed before any raw byte. A
+                        # later reader borrows it without blocking this pipe writer.
+                        late = sqlite3.connect(path, isolation_level=None, timeout=0)
+                        try:
+                            epochs = late.execute(
+                                "SELECT sent_owner_admission_generation FROM native_runtime_input"
+                            ).fetchall()
+                            assert len(epochs) == 1 and epochs[0][0] is not None
+                        finally:
+                            late.close()
+                        assert _held(root) == []
+                        observations.append("original admission committed and released")
+                        yield
+                except native_prompt_send.PromptAdmissionBusy:
+                    assert observations == []
+                    assert not received.exists()  # No raw prompt has reached the child.
+                    observations.append("reader refused before bytes")
+                    reader.execute("ROLLBACK")
+                    raise
+    
+            try:
+                write(fd, payload, checked_admission, cancelled, deadline)
+                observations.append("sent and committed once")
+            finally:
+                reader.close()
+    
+        monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
+        # The local child supplies capability+reads prompt then exits without proof;
+        # the expected downstream error is NOT a post-write admission failure.
+        with pytest.raises(native_pi.NativePiUnavailable) as caught:
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_send_admission.py:594: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py:105: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:294: in run
+    return await attempt.run(execution.native_package, session,
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/selected_turn.py:253: in run
+    result = await request.admission.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/private_send_admission.py:155: in execute
+    result = await TrackedTurnSession.execute(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:229: in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:246: in complete
+    await self.admit_prompt()
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/tracked_turn.py:368: in admit_prompt
+    await send_fenced_prompt(
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:182: in send_fenced_prompt
+    await asyncio.shield(done)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def worker() -> None:
+        error: BaseException | None = None
+        try:
+>           _write_fenced(fd, payload, boundary, cancelled, write_timeout, measurements)
+E           TypeError: test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers.<locals>.probe() takes 5 positional arguments but 6 were given
+E           Original native child stderr:
+E           (empty)
+
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/native_prompt_send.py:165: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.optional_awareness_projection:optional_awareness_projection.py:232 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+______ test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1072/test_ordinary_owner_checks_kee0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fea15660e50>
+
+    @pytest.mark.asyncio
+    async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp_path, monkeypatch):
+>       agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_ordinary_admission_rules.py:17: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:34: in owner
+    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...:test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_native_send_admission.py::test_pre_send_drift_refuses_all_prompt_bytes[False-generation]
+FAILED tests/test_native_send_admission.py::test_pre_send_drift_refuses_all_prompt_bytes[False-registry]
+FAILED tests/test_native_send_admission.py::test_pre_send_drift_refuses_all_prompt_bytes[True-registry]
+FAILED tests/test_native_send_admission.py::test_actual_raw_writes_follow_committed_admission_without_global_exclusions[False-False]
+FAILED tests/test_native_send_admission.py::test_actual_raw_writes_follow_committed_admission_without_global_exclusions[False-True]
+FAILED tests/test_native_send_admission.py::test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers[False]
+FAILED tests/test_native_send_admission.py::test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers[True]
+FAILED tests/test_ordinary_admission_rules.py::test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion
+8 failed, 3 passed in 5.07s

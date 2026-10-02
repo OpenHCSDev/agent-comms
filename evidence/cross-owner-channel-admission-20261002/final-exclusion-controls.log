@@ -1,0 +1,34 @@
+.......F                                                                 [100%]
+=================================== FAILURES ===================================
+______ test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-1075/test_ordinary_owner_checks_kee0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f341f586690>
+
+    @pytest.mark.asyncio
+    async def test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion(tmp_path, monkeypatch):
+>       agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_ordinary_admission_rules.py:17: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:48: in owner
+    comms.threads.attach_session("project", str(session))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7f341f4c8050>
+original = 'project'
+session_file = '/tmp/pytest-of-ts/pytest-1075/test_ordinary_owner_checks_kee0/session.jsonl'
+pid = None
+
+    def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
+        """Attach authoritative Pi runtime state to an existing thread."""
+        with _store_lock(self._wire_lock_path):
+>           current = self.registry.require(original.name)
+                                            ^^^^^^^^^^^^^
+E           AttributeError: 'str' object has no attribute 'name'
+
+.artifacts/runtime-cross-owner524/lib/python3.14/site-packages/agent_comms/thread_management.py:482: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_ordinary_admission_rules.py::test_ordinary_owner_checks_keep_distinct_fences_and_wire_exclusion
+1 failed, 7 passed in 3.86s
