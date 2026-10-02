@@ -21,6 +21,7 @@ from .acp_extension import (
     VerifiedCursorObservation,
     encode_updates,
 )
+from .bus_publication import stable_thread_lookup
 from .comms import Comms
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
@@ -152,4 +153,23 @@ class CursorPublication:
 
     async def refresh(self, session_id: str, thread_name: str) -> None:
         if self.delivery(session_id).needs_refresh:
+            # Resume only the cursor projection. The immutable native receipt
+            # supplies its original admission; no claim or input is resumed.
+            try:
+                owner, admission = self.comms.registry.live_owner_with_admission(thread_name)
+                with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
+                    person = store.participants.get(stable_thread_lookup(owner.created_at))
+                    bus = MessageBus(
+                        self.comms.root / "bus.jsonl",
+                        self.comms.registry,
+                        private_response_writes=True,
+                    )
+                    NativeSourceCursor(bus, store, wire_root_id=self.root_id).advance(
+                        owner=owner,
+                        owner_admission_generation=admission,
+                        owner_generation=person.participant_generation,
+                        committed_input_id=None,
+                    )
+            except (OSError, ValueError, sqlite3.Error, CoordinationError):
+                pass  # The publication below still reports the original observation.
             await self.publish(session_id, thread_name)

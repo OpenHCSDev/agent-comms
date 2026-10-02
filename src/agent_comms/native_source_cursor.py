@@ -66,7 +66,6 @@ class NativeSourceCursor:
         contention: StoreLockContention | None,
     ) -> CurrentNativeCursor | None:
         sources = self._coverage(identity.lookup, contention)
-        witness = sources.witness()
         coverage = sources.prefix(source_reads=source_reads)
         proof = sources.last_proof(
             coverage.injected_source_seqs[-1] if coverage.injected_source_seqs else 0,
@@ -77,7 +76,7 @@ class NativeSourceCursor:
             _response_boundary(self.bus, blocking=False, contention=contention) as registry,
             self.store.session.transaction() as db,
         ):
-            if sources.witness_unlocked() != witness:
+            if sources.witness_unlocked() != coverage.source_witness:
                 raise IdentityConflict("current cursor canonical source changed before commit")
             identity.require_live(
                 self.bus, registry, "current cursor owner or private root changed"
@@ -172,9 +171,9 @@ class NativeSourceCursor:
         sources = self._coverage(identity.lookup)
         witness = None
         if cursor is not None:
-            witness = sources.witness()
             with NativeEvidenceScope() as source_reads:
-                self._require_source(identity, cursor, sources, source_reads)
+                coverage = self._require_source(identity, cursor, sources, source_reads)
+                witness = coverage.source_witness
         with _response_boundary(self.bus, blocking=False) as registry:
             if cursor is not None and sources.witness_unlocked() != witness:
                 raise IdentityConflict("current cursor canonical source changed while reading")
@@ -192,7 +191,7 @@ class NativeSourceCursor:
     def _require_source(
         self, owner: CursorOwner, cursor: CurrentNativeCursor, sources: SourceCoverage,
         source_reads: NativeEvidenceScope,
-    ) -> None:
+    ) -> ProvenSourceCoverage:
         if cursor.owner_identity != owner.participant_identity:
             raise IdentityConflict("current native cursor owner identity differs")
         coverage = sources.prefix(through_seq=cursor.covered_seq, source_reads=source_reads)
@@ -211,3 +210,4 @@ class NativeSourceCursor:
             raise IdentityConflict("current native cursor proof differs from journal")
         if proof is not None and proof.owner_identity != owner.participant_identity:
             raise IdentityConflict("current native cursor proof belongs to another owner")
+        return coverage

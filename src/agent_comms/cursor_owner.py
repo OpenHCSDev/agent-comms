@@ -94,17 +94,23 @@ class CursorOwner(RegistryOwner):
         prior: CurrentNativeCursor | None,
         committed_input_id: str | None,
     ) -> bool:
-        """Historical evidence cannot seed another live admission generation."""
+        """The original recorded input seeds only its own live admission.
+
+        A settled caller may additionally fence the expected input ID. Idle
+        projection uses the same immutable receipt, not a cached completion ID;
+        absence of that caller assertion does not erase the receipt's admission.
+        """
         if proof is None:
             return True  # Covered no-wake prefix may precede an UNKNOWN gap.
         if proof.owner_identity != self.participant_identity or proof.source_seq != injected_seq:
             raise IdentityConflict("current cursor native proof belongs to another owner")
-        if prior is None or injected_seq > prior.injected_seq:
-            if proof.input_id != committed_input_id:
-                return False
-        elif prior.input_id != proof.input_id:
+        if (
+            prior is not None
+            and injected_seq <= prior.injected_seq
+            and prior.input_id != proof.input_id
+        ):
             raise IdentityConflict("current cursor native input changed")
-        elif committed_input_id is not None and proof.input_id != committed_input_id:
+        if committed_input_id is not None and proof.input_id != committed_input_id:
             return False
         reserved = NativeRuntimeInput.one(db, input_id=proof.input_id)
         if (
