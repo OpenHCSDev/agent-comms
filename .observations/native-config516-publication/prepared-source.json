@@ -1,0 +1,12 @@
+{
+  "state": "prepared; existing quiet-prepare then exact stopped reacquisition relation confirmed by parent and Mendel",
+  "publisher": ".observations/native-config516-publication/publish.py",
+  "publisher_sha256": "7653153bf270fa72bdf0bd7fd2430d79c56ec80868f37f457bf5dec18f222eee",
+  "operator_source_head": "c0135047625945ad1c2115a86a3181a8d16c3ab3",
+  "operator_manifest_sha256": "506bd52e5602fe564ff42b80ca5e19105af712d8aa6f0ce8253848852800ef22",
+  "core_source": "c6019afd34313db81504a364e3cc4024470a3034",
+  "toad_source": "c7f5e2475d535bf625d8e90345ff44acefc1458d",
+  "public_effects": 0,
+  "new_packages": 0,
+  "new_provider_attempts": 0
+}
