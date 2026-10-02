@@ -523,7 +523,14 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
             comms.registry.require("alpha"), snapshot)
 
 
-def test_explicit_subtask_observation_correction_drop_and_turn_continuity(comms, monkeypatch):
+@pytest.mark.asyncio
+async def test_explicit_subtask_observation_correction_drop_and_turn_continuity(comms, monkeypatch):
+    import threading
+    from agent_comms.owner_compaction_settings import PiCompactionDecision
+    from agent_comms.pi_vocabulary import (
+        ManualCompactionReason, OverflowCompactionReason,
+        TaskBoundaryCompactionReason, ThresholdCompactionReason,
+    )
     from agent_comms.retained_task_facts import RetainedTaskFacts
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
 
@@ -547,6 +554,33 @@ def test_explicit_subtask_observation_correction_drop_and_turn_continuity(comms,
     assert boundary() == (original.reference,)
     assert original.body == request["text"]
     assert original.task.source_turn == owner.turn_identity
+    with comms.bus.log.locked():
+        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+    retained = RetainedTaskFacts(facts)
+    loop_thread = threading.get_ident()
+    reads = []
+    registry_type = type(comms.registry)
+    snapshot = registry_type.snapshot
+
+    def read_snapshot(registry):
+        assert threading.get_ident() != loop_thread, "Registry read blocked the async owner"
+        reads.append(threading.get_ident())
+        return snapshot(registry)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(registry_type, "snapshot", read_snapshot)
+        for reason in (ManualCompactionReason, OverflowCompactionReason, ThresholdCompactionReason):
+            decision = PiCompactionDecision(2048, 1000, True, True, reason, ())
+            assert await decision.boundary_current(retained, owner, comms.registry)
+        optional = PiCompactionDecision(2048, 1000, True, True, TaskBoundaryCompactionReason, ())
+        assert not await optional.boundary_current(retained, owner, comms.registry)
+        assert reads == []
+        optional = replace(optional, boundary=(original.reference,))
+        assert await optional.boundary_current(retained, owner, comms.registry)
+        assert len(reads) == 1
+        assert not await replace(optional, boundary=optional.boundary * 2).boundary_current(
+            retained, owner, comms.registry)
+        assert len(reads) == 2
     unfinished = invoke_tool(comms, "comms_subtask", {
         **request, "completed": False,
         "change": {"kind": "correction", "original": first["reference"]}})
