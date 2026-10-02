@@ -52,6 +52,8 @@ async def configured_mixed_routes(arguments):
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.native_package import verify_native_package
     from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_entries import NativeEntry
+    from agent_comms.pi_payloads import ToolResultMessage
     from agent_comms.coordination_tables.publications import PublicationReceipts
     from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
     from agent_comms.store_files import _store_lock
@@ -169,11 +171,14 @@ async def configured_mixed_routes(arguments):
                             'original_cursor_covers_late':True}
                         break
                 await asyncio.sleep(.03)
-        owner = service.registry.require(name)
-        entries = [json.loads(line) for line in Path(owner.session_file).read_text().splitlines()]
-        tool_results = [row for row in entries if row.get('type') == 'message' and
-                        row['message'].get('role') == 'toolResult']
-        assert any(row['message'].get('toolName') == 'read' for row in tool_results), 'No ordinary native read tool ran'
+        with Coordination(str(service.root/'coordination.sqlite3')) as store:
+            history = read_historical_native_inputs(store,wire_root_id=root_id,
+                recipient_lookup=lookup,source_seq=originals[0].seq)
+        with NativeEntry.open_evidence(history[0].context.session_file) as evidence:
+            _, entries = evidence.observe()
+        tool_results = [entry.message for entry in entries if entry.is_message and
+                        isinstance(entry.message,ToolResultMessage)]
+        assert any(result.tool_name == 'read' and not result.is_error for result in tool_results), 'No ordinary native read tool ran'
         facts = [fact for packet in packets for fact in decode_updates(packet['update'].get('_meta'))]
         assert facts, 'No actual ACP facts observed'
         proof['ordinary_read_tool_result'] = True
@@ -182,6 +187,7 @@ async def configured_mixed_routes(arguments):
         failure = f'{type(error).__name__}: {error}'
         raise
     finally:
+        (stage/'acp-observer.json').write_text(json.dumps(packets,indent=2)+'\n')
         await attachment.shutdown()
         await asyncio.to_thread(service.owners.stop,name)
         receipt = {'elapsed_seconds':time.perf_counter()-begun,'failure':failure,

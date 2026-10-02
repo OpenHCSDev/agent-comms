@@ -250,3 +250,36 @@ Production/DDL stays byte-equal3725, so the paired runtime is unchanged.
 Stage preflight resource warning: home7.1GiB/RAM13.0GiB/swap10.2GiB. Shadow
 prefix123152KiB is owned; next one-owner fresh private fixture is bounded64MiB.
 This is a preserved failed installed attempt, not a functional batch PASS.
+
+
+### Actual configured mixed-route functional receipt (same original02)
+
+Original configured02 completed both FULL native workflows in24.229s using
+actual openai-codex/gpt-6.1-sol/off. Three originals shared ONE native input: two
+channel questions produced one combined #team answer and the direct question
+produced its human-only answer. PRIVATE_ROUTE_490 did not leak into the channel.
+The late fourth original belonged only to its next native input. All four
+original assignments completed; each historical proof recovered the original
+expected input, and the single current cursor covered the late original.
+
+The process still exited1: after these checks, the driver tried
+Path(registry_owner.session_file), which is absent for this fresh selected owner.
+The recorded original context, not that registration field, owns the native file.
+Raw failure and cleanup remain immutable in configured02-preserved-observer-failure.json.
+Both owned workers were retired; original provider configuration remained unchanged.
+No global owner restart, input replay or public activation occurred.
+
+A subsequent READ-ONLY inspection of THE SAME original02 used existing
+HistoricalNativeInput.context -> NativeEntry.open_evidence. It confirmed native
+input6ead6b031f9a81c8a83aa9ace910fac9, successful read tool entryb0d75e37 and
+source equality. It made no provider call or native prompt. Observer now uses
+that same canonical context and persists actual ACP callback packets even on
+failure; this correction is test-only, with production/assets still equal3725.
+
+The original02 ACP callback packets were in memory and were not retained before
+the observer failed. Their count/content is NOT reconstructed or claimed passed.
+The ordinary ACP load/owner path executed, but full notification observation
+remains a named acceptance gap. No further provider run was made to hide it.
+Evidence is committed in evidence/pending-message-batch-execution-20261001;
+private originals remain /home/ts/wt/k490c01 and k490c02. This is a useful scoped
+Native5 functional checkpoint, not whole-PR Ready or a public/live claim.
