@@ -1,0 +1,11 @@
+{
+  "owner": "Schrodinger compact Core package; Einstein520 actualS1",
+  "source": "f76ef52dc2d77b94618b461175ccae82b51aac98",
+  "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-s1-final520-core-20261002",
+  "base_69_requirements": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/selected-publication530-sidebar323-20261002/requirements.txt",
+  "purpose": "Normal production Core+SDK dependency projection of qualified69 pins; no frontend install/native build/source overlay",
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-0b306dac5a8b9b60/node_modules/@earendil-works/pi-coding-agent",
+  "expected_allocation_bytes": 15000000,
+  "provider_calls": 0,
+  "public_writes": 0
+}

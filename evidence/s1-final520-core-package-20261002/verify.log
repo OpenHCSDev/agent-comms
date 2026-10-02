@@ -1,0 +1,29 @@
+{
+  "state": "READY compact normal Corewheel/SDK sourcequalified; Einstein actualS1 remains separate",
+  "prefix": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-s1-final520-core-20261002",
+  "python": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-s1-final520-core-20261002/bin/python",
+  "core": "f76ef52dc2d77b94618b461175ccae82b51aac98",
+  "wheel_sha256": "74a638a5f0907186ad8bcae47d175ef628cbf5b1bd9c0e6f7d736ba743df0221",
+  "core_direct_url": {
+    "url": "file:///home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/s1-final520-core-20261002/wheels/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "source_resources_byte_equal": true,
+  "source_resource_count": 342,
+  "sdk": "0.12.1",
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-0b306dac5a8b9b60/node_modules/@earendil-works/pi-coding-agent",
+  "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-0b306dac5a8b9b60/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "manifest": "0b306dac5a8b9b603949cc245f0629a9cbfc01bc4534090f2c88ca2561c1f34e",
+  "tree": "1e27f3ff7d93232528b26693fe462052f067bbd4ec6efd30216eb1b6ddd0575e",
+  "native_full_trust": true,
+  "dependency_strategy": "Core production+SDK projection of existing frozen69 pins, normal wheel resolver; no Toad mismatch/override/no-deps",
+  "base_requirements_sha256": "1867c05e4ba779120ecaf2facccfdf86f43ec9288e27d744dce103499cce1771",
+  "requirements_sha256": "8eb0d60485d447b347688074dabaae4bf9f38d5577eaae1b42a351998717a19b",
+  "public_writes": 0,
+  "provider_calls": 0,
+  "native_build": false,
+  "get_state_repeated": false,
+  "source_overlay": false,
+  "fixture_or_original_mutation": false,
+  "acceptance": "Installedsource/package only; Einstein owns configured optionalS1 on canonical SDKfork of preserved102 source, no repeatmanual529."
+}

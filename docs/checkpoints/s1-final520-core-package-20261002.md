@@ -1,0 +1,5 @@
+# Compact optional S1 Core package
+
+Exact final520 freeze f76ef52dc2d77b94618b461175ccae82b51aac98 normal wheel and installed source/resources byte equality pass. The independent compact prefix `.artifacts/runtime-s1-final520-core-20261002` uses10 normal Core+SDK production dependencies projected from the existing69 pins; no Toad install, dependency bypass, overlay or native rebuild. SDK0.12.1 and unchanged native0b306 manifest/full-tree trust pass. Prefix16MiB, wheel840KiB; cached normal resolver used without changing old packages.
+
+Einstein owns configured optionalS1 using a canonical SDK fork of already-compacted preserved102 source with a new root/originals and inherited settings/auth. No original attempt/journal mutated or provider input sent by this packaging lane. Installed package qualification does not establish S1 acceptance; no repeated manual529/get_state gate. Current public326 and subsequent532+325/Text27 pair remain independent. Source proof and requirement pins are under `evidence/s1-final520-core-package-20261002`.

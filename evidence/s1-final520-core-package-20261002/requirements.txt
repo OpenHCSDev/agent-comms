@@ -1,0 +1,10 @@
+agent-client-protocol==0.12.1
+agent-comms[all] @ file:///home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/s1-final520-core-20261002/wheels/agent_comms-0.1.0-py3-none-any.whl
+annotated-types==0.8.0
+metaclass-registry==0.2.1
+nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@d392c5e4cd189ce1203127a746337ad498a0330d#subdirectory=skills/refactor-audit
+packaging==26.2
+pydantic==2.13.5
+pydantic-core==2.46.5
+typing-extensions==4.15.0
+typing-inspection==0.4.4
