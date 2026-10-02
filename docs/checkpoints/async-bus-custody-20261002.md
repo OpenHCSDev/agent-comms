@@ -227,3 +227,58 @@ original source still refuses publication rather than returning absence or
 authorizing another append. SQL may still scan pointer rows: this is not a
 constant-time or new-index claim. No schema, seal, source format or write-fence
 change is needed, and every keyed-publication consumer keeps the same owner.
+
+## Owner/caller check and working read/publication closure
+
+Read OpenHCS PR60 commit `5e8812ee83d0dc8714392445bad3e32fc47a1755`,
+including its root parsing, member annotations, imports, inherited declarations,
+and removed-facade checks. Reused the existing refactor-audit `Package` and
+`ParsedModule` parser for a scoped before/after AST query, rather than copying
+its helpers or adding a guard framework. The output is
+`evidence/async-bus-custody-20261002/owner-consumers-before-after.json`:
+719 tracked Core files across `src/agent_comms`, `tests`, `tools` parsed in each
+snapshot; 275 Toad dependency source files parsed; zero parse omissions.
+Eighteen selected existing owner definitions are unique in those Core roots.
+Members, annotations, bases, self/cls reads and writes, imports, and matching
+references are retained. The dependency checkout/head is recorded. These are
+lexical candidates, not proof of dynamic receiver resolution or runtime MRO.
+Untracked fixtures, shell/JS generated commands and installed package bytes are
+outside this Python census; the source receipt does not call them absent.
+
+The existing `WireRecord` ancestor now owns `delivery_messages`; the existing
+`CommittedDelivery` member supplies its original frozen sender lookup. Deleted
+`DeliveryMessage.from_wire`'s external choice between deliveries and messages.
+Inbox reads consume the original strict opened stream after publication custody
+closes. Claim reads and retained-context export likewise decode after release;
+their actual write counterparts still consume the current protected source.
+The strict scan, claim algorithm and retained-fact/digest algorithm each have
+one implementation shared by their current-write and opened-read consumers.
+No snapshot grants admission, cursor progress, native proof or replay.
+
+The existing `LiveResponseOwner` owns the complete asynchronous multi-route
+publication operation. `SelectedAttempt` supplies only its original owner/fence
+and decoded proposals; the acquired operation owns its coordinator connection,
+prepares every route before the first append, verifies every published receipt,
+and consumes original dependency waits before closing or propagating cancellation.
+Deleted the caller's two publication loops and its separate post-publication
+wait settlement. `Coordination.run_async` and `join_retirement` are the acquired
+resource mechanism; no connection, participant or active transaction escapes.
+Patterns: BOUND-2, IMPL-5, IMPL-10. This is code-bearing source progress, not Ready.
+
+### Exact remaining lock scopes
+
+- `MessageBus._pending_projection` still decodes its disposable route projection
+  under the bus barrier; `channel_activity`/`last_sent_timestamps` likewise retain
+  it during append-index decoding. Those existing projection owners must borrow
+  an opened source cut rather than make a second authority.
+- Certification can repair an original checkpoint. Its guarded write must stay
+  exclusive; ordinary borrowed snapshots cannot simply flip `shared=True`.
+- `PrivateSendAdmission._exclusion` currently borrows `_response_boundary`, then
+  acquires coordinator EXCLUSIVE and original prompt/journal exclusions. Those
+  global locks survive the raw pipe write. No model-stream await is inside that
+  scope, but pipe backpressure serializes unrelated admissions. Narrowing requires
+  the original stop/rename/maintenance/revoke consumers and UNKNOWN settlement,
+  not an async wrapper or removal of a fence. This remains owned #509 work.
+
+Validation follows the complete related source migration. No new provider,
+public input, restart or installed-readiness claim is made by this checkpoint.

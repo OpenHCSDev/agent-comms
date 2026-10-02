@@ -10,7 +10,6 @@ from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
 from .channel_coding_tools import CodingToolOwner
 from .coordination_errors import IdentityConflict, StaleFence
-from .coordination_response import prepare_fenced_response, publish_fenced_response
 from .coordination_tables.executions import ExecutionOrigin
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
@@ -204,18 +203,9 @@ class SelectedAttempt:
             request.admission.commit(participant.store, result.context)
             self.stage.progress.finish()
             participant.owner.require_registry(participant.comms.registry)
-            for reply in replies:
-                prepare_fenced_response(
-                    participant.store, participant.bus, self.stage.fence, reply.body,
-                    exact_target=reply.target, owner_witness=participant.response_owner,
-                )
-            for reply in replies:
-                published = publish_fenced_response(
-                    participant.store, participant.bus, self.stage.fence,
-                    exact_target=reply.target, owner_witness=participant.response_owner,
-                ).value
-                published.require_published_evidence(reply.target)
-            participant.consume_reply_wait()
+            published = await participant.response_owner.publish_responses(
+                participant.store.session.path, participant.bus, self.stage.fence, replies
+            )
             return await CoordinatedTurn.capture(
                 participant, session, request.admission.input_id, CompletedAssignment,
                 published.publication_receipts,

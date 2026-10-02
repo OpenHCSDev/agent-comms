@@ -150,10 +150,10 @@ class MessageBus:
         delivery = self._delivery_scope(name, snapshot)
         selection = delivery.selection(target, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
-        with self.log.locked():
+        with self.log.delivery_snapshot() as originals:
             return [
                 item.message
-                for item in self._iter_delivery_messages_unlocked()
+                for item in originals
                 if delivery.current(item, snapshot)
                 and selection.includes(item.message)
                 and item.message.seq not in seen
