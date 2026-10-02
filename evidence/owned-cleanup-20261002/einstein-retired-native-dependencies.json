@@ -1,0 +1,83 @@
+{
+  "epoch": 1790908129.0893352,
+  "before_available_bytes": 14597369856,
+  "removed": [
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-b68dfdced9148b50",
+      "path": "/home/ts/.local/share/agent-comms/native-current-b68dfdced9148b50/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142163968,
+      "exclusive_before_bytes": 142163968,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-b68dfdced9148b50-00.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-4230c1eedb5a50a0",
+      "path": "/home/ts/.local/share/agent-comms/native-current-4230c1eedb5a50a0/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142180352,
+      "exclusive_before_bytes": 142180352,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-4230c1eedb5a50a0-01.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd",
+      "path": "/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142168064,
+      "exclusive_before_bytes": 142168064,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-5fdef596596173bd-02.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-689ce4b5d0592b9a",
+      "path": "/home/ts/.local/share/agent-comms/native-current-689ce4b5d0592b9a/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142163968,
+      "exclusive_before_bytes": 142163968,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-689ce4b5d0592b9a-03.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20",
+      "path": "/home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142172160,
+      "exclusive_before_bytes": 142172160,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-9213ee71479d1b20-04.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28",
+      "path": "/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142176256,
+      "exclusive_before_bytes": 142176256,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-d3967e8b6ee0cf28-05.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-776dc36857e630da",
+      "path": "/home/ts/.local/share/agent-comms/native-current-776dc36857e630da/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142172160,
+      "exclusive_before_bytes": 142172160,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-776dc36857e630da-06.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0",
+      "path": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142184448,
+      "exclusive_before_bytes": 142184448,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-4ab910061590d1e0-07.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-905f9f6facb3070a",
+      "path": "/home/ts/.local/share/agent-comms/native-current-905f9f6facb3070a/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142172160,
+      "exclusive_before_bytes": 142172160,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-905f9f6facb3070a-08.json"
+    },
+    {
+      "root": "/home/ts/.local/share/agent-comms/native-current-7817b54ec2534555",
+      "path": "/home/ts/.local/share/agent-comms/native-current-7817b54ec2534555/node_modules/@earendil-works/pi-coding-agent/node_modules",
+      "allocated": 142184448,
+      "exclusive_before_bytes": 142184448,
+      "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-7817b54ec2534555-09.json"
+    }
+  ],
+  "method": "delete generated nested npm dependency leaves; retain native dist/extensions/locks/source in place",
+  "saved_history_or_unknown_removed": 0,
+  "source_removed": 0,
+  "after_available_bytes": 16064225280,
+  "observed_df_delta_bytes": 1466855424,
+  "removed_allocated_bytes": 1421737984,
+  "exclusive_before_bytes": 1421737984
+}

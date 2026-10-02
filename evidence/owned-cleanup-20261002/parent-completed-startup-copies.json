@@ -1,0 +1,35 @@
+{
+  "owner": "parent integration432",
+  "purpose": "remove byte-identical disposable startup copies; native/proof originals retained untouched",
+  "records": [
+    {
+      "deleted_duplicate": "/home/ts/.cache/agent-scratch/parent-native5batch490-stopped-saved-startup-20261002/session.jsonl",
+      "preserved_original": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl",
+      "sha256": "4c7dad1d4669bce0258cbc6fbd17c382628657cac38c919f13f129c9f12eca11",
+      "bytes": 42932905
+    },
+    {
+      "deleted_duplicate": "/home/ts/.cache/agent-scratch/parent-native5batch490-stopped-saved-startup-20261002/session.jsonl.input-proof",
+      "preserved_original": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl.input-proof",
+      "sha256": "1332af05fd6510e036fe80643749470fe167009f55506b03b16a23f766e9b31d",
+      "bytes": 970752
+    },
+    {
+      "deleted_duplicate": "/home/ts/.cache/agent-scratch/parent-critical501-stopped-saved-startup-20261002/session.jsonl",
+      "preserved_original": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl",
+      "sha256": "4c7dad1d4669bce0258cbc6fbd17c382628657cac38c919f13f129c9f12eca11",
+      "bytes": 42932905
+    },
+    {
+      "deleted_duplicate": "/home/ts/.cache/agent-scratch/parent-critical501-stopped-saved-startup-20261002/session.jsonl.input-proof",
+      "preserved_original": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-29T19-03-03-440Z_01a0ee8c-8c10-77cc-a306-2f47d15ba7d0.jsonl.input-proof",
+      "sha256": "1332af05fd6510e036fe80643749470fe167009f55506b03b16a23f766e9b31d",
+      "bytes": 970752
+    }
+  ],
+  "process_references": [],
+  "deleted_bytes": 87807314,
+  "before_available_bytes": 6973689856,
+  "after_available_bytes": 7061512192,
+  "observed_available_change_bytes": 87822336
+}
