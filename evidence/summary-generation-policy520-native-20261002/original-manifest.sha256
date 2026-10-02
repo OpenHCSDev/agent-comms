@@ -1,6 +1,6 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
 709bcbf952a648587e3f1961b79cf1e7a95095758018bd1f956b416784bfa06f  dist/core/agent-session.js
-2c41563287283e83d899254aa7ff4a6d070c044835dc7fde95d90b987a480622  dist/core/compaction/compaction.js
+2e507c23edf47391265f81db353b205d9f5e9b78b3025f0497e9415a6121d2de  dist/core/compaction/compaction.js
 1a7a8c6323a8f227d4de1bacc667c6894e40e0c54844f19d36125e978ffa35fb  dist/core/compaction/compaction.d.ts
 4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67  dist/core/session-manager.js
 136a8ada8ef2a17d1bc25f278432573a3966dc59960b304a225cc74f78459c87  dist/modes/rpc/rpc-mode.js
@@ -13,7 +13,7 @@ a2807c7397e69f560e9dc6f40b3b266cbd6f09da57826ad7012c5553638f6043  node_modules/@
 07bae37d12469f43b003c9e874263f40c1e3e7584d45b44e8ce1a25c2139c54f  node_modules/@earendil-works/pi-agent-core/dist/types.d.ts
 845edb9a4509f79bf973310a37dafa7adb1110dd77e88bfbe5e1c00292dbac68  node_modules/@earendil-works/pi-ai/dist/types.d.ts
 2f419e00e26c32462a8643d694fcfb8d793cf7119a1995023f19b3acbc492059  node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
-17a89fe81359a9297fdb3785cd3f23850710467ba230c3947bd888429f91b7b1  dist/core/compaction/agent-comms-policy.js
+e3251ab83782ad79107419f8bbbb4d6269b3f65107b12fdceee0696b612f8e87  dist/core/compaction/agent-comms-policy.js
 5aa2488a9695a629a5057659161a0fadac9f6dadd6eee3b5dbd73864ddb7a0c5  dist/core/extensions/loader.js
 103067298d031fcc2000962b15ec751746e93add4350befbd4cee91c9fafc42e  dist/core/package-manager.js
 3d951c06ade63eb2e965f9a1b26b9bc7541afb5a5dbd44a7da041af7b0af1c06  dist/core/agent-session-services.js
@@ -51,5 +51,4 @@ df2ebb8371c88bff73253bad57fb485965360fb959187d84a7267e2d41b618b9  dist/core/turn
 b3ad505e285cbd5aa349011e03111212bd88d1a89a0e31b117272e4108548f18  dist/core/tools/edit.js
 233ab990ddbb3f54f19baa02ab11620da01588a664fd8da639ffe5fa268f3f0f  dist/core/tools/native-file-artifact-schema.mjs
 b0a79f274d3f94297337f2533ce511b7be73ef941ba68f6d9e067fe346284cb0  dist/core/tools/write.js
-31e6d4df83f2fc6d4f17287fe0fccb6cf1df429d34bd5315313fac12b1e44891  node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
-# agent-comms-native-tree-v1 adb2969a4d57cb8993a92d30b924b969ca76772de5dadb31cc7b2f294ee120e9
+# agent-comms-native-tree-v1 0928d3bce4f5446d6f60b617854a0f6607a469c95c793505ba272dd05e14a079
