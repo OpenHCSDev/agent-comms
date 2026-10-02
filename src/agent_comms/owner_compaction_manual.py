@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .backend import PersistentPiSession
-from .compaction_errors import CompactionJournalError
 from .compaction_records import SelectedSummaryAttempt
 from .compaction_result import CompactionResult
 from .compaction_states import ManualCommittedSummary
@@ -65,24 +64,6 @@ async def compact_manual_owner(
         OwnerCompactionCommit, runner.comms.registry.store.path, Path(package)
     )
 
-    pending_input_keys = ()
-    refusals = bridge.journal.summaries.blocking(session_file)
-    for refusal in refusals:
-        refusal.state.manual_recovery()
-        prior = refusal.source()
-        if prior.incarnation != owner.incarnation:
-            raise CompactionJournalError("Refused selected source belongs to another owner")
-        keys = prior.pending_input_keys
-        if keys:
-            inputs = bridge.inputs.read()
-            if any(not inputs.lookup(key).accepts_reservation for key in keys):
-                raise CompactionJournalError("Refused original input is no longer unbound")
-            if pending_input_keys and pending_input_keys != keys:
-                raise CompactionJournalError(
-                    "Multiple unresolved originals require explicit review"
-                )
-            pending_input_keys = keys
-
     settings = await read_selected_compaction_decision(
         persistent, session_file=session_file,
         expected_package=Path(package), selected=selected,
@@ -95,14 +76,9 @@ async def compact_manual_owner(
         reserved_revision=SessionRevision.observe(session_file).require_available(),
     )
 
-    def retire_refusals():
-        for refusal in refusals:
-            bridge.journal.summaries.retire_refused(refusal)
-
     return await bridge.compact_selected(
         owner, generation, persistent, source, selected, settings,
         instructions=instructions.strip() if instructions else None,
-        pending_input_keys=pending_input_keys, before_summary=retire_refusals,
         on_event=lambda event: runner.effects._emit_event(session_id, event),
         reason="manual",
         purpose=ManualCompactionReason,

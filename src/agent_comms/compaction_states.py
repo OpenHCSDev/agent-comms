@@ -104,7 +104,6 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
     terminal: ClassVar[bool] = False
     original_eligible: ClassVar[bool] = False
     settled_without_original: ClassVar[bool] = False
-    reconcile_unchanged_source: ClassVar[bool] = False
 
     def project_outcome(self, attempt: SelectedSummaryAttempt, sequence: int):
         """In-flight requests and native-owned summaries add no journal notice."""
@@ -126,16 +125,13 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
             raise CompactionJournalError("Manual compaction cannot admit an original input")
     def require_commit_reservation(self) -> None:
         raise CompactionJournalError("Selected summary is not a commit reservation")
-    def manual_recovery(self) -> SummaryState:
-        raise CompactionJournalError(
-            "Prior selected compaction is uncertain; inspect compaction-status, never replay"
-        )
     def refuse(self, reason: str) -> SummaryState:
         raise CompactionJournalError("Selected summary refusal transition forbidden")
     def fail(self, reason: str) -> SummaryState:
         raise CompactionJournalError("Selected summary failure transition forbidden")
     def retire_unchanged_source(self) -> SummaryState:
-        raise CompactionJournalError("Selected summary is not an interrupted no-write candidate")
+        """Settled/link states retain their original disposition during recovery."""
+        return self
     def verifies_original(
         self, journal: CompactionJournal, attempt: SelectedSummaryAttempt
     ) -> bool:
@@ -143,6 +139,13 @@ class SummaryState(DeclaredFamily, LifecycleState, affix="Summary"):
 
 
 class ReservedSummary(SummaryState):
+    def retire_unchanged_source(self) -> SummaryState:
+        # A reservation records neither provider completion nor a native write.
+        # Recovery must still prove its original source is unchanged under the
+        # native writer and that no commit/input binding exists. Provider outcome
+        # remains UNKNOWN; this does not restart its request.
+        return RetiredUnknownSummary()
+
     def require_commit_reservation(self) -> None:
         pass
     def refuse(self, reason: str) -> SummaryState:
@@ -159,6 +162,7 @@ class ReservedSummary(SummaryState):
             DeclinedPrestartSummary,
             RefusedSummary,
             FailedSummary,
+            RetiredUnknownSummary,
         )
 
 
@@ -190,7 +194,6 @@ class RefusedSummaryOutcome(SummaryOutcome):
 
 
 class UnknownSummary(UnknownSummaryOutcome, SummaryState):
-    reconcile_unchanged_source = True
     def retire_unchanged_source(self) -> SummaryState:
         return RetiredUnknownSummary()
 
@@ -277,7 +280,7 @@ class RefusedSummary(RefusedSummaryOutcome, SummaryState):
     def __post_init__(self):
         if not self.decline_reason or len(self.decline_reason) > 256:
             raise ValueError("Bounded native refusal reason required")
-    def manual_recovery(self) -> SummaryState:
+    def retire_unchanged_source(self) -> SummaryState:
         return RetiredRefusalSummary(self.decline_reason)
     def refuse(self, reason: str) -> SummaryState:
         if reason != self.decline_reason:
@@ -291,7 +294,7 @@ class RefusedSummary(RefusedSummaryOutcome, SummaryState):
 
 @dataclass(frozen=True)
 class RetiredRefusalSummary(RefusedSummaryOutcome, SummaryState):
-    """An explicit manual command acknowledged a known no-provider refusal."""
+    """Original source custody excluded a native write after a known refusal."""
 
     decline_reason: str = field()
     terminal = True
