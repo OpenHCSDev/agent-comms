@@ -439,9 +439,7 @@ class WireLog:
         installed certificate still require their original strict traversal.
         """
         if lock.source is not None:
-            source = lock.certified_read()
-            source.require_current()
-            return source.witness.through_seq
+            return lock.certified_read().committed_sequence()
         if self.claim_gate_enabled():
             return max((message.seq for message in self._iter_log_unlocked()), default=0)
         return self.read_metadata_unlocked().last_seq
