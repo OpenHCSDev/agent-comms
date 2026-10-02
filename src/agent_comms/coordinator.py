@@ -21,6 +21,17 @@ Result = TypeVar("Result")
 
 
 class Coordination:
+    @staticmethod
+    async def run_worker(operation: Callable[[], Result]) -> Result:
+        """Join an owned blocking operation before its enclosing custody exits.
+
+        The callback owns and closes every borrowed resource it opens. This
+        scheduling seam also supports registry-only acquisition/retirement;
+        those operations must not depend on opening a coordinator connection.
+        """
+        pending = asyncio.get_running_loop().run_in_executor(None, operation)
+        return await join_retirement(pending)
+
     @classmethod
     async def run_async(
         cls, path: str | Path, operation: Callable[[Self], Result], *,
@@ -33,10 +44,9 @@ class Coordination:
         joins the acquired operation through connection close; it cannot leave
         a later projection write after the caller releases its custody.
         """
-        pending = asyncio.get_running_loop().run_in_executor(
-            None, partial(cls._run_owned, path, operation, clock_ms, lock_timeout)
+        return await cls.run_worker(
+            partial(cls._run_owned, path, operation, clock_ms, lock_timeout)
         )
-        return await join_retirement(pending)
 
     @classmethod
     def _run_owned(
