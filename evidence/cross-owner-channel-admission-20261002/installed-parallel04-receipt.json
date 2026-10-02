@@ -1,0 +1,60 @@
+{
+  "original_root": "/var/tmp/ac-sealed-test-fuvczhen",
+  "wire_root_id": "edd1e747dc2343de96940a261d2dcfe0",
+  "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "saved_restart": false,
+  "contended_cursor": false,
+  "rejected_triage_continuity": false,
+  "parallel_channel": true,
+  "request_monotonic_times": [
+    410399.587632914,
+    410400.20886737,
+    410402.786246273,
+    410402.881511797,
+    410407.112756478,
+    410408.153797603,
+    410408.225749334
+  ],
+  "original_native_request_inputs": [
+    {
+      "input_id": "aba0cbdcbce84042cf9d907dc66961a6",
+      "stage": "triage",
+      "owner": "answerer"
+    },
+    {
+      "input_id": "ff06ec88c8500575631f1a50e9fbf2d3",
+      "stage": "triage",
+      "owner": "answerer2"
+    },
+    {
+      "input_id": "0b88bd4523d1bbcf090d69ebbf77b739",
+      "stage": "full",
+      "owner": "answerer"
+    },
+    {
+      "input_id": "942f67daefa1874caf77919105b98310",
+      "stage": "full",
+      "owner": "answerer2"
+    },
+    {
+      "input_id": "90e415f8757ddfa177d277108e269062",
+      "stage": "triage",
+      "owner": "questioner"
+    },
+    {
+      "input_id": "e978d1a34e816f4be129df95ab83528e",
+      "stage": "triage",
+      "owner": "answerer"
+    },
+    {
+      "input_id": "cf3715f19cd417d0026145a8f6610144",
+      "stage": "triage",
+      "owner": "answerer2"
+    }
+  ],
+  "localhost_posts": 7,
+  "provider_failures": [],
+  "owners_stopped": true,
+  "server_thread_alive": false,
+  "wire_sha256": "55b6b715561ddcf5fae7f9654ec52fdd2d550d0f7f576c5c49fa64b6c0ea9ed8"
+}

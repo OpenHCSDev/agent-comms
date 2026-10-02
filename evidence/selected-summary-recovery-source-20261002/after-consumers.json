@@ -1,0 +1,88 @@
+{
+  "head": "30f9cf74f6f1ede7d4f795ea857cce51b6e7857c",
+  "parsed": 311,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/compaction_operations.py",
+      "line": 51,
+      "reference": "SelectedSummaryAttempt.blocking_in"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 236,
+      "reference": "SelectedSummaryAttempt.blocking_in"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 206,
+      "declaration": "blocking_in"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 132,
+      "declaration": "retire_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 142,
+      "declaration": "retire_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 197,
+      "declaration": "retire_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/compaction_states.py",
+      "line": 283,
+      "declaration": "retire_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 175,
+      "declaration": "retire_unchanged"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 183,
+      "reference": "attempt.state.retire_unchanged_source"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 164,
+      "reference": "SelectedSummaryAttempt.blocking_in"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 120,
+      "reference": "SelectedSummaryAttempt.blocking_in"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 174,
+      "declaration": "reconcile_interrupted_summaries"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 192,
+      "declaration": "settle_selected_refusal"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 146,
+      "reference": "self.reconcile_interrupted_summaries"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 221,
+      "reference": "self.journal.summaries.retire_unchanged"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 190,
+      "reference": "self.journal.summaries.retire_unchanged"
+    }
+  ],
+  "resolution_limit": "AST references identify candidates; nominal dispatch and held-resource semantics were read in source."
+}

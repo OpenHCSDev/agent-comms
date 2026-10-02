@@ -12,7 +12,7 @@ import json
 import os
 import stat
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -23,7 +23,7 @@ from .lifecycle import LifecycleState
 
 from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
-from .store_files import _store_lock
+from .store_files import _async_store_lock, _store_lock
 
 
 class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
@@ -162,22 +162,35 @@ class MaintenanceBarrier:
             raise RelationViolationError("Maintenance witness incomplete; admission closed")
         return state.require_marker(marker, self.registry_path.parent)
 
-    def assert_open_unlocked(self) -> None:
+    def assert_open_unlocked(self) -> MaintenanceReceipt | None:
         receipt = self.current_unlocked()
         if receipt is not None:
             receipt.phase.require_open()
+        return receipt
 
     def read(self) -> MaintenanceReceipt | None:
-        with _store_lock(self.wire_path):
+        with _store_lock(self.wire_path, shared=True):
             return self.current_unlocked()
 
     @contextmanager
-    def admit_ingress(self) -> Iterator[MaintenanceReceipt | None]:
-        """Read and hold the wire admission lock through a *synchronous* spawn.
+    def admit_ingress(self, *, blocking: bool = True) -> Iterator[MaintenanceReceipt | None]:
+        """Share open-root custody through one synchronous ingress operation.
 
         Do not await while inside this context. A child still needs to perform
         its own claim/send checks, and old-import children are not protected.
+        Maintenance, stop and rename take exclusive wire custody. Independent
+        inputs share this gate; their registry, input and journal owners retain
+        their own determining locks.
         """
-        with _store_lock(self.wire_path):
-            self.assert_open_unlocked()
-            yield self.current_unlocked()
+        with _store_lock(self.wire_path, shared=True, blocking=blocking):
+            yield self.assert_open_unlocked()
+
+    @asynccontextmanager
+    async def admit_ingress_async(self):
+        """Acquire the same ingress gate without blocking a native event loop.
+
+        The borrower writes synchronously, then releases before waiting for
+        pipe drain or a native response.
+        """
+        async with _async_store_lock(self.wire_path, shared=True):
+            yield self.assert_open_unlocked()

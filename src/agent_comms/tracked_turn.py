@@ -39,7 +39,6 @@ from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .selected_session import SelectedSession
-from .store_files import _async_store_lock
 from .turn_context import InputContributionCoordinates
 
 
@@ -311,10 +310,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         payload = self.native.reader.encode(command)
         if self.maintenance_root is not None:
             try:
-                async with _async_store_lock(self.maintenance_root / "wire"):
-                    MaintenanceBarrier(
-                        self.maintenance_root / "registry.json"
-                    ).assert_open_unlocked()
+                async with MaintenanceBarrier(
+                    self.maintenance_root / "registry.json"
+                ).admit_ingress_async():
                     self.write(command, payload)
             except RelationViolationError as error:
                 raise NativePiUnavailable(

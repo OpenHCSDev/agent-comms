@@ -1,0 +1,163 @@
+{
+  "state": "PASS actual default saved-helper stationary physical load/read",
+  "scope": "Default toad-comms saved helper history, current sidebar/chat Ready status, empty focused editor; no message, fork, paid/provider input or performance claim",
+  "duration_seconds": 23.598996101995,
+  "command": [
+    "/home/ts/bin/toad-comms",
+    "openhcs-helper"
+  ],
+  "capture_target": "existing_thread",
+  "journey": "observe",
+  "capture_completed": true,
+  "completed": true,
+  "runtime_unchanged": true,
+  "original_owner_before": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "openhcs-helper",
+    "identity": {
+      "pid": 3588675,
+      "start_time": 40645237
+    },
+    "original_owner_alive": true
+  },
+  "original_owner_after": {
+    "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+    "mode": "existing_thread",
+    "name": "openhcs-helper",
+    "identity": {
+      "pid": 3588675,
+      "start_time": 40645237
+    },
+    "original_owner_alive": true
+  },
+  "screen_focus": {
+    "object_id": 139766218213968,
+    "class": "PromptTextArea",
+    "module": "toad.widgets.prompt",
+    "id": null,
+    "parent_object_id": 139766218213328,
+    "ancestors": [
+      {
+        "object_id": 139766218213968,
+        "class": "PromptTextArea",
+        "module": "toad.widgets.prompt",
+        "id": null,
+        "parent_object_id": 139766218213328
+      },
+      {
+        "object_id": 139766218213328,
+        "class": "HorizontalGroup",
+        "module": "textual.containers",
+        "id": "text-prompt",
+        "parent_object_id": 139766218212688
+      },
+      {
+        "object_id": 139766218212688,
+        "class": "PromptContainer",
+        "module": "toad.widgets.prompt",
+        "id": "prompt-container",
+        "parent_object_id": 139766228552912
+      },
+      {
+        "object_id": 139766228552912,
+        "class": "Prompt",
+        "module": "toad.widgets.prompt",
+        "id": null,
+        "parent_object_id": 139766192155984
+      },
+      {
+        "object_id": 139766192155984,
+        "class": "Vertical",
+        "module": "textual.containers",
+        "id": "prompt-stack",
+        "parent_object_id": 139766198348496
+      },
+      {
+        "object_id": 139766198348496,
+        "class": "Conversation",
+        "module": "toad.widgets.conversation",
+        "id": null,
+        "parent_object_id": 139766198340496
+      },
+      {
+        "object_id": 139766198340496,
+        "class": "Vertical",
+        "module": "textual.containers",
+        "id": "session-content",
+        "parent_object_id": 139766229124160
+      },
+      {
+        "object_id": 139766229124160,
+        "class": "Center",
+        "module": "textual.containers",
+        "id": null,
+        "parent_object_id": 139766198340176
+      },
+      {
+        "object_id": 139766198340176,
+        "class": "MainScreen",
+        "module": "toad.screens.main",
+        "id": "session-1",
+        "parent_object_id": 139766192335440
+      },
+      {
+        "object_id": 139766192335440,
+        "class": "Container",
+        "module": "textual.containers",
+        "id": "workspace-session-host",
+        "parent_object_id": 139766192335104
+      },
+      {
+        "object_id": 139766192335104,
+        "class": "Horizontal",
+        "module": "textual.containers",
+        "id": "workspace-body",
+        "parent_object_id": 139766192334768
+      },
+      {
+        "object_id": 139766192334768,
+        "class": "WorkspaceScreen",
+        "module": "toad.screens.workspace",
+        "id": "workspace",
+        "parent_object_id": 139766261563808
+      },
+      {
+        "object_id": 139766261563808,
+        "class": "ToadApp",
+        "module": "toad.app",
+        "id": null,
+        "parent_object_id": null
+      }
+    ]
+  },
+  "physical_review": "Personally reviewed before.png and after.png: saved inbound history readable; Agent Comms connected; helper and sidebar Ready; Sol/off empty editor. Initial Needs attention notice cleared by final frame.",
+  "cleanup": {
+    "remaining_owned_pids": [],
+    "errors": []
+  },
+  "raw_receipt": "/home/ts/.cache/agent-scratch/516-default-saved-helper-20261002/capture/receipt.json",
+  "raw_receipt_sha256": "627e0bb10db4e7cd708f1621c620fade3c27b086a43c17844abc50a24e97e6e4",
+  "frames": [
+    {
+      "path": "/home/ts/.cache/agent-scratch/516-default-saved-helper-20261002/capture/before.png",
+      "sha256": "0367bc3cca777b07db6f501dacf91242dee9787d0ba24eae2387f994154c198f"
+    },
+    {
+      "path": "/home/ts/.cache/agent-scratch/516-default-saved-helper-20261002/capture/after.png",
+      "sha256": "48ce36a000391866edf596f7c55b390ea1ff5a6cd7f0759c3b0142e8b046b2c1"
+    }
+  ],
+  "snapshot_times": {
+    "before": {
+      "started_seconds": 8.261666817008518,
+      "finished_seconds": 8.737789799983148
+    },
+    "after": {
+      "started_seconds": 23.274136563006323,
+      "finished_seconds": 23.598989649035502
+    }
+  },
+  "default_publication": "Parent reported publication exit0; 19 retained original owners, Native6 carry verified separately by parent",
+  "review_only_race": "A no-execute check started before publication completed later refused stale original default observation. It caused no source capture, fence, stop, publication or retry. After publication the previous original-default precondition is intentionally obsolete."
+}

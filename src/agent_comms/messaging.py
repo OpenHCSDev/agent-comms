@@ -129,9 +129,8 @@ class Messaging:
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""
-        for thread in self.registry.all_threads().values():
-            if self.bus.reads.human(thread.role):
-                return thread
+        for thread in self._user_identities():
+            return thread
         name, suffix = "user", 2
         while self.registry.name_reserved(name):
             name, suffix = f"user-{suffix}", suffix + 1
@@ -139,8 +138,19 @@ class Messaging:
         self.registry.register(thread)
         return thread
 
+    def _user_identities(self):
+        """Derive existing humans from the original registered declarations."""
+        return (thread for thread in self.registry.all_threads().values()
+                if self.bus.reads.human(thread.role))
+
     def user_identity(self, worktree: str) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
+        with _store_lock(self._wire_lock_path, shared=True):
+            for thread in self._user_identities():
+                return thread
+        # Creation is a write, with its original exclusive recheck. Observing
+        # an existing sender must not serialize every sidebar/page preparation
+        # against independent native input or response publication.
         with _store_lock(self._wire_lock_path):
             return self._user_identity_under_wire_lock(worktree)
 
