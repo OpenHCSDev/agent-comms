@@ -118,7 +118,16 @@ class CodingToolOwner:
             )
             self.claims[canonical] = claimed
 
-    def finish(self, store: Coordination) -> None:
+    async def finish(self) -> None:
+        """Only an owned claim set needs a worker and its SQLite resource."""
+        if not self.claims:
+            return
+        await Coordination.run_async(
+            self.store.session.path, self.release,
+            clock_ms=self.store.session.now,
+        )
+
+    def release(self, store: Coordination) -> None:
         release_selected_resources(
             self.comms, store, self.admission, self.owner_name, tuple(self.claims.values())
         )
@@ -140,10 +149,7 @@ class CodingToolMode(NativeToolMode):
         return CodingToolSocket(directory, token, self.owner)
 
     async def finish(self) -> None:
-        await Coordination.run_async(
-            self.owner.store.session.path, self.owner.finish,
-            clock_ms=self.owner.store.session.now,
-        )
+        await self.owner.finish()
 
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):
