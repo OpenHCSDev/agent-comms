@@ -98,15 +98,21 @@ class WireLog:
             record = ObservationWireRecord(ContextManifestWireObservation(manifest))
             self._append_private_unlocked(marker, record.to_wire())
 
-    def context_manifests(self, incarnation):
-        """Observe original rows; no context sidecar, receipt or sequence index."""
-        with self.locked():
+    def context_manifests(self, name: str, registry):
+        """Read original observations for one registry-owned historical identity.
+
+        The existing wire/bus/registry lock order freezes rename membership for
+        this read. Returned rows retain their recorded names and proof fields.
+        """
+        with _store_lock(self.path.parent / "wire"), self.locked():
+            snapshot = registry.snapshot()
+            incarnation = snapshot.require(name).incarnation
             marker = self._private_marker_unlocked()
             return tuple(
                 manifest
                 for record in self.verified_records_unlocked(marker)
                 for manifest in record.context_manifests()
-                if manifest.thread == incarnation
+                if manifest.thread.resolved(snapshot) == incarnation
             )
 
     def compaction_messages_unlocked(self, recipient: ThreadIncarnation):
