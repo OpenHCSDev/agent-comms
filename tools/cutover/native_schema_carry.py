@@ -1,4 +1,4 @@
-"""One-use native4->5 carry outside product readers, under stopped custody.
+"""One-use complete490 carry outside product readers, under stopped custody.
 
 Original declarations authenticate the source. Current declarations own target
 DDL. Only matched clones are transformed; original files remain preimages.
@@ -29,6 +29,12 @@ class NativeSchemaDeclaration:
     runtime_digest: str
     binding: dict[str, str]
     binding_digest: str
+    coordination_version: int
+    snapshot_version: int
+    response_version: int
+    coordination: dict[str, str]
+    writable_columns: dict[str, tuple[str, ...]]
+    metadata_rows: dict[str, tuple[tuple[Any, ...], ...]]
 
     @classmethod
     def observe(cls):
@@ -37,8 +43,54 @@ class NativeSchemaDeclaration:
         from agent_comms.native_prompt_binding import PromptBinding
         from agent_comms.private_sidecar import _schema as binding_schema, _digest as binding_digest
         from typing import get_args, get_type_hints
+        from agent_comms.coordination_schema import coordinator_schema, CoordinatorTable
+        from agent_comms.coordination_tables.metadata import SchemaMeta
+        from agent_comms.coordination_response import ResponseTable, ResponseSchemaMeta, _response_schema, _response_digest
+        from agent_comms.native_runtime_input import NativeRuntimeTable
+        from agent_comms.typed_table import TypedTable
+        coordination_meta = SchemaMeta.current()
+        response_version = get_args(get_type_hints(ResponseSchemaMeta)['version'])[0]
+        response = _response_schema()
+        # Source-only declaration capture: no product store or original data is
+        # opened. SQLite supplies the same normalized DDL spelling as originals.
+        with closing(sqlite3.connect(':memory:')) as shape:
+            shape.executescript(coordinator_schema())
+            coordination_meta.insert(shape)
+            for sql in response.values():
+                shape.execute(sql)
+            ResponseSchemaMeta(1, response_version, _response_digest(response)).insert(shape)
+            coordination = objects(shape)
+            metadata = {name: tuple(rows(shape, name)) for name in
+                        (SchemaMeta.declared_name, ResponseSchemaMeta.declared_name)}
+            NativeRuntimeSchemaMeta.create_schema(shape)
+            metadata[NativeRuntimeSchemaMeta.declared_name] = tuple(rows(shape, NativeRuntimeSchemaMeta.declared_name))
+        writable = {table.declared_name: tuple(item.name for item in table._fields()
+                    if item.column.generated is None)
+                    for family in (CoordinatorTable, ResponseTable, NativeRuntimeTable)
+                    for table in TypedTable.members_with(family)}
         return cls(get_args(get_type_hints(NativeRuntimeSchemaMeta)['version'])[0],
-                   _schema(), _digest(_schema()), binding_schema(PromptBinding), binding_digest(PromptBinding))
+                   _schema(), _digest(_schema()), binding_schema(PromptBinding), binding_digest(PromptBinding),
+                   coordination_meta.schema_version, coordination_meta.snapshot_version, response_version,
+                   coordination, writable, metadata)
+
+    @property
+    def release_versions(self):
+        return self.coordination_version, self.snapshot_version, self.response_version, self.version
+
+    @property
+    def runtime_objects(self):
+        return {**self.coordination, **self.runtime}
+
+    def require_coordination(self, db):
+        actual = objects(db)
+        if {name: actual.get(name) for name in self.runtime_objects} != self.runtime_objects:
+            raise ValueError('Original complete coordinator declaration preimage differs')
+        if db.execute('PRAGMA user_version').fetchone()[0] != self.coordination_version:
+            raise ValueError('Original coordinator user_version differs')
+        for name, expected in self.metadata_rows.items():
+            if tuple(rows(db, name)) != expected:
+                raise ValueError('Original complete release metadata differs: ' + name)
+        self.require_runtime(db)
 
     def require_runtime(self, db):
         actual = objects(db)
@@ -99,7 +151,7 @@ def row_digest(data):
 
 
 def columns(db, table):
-    return tuple(row[1] for row in db.execute(f'PRAGMA table_info({quoted(table)})'))
+    return tuple(row[1] for row in db.execute(f'PRAGMA table_xinfo({quoted(table)})'))
 
 
 def projection(db, table, target_columns, removed):
@@ -122,22 +174,23 @@ def rebuild(db, schema, table_rows):
         if table in existing:
             db.execute(f'DROP TABLE {quoted(table)}')
     for name, sql in schema.items():
-        if sql.lstrip().startswith('CREATE TABLE'):
+        if sql.lstrip().startswith('CREATE TABLE') and name in table_rows:
             db.execute(sql)
     for table, (fields, values) in table_rows.items():
         placeholders = ','.join('?' for _ in fields)
         db.executemany(f'INSERT INTO {quoted(table)} ({",".join(map(quoted, fields))}) VALUES ({placeholders})', values)
     for name, sql in schema.items():
-        if not sql.lstrip().startswith('CREATE TABLE'):
+        if not sql.lstrip().startswith('CREATE TABLE') and name != 'sqlite_sequence':
             db.execute(sql)
 
 
 def carry_coordination(db, original, target):
-    original.require_runtime(db)
+    original.require_coordination(db)
+    if db.execute('PRAGMA foreign_key_check').fetchall():
+        raise ValueError('Original coordinator relations require their owning review')
     before_objects, before_rows = objects(db), inventory(db)
     old_inputs = [dict(zip(columns(db, 'native_runtime_input'), row)) for row in rows(db, 'native_runtime_input')]
     from agent_comms.native_input_record import NativeInputExecution
-    from agent_comms.native_runtime_input import NativeRuntimeSchemaMeta
     from agent_comms.coordination_tables.assignments import WakeAssignment
     if any(name.startswith('selected_native_sources') for name in before_objects):
         raise ValueError('Intermediate batch4 source attestation requires its owning carry review')
@@ -163,28 +216,79 @@ def carry_coordination(db, original, target):
         anchor = next((item['assignment_id'] for item in old_inputs if item['input_id'] == cursor[0]), None)
         if cursor[1] != anchor:
             raise ValueError('Original cursor anchor differs from its physical native input')
-    with closing(sqlite3.connect(':memory:')) as target_shape:
-        NativeRuntimeSchemaMeta.create_schema(target_shape)
-        payload = {}
-        for name in ('native_runtime_input', 'current_native_cursor'):
-            fields = columns(target_shape, name)
-            payload[name] = (fields, projection(db, name, fields, {'assignment_id'}))
-        payload[NativeRuntimeSchemaMeta.declared_name] = (
-            columns(target_shape, NativeRuntimeSchemaMeta.declared_name),
-            rows(target_shape, NativeRuntimeSchemaMeta.declared_name),
-        )
-        payload['native_runtime_triage_sources'] = (columns(target_shape, 'native_runtime_triage_sources'), [])
-    rebuild(db, target.runtime, payload)
+    # The original singleton obligation is the sole historical route authority.
+    # No route is added from other claim bodies, current routing or new batching.
+    obligations = {row['execution_id']: row for row in
+                   (dict(zip(columns(db, 'obligations'), value))
+                    for value in rows(db, 'obligations'))}
+    executions = {row['execution_id']: row for row in
+                  (dict(zip(columns(db, 'executions'), value))
+                   for value in rows(db, 'executions'))}
+    for execution_id, execution in executions.items():
+        obligation = obligations.get(execution_id)
+        if execution['origin'] == 'wire':
+            if obligation is None or obligation['exact_target'] != execution['exact_target']:
+                raise ValueError('Original scalar execution differs from its original obligation')
+        elif obligation is not None or execution['exact_target'] is not None:
+            raise ValueError('Original claimless execution has a response route')
+    intents = {row['execution_id']: row for row in
+               (dict(zip(columns(db, 'publication_intents'), value))
+                for value in rows(db, 'publication_intents'))}
+    for execution_id, intent in intents.items():
+        if execution_id not in obligations or intent['exact_target'] != obligations[execution_id]['exact_target']:
+            raise ValueError('Original intent differs from its original response route')
+
+    removed_writable = {'executions': {'exact_target'},
+                        'native_runtime_input': {'assignment_id'},
+                        'current_native_cursor': {'assignment_id'}}
+    added_writable = {'publication_receipts': {'exact_target'},
+                      'publication_append_dispatches': {'exact_target'}}
+    payload = {}
+    for name, fields in target.writable_columns.items():
+        if name in target.metadata_rows:
+            payload[name] = (fields, list(target.metadata_rows[name]))
+            continue
+        if name not in before_rows:
+            if name != 'native_runtime_triage_sources':
+                raise ValueError('Unreviewed new release table: ' + name)
+            payload[name] = (fields, [])
+            continue
+        old_fields = original.writable_columns[name]
+        if (set(old_fields) - set(fields) != removed_writable.get(name, set())
+                or set(fields) - set(old_fields) != added_writable.get(name, set())):
+            raise ValueError('Unreviewed writable column change: ' + name)
+        values = []
+        for value in rows(db, name, old_fields):
+            record = dict(zip(old_fields, value))
+            if name in added_writable:
+                intent = intents.get(record['execution_id'])
+                if intent is None:
+                    raise ValueError('Original publication evidence lacks its frozen intent')
+                record['exact_target'] = intent['exact_target']
+            values.append(tuple(record[field] for field in fields))
+        payload[name] = (fields, values)
+    # Rebuild one matched clone from ALL existing declaration families. Generated
+    # columns, route FKs, guards and retry view are derived, not copied decisions.
+    sequence = rows(db, 'sqlite_sequence') if 'sqlite_sequence' in before_objects else None
+    rebuild(db, target.runtime_objects, payload)
+    if sequence is not None:
+        db.execute('DELETE FROM sqlite_sequence')
+        db.executemany('INSERT INTO sqlite_sequence(name,seq) VALUES (?,?)', sequence)
+        if rows(db, 'sqlite_sequence') != sequence:
+            raise ValueError('Original sequence counters changed')
+    db.execute(f'PRAGMA user_version={target.coordination_version}')
     for item, execution, assignments in captured:
         # The existing family validates the exact retained execution links or
         # records TRIAGE's original singleton. No native proof is reconstructed.
         execution.record_sources(db, item['input_id'], assignments)
     payload['native_runtime_triage_sources'] = (payload['native_runtime_triage_sources'][0], rows(db, 'native_runtime_triage_sources'))
-    target.require_runtime(db)
+    target.require_coordination(db)
     after_objects, after_rows = objects(db), inventory(db)
-    if {k:v for k,v in before_objects.items() if k not in original.runtime} != {k:v for k,v in after_objects.items() if k not in target.runtime}:
+    if {k:v for k,v in before_objects.items() if k not in original.runtime_objects} != {k:v for k,v in after_objects.items() if k not in target.runtime_objects}:
         raise ValueError('Carry changed unrelated coordination schema')
-    untouched = set(before_rows) - {'native_runtime_schema_meta', 'native_runtime_input', 'current_native_cursor'}
+    unchanged_tables = {name for name in before_rows if name not in target.metadata_rows
+                        and name not in removed_writable and name not in added_writable}
+    untouched = unchanged_tables
     if any(after_rows[name] != before_rows[name] for name in untouched):
         raise ValueError('Carry changed unrelated original coordination rows')
     for name, (fields, expected) in payload.items():
@@ -192,7 +296,9 @@ def carry_coordination(db, original, target):
             raise ValueError('Carried native rows differ from exact original projection')
     if db.execute('PRAGMA foreign_key_check').fetchall():
         raise ValueError('Carried native relations violate foreign keys')
-    return {'original_rows':{k:len(v) for k,v in before_rows.items()}, 'carried_rows':{k:len(v) for k,v in after_rows.items()},
+    return {'original_release': original.release_versions, 'target_release': target.release_versions,
+            'historical_routes': {key: value['exact_target'] for key, value in obligations.items()},
+            'original_rows':{k:len(v) for k,v in before_rows.items()}, 'carried_rows':{k:len(v) for k,v in after_rows.items()},
             'unchanged_rows_sha256':row_digest({k:before_rows[k] for k in sorted(untouched)}),
             'native_projection_sha256':row_digest(payload), 'triage_originals':len(payload['native_runtime_triage_sources'][1])}
 
@@ -238,8 +344,8 @@ class NativeSchemaCarryPlan:
     stores: tuple[CarriedNativeStore, ...]
 
     def require_candidate(self):
-        if self.original.version != 4 or self.target.version != 5:
-            raise ValueError('Only reviewed native schema4->5 carry is authorized')
+        if self.original.release_versions != (8, 2, 2, 4) or self.target.release_versions != (9, 3, 3, 5):
+            raise ValueError('Only reviewed complete490 release8/2/2/4->9/3/3/5 carry is authorized')
         if NativeSchemaDeclaration.observe() != self.target:
             raise ValueError('Matched target declarations changed after carry preparation')
         if tuple(item.name for item in self.stores) not in (('coordination.sqlite3',), ('coordination.sqlite3','native_prompt_bindings.sqlite3')):
@@ -295,7 +401,7 @@ class NativeSchemaCarryPlan:
                     fsync_directory(self.root)
             if any(digest(self.root / item.name) != item.candidate_sha256 for item in self.stores):
                 raise ValueError('Installed native carry differs; remain stopped')
-            result = {'classification':'runtime/native-schema4-to5-preserve', 'stores':FieldCodec.encode(self.stores),
+            result = {'classification':'runtime/complete490-release-preserve', 'stores':FieldCodec.encode(self.stores),
                       'original_preimages':str(destination), 'retired':[], 'reconstructed_proofs':0, 'input_replays':0}
             write_original(destination / 'installed.json', (json.dumps(result,indent=2)+'\n').encode())
             fsync_directory(destination)
@@ -304,8 +410,8 @@ class NativeSchemaCarryPlan:
 
 def prepare(root, candidate, original):
     target = NativeSchemaDeclaration.observe()
-    if original.version != 4 or target.version != 5:
-        raise ValueError('Original4 and matched target5 declarations are required')
+    if original.release_versions != (8, 2, 2, 4) or target.release_versions != (9, 3, 3, 5):
+        raise ValueError('Original8/2/2/4 and matched target9/3/3/5 declarations are required')
     root, candidate = root.absolute(), candidate.absolute()
     if candidate == root or candidate.is_relative_to(root):
         raise ValueError('Candidate must be separate persistent owned storage')

@@ -46,7 +46,7 @@ class PreserveRuntimeInstallation(RuntimeInstallation):
 
 @dataclass(frozen=True)
 class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
-    """Changed native declarations; compaction remains original-format bytes."""
+    """Complete490 release declarations; compaction remains original bytes."""
 
     plan: NativeSchemaCarryPlan
 
