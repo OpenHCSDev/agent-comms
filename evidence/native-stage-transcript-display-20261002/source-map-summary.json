@@ -1,0 +1,34 @@
+{
+  "before": {
+    "repository": "/home/ts/wt/comms-context-manifest-resource-20261002",
+    "ref": "fed8fc5e95dc2b9ce065855313b6be7f7938e45f",
+    "nra_parsed": 913,
+    "candidate_stdlib_314": 1,
+    "unparsed": [],
+    "declarations": 59,
+    "consumer_candidates": 290,
+    "field_reference_candidates": 2122
+  },
+  "after": {
+    "repository": "/home/ts/wt/comms-context-manifest-resource-20261002",
+    "ref": "79e556ab6ea591f95bdf5b27b1b84b22c0da3eda",
+    "nra_parsed": 913,
+    "candidate_stdlib_314": 1,
+    "unparsed": [],
+    "declarations": 59,
+    "consumer_candidates": 300,
+    "field_reference_candidates": 2123
+  },
+  "toad-consumers": {
+    "repository": "/home/ts/wt/toad-prompt-action-owner-20261002",
+    "ref": "330c903a8316c9f4760fc67ccacf48c32fb47f41",
+    "nra_parsed": 715,
+    "candidate_stdlib_314": 31,
+    "unparsed": [],
+    "declarations": 6,
+    "consumer_candidates": 191,
+    "field_reference_candidates": 736
+  },
+  "limitations": "Syntactic declarations/imports/annotations/call and field candidates, not dynamic binding or MRO proof. Native SDK semantics read separately. Historical snapshots without original selected native rows stay unclassified; no inference or proof reconstruction.",
+  "production_diff": "40\t0\tsrc/agent_comms/native_input_record.py\n45\t41\tsrc/agent_comms/native_runtime_input.py\n10\t1\tsrc/agent_comms/transcript_events.py\n17\t22\tsrc/agent_comms/transcript_receipts.py\n"
+}

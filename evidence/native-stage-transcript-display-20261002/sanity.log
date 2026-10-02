@@ -1,0 +1,322 @@
+.FF.....FFF.F..................FF                                        [100%]
+=================================== FAILURES ===================================
+_______ test_known_native_entries_decode_once_in_both_bounded_directions _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_known_native_entries_deco0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff69afda190>
+
+    def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, monkeypatch):
+        path = tmp_path / "session.jsonl"
+        path.write_bytes(
+            b"".join(
+                encoded(
+                    {
+                        "type": "message",
+                        "message": {
+                            "role": "assistant",
+                            "content": str(i),
+                        },
+                    }
+                )
+                for i in range(60)
+            )
+        )
+        comms = wire(tmp_path / "wire")
+        comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+        decoded = []
+        original = NativeEntry.read
+    
+        def decode(raw):
+            decoded.append(raw)
+            return original(raw)
+    
+        monkeypatch.setattr(NativeEntry, "read", decode)
+        latest = comms.transcripts.thread_transcript_page("worker", max_messages=5)
+>       assert len(decoded) == len(set(decoded)) == 6
+E       assert 60 == 6
+E        +  where 60 = len({b'{"type": "message", "message": {"role": "assistant", "content": "0"}}\n', b'{"type": "message", "message": {"role":...": "assistant", "content": "12"}}\n', b'{"type": "message", "message": {"role": "assistant", "content": "13"}}\n', ...})
+E        +    where {b'{"type": "message", "message": {"role": "assistant", "content": "0"}}\n', b'{"type": "message", "message": {"role":...": "assistant", "content": "12"}}\n', b'{"type": "message", "message": {"role": "assistant", "content": "13"}}\n', ...} = set([b'{"type": "message", "message": {"role": "assistant", "content": "59"}}\n', b'{"type": "message", "message": {"role"...": "assistant", "content": "55"}}\n', b'{"type": "message", "message": {"role": "assistant", "content": "54"}}\n', ...])
+
+tests/test_native_transcript.py:83: AssertionError
+_______ test_malformed_unknown_and_partial_entries_keep_byte_boundaries ________
+
+tmp_path = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_malformed_unknown_and_par0')
+
+    def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
+        path = tmp_path / "session.jsonl"
+        extension = {"type": "plugin-note", "custom": {"future": True}}
+        path.write_bytes(
+            encoded(extension)
+            + encoded({"type": "message", "message": {"role": "assistant", "content": 42}})
+            + b'{"type":"message"\n'
+            + encoded({"type": "message", "message": {"role": "assistant", "content": "valid"}})
+            + b'{"type":"message","message":'
+        )
+        reader = NativeTranscript(path)
+        forward = list(reader.forward(0, path.stat().st_size))
+        reverse = list(reader.reverse(path.stat().st_size))
+        assert forward == list(reversed(reverse))
+        assert isinstance(forward[0].entry, UnknownEntry) and forward[0].entry.payload == extension
+        assert forward[0].entry.events(TranscriptProjection()) == []
+        assert forward[1].entry is None and forward[2].entry is None
+>       assert forward[3].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
+               ^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'NoneType' object has no attribute 'events'
+
+tests/test_native_transcript.py:112: AttributeError
+_________ test_large_record_retained_in_tail_and_both_page_directions __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_large_record_retained_in_0')
+
+    def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
+        path = tmp_path / "large.jsonl"
+        bodies = ["before", "λ" * (300 * 1024), "after"]
+        path.write_bytes(
+            b"".join(
+                encoded({"type": "message", "message": {"role": "assistant", "content": body}})
+                for body in bodies
+            )
+        )
+        transcript = NativeTranscript(path)
+        size = path.stat().st_size
+        forward = list(transcript.forward(0, size))
+        assert list(transcript.reverse(size)) == list(reversed(forward))
+>       assert list(transcript.tail()) == [record.entry for record in reversed(forward)]
+E       assert [] == [None, None, None]
+E         
+E         Right contains 3 more items, first extra item: None
+E         Use -v to get more diff
+
+tests/test_native_transcript.py:150: AssertionError
+_ test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen[False] __
+
+tmp_path = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_saved_goal_prompt_hidden_0')
+paged = False
+
+    @pytest.mark.parametrize("paged", [False, True])
+    def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path, paged):
+        comms = wire(tmp_path / "wire")
+        comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+        # These annotations are committed before sending, before Pi creates its first file.
+        comms.transcripts.routes.record_input_display("a" * 32, None)
+        comms.transcripts.routes.record_input_display(
+            "b" * 32, "Please inspect this image\nthen continue."
+        )
+        # Send now checks the same already-bound ID again; it cannot change its display.
+        comms.transcripts.routes.record_input_display("b" * 32, "User follow-up: private wrapper")
+        session = tmp_path / "session.jsonl"
+        rows = [
+            saved_row("a" * 32, GOAL_PROMPT),
+            saved_row(
+                "b" * 32, "User follow-up:\nPlease inspect this image\nthen continue.", images=True
+            ),
+            # A genuine user may quote these exact words; never filter by prefix.
+            saved_row("c" * 32, GOAL_PROMPT),
+            saved_row("a" * 32, "assistant reply", role="assistant"),
+        ]
+        session.write_text("".join(json.dumps(row) + "\n" for row in rows))
+>       comms.threads.attach_session("worker", str(session))
+
+tests/test_transcript_input_display.py:55: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7ff69b0e3ed0>
+original = 'worker'
+session_file = '/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_saved_goal_prompt_hidden_0/session.jsonl'
+pid = None
+
+    def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
+        """Attach authoritative Pi runtime state to an existing thread."""
+        with _store_lock(self._wire_lock_path):
+>           current = self.registry.require(original.name)
+                                            ^^^^^^^^^^^^^
+E           AttributeError: 'str' object has no attribute 'name'
+
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/thread_management.py:482: AttributeError
+__ test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen[True] __
+
+tmp_path = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_saved_goal_prompt_hidden_1')
+paged = True
+
+    @pytest.mark.parametrize("paged", [False, True])
+    def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path, paged):
+        comms = wire(tmp_path / "wire")
+        comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+        # These annotations are committed before sending, before Pi creates its first file.
+        comms.transcripts.routes.record_input_display("a" * 32, None)
+        comms.transcripts.routes.record_input_display(
+            "b" * 32, "Please inspect this image\nthen continue."
+        )
+        # Send now checks the same already-bound ID again; it cannot change its display.
+        comms.transcripts.routes.record_input_display("b" * 32, "User follow-up: private wrapper")
+        session = tmp_path / "session.jsonl"
+        rows = [
+            saved_row("a" * 32, GOAL_PROMPT),
+            saved_row(
+                "b" * 32, "User follow-up:\nPlease inspect this image\nthen continue.", images=True
+            ),
+            # A genuine user may quote these exact words; never filter by prefix.
+            saved_row("c" * 32, GOAL_PROMPT),
+            saved_row("a" * 32, "assistant reply", role="assistant"),
+        ]
+        session.write_text("".join(json.dumps(row) + "\n" for row in rows))
+>       comms.threads.attach_session("worker", str(session))
+
+tests/test_transcript_input_display.py:55: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.thread_management.ThreadManagement object at 0x7ff69b132210>
+original = 'worker'
+session_file = '/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_saved_goal_prompt_hidden_1/session.jsonl'
+pid = None
+
+    def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
+        """Attach authoritative Pi runtime state to an existing thread."""
+        with _store_lock(self._wire_lock_path):
+>           current = self.registry.require(original.name)
+                                            ^^^^^^^^^^^^^
+E           AttributeError: 'str' object has no attribute 'name'
+
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/thread_management.py:482: AttributeError
+_______ test_acp_saved_transcript_replay_hides_only_owned_internal_input _______
+
+tmp_path = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_acp_saved_transcript_repl0')
+
+    @pytest.mark.asyncio
+    async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_path):
+        comms = wire(tmp_path / "wire")
+        session = tmp_path / "session.jsonl"
+        session.write_text(
+            "".join(
+                json.dumps(row) + "\n"
+                for row in [
+                    saved_row("a" * 32, GOAL_PROMPT),
+                    saved_row("b" * 32, "User follow-up:\ntest2"),
+                    saved_row("c" * 32, "Done reading", role="assistant"),
+                ]
+            )
+        )
+        comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
+        comms.transcripts.routes.record_input_display("a" * 32, None)
+        comms.transcripts.routes.record_input_display("b" * 32, "test2")
+        agent = CommsAgent(wire(comms.root))
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        try:
+>           await agent.sessions.transcript.replay("worker", "worker", client=Client())
+
+tests/test_transcript_input_display.py:116: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/transcript_updates.py:50: in replay
+    snapshot = await asyncio.to_thread(
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/acp_extension.py:467: in capture
+    return cls(read.read(), read.identity)
+               ^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/transcripts.py:211: in read
+    page = self.owner.thread_transcript_page(
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/transcripts.py:463: in thread_transcript_page
+    consumed, records = traversal.read_records(
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/transcript_receipts.py:133: in read_records
+    events = record.project(project_native) if record is not None else ()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/native_transcript.py:58: in project
+    return projection(self) if self.entry is not None else ()
+           ^^^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/transcript_receipts.py:260: in native_events
+    events, references = NativeRuntimeInput.transcript_events(
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/native_runtime_input.py:194: in transcript_events
+    user = entry.tracked_user if entry.input_boundary else reader.input_ancestor(record)
+           ^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = MessageEntry(id='bbbbbbbb', parent_id=None, timestamp=None, message=UserMessage(content=(TextContent(text='User follow...digest=None, stop_reason=<class 'agent_comms.pi_vocabulary.UnreportedStopReason'>, error_message=None, diagnostics=()))
+
+    @property
+    def tracked_user(self) -> MessageEntry | None:
+        from .native_pi import _DIGEST
+        from .native_input_record import NativeInputIdText
+    
+        if self.message.input_id is None:
+            return None
+        NativeInputIdText.decode(self.message.input_id)
+        if (
+            not self.message.user
+            or self.message.input_digest is None
+            or not _DIGEST.fullmatch(self.message.input_digest)
+            or not self.id
+        ):
+>           raise ValueError("Native Pi session has ambiguous tracked user input")
+E           ValueError: Native Pi session has ambiguous tracked user input
+
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/native_entries.py:402: ValueError
+____________ test_route_is_forwarded_live_and_preserved_by_entry_id ____________
+
+tmp_path = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_route_is_forwarded_live_a0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff69b011240>
+
+    async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True, auto_wake=False)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_reply_routing.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'..._routing.py::test_route_is_forwarded_live_and_preserved_by_entry_id (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+____ test_coordination_context_does_not_override_scheduled_response_policy _____
+
+tmp_path = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/native-stage-display/sanity/test_coordination_context_does0')
+
+    async def test_coordination_context_does_not_override_scheduled_response_policy(tmp_path):
+        comms = wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_reply_routing.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:57: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'ANDROID_HOME': '/opt/android-sdk', 'ANDROID_NDK': '/opt/android-ndk', 'ANDROID_NDK_HOME': '/opt/android-ndk'...NT_TEST': 'tests/test_reply_routing.py::test_coordination_context_does_not_override_scheduled_response_policy (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_native_transcript.py::test_known_native_entries_decode_once_in_both_bounded_directions
+FAILED tests/test_native_transcript.py::test_malformed_unknown_and_partial_entries_keep_byte_boundaries
+FAILED tests/test_native_transcript.py::test_large_record_retained_in_tail_and_both_page_directions
+FAILED tests/test_transcript_input_display.py::test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen[False]
+FAILED tests/test_transcript_input_display.py::test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen[True]
+FAILED tests/test_transcript_input_display.py::test_acp_saved_transcript_replay_hides_only_owned_internal_input
+FAILED tests/test_reply_routing.py::test_route_is_forwarded_live_and_preserved_by_entry_id
+FAILED tests/test_reply_routing.py::test_coordination_context_does_not_override_scheduled_response_policy
+8 failed, 25 passed in 5.98s
