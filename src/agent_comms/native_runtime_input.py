@@ -167,6 +167,33 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             yield db
 
     @classmethod
+    def for_native_user(cls, db, reader, user):
+        """The original admitted native file/input owns stage and publication.
+
+        Viewer names and current registry owners cannot classify inherited or
+        saved native history. A recorded receipt additionally seals the exact
+        original user entry; a precommit admitted row still owns its stage.
+        """
+        rows = cls.select(
+            db, where="input_id=? AND session_file=? AND session_id=?",
+            parameters=(user.input_id, str(reader.path), reader.session_id),
+        )
+        for row in rows:
+            if row.reference.recorded and row.session_entry_id != user.id:
+                raise IdentityConflict("Native transcript input conflicts with its original entry")
+        return rows
+
+    @classmethod
+    def transcript_events(cls, db, reader, record, projection):
+        entry = record.entry
+        user = entry.tracked_user if entry.input_boundary else reader.input_ancestor(record)
+        if db is not None and user is not None:
+            for original in cls.for_native_user(db, reader, user):
+                return original.execution.transcript_events(entry, projection, user)
+        # Untracked or detached history is not classified by text or native role.
+        return entry.events(projection)
+
+    @classmethod
     def publication_revision(cls, root, reader, owner_lookup):
         """Read only this native source's committed original reply relations.
 
@@ -196,46 +223,15 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             )[0]
 
     @classmethod
-    def published_replies(cls, root, reader, user, owner_lookup):
-        """Join the original tracked input to its exact published execution.
-
-        This is a read-only projection of existing records. It never enrolls a
-        native input, installs a schema, advances a cursor, or authorizes retry.
-        The SQLite reader is closed before any wire read or presentation work.
-        """
-        from .coordination_tables.executions import ExecutionRecord
-        from .coordination_tables.responses import ResponseObligation
-        from .message_reference import MessageReference
-
-        session_id = reader.session_id
-        with cls._publication_read(root) as db:
-            if db is None:
+    def published_replies(cls, db, reader, user, owner_lookup):
+        """Derive original replies inside the same acquired transcript snapshot."""
+        if db is None:
+            return ()
+        for original in cls.for_native_user(db, reader, user):
+            if (original.owner_lookup, original.session_entry_id) != (owner_lookup, user.id):
                 return ()
-            rows = cls.select(db, where="input_id=? AND execution_id IS NOT NULL", parameters=(user.input_id,))
-            if not rows:
-                return ()
-            original = rows[0]
-            if (
-                original.owner_lookup,
-                original.session_file,
-                original.session_id,
-                original.session_entry_id,
-            ) != (owner_lookup, str(reader.path), session_id, user.id):
-                return ()
-            attempt = original.execution.require_attempt()
-            execution = ExecutionRecord.one(db, execution_id=attempt.execution_id)
-            if not attempt.matches_execution(execution, original.owner_lookup):
-                return ()
-            obligations = ResponseObligation.select(
-                db, where="execution_id=?", parameters=(attempt.execution_id,)
-            )
-            if not obligations or not all(row.lifecycle.published for row in obligations):
-                return ()
-            return tuple(sorted(
-                (MessageReference(row.lifecycle.receipt_seq, row.lifecycle.receipt_message_id)
-                 for row in obligations),
-                key=lambda reference: reference.seq,
-            ))
+            return original.execution.published_replies(db, owner_lookup)
+        return ()
 
     input_id: str = field(
         metadata={

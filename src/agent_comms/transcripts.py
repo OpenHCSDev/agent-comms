@@ -458,8 +458,14 @@ class Transcripts:
         reader = NativeTranscript(path)
         from functools import partial
 
-        with routes_owner.for_session(session_file) as routes:
-            project_native = partial(receipts.native_events, routes=routes, reader=reader)
+        with (
+            routes_owner.for_session(session_file) as routes,
+            NativeRuntimeInput._publication_read(receipt_root) as native_inputs,
+        ):
+            project_native = partial(
+                receipts.native_events, routes=routes, reader=reader,
+                native_inputs=native_inputs,
+            )
             consumed, records = traversal.read_records(
                 reader, project_native, receipts, outcomes.outcomes, initial, frontier,
                 max_messages=max_messages, max_bytes=max_bytes,

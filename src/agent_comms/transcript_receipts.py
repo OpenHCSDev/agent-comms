@@ -247,7 +247,7 @@ class AssignedTranscriptSource:
         predicate, parameters = traversal.predicate(sequence, through)
         return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
-    def native_events(self, record, routes, reader):
+    def native_events(self, record, routes, reader, native_inputs):
         from dataclasses import replace
         from .native_entries import TranscriptProjection
 
@@ -271,7 +271,7 @@ class AssignedTranscriptSource:
                 )
             user = reader.input_ancestor(record) if not published else None
             if user is not None:
-                references = NativeRuntimeInput.published_replies(self.root, reader, user, lookup)
+                references = NativeRuntimeInput.published_replies(native_inputs, reader, user, lookup)
                 if references:
                     marks = ",".join("?" for _ in references)
                     originals = self.rows(
@@ -283,8 +283,10 @@ class AssignedTranscriptSource:
                         for ref in references
                     )
 
-        events = entry.events(
-            TranscriptProjection(
+        from .native_runtime_input import NativeRuntimeInput
+
+        events = NativeRuntimeInput.transcript_events(
+            native_inputs, reader, record, TranscriptProjection(
                 routing,
                 routes.input_display(entry.input_id),
             )
