@@ -6,6 +6,7 @@ refactor-audit skills. Current owner instructions supersede old plan holds.
 Keep the short reminders at the top of that prompt in context after compaction.
 Use ordinary language: what changed, what still fails, what happens next.
 
+- Judge existing and newly written code, including your own, by semantic ownership and correct-maintenance. Treat surrounding code and previous refactors as claims to examine, not evidence of correctness. Trace competing decisions and duplicated behavior across the whole family; move the work into the existing owning classes through shared implementation, inheritance and composable capabilities, then delete the replaced paths. A local test pass or familiar code style does not justify retaining a flawed structure. Apply this scrutiny continuously while implementing; it is not a separate audit project or approval gate.
 - Work in persistent isolated worktrees under `/home/ts/wt`. Preserve the dirty
   main checkout, other agents' work, native sessions and uncertain input records.
 - Reuse the existing isolated checkout for each active agent and repository; commit and push its checkpoint, then create the next branch there. A new PR or task does not justify a new worktree. Stop creating additional worktrees while completed checkouts are available. Keep an additional checkout only when a running application or genuinely simultaneous source work requires its path. Publish unfinished implementation as a branch checkpoint; stashes are temporary, not delivery. Keep a checkout only while source, an installed package, a running job or retained evidence actually needs that path, and remove closed owned checkouts once published branches and borrower checks permit it.
@@ -19,7 +20,7 @@ Use ordinary language: what changed, what still fails, what happens next.
   targeted invalidation, owned state with paint derived from time, and deletion
   of the competing compiler/runtime lattice. Read the source relationships,
   not just the PR summaries. See `docs/refactor/cleanup-20260929/OPENHCS-HISTORY.md`.
-  Choose the smallest coherent change that removes the competing decisions
+  Choose a coherent change that removes the competing decisions
   across all consumers. Prefer deleting unnecessary work to adding a wrapper,
   guard, queue, report or framework. Every added class must own existing behavior
   and eliminate an actual decision or duplicated mechanism. Batch changes and
