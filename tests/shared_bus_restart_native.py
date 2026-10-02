@@ -160,10 +160,15 @@ async def configured_pure_channel(arguments):
         for index in range(arguments.history):
             service.messaging.send_initial_cohort('history-sender', 'history-recipient',
                 f'Original private retained history {index}: ' + 'history ' * 400)
-    packets, timeline = [], []
+    packets, timeline, compaction_events = [], [], []
     class Observation:
         async def session_update(self, **kwargs):
             packets.append(kwargs)
+            from agent_comms.acp_extension import CompactionChangedUpdate
+            for item in decode_updates(kwargs['update'].get('_meta')):
+                if isinstance(item, CompactionChangedUpdate):
+                    compaction_events.append({'elapsed_seconds': time.perf_counter()-begun,
+                        'phase': item.event.phase})
     attachment = CommsClient(service, runtime_enabled=True,
         private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
@@ -339,6 +344,8 @@ async def configured_pure_channel(arguments):
             proof['task_timing'] = await configured_task_timing(
                 arguments, service, attachment, names[0], sender, stage
             )
+            assert {'start', 'progress', 'end'} <= {event['phase'] for event in compaction_events}, \
+                'Optional compaction did not publish continuous ACP progress and completion'
         if arguments.configured_saved_preparation:
             from agent_comms.compaction_journal import CompactionJournal
             from agent_comms.compaction_records import SelectedSummarySource
@@ -389,6 +396,7 @@ async def configured_pure_channel(arguments):
                 'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                     for path,digest in source_hashes.items()),
                 'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
+            receipt['compaction_events'] = compaction_events
             (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
             print(json.dumps(receipt,indent=2),flush=True)
 
