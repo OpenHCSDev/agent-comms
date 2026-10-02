@@ -62,6 +62,11 @@ class FreshCoverageIdentity:
     creator: ProcessIdentity
     owner_lookup: str
 
+    def require_owner(self, source) -> None:
+        """The returned enrollment, not its directory, owns the stable lookup."""
+        if source.incarnation != self.incarnation or source.owner != self.creator:
+            raise CompactionJournalError("Fresh private owner coverage differs: owner identity")
+
 
 @dataclass(frozen=True)
 class ReturnedFreshEnrollment:

@@ -42,9 +42,6 @@ async def owner(tmp_path, monkeypatch):
 
     agent.on_connect(Client())
     (tmp_path / "project").mkdir()
-    agent.turns.adaptive_compaction_enabled = (
-        False  # This case tests ordinary goal/input admission.
-    )
     await agent.new_session(str(tmp_path / "project"))
     session = tmp_path / "session.jsonl"
     session.touch()
@@ -180,12 +177,12 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         observed["public_id"] = public_id
         original = agent.inputs.original_sources["project"]
         assert original.notice_keys == ()  # Internal continuation is not a user echo.
-        pending_key = original.compaction_key(str(session))
-        assert pending_key.startswith("turn:")
+        pending_keys = original.compaction_keys(str(session))
+        assert len(pending_keys) == 1 and pending_keys[0].startswith("turn:")
         owner = comms.registry.require("project")
-        future = agent.inputs.future_inputs(owner, pending_key)
+        future = agent.inputs.future_inputs(owner, pending_keys)
         assert tuple(future) == ("acp:" + public_id,)
-        agent.inputs.dispositions.read().compaction_rows(owner, pending_key, agent.inputs)
+        agent.inputs.dispositions.read().compaction_rows(owner, pending_keys, agent.inputs)
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert allowed is True
         persist_user(session, "a" * 32, args[2])

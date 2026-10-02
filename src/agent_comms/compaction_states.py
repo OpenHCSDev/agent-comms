@@ -9,12 +9,14 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .child_process import ChildOutcome
 from .compaction_errors import CompactionJournalError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .native_revision_text import NativeRevisionText
+from .private_path import FileRevision
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
@@ -331,10 +333,10 @@ class NativeCommitPosition:
     """The committed native entry/revision/leaf shared by receipt and publication."""
 
     entry_id: str = field(metadata={"wire_name": "entryId"})
-    revision: str
+    revision: Annotated[FileRevision, NativeRevisionText]
     leaf_id: str = field(metadata={"wire_name": "leafId"})
     def __post_init__(self):
-        if not self.entry_id or not self.revision or not self.leaf_id:
+        if not self.entry_id or not self.leaf_id:
             raise ValueError("Invalid native metadata receipt; never replay")
 
 
@@ -399,7 +401,7 @@ class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
             return UnknownNativeOutcome("native-metadata-mismatch")
         return self
     def require_saved_revision(self, revision: SessionRevision) -> None:
-        if self.revision != revision.native_stamp:
+        if self.revision != revision.native:
             raise CompactionJournalError("Selected native result is unavailable: saved revision changed")
 
     def require_committed(self) -> CommittedNativeOutcome:
@@ -417,8 +419,8 @@ class CommittedNativeOutcome(NativeCommitPosition, NativeOutcome):
 @dataclass(frozen=True)
 class AbortedNoWriteNativeOutcome(NativeOutcome, declared_name="aborted-no-write"):
     state = AbortedNoWriteOperation()
-    revision: str
+    revision: Annotated[FileRevision, NativeRevisionText]
     leaf_id: str = field(metadata={"wire_name": "leafId"})
     def __post_init__(self):
-        if not self.revision or not self.leaf_id:
+        if not self.leaf_id:
             raise ValueError("Incomplete native no-write receipt")

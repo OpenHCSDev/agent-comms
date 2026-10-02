@@ -1,0 +1,17 @@
+Toad original Git object 37e7867bc646aac686837687c1ca9c775503c71b
+command: git grep -n -E TurnState|TurnChangedUpdate|decode_updates|agent_events|AgentEvent|replay_safe|side_effects_possible origin/main -- src/toad
+origin/main:src/toad/acp/agent.py:25:    decode_updates,
+origin/main:src/toad/acp/agent.py:275:        for fact in decode_updates(metadata):
+origin/main:src/toad/acp/agent_controller.py:22:    CompactRequest, InputFailedUpdate, decode_updates, encode_request,
+origin/main:src/toad/acp/agent_controller.py:341:        for fact in decode_updates(response.field_meta):
+origin/main:src/toad/acp/comms_updates.py:25:    TurnChangedUpdate,
+origin/main:src/toad/acp/comms_updates.py:88:    @handles(TurnChangedUpdate)
+origin/main:src/toad/acp/comms_updates.py:89:    def turn_changed(self, update: TurnChangedUpdate) -> None:
+origin/main:src/toad/acp/session_updates.py:8:from agent_comms.acp_extension import decode_updates
+origin/main:src/toad/acp/session_updates.py:156:            facts = decode_updates(metadata)
+origin/main:src/toad/conversation_turn.py:6:from agent_comms.turn_lease import TurnState
+origin/main:src/toad/conversation_turn.py:101:    state: TurnState = TurnState()
+origin/main:src/toad/conversation_turn.py:227:    def receive(self, state: TurnState, owner_type=OrderedManagedTurn):
+origin/main:src/toad/widgets/conversation.py:23:from agent_comms import agent_events as comms_events
+origin/main:src/toad/widgets/conversation.py:37:    TurnChangedUpdate,
+origin/main:src/toad/widgets/conversation.py:2280:    @handles(TurnChangedUpdate)

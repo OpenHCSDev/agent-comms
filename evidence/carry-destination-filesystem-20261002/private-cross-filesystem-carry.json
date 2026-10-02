@@ -1,0 +1,87 @@
+{
+  "state": "PASS-private-cross-filesystem-original-goal-carry",
+  "installed_package": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "interpreter": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002/bin/python",
+  "target_root": "/var/tmp/agent-comms-mendel-carry517-bpz6donf",
+  "target_device": 2083,
+  "archive_device": 2084,
+  "installation": {
+    "classification": "goal/declaration-preserve",
+    "stores": [
+      {
+        "name": "goal-private/goal_attempts.sqlite3",
+        "original_sha256": "64a891bc5ab10bdba92cf9cebde97de052a5fce02409ffc10c114e6dccba8ce5",
+        "candidate_sha256": "1f64ac7b4c3b44a1b88ecf3223a0f2ffac3ba091d590c578a017ff9f3e10b184",
+        "evidence": {
+          "original_ddl_sha256": "a0055e74db52658c59d99e78b36c834b73c1df939c6e11ab11e475d07edaa28e",
+          "target_ddl_sha256": "a8014ad0700cf3c63b97df96523ff9f1371054608939de9ee3dc8477d06a6840",
+          "original_rows": {
+            "failed_turn_evidence": 4,
+            "generation": 8,
+            "attempt_record": 36,
+            "goal_human_decision": 7,
+            "goal_provider_usage": 437,
+            "goal_attempt_schema": 1
+          },
+          "carried_rows": {
+            "failed_turn_evidence": 4,
+            "generation": 8,
+            "attempt_record": 36,
+            "goal_human_decision": 7,
+            "goal_provider_usage": 437,
+            "goal_attempt_schema": 1
+          },
+          "unchanged_rows_sha256": "0397e10ebb3da5082fe7ebabb0552083ab9651fc27d78e0617caa309779f32f5",
+          "row_identity_sha256": "2f1613f772bfd2926c47da75a4121ac2dbe666d8d40096a180fa267e1f414a19",
+          "changed_schema_objects": [
+            "failed_turn_evidence",
+            "goal_attempt_schema"
+          ],
+          "metadata_owner": "goal_attempt_schema"
+        }
+      }
+    ],
+    "original_preimages": "/home/ts/.cache/agent-scratch/comms-goal-ledger-schema-carry-20261002/cross-filesystem517/originals",
+    "retired": [],
+    "reconstructed_proofs": 0,
+    "input_replays": 0
+  },
+  "staging": [
+    {
+      "path": "/var/tmp/agent-comms-mendel-carry517-bpz6donf/goal-private/.goal_attempts.sqlite3.carry-_x8jf1uf/goal_attempts.sqlite3",
+      "sha256": "1f64ac7b4c3b44a1b88ecf3223a0f2ffac3ba091d590c578a017ff9f3e10b184",
+      "revision": {
+        "identity": {
+          "device": 2083,
+          "inode": 4590025
+        },
+        "size": 237568,
+        "mtime_ns": 1790926299267022049,
+        "ctime_ns": 1790926299286108484
+      }
+    }
+  ],
+  "unchanged_fact_rows": 492,
+  "failure_before_publication": {
+    "stage": {
+      "path": "/var/tmp/agent-comms-mendel-carry517-bpz6donf/goal-private/.goal_attempts.sqlite3.carry-etxgqlhv/goal_attempts.sqlite3",
+      "sha256": "1f64ac7b4c3b44a1b88ecf3223a0f2ffac3ba091d590c578a017ff9f3e10b184",
+      "revision": {
+        "identity": {
+          "device": 2083,
+          "inode": 4590024
+        },
+        "size": 237568,
+        "mtime_ns": 1790926299267022049,
+        "ctime_ns": 1790926299304066922
+      }
+    },
+    "target_unchanged": true,
+    "stage_retained": true
+  },
+  "public_mutations": 0,
+  "provider_calls": 0,
+  "input_replays": 0,
+  "limitations": "Installed target package plus tracked outside-src operator. Fixture copied from running-source backup; not live stopped custody.",
+  "owned_target_fixture_removed": true
+}

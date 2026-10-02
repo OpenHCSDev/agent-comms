@@ -46,6 +46,26 @@ class Registration:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
             self._commit_registration(edit, change)
 
+    def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
+        """Publish an observed native source under its original executable lease.
+
+        Registry admission checks own the determining facts. A changing progress
+        phase is retained from the locked document, not compared to an old view.
+        Native session identity and context proof remain with their producers.
+        """
+        with _store_lock(self.store.path.parent / "wire"), self.store.editing() as edit:
+            snapshot = edit.document.snapshot()
+            original.require_snapshot(snapshot, "Native source owner changed before publication")
+            current = snapshot.require_active(original.thread.name)
+            attached = replace(current, session_file=session_file)
+            change = edit.document.prepare_registration(
+                attached, snapshot.statuses[current.name], new_owner=False
+            )
+            self._commit_registration(edit, change)
+            return RegistryOwner(
+                thread=change.installed_thread, admission_generation=original.admission_generation
+            )
+
     def declare(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:
         """Operational declaration and channel provenance use one locked current owner.
 

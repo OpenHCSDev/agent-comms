@@ -1,0 +1,16 @@
+{
+  "owner": "Einstein",
+  "purpose": "Corrected selected wire-source batch; configured saved-fork final workflow",
+  "receiving_pr": 313,
+  "core": "28401d70228237936d6489cba419271764edb905",
+  "frontend": "c7290d5b7d23d0366812e2e3988aa3f80e1e0de0",
+  "textual": "23822923a02b75a1fad10751d97dc009c36b598b",
+  "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+  "native": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-native6-wire-source-20261002",
+  "gate_owner": "Einstein",
+  "publication_owner": "parent",
+  "toad": "c7290d5b7d23d0366812e2e3988aa3f80e1e0de0",
+  "carry_owner": "Mendel",
+  "driver_head": "efd8228c2167483c21c9b6f69160dee5b2f6edfb"
+}

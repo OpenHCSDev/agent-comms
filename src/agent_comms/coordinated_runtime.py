@@ -95,10 +95,11 @@ class SelectedExecution:
             ) as participant:
                 if participant is None:
                     return None
-                session = SelectedSession.prepare(
+                session = await SelectedSession.prepare(
                     participant,
                     self.session_file,
                     self.fresh_private_enrollment,
                     self.selected_thinking_level,
+                    self.native_package,
                 )
                 return await SelectedConsideration(participant).run(self, session)

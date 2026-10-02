@@ -1,0 +1,13 @@
+# Destination filesystem carry publication
+
+Actual #514 publication failed EXDEV after original owners stopped: the recovery directory on HOME was used for atomic replacement of a goal DB on /var/tmp. Parent restored original owners separately; this source patch makes no public changes and does not retry that attempt.
+
+RetainedRuntimeFile owns exclusive target-local candidate staging, held descriptor/revision/SHA, atomic replacement through existing _replace_snapshot, and durable target directory publication. AcquiredRuntimeFiles derives file evidence from its held members. Shared install_prepared retains every preimage before staging, prepares every candidate before any replacement, persists staging paths before publication, and keeps the existing binding sidecar uncertainty protocol. Failed publication leaves stage/recovery evidence; success retires disposable stages. Goal and native release callers use the same lifetime. Recovery receipts remain on HOME.
+
+The private actual original goal fixture uses installed9ccc package declarations and tracked outside-src operator tools. HOME device2084 and /var/tmp device2083 are distinct. Target DDL qualified, 492 fact rows and rowids unchanged; original preimage SHA unchanged. A deliberate prepublication failure retained its staged bytes and left the target unchanged. The owned /var/tmp fixture was removed; original backup, private installed result and failed-stage copy remain in owned persistent scratch. No provider, input, live root mutation or worker was involved. This validates filesystem publication, not a new live stopped-custody grant.
+
+Before/after AST uses existing audit Package/ParsedModule over all 50 cutover Python modules, zero omissions. It identifies source references, not dynamic dispatch proof. Existing resource owner and all shared callers were read before edits; the HOME .target construction and direct Path.replace decisions were deleted. No format/goal plan/package changes. Patterns: shared resource lifetime and declaration-owned behavior; no new registry or store.
+
+Parent owns the next fresh stopped capture and reviewed-tool continuation. Failed public attempt paths/receipts/preimages remain untouched. Native6 #510 will receive this same resource change by normal merge; no future/native source is needed for Native5 publication.
+
+Frozen tools source: d874f10c2706aec40bc6a4624755960846bc5c99. Tool-only diff: 73 added / 25 deleted across 2 existing files. The 50-file operator manifest is pinned to this source; unchanged runtime plan SHA 17cde43a4fff64f0623523e28f39381b49d9b615746da241dfb4c5b82b09e254. Existing Native5 package remains unchanged.
