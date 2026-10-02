@@ -131,18 +131,12 @@ class WireLog:
         The original wire -> bus -> registry order selects the read snapshot;
         neither physical publication lock survives into its decoder.
         """
-        with ExitStack() as resources:
-            with _store_lock(self.path.parent / "wire"):
-                # The bus snapshot is acquired before the registry observation.
-                records = resources.enter_context(self.verified_snapshot())
+        with _store_lock(self.path.parent / "wire"):
+            with self.certified_read() as source:
                 snapshot = registry.snapshot()
                 incarnation = snapshot.require(name).incarnation
-            return tuple(
-                manifest
-                for record in records
-                for manifest in record.context_manifests()
-                if manifest.thread.resolved(snapshot) == incarnation
-            )
+                captured = source.context_manifests(incarnation, snapshot)
+        return tuple(captured)
 
     def retained_task_facts_unlocked(self, recipient: ThreadIncarnation):
         """Capture exact task facts from their original addressed declarations.
