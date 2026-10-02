@@ -23,7 +23,7 @@ Expression = projection.AstExpressionProjection
 
 CORE = Path('/home/ts/wt/comms-channel-reply-batch-policy-20261002')
 BEFORE = '9d557bf469ff1c61494b323a8cccb9fa9dd947c8'
-AFTER = 'd45f6287456411254165cbfe6e4d4135ce7ba269'
+AFTER = '4c98616d290a0376dbec7c1e2131e20fe6da90bc'
 OWNERS = frozenset((
     'SelectedParticipant', 'SelectedExecution', 'SelectedSource', 'SelectedSourceBatch',
     'Coordination', 'CoordinationSession', 'CoordinationStore', 'CertifiedSourceRead',
@@ -41,7 +41,7 @@ OPERATIONS = frozenset((
     '_expected_assignments', '_immutable_assignment_matches',
 ))
 MEMBERS = frozenset((
-    'select', 'sources', 'run_async', '_run_owned', 'lease', 'require_current',
+    'select', 'sources', 'run_async', 'run_worker', '_run_owned', 'lease', 'prepare', 'configured_model', 'require_current',
     'require_selected_source', 'require_committed_source', 'require_registry',
     'addressed_sources', 'addressed_deliveries', 'certified_read', 'references',
     'capture_deliveries', 'finish_turn', 'lease_live_turn_with_admission',

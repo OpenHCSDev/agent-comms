@@ -14,11 +14,11 @@
     "path": "tests/unit/test_cellprofiler_static_deletion_gates.py"
   },
   "before": "9d557bf469ff1c61494b323a8cccb9fa9dd947c8",
-  "after": "d45f6287456411254165cbfe6e4d4135ce7ba269",
+  "after": "4c98616d290a0376dbec7c1e2131e20fe6da90bc",
   "production_deleted_lines": 63,
   "production_added_lines": 81,
   "raw_output": "ast-before-after.json.gz",
-  "raw_sha256": "8a6ee3ee0a1fb68bf5a7f339a3446485832ec254a25feee52b1a3808d6bf50cf",
+  "raw_sha256": "6cbf9453b495d3bd646c54d4f7500fa0dc91c27a68ea6782671990846a17aae5",
   "limits": [
     "Imported/dotted spellings and class ancestry are source evidence, not native MRO or descriptor execution.",
     "Receiver variables, monkeypatches, shadowing and dynamic getattr/import dispatch remain unproved; candidate references are retained.",
@@ -313,6 +313,39 @@
           "awaited": false,
           "resource_context": "With",
           "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_triage.py",
+          "line": 103,
+          "context": "FullSelectedTriage.continue_turn",
+          "kind": "Call",
+          "terminal": "require_current",
+          "spelling": "participant.require_current",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 96,
+          "context": "SelectedAttempt.engage",
+          "kind": "Call",
+          "terminal": "require_current",
+          "spelling": "participant.require_current",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 236,
+          "context": "SelectedConsideration.run",
+          "kind": "Call",
+          "terminal": "require_current",
+          "spelling": "participant.require_current",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
         }
       ],
       "changed_contract_declarations": [
@@ -402,7 +435,7 @@
     },
     {
       "label": "core-after",
-      "revision": "d45f6287456411254165cbfe6e4d4135ce7ba269",
+      "revision": "4c98616d290a0376dbec7c1e2131e20fe6da90bc",
       "roots": [
         "benchmarks",
         "docs",
@@ -414,8 +447,8 @@
         "tools",
         "src/agent_comms"
       ],
-      "tracked_python_files": 902,
-      "parsed_files": 902,
+      "tracked_python_files": 903,
+      "parsed_files": 903,
       "parse_failures": [],
       "enumeration_omissions": [],
       "qualified_owner_definition_duplicates": [],
@@ -678,13 +711,112 @@
         },
         {
           "path": "src/agent_comms/selected_participant.py",
-          "line": 111,
+          "line": 95,
+          "context": "SelectedParticipant.select",
+          "kind": "Call",
+          "terminal": "run_worker",
+          "spelling": "Coordination.run_worker",
+          "awaited": true,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 98,
+          "context": "SelectedParticipant.select",
+          "kind": "Call",
+          "terminal": "run_worker",
+          "spelling": "Coordination.run_worker",
+          "awaited": true,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 99,
           "context": "SelectedParticipant.select",
           "kind": "Call",
           "terminal": "sources",
           "spelling": "cls.sources",
           "awaited": true,
-          "resource_context": "With",
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 114,
+          "context": "SelectedParticipant.select",
+          "kind": "Call",
+          "terminal": "run_worker",
+          "spelling": "Coordination.run_worker",
+          "awaited": true,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 121,
+          "context": "SelectedParticipant.select",
+          "kind": "Call",
+          "terminal": "run_worker",
+          "spelling": "Coordination.run_worker",
+          "awaited": true,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 89,
+          "context": "SelectedParticipant.select",
+          "kind": "Call",
+          "terminal": "prepare",
+          "spelling": "cls.prepare",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 95,
+          "context": "SelectedParticipant.select",
+          "kind": "Call",
+          "terminal": "configured_model",
+          "spelling": "cls.configured_model",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_triage.py",
+          "line": 98,
+          "context": "FullSelectedTriage.continue_turn",
+          "kind": "Call",
+          "terminal": "require_current",
+          "spelling": "participant.require_current",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 154,
+          "context": "SelectedAttempt.engage",
+          "kind": "Call",
+          "terminal": "require_current",
+          "spelling": "participant.require_current",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 285,
+          "context": "SelectedConsideration.run",
+          "kind": "Call",
+          "terminal": "require_current",
+          "spelling": "participant.require_current",
+          "awaited": false,
+          "resource_context": "",
           "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
         }
       ],
@@ -822,5 +954,10 @@
     "fact": "Initial select preparation, registry lease acquisition/retirement and final current-owner check remain synchronous in d45 source",
     "dependency": "Complete registry operation must retire without first opening SQLite; acquisition cancellation must join then close original lease even if its result was not delivered. Shared owner API/contract coordinated directly; no duplicate worker/helper/type will be added locally.",
     "installed_gate": "One changed combined installed real-path qualification by Arendt509 after coherent closure; no independent duplicate gate."
-  }
+  },
+  "latest_implementation_commit": "50b12af1",
+  "latest_implementation_deleted_lines": 32,
+  "latest_implementation_added_lines": 60,
+  "latest_coherent_source_head": "4c98616d290a0376dbec7c1e2131e20fe6da90bc",
+  "resource_closure": "Existing Coordination.run_worker/run_async plus original SelectedParticipant lease generator; no second executor or entered/status mirror."
 }
