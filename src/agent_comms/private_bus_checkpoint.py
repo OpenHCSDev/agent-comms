@@ -610,9 +610,8 @@ def _recover_pending_unlocked(
     size = 0
 
     with db:
-        db.execute("DELETE FROM addressed")
-        db.execute(f"DELETE FROM {DeliverySources.declared_name}")
-        db.execute("DELETE FROM response_keys")
+        for owner in TypedTable.members_with(CheckpointTable):
+            db.execute(f'DELETE FROM "{owner.declared_name}"')
 
         def collect(offset, raw, record):
             nonlocal digest, prior_seen, prior_seq, last_seq, count, size
