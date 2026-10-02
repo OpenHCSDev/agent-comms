@@ -24,6 +24,7 @@ from .owner_compaction_prepare import NativeWitness
 from .pi_commands import AgentCommsSummarizeCompaction
 from .pi_events import AgentCommsCompactionProgress, Response
 from .pi_rpc import PiRpcChannel
+from .threads import Thread
 from .pi_summary_payloads import SelectedSummaryData, SummaryFailedData
 
 
@@ -68,6 +69,7 @@ class SelectedSummarySlot:
         witness: NativeWitness,
         source: SelectedSummarySource,
         *,
+        owner: Thread,
         expected_package: Path,
         tokens_before: int,
         custom_instructions: str | None = None,
@@ -95,7 +97,7 @@ class SelectedSummarySlot:
             selected=envelope.selected,
             settings=envelope.settings,
             retained_text=envelope.retained.text,
-            custom_instructions=custom_instructions,
+            custom_instructions=source.summary_instructions(owner, custom_instructions),
         )
         if (
             witness.session_id != self.session

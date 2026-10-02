@@ -111,14 +111,14 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "wire"))
     agent = None
     try:
-        preparation = await asyncio.to_thread(
+        preparation = (await asyncio.to_thread(
             prepare_native_source,
             package,
             str(session),
             settings=settings,
             context_window=context_window,
-        )
-        assert preparation is not None
+        )).require_ready()
+
         comms = Comms(tmp_path / "wire")
         root_id = comms.messaging.initialize_private_initial_protocol()
         monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)

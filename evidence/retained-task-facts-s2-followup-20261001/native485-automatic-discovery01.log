@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/ts/.cache/agent-scratch/sch-pr485-native-artifact-20261001/automatic-discovery-installed.py", line 135, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/.cache/agent-scratch/sch-pr485-native-artifact-20261001/automatic-discovery-installed.py", line 80, in main
+    assert not registered["errors"], registered["errors"]
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [{'path': '/home/ts/.cache/agent-scratch/sch-pr485-native-artifact-20261001/automatic-discovery01/agent/extensions/project-sync/index.ts', 'error': 'Failed to load extension: Native import boundary refused: extension source changed; prepare a new deployment: /home/ts/.agent-comms/extensions/pi-project-sync/index.ts'}]

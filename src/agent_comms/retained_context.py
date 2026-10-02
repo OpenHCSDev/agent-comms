@@ -9,6 +9,7 @@ from .exporting import (AuthoredSourceScope, FullLimit, WireExportBoundary,
 from .field_codec import FieldCodec
 from .messages import Message
 from .retained_task_facts import RetainedTaskFacts
+from .input_attempt import StoredInput
 from .turn_context import ContextSegment, OwnerProvenance, WireProvenance
 
 
@@ -21,9 +22,12 @@ class RetainedSegment(ContextSegment):
     @classmethod
     def capture(cls, retained: RetainedTaskFacts, source: OwnerProvenance,
                 owner, registry, boundary: WireExportBoundary) -> "RetainedSegment":
-        sources = dict.fromkeys(source.reference for fact in retained.facts
-                                for source in fact.wire_sources())
-        return cls(provenance=(source, *(WireProvenance(ref) for ref in sources)),
+        sources = {message.reference: message for fact in retained.facts
+                   for message in fact.wire_sources()}
+        wording_sources = tuple(message.task.original_wording_context_source(
+            retained.original_text_source(message)) for message in sources.values())
+        return cls(provenance=tuple(dict.fromkeys((source,
+                       *(WireProvenance(ref) for ref in sources), *wording_sources))),
                    retained=retained, boundary=boundary,
                    scope=AuthoredSourceScope(tuple(message.reference for message in
                        retained.current_authored_sources(owner, registry))))
@@ -31,7 +35,7 @@ class RetainedSegment(ContextSegment):
     def text(self) -> str:
         return self.retained.text
 
-    def original_text_source(self, declaration: Message) -> Message:
+    def original_text_source(self, declaration: Message) -> Message | StoredInput:
         return self.retained.original_text_source(declaration)
 
     def export(self, destination: Path | str, *, overwrite: bool = False):
@@ -57,8 +61,7 @@ class RetainedFormat(WireExportFormat):
     def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
         original = self.segment.original_text_source(message)
         provenance = dict(declaration=FieldCodec.encode(message.reference),
-                          wording=FieldCodec.encode(original.reference),
-                          author=original.sender, author_role=original.sender_role.value,
+                          **message.task.original_wording_provenance(original),
                           task=FieldCodec.encode(message.task))
         return (f"# source: {self.json_record(provenance)}\n"
-                + original.body + "\n\n").encode()
+                + message.task.original_wording(original) + "\n\n").encode()

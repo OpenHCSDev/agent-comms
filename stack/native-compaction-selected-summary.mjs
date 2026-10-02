@@ -64,8 +64,8 @@ function acValidSummaryCancel(value) {
         typeof value.id === "string" && value.id.length > 0 && value.id.length <= 4096 &&
         value.type === "agent_comms_cancel_summary" && value.version === 1 && acSummaryId(value.operationId);
 }
-const acSummaryDecline = (operationId, reason, context) => ({
-    version: 1, status: "declined", operationId, reason: context.summaryDeclineReason(reason),
+const acSummaryDecline = (operationId, reason) => ({
+    version: 1, status: "declined", operationId, reason,
 });
 // Diagnostic text never decides whether a failure is terminal and never grants replay.
 const acSummaryReason = reason => reason.replace(/[\u0000-\u001f\u007f]/g, " ")
@@ -109,7 +109,7 @@ function acSummaryCurrent(session, request, binding) {
     try {
         const witness = session.sessionManager.captureCompactionWitness(request.witness.firstKeptEntryId);
         if (Object.keys(request.witness).some(key => witness[key] !== request.witness[key])) return false;
-        const preparation = prepareCompaction(session.sessionManager.entryStore, settings, model, session.sessionManager.getLeafId());
+        const preparation = prepareCompaction(session.sessionManager.entryStore, settings, model, session.sessionManager.getLeafId(), request.retainedText);
         return preparation &&
             preparation.firstKeptEntryId === request.witness.firstKeptEntryId;
     } catch { return false; }
@@ -171,7 +171,7 @@ function acAdmitSummary(request, session, conflict, spent, host) {
         return { denial: "source_mismatch" };
     if (!acSummaryCompatible(session)) return { denial: "extension_unsupported" };
     let preparation;
-    try { preparation = prepareCompaction(manager.entryStore, settings, model, manager.getLeafId()); }
+    try { preparation = prepareCompaction(manager.entryStore, settings, model, manager.getLeafId(), request.retainedText); }
     catch { return { denial: "unsupported" }; }
     if (!preparation || preparation.firstKeptEntryId !== request.witness.firstKeptEntryId)
         return { denial: "source_mismatch" };
@@ -311,7 +311,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             { onSummaryText: progress,
               onSummaryProgress: source => progress("", source),
               onSummaryStart: source => progress("", source),
-              onSummaryResponse: (_usage, source) => progress("", source) }, undefined, request.retainedText);
+              onSummaryResponse: (_usage, source) => progress("", source) }, undefined);
         await Promise.allSettled([...inFlight]);
         if (slot.controller.signal.aborted ||
             !acSummaryCurrent(session, request, binding) || !acSummaryValidResult(result, request))
@@ -327,7 +327,7 @@ async function acExecuteSummary(slot, session, request, preparation, binding, ou
             return error.outcome(request);
         const reason = error instanceof Error && error.message ? error.message : "Selected summary failed without error detail";
         return slot.started ? acSummaryUnknown(request.operationId, reason) :
-            acSummaryDecline(request.operationId, slot.controller.signal.aborted ? "cancelled" : "unsupported", session.storedContext);
+            acSummaryDecline(request.operationId, slot.controller.signal.aborted ? "cancelled" : "unsupported");
     } finally {
         slot.controller.abort();
         await Promise.allSettled([...inFlight]); // concurrent map chunks must join before releasing slot
