@@ -4,6 +4,37 @@ Owner: Arendt. Separate continuation of the useful #508 sequence checkpoint.
 The matching installed #508 channel-click journey passes; this draft does not
 claim the remaining cross-owner bus concurrency is fixed.
 
+## Current working implementation
+
+The original selected admission now finishes its durable UNKNOWN marker and
+recorded native admission under the existing wire/bus/registry/SQLite/journal
+fences, then closes those resources before the raw pipe writer begins. Removed
+`PrivateSendAdmission._exclusion`; pipe backpressure retains only the original
+one-use writer and pipe. Busy acquisition remains pre-admission and repeatable;
+token consumption, commit failure, partial write and cancellation never permit
+replay. Stop/rename before the grant refuse it; after the grant they follow the
+already admitted original attempt. Original release/proof recovery still owns
+settlement. No new grant class, store or lock namespace was added.
+
+Activity and pending-route projections now borrow one opened original wire cut
+after publication custody closes. The existing route index retains only its own
+lock and SQLite transaction through sync/query. Deleted its separate wire open,
+MessageBus's duplicate locked delivery decoder and locked activity lifetime.
+Strict fallback reads the same opened original cut. All bounded reads retain
+original source, sequence, frozen audience and corruption validation.
+
+Normal integration includes #512's complete selected collector/lease resource
+and #511's typed context contribution. Phase/context callbacks join the same
+existing Coordination worker owner; cancellation joins retirement before lease
+exit. Historical InputProvenance remains exactly key/origin. Native5 and durable
+formats are unchanged; this checkpoint does not depend on Native6 carry or claim
+that saved-session continuation in #489 is complete.
+
+End validation so far: 39 affected source checks passed in 22.90 seconds on the
+admission/projection checkpoint, including partial sends/cancellation, later
+feedback reads, original batch receipts and certified-source corruption. The
+final installed busy multi-owner/read/publication journey is still required.
+
 ## Existing owner search and required relation
 
 The physical owner is `StoreLock`, acquired by `_store_lock`; bounded physical
