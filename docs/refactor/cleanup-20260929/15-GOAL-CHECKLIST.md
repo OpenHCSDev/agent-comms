@@ -1,3 +1,41 @@
+## Actual many-owner channel failure and owner closure — 2026-10-02
+
+The installed mixed channel/DM gate did not cover pure-channel TRIAGE to FULL:
+its human DM required FULL and skipped triage. Tristan's actual #openhcs seq326
+has twelve claims accepted together, ten native relevance decisions (nine FULL,
+one IGNORE), and zero new executions. The nine FULL claims remain Deferred at
+revision2. Triage legitimately advanced their claims, but SelectedSource retained
+revision1 and ExecutionStore compared that copy to the current store row.
+The failed comparison rolled back engagement. This is an installed regression,
+not user confirmation still pending; startup Ready does not establish this journey.
+
+Singer owns Core PR502: immutable source membership and sealed delivery retain
+their existing AssignmentStore capability, whose transaction owns current claim
+lifecycle and revision. Delete copied lifecycle equality, retain exact native
+reservation/proof witnesses and execution revision fences, and convert every
+constructor/consumer. Kepler owns its matching inactive Native5 package in the
+existing receiving worktree. Singer owns final configured-provider many-owner
+pure-channel acceptance without a DM or mention forcing FULL; parent owns merge
+and default activation after that affected installed gate. No original seq326
+input is replayed or reclassified to hide the failure.
+
+Arendt independently owns cross-owner admission/latency. Exact seq326 native
+model windows last3.2866 to7.5509 seconds but begin7.187 to80.483 seconds after
+claim admission; some model windows overlap. A strict global serial provider
+queue is not proved. Allocate the startup/preparation interval from original
+child/process and request clocks before changing the responsible owner.
+
+Heisen's changed foreground preparation candidate completed an actual102.318s
+saved-thread physical journey: warm return16/16 and input-focused paging7/7,
+End at native max133 with reader retained, all owned processes cleaned up. This
+closes the earlier cyclic paint wait in that recorded journey; CPU remains about
+77–81% scrolling and23–30% stationary. Useful scoped checkpoint publication is
+independent; full performance284/Textual19 targets remain unfinished.
+
+Evidence: evidence/native5-batching-live-20261002/public-channel326-followup.json.
+Original release receipts and all original inputs/proofs remain preserved. The
+full original goal and checklist below remain ACTIVE.
+
 ## Batching DEFAULT INSTALLED and actual entrypoint verified — 2026-10-02
 
 Core490/495/500 Native5 batching is now the default, paired Coreb283/Toad2ca4/Textuale36/native5184; Toad289 mergeddb027737. Configured-provider installed mixed channel/DM batch02 completed23.5123s with exact per-source routing/receipts, original first UNKNOWN fixture preserved. Actual ordinary toad-comms openhcs-helper opened retained saved history and Ready, personally viewed pixels; Observe capture completed with no cleanup errors and original native owner unchanged.
@@ -6,7 +44,7 @@ Original public stores retain older6935 publication table/trigger declarations d
 
 First cutover stopped19 then failedEXDEV before any store replacement. Preserve original receipt/log/preimages. Correct existing NativeSchemaCarryPlan.install to reuse ROOT-local private_sidecar binary atomic publisher for BOTH stores; source359bc64c, parent61c7754b,14+/15−, carried in existing deployment PR432. Explicit reviewed continuation verified all38 original hashes and stopped registry unchanged, installed same reviewed candidate, then ordinary authorized OwnerLifecycle.start resumed19 from canonical Thread settings. Original in-memory launch-environment snapshots were lost at failed operator exit; do not fabricate retained-process environment proof. Canonical settings equality verified, latest owner identities alone renewed. Actual default links name runtime-native5-batch490-20261001.
 
-Evidence: evidence/native5-batching-live-20261002/installation.json. Public channel backlog response remains user confirmation; startup plus configured installed batching is the verified scope. No performance284 or full lifecycle489 readiness claim. Heisen independently stages matching Native5/Coreb283 with newf424 foreground cohort closure for the next physical profiling/capture; Arendt continues lifecycle owner/caller closure. Original full goal and scopes below remain ACTIVE.
+Evidence: evidence/native5-batching-live-20261002/installation.json. Subsequent actual public channel acceptance failed as documented above; startup plus configured mixed-route batching is the earlier verified scope. No performance284 or full lifecycle489 readiness claim. Original full goal and scopes below remain ACTIVE.
 
 ## Critical compaction and transcript lifetime DEFAULT INSTALLED — 2026-10-02
 
