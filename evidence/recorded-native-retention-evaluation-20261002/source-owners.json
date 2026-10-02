@@ -1,0 +1,1383 @@
+{
+  "scope": "nine declared reader/scorer/dependency roots; no production edits",
+  "parse_omissions": [],
+  "files": [
+    {
+      "file": "tests/compaction_retention_fixture.py",
+      "sha256": "bafdc611c6a614c56cc882e30b89aa8e72ed255a9ac7be793c4975b861dcb805",
+      "before": [
+        {
+          "name": "RecordedAnswers",
+          "line": 23,
+          "bases": []
+        },
+        {
+          "name": "Condition",
+          "line": 27,
+          "bases": [
+            "str",
+            "Enum"
+          ]
+        },
+        {
+          "name": "AnswerScore",
+          "line": 37,
+          "bases": []
+        },
+        {
+          "name": "ScoreView",
+          "line": 43,
+          "bases": [
+            "ABC"
+          ]
+        },
+        {
+          "name": "ScoredRound",
+          "line": 77,
+          "bases": [
+            "ScoreView"
+          ]
+        },
+        {
+          "name": "ScoredScenario",
+          "line": 98,
+          "bases": [
+            "ScoreView"
+          ]
+        },
+        {
+          "name": "Question",
+          "line": 122,
+          "bases": []
+        },
+        {
+          "name": "RecallRound",
+          "line": 141,
+          "bases": []
+        },
+        {
+          "name": "RecallScenario",
+          "line": 167,
+          "bases": []
+        }
+      ],
+      "after": [
+        {
+          "name": "RecordedAnswers",
+          "line": 26,
+          "bases": []
+        },
+        {
+          "name": "RecordedNativeProbes",
+          "line": 31,
+          "bases": []
+        },
+        {
+          "name": "Condition",
+          "line": 35,
+          "bases": [
+            "str",
+            "Enum"
+          ]
+        },
+        {
+          "name": "AnswerScore",
+          "line": 45,
+          "bases": []
+        },
+        {
+          "name": "ScoreView",
+          "line": 51,
+          "bases": [
+            "ABC"
+          ]
+        },
+        {
+          "name": "ScoredRound",
+          "line": 85,
+          "bases": [
+            "ScoreView"
+          ]
+        },
+        {
+          "name": "ScoredScenario",
+          "line": 106,
+          "bases": [
+            "ScoreView"
+          ]
+        },
+        {
+          "name": "Question",
+          "line": 130,
+          "bases": []
+        },
+        {
+          "name": "RecallRound",
+          "line": 149,
+          "bases": []
+        },
+        {
+          "name": "RecallScenario",
+          "line": 193,
+          "bases": []
+        }
+      ],
+      "calls": [
+        {
+          "line": 371,
+          "call": "scenario.score_native"
+        },
+        {
+          "line": 172,
+          "call": "self.probe_text"
+        },
+        {
+          "line": 364,
+          "call": "item.probe_text"
+        },
+        {
+          "line": 217,
+          "call": "item.score_native"
+        }
+      ]
+    },
+    {
+      "file": "tests/retained_native_fixture.py",
+      "sha256": "f9b3fdb5642909a4f192e710ac68413d91b290ebdd8bf816bc10d47e0e29b2b6",
+      "before": [],
+      "after": [
+        {
+          "name": "RecordedNativeCheckpoint",
+          "line": 25,
+          "bases": []
+        },
+        {
+          "name": "RecordedNativeProbe",
+          "line": 69,
+          "bases": []
+        }
+      ],
+      "calls": [
+        {
+          "line": 62,
+          "call": "CompactionJournal.observe_readonly"
+        },
+        {
+          "line": 45,
+          "call": "operation.require_summary_link"
+        },
+        {
+          "line": 46,
+          "call": "operation.committed_outcome"
+        },
+        {
+          "line": 80,
+          "call": "NativeEntry.open_evidence"
+        },
+        {
+          "line": 81,
+          "call": "NativeContextProof.read_evidence"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_compaction_retention_fixture.py",
+      "sha256": "14b35516b2a0e79edcbda0fe6cb43c05798b9dd5e1e06bb881903dae0ff5db30",
+      "before": [
+        {
+          "name": "RecallMeasurementTests",
+          "line": 19,
+          "bases": [
+            "unittest.TestCase"
+          ]
+        }
+      ],
+      "after": [
+        {
+          "name": "RecallMeasurementTests",
+          "line": 29,
+          "bases": [
+            "unittest.TestCase"
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "line": 152,
+          "call": "NativeEntry.read_evidence"
+        },
+        {
+          "line": 164,
+          "call": "scenario.score_native"
+        },
+        {
+          "line": 172,
+          "call": "scenario.rounds[1].score_native"
+        },
+        {
+          "line": 150,
+          "call": "first.probe_text"
+        },
+        {
+          "line": 133,
+          "call": "item.probe_text().split"
+        },
+        {
+          "line": 133,
+          "call": "item.probe_text"
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "sha256": "8446c270bc520f6941a8b2a59adad4a983db4ee4160cc1932cdbd1d25a07b4c4",
+      "before": [
+        {
+          "name": "TranscriptProjection",
+          "line": 24,
+          "bases": []
+        },
+        {
+          "name": "NativeEntryCoordinates",
+          "line": 30,
+          "bases": [
+            "PiPayload"
+          ]
+        },
+        {
+          "name": "NativeEntry",
+          "line": 43,
+          "bases": [
+            "NativeEntryCoordinates",
+            "DeclaredFamily"
+          ]
+        },
+        {
+          "name": "NativeEvidenceRead",
+          "line": 186,
+          "bases": []
+        },
+        {
+          "name": "NativeInputEvidenceRead",
+          "line": 306,
+          "bases": [
+            "NativeEvidenceRead"
+          ]
+        },
+        {
+          "name": "NativeEvidenceScope",
+          "line": 322,
+          "bases": [
+            "ExitStack"
+          ]
+        },
+        {
+          "name": "SelectedFreshMarker",
+          "line": 369,
+          "bases": [
+            "PiPayload"
+          ]
+        },
+        {
+          "name": "SessionEntry",
+          "line": 380,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "MessageEntry",
+          "line": 400,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "CompactionEntry",
+          "line": 471,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "UnknownEntry",
+          "line": 480,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "StartupMetadataEntry",
+          "line": 492,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "ModelChangeEntry",
+          "line": 531,
+          "bases": [
+            "StartupMetadataEntry"
+          ]
+        },
+        {
+          "name": "ThinkingLevelChangeEntry",
+          "line": 544,
+          "bases": [
+            "StartupMetadataEntry"
+          ]
+        }
+      ],
+      "after": [
+        {
+          "name": "TranscriptProjection",
+          "line": 24,
+          "bases": []
+        },
+        {
+          "name": "NativeEntryCoordinates",
+          "line": 30,
+          "bases": [
+            "PiPayload"
+          ]
+        },
+        {
+          "name": "NativeEntry",
+          "line": 43,
+          "bases": [
+            "NativeEntryCoordinates",
+            "DeclaredFamily"
+          ]
+        },
+        {
+          "name": "NativeEvidenceRead",
+          "line": 186,
+          "bases": []
+        },
+        {
+          "name": "NativeInputEvidenceRead",
+          "line": 306,
+          "bases": [
+            "NativeEvidenceRead"
+          ]
+        },
+        {
+          "name": "NativeEvidenceScope",
+          "line": 322,
+          "bases": [
+            "ExitStack"
+          ]
+        },
+        {
+          "name": "SelectedFreshMarker",
+          "line": 369,
+          "bases": [
+            "PiPayload"
+          ]
+        },
+        {
+          "name": "SessionEntry",
+          "line": 380,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "MessageEntry",
+          "line": 400,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "CompactionEntry",
+          "line": 471,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "UnknownEntry",
+          "line": 480,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "StartupMetadataEntry",
+          "line": 492,
+          "bases": [
+            "NativeEntry"
+          ]
+        },
+        {
+          "name": "ModelChangeEntry",
+          "line": 531,
+          "bases": [
+            "StartupMetadataEntry"
+          ]
+        },
+        {
+          "name": "ThinkingLevelChangeEntry",
+          "line": 544,
+          "bases": [
+            "StartupMetadataEntry"
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "line": 101,
+          "call": "cls.open_evidence"
+        },
+        {
+          "line": 352,
+          "call": "NativeEntry.open_evidence"
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "sha256": "0acbcaedbceb1ef0a0e0e74f4a74a692dfa8ddd32df257d3c1d1d8d62e6e9024",
+      "before": [
+        {
+          "name": "NativePiUnavailable",
+          "line": 48,
+          "bases": [
+            "RuntimeError"
+          ]
+        },
+        {
+          "name": "NativePiInputNotSent",
+          "line": 66,
+          "bases": [
+            "NativePiUnavailable"
+          ]
+        },
+        {
+          "name": "NativePiPromptRejected",
+          "line": 86,
+          "bases": [
+            "NativePiUnavailable"
+          ]
+        },
+        {
+          "name": "NativeContextRecord",
+          "line": 116,
+          "bases": []
+        },
+        {
+          "name": "NativeContextJournal",
+          "line": 189,
+          "bases": [
+            "NativeContextRecord",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "NativeContextProof",
+          "line": 302,
+          "bases": [
+            "NativeContextRecord"
+          ]
+        },
+        {
+          "name": "NativePiTerminalFailure",
+          "line": 357,
+          "bases": [
+            "NativePiUnavailable"
+          ]
+        },
+        {
+          "name": "NativeTurnResult",
+          "line": 381,
+          "bases": []
+        },
+        {
+          "name": "NativePiRpcLaunch",
+          "line": 394,
+          "bases": []
+        },
+        {
+          "name": "PrivateEvidenceRead",
+          "line": 586,
+          "bases": []
+        }
+      ],
+      "after": [
+        {
+          "name": "NativePiUnavailable",
+          "line": 48,
+          "bases": [
+            "RuntimeError"
+          ]
+        },
+        {
+          "name": "NativePiInputNotSent",
+          "line": 66,
+          "bases": [
+            "NativePiUnavailable"
+          ]
+        },
+        {
+          "name": "NativePiPromptRejected",
+          "line": 86,
+          "bases": [
+            "NativePiUnavailable"
+          ]
+        },
+        {
+          "name": "NativeContextRecord",
+          "line": 116,
+          "bases": []
+        },
+        {
+          "name": "NativeContextJournal",
+          "line": 189,
+          "bases": [
+            "NativeContextRecord",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "NativeContextProof",
+          "line": 302,
+          "bases": [
+            "NativeContextRecord"
+          ]
+        },
+        {
+          "name": "NativePiTerminalFailure",
+          "line": 357,
+          "bases": [
+            "NativePiUnavailable"
+          ]
+        },
+        {
+          "name": "NativeTurnResult",
+          "line": 381,
+          "bases": []
+        },
+        {
+          "name": "NativePiRpcLaunch",
+          "line": 394,
+          "bases": []
+        },
+        {
+          "name": "PrivateEvidenceRead",
+          "line": 586,
+          "bases": []
+        }
+      ],
+      "calls": [
+        {
+          "line": 845,
+          "call": "NativeContextProof.read_evidence"
+        },
+        {
+          "line": 315,
+          "call": "self.read_evidence"
+        },
+        {
+          "line": 349,
+          "call": "NativeContextJournal.open_evidence"
+        },
+        {
+          "line": 332,
+          "call": "NativeContextJournal.open_evidence"
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_records.py",
+      "sha256": "1fa355e97ebf959a4b917519ed92eabe06fbebd29414d7a2c64c98578c1d82e6",
+      "before": [
+        {
+          "name": "SelectedSummarySource",
+          "line": 40,
+          "bases": []
+        },
+        {
+          "name": "JournalTable",
+          "line": 79,
+          "bases": []
+        },
+        {
+          "name": "SessionJournalHistory",
+          "line": 92,
+          "bases": [
+            "JournalTable"
+          ]
+        },
+        {
+          "name": "UnresolvedJournalHistory",
+          "line": 104,
+          "bases": [
+            "SessionJournalHistory"
+          ]
+        },
+        {
+          "name": "CompactionOperation",
+          "line": 118,
+          "bases": [
+            "UnresolvedJournalHistory",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "SelectedSummaryAttempt",
+          "line": 180,
+          "bases": [
+            "UnresolvedJournalHistory",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "CompactionPublication",
+          "line": 272,
+          "bases": [
+            "JournalTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "PrivateRawInput",
+          "line": 294,
+          "bases": [
+            "SessionJournalHistory",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "EnrolledPrivateSession",
+          "line": 301,
+          "bases": [
+            "JournalTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "JournalSchemaObject",
+          "line": 330,
+          "bases": [
+            "TypedRow"
+          ]
+        },
+        {
+          "name": "JournalMode",
+          "line": 336,
+          "bases": [
+            "TypedRow"
+          ]
+        },
+        {
+          "name": "SyncMode",
+          "line": 341,
+          "bases": [
+            "TypedRow"
+          ]
+        }
+      ],
+      "after": [
+        {
+          "name": "SelectedSummarySource",
+          "line": 40,
+          "bases": []
+        },
+        {
+          "name": "JournalTable",
+          "line": 79,
+          "bases": []
+        },
+        {
+          "name": "SessionJournalHistory",
+          "line": 92,
+          "bases": [
+            "JournalTable"
+          ]
+        },
+        {
+          "name": "UnresolvedJournalHistory",
+          "line": 104,
+          "bases": [
+            "SessionJournalHistory"
+          ]
+        },
+        {
+          "name": "CompactionOperation",
+          "line": 118,
+          "bases": [
+            "UnresolvedJournalHistory",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "SelectedSummaryAttempt",
+          "line": 180,
+          "bases": [
+            "UnresolvedJournalHistory",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "CompactionPublication",
+          "line": 272,
+          "bases": [
+            "JournalTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "PrivateRawInput",
+          "line": 294,
+          "bases": [
+            "SessionJournalHistory",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "EnrolledPrivateSession",
+          "line": 301,
+          "bases": [
+            "JournalTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "name": "JournalSchemaObject",
+          "line": 330,
+          "bases": [
+            "TypedRow"
+          ]
+        },
+        {
+          "name": "JournalMode",
+          "line": 336,
+          "bases": [
+            "TypedRow"
+          ]
+        },
+        {
+          "name": "SyncMode",
+          "line": 341,
+          "bases": [
+            "TypedRow"
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "line": 168,
+          "call": "self.committed_outcome"
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_states.py",
+      "sha256": "d09d9dadb2ab0a3793ec0c019d6f5e2749b8d943214d0deb5668ad75e86767ce",
+      "before": [
+        {
+          "name": "OperationState",
+          "line": 45,
+          "bases": [
+            "DeclaredFamily",
+            "LifecycleState"
+          ]
+        },
+        {
+          "name": "IntentOperation",
+          "line": 62,
+          "bases": [
+            "OperationState"
+          ]
+        },
+        {
+          "name": "UnknownOperation",
+          "line": 68,
+          "bases": [
+            "OperationState"
+          ]
+        },
+        {
+          "name": "TerminalOperation",
+          "line": 75,
+          "bases": []
+        },
+        {
+          "name": "CommittedOperation",
+          "line": 83,
+          "bases": [
+            "TerminalOperation",
+            "OperationState"
+          ]
+        },
+        {
+          "name": "RefusedOperation",
+          "line": 94,
+          "bases": [
+            "TerminalOperation",
+            "OperationState"
+          ]
+        },
+        {
+          "name": "AbortedNoWriteOperation",
+          "line": 98,
+          "bases": [
+            "TerminalOperation",
+            "OperationState"
+          ]
+        },
+        {
+          "name": "SummaryState",
+          "line": 103,
+          "bases": [
+            "DeclaredFamily",
+            "LifecycleState"
+          ]
+        },
+        {
+          "name": "ReservedSummary",
+          "line": 141,
+          "bases": [
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "SummaryOutcome",
+          "line": 169,
+          "bases": []
+        },
+        {
+          "name": "UnknownSummaryOutcome",
+          "line": 182,
+          "bases": [
+            "SummaryOutcome"
+          ]
+        },
+        {
+          "name": "RefusedSummaryOutcome",
+          "line": 188,
+          "bases": [
+            "SummaryOutcome"
+          ]
+        },
+        {
+          "name": "UnknownSummary",
+          "line": 196,
+          "bases": [
+            "UnknownSummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "RetiredUnknownSummary",
+          "line": 205,
+          "bases": [
+            "UnknownSummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "FailedSummary",
+          "line": 217,
+          "bases": [
+            "SummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "LinkedSummary",
+          "line": 234,
+          "bases": [
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "ManualCommittedSummary",
+          "line": 251,
+          "bases": [
+            "LinkedSummary"
+          ]
+        },
+        {
+          "name": "DeclinedPrestartSummary",
+          "line": 259,
+          "bases": [
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "RefusedSummary",
+          "line": 275,
+          "bases": [
+            "RefusedSummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "RetiredRefusalSummary",
+          "line": 296,
+          "bases": [
+            "RefusedSummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "PublicationState",
+          "line": 312,
+          "bases": [
+            "DeclaredFamily",
+            "LifecycleState"
+          ]
+        },
+        {
+          "name": "PendingPublication",
+          "line": 320,
+          "bases": [
+            "PublicationState"
+          ]
+        },
+        {
+          "name": "ObservedPublication",
+          "line": 326,
+          "bases": [
+            "PublicationState"
+          ]
+        },
+        {
+          "name": "NativeCommitPosition",
+          "line": 335,
+          "bases": []
+        },
+        {
+          "name": "CompactionPublishedMetadata",
+          "line": 347,
+          "bases": [
+            "NativeCommitPosition"
+          ]
+        },
+        {
+          "name": "NativeOutcome",
+          "line": 351,
+          "bases": [
+            "DeclaredFamily"
+          ]
+        },
+        {
+          "name": "UnknownNativeOutcome",
+          "line": 386,
+          "bases": [
+            "NativeOutcome"
+          ]
+        },
+        {
+          "name": "CommittedNativeOutcome",
+          "line": 396,
+          "bases": [
+            "NativeCommitPosition",
+            "NativeOutcome"
+          ]
+        },
+        {
+          "name": "AbortedNoWriteNativeOutcome",
+          "line": 423,
+          "bases": [
+            "NativeOutcome"
+          ]
+        }
+      ],
+      "after": [
+        {
+          "name": "OperationState",
+          "line": 45,
+          "bases": [
+            "DeclaredFamily",
+            "LifecycleState"
+          ]
+        },
+        {
+          "name": "IntentOperation",
+          "line": 62,
+          "bases": [
+            "OperationState"
+          ]
+        },
+        {
+          "name": "UnknownOperation",
+          "line": 68,
+          "bases": [
+            "OperationState"
+          ]
+        },
+        {
+          "name": "TerminalOperation",
+          "line": 75,
+          "bases": []
+        },
+        {
+          "name": "CommittedOperation",
+          "line": 83,
+          "bases": [
+            "TerminalOperation",
+            "OperationState"
+          ]
+        },
+        {
+          "name": "RefusedOperation",
+          "line": 94,
+          "bases": [
+            "TerminalOperation",
+            "OperationState"
+          ]
+        },
+        {
+          "name": "AbortedNoWriteOperation",
+          "line": 98,
+          "bases": [
+            "TerminalOperation",
+            "OperationState"
+          ]
+        },
+        {
+          "name": "SummaryState",
+          "line": 103,
+          "bases": [
+            "DeclaredFamily",
+            "LifecycleState"
+          ]
+        },
+        {
+          "name": "ReservedSummary",
+          "line": 141,
+          "bases": [
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "SummaryOutcome",
+          "line": 169,
+          "bases": []
+        },
+        {
+          "name": "UnknownSummaryOutcome",
+          "line": 182,
+          "bases": [
+            "SummaryOutcome"
+          ]
+        },
+        {
+          "name": "RefusedSummaryOutcome",
+          "line": 188,
+          "bases": [
+            "SummaryOutcome"
+          ]
+        },
+        {
+          "name": "UnknownSummary",
+          "line": 196,
+          "bases": [
+            "UnknownSummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "RetiredUnknownSummary",
+          "line": 205,
+          "bases": [
+            "UnknownSummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "FailedSummary",
+          "line": 217,
+          "bases": [
+            "SummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "LinkedSummary",
+          "line": 234,
+          "bases": [
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "ManualCommittedSummary",
+          "line": 251,
+          "bases": [
+            "LinkedSummary"
+          ]
+        },
+        {
+          "name": "DeclinedPrestartSummary",
+          "line": 259,
+          "bases": [
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "RefusedSummary",
+          "line": 275,
+          "bases": [
+            "RefusedSummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "RetiredRefusalSummary",
+          "line": 296,
+          "bases": [
+            "RefusedSummaryOutcome",
+            "SummaryState"
+          ]
+        },
+        {
+          "name": "PublicationState",
+          "line": 312,
+          "bases": [
+            "DeclaredFamily",
+            "LifecycleState"
+          ]
+        },
+        {
+          "name": "PendingPublication",
+          "line": 320,
+          "bases": [
+            "PublicationState"
+          ]
+        },
+        {
+          "name": "ObservedPublication",
+          "line": 326,
+          "bases": [
+            "PublicationState"
+          ]
+        },
+        {
+          "name": "NativeCommitPosition",
+          "line": 335,
+          "bases": []
+        },
+        {
+          "name": "CompactionPublishedMetadata",
+          "line": 347,
+          "bases": [
+            "NativeCommitPosition"
+          ]
+        },
+        {
+          "name": "NativeOutcome",
+          "line": 351,
+          "bases": [
+            "DeclaredFamily"
+          ]
+        },
+        {
+          "name": "UnknownNativeOutcome",
+          "line": 386,
+          "bases": [
+            "NativeOutcome"
+          ]
+        },
+        {
+          "name": "CommittedNativeOutcome",
+          "line": 396,
+          "bases": [
+            "NativeCommitPosition",
+            "NativeOutcome"
+          ]
+        },
+        {
+          "name": "AbortedNoWriteNativeOutcome",
+          "line": 423,
+          "bases": [
+            "NativeOutcome"
+          ]
+        }
+      ],
+      "calls": [
+        {
+          "line": 89,
+          "call": "operation.require_summary_link"
+        },
+        {
+          "line": 90,
+          "call": "operation.committed_outcome"
+        },
+        {
+          "line": 247,
+          "call": "commit.require_summary_link"
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/compaction_journal.py",
+      "sha256": "abcb0c36766df4bd57eaf1b05872e1c57ed18e01ad1a2e73830f47a44f906e4c",
+      "before": [
+        {
+          "name": "CompactionJournal",
+          "line": 26,
+          "bases": []
+        }
+      ],
+      "after": [
+        {
+          "name": "CompactionJournal",
+          "line": 26,
+          "bases": []
+        }
+      ],
+      "calls": [
+        {
+          "line": 39,
+          "call": "cls.observe_readonly"
+        },
+        {
+          "line": 122,
+          "call": "cls.observe_readonly"
+        },
+        {
+          "line": 105,
+          "call": "cls.observe_readonly"
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/field_codec.py",
+      "sha256": "8050f19bffa36118bac4e852836c86c76fabe22eb9c0292dbf01f15158eb2eb5",
+      "before": [
+        {
+          "name": "FieldRepresentation",
+          "line": 33,
+          "bases": [
+            "ABC"
+          ]
+        },
+        {
+          "name": "WireValue",
+          "line": 55,
+          "bases": [
+            "FieldRepresentation"
+          ]
+        },
+        {
+          "name": "JsonShapeMember",
+          "line": 77,
+          "bases": []
+        },
+        {
+          "name": "JsonShapeFamily",
+          "line": 89,
+          "bases": [
+            "WireValue"
+          ]
+        },
+        {
+          "name": "TextRepresentation",
+          "line": 132,
+          "bases": [
+            "FieldRepresentation"
+          ]
+        },
+        {
+          "name": "PathText",
+          "line": 148,
+          "bases": [
+            "TextRepresentation"
+          ]
+        },
+        {
+          "name": "TimestampText",
+          "line": 160,
+          "bases": [
+            "TextRepresentation"
+          ]
+        },
+        {
+          "name": "Projected",
+          "line": 172,
+          "bases": [
+            "property"
+          ]
+        },
+        {
+          "name": "FieldCodec",
+          "line": 185,
+          "bases": [
+            "Sealed"
+          ]
+        }
+      ],
+      "after": [
+        {
+          "name": "FieldRepresentation",
+          "line": 33,
+          "bases": [
+            "ABC"
+          ]
+        },
+        {
+          "name": "WireValue",
+          "line": 55,
+          "bases": [
+            "FieldRepresentation"
+          ]
+        },
+        {
+          "name": "JsonShapeMember",
+          "line": 77,
+          "bases": []
+        },
+        {
+          "name": "JsonShapeFamily",
+          "line": 89,
+          "bases": [
+            "WireValue"
+          ]
+        },
+        {
+          "name": "TextRepresentation",
+          "line": 132,
+          "bases": [
+            "FieldRepresentation"
+          ]
+        },
+        {
+          "name": "PathText",
+          "line": 148,
+          "bases": [
+            "TextRepresentation"
+          ]
+        },
+        {
+          "name": "TimestampText",
+          "line": 160,
+          "bases": [
+            "TextRepresentation"
+          ]
+        },
+        {
+          "name": "Projected",
+          "line": 172,
+          "bases": [
+            "property"
+          ]
+        },
+        {
+          "name": "FieldCodec",
+          "line": 185,
+          "bases": [
+            "Sealed"
+          ]
+        }
+      ],
+      "calls": []
+    }
+  ],
+  "limitations": [
+    "Static definitions/references; dynamic MRO not resolved.",
+    "Recorded condition labels do not construct conditions or prove prompt presence."
+  ]
+}
