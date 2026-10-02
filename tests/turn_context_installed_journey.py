@@ -152,7 +152,7 @@ async def run_configured(options):
         terminal_replies = tuple(entry for entry in entries[entries.index(user) + 1:]
             if entry.final_reply)
         assert terminal_replies[-1].message.authoritative_text.strip() == token
-        manifests = service.bus.log.context_manifests(thread.incarnation)
+        manifests = service.bus.log.context_manifests(thread.name, service.registry)
         assert manifests
         historical = await query('--turn', str(manifests[-1].turn.occurrence.generation))
         (output / 'recorded-context.json').write_text(json.dumps(historical))
@@ -240,7 +240,7 @@ def complete_goal_controls(root):
         durable = dispositions.read()
         assert all(durable.lookup(item.key) == item for item in originals)
         difference = ContextCliCommand(thread=source.name, diff=True).apply(service)
-        manifests = service.bus.log.context_manifests(source.incarnation)
+        manifests = service.bus.log.context_manifests(source.name, service.registry)
         assert difference['turn'] != difference['previous_turn']
         recorded = ContextCliCommand(thread=source.name,
             turn=manifests[-1].turn.occurrence.generation).apply(service)
