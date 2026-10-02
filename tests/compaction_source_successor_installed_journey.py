@@ -48,7 +48,8 @@ def ordinary_source():
 
 
 async def run(stage, package, source_file, *, capture_source=ordinary_source,
-              observe_launch=unchanged_launch):
+              observe_launch=unchanged_launch,
+              probe_marker='SOURCE529_DISTINCT_AFTER_COMMIT'):
     import agent_comms
     installed = Path(agent_comms.__file__).resolve().parent
     checkout = Path(__file__).resolve().parents[1]
@@ -123,8 +124,10 @@ async def run(stage, package, source_file, *, capture_source=ordinary_source,
         operation.committed_outcome()
         assert peer_publications
         assert InputDispositions(service.root/InputDispositions.filename).read().rows=={}
+        receipt.update(manual_commit=operation.commit_id,
+            peer_messages_during_summary=len(peer_publications), original_inputs_before_new_prompt=0)
         text_chunks.clear()
-        marker='SOURCE529_DISTINCT_AFTER_COMMIT'
+        marker=probe_marker
         print('CONFIGURED_DISTINCT_INPUT_STARTED', flush=True)
         result = await router('session/prompt', {'sessionId':owner.name,
             'prompt':[{'type':'text','text':f'New bounded acceptance input. Do not use tools or resume inherited work. Reply exactly {marker}.'}]}, False)
