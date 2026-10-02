@@ -86,9 +86,8 @@ async def run_configured(options):
         project = root / 'project'
         project.mkdir(mode=0o700)
         environment = dict(captured.retained.environment)
-        fork_environment = dict(environment, PI_CODING_AGENT_DIR=str(root / 'native-forks'))
         identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
-            str(original_file), str(project)), cwd=project, env=fork_environment)
+            str(original_file), str(project), str(root / 'native-forks')), cwd=project, env=environment)
         assert Path(identity.session_file).is_relative_to(root)
         captured.require_current()
         service = Comms(root / 'wire')

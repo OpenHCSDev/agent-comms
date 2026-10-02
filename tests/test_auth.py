@@ -44,7 +44,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     tmp_path, monkeypatch
 ):
     revision = [0]
-    monkeypatch.setattr(backend, "auth_revision", lambda: (revision[0], 0))
+    monkeypatch.setattr("agent_comms.owner_launch.RestartEnvironment.auth_revision", lambda self: (revision[0], 0))
 
     async def discover(*args):
         models = [SessionConfigSelectOption(value="test/base", name="Base")]

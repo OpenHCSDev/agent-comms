@@ -121,8 +121,7 @@ async def main(package: Path, evidence: Path, source: Path, *, cancel_only=False
             config.mkdir(mode=0o700)
             fork_environment = {key: value for key, value in os.environ.items()
                                 if not key.startswith(("PI_", "AGENT_COMMS_")) and key != "PYTHONPATH"}
-            fork_environment["PI_CODING_AGENT_DIR"] = str(config)
-            fork = await ForkSessionHelper.run(ForkSessionRequest(str(package), str(source), str(project)),
+            fork = await ForkSessionHelper.run(ForkSessionRequest(str(package), str(source), str(project), str(config / 'sessions')),
                                                cwd=project, env=fork_environment)
             retained = Path(fork.session_file)
             before = retained.read_bytes()

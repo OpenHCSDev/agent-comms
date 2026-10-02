@@ -22,6 +22,7 @@ from . import backend
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .native_arguments import NativeArguments
+from .owner_launch import RestartEnvironment
 from .pending_requests import PendingRequests
 from .pi_commands import (
     GetAvailableModels,
@@ -61,8 +62,9 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision, lock and generation."""
 
-    def __init__(self, agent_bin: str, agent_args: NativeArguments):
+    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment):
         self.agent_bin, self.agent_args = agent_bin, agent_args
+        self.configuration = configuration
         self.catalogs: dict[str | None, list[SessionConfigSelectOption]] = {}
         self.auth: tuple[int, int] | None = None
         self.lock = asyncio.Lock()
@@ -70,7 +72,7 @@ class CatalogConfigOption(ConfigOption):
 
     @property
     def current_auth(self) -> bool:
-        return self.auth == backend.auth_revision()
+        return self.auth == self.configuration.auth_revision()
 
     def cache_key(self, thread: Thread) -> str | None:
         return thread.model
@@ -79,7 +81,7 @@ class CatalogConfigOption(ConfigOption):
         async with self.lock:
             if not self.current_auth:
                 self.catalogs.clear()
-                self.auth = backend.auth_revision()
+                self.auth = self.configuration.auth_revision()
             key = self.cache_key(thread)
             if key not in self.catalogs:
                 self.catalogs[key] = await self.discover(thread)
@@ -193,6 +195,7 @@ class ConfigOptions:
     ):
         self.comms, self.agent_bin, self.agent_args = comms, agent_bin, agent_args
         self.runtime, self.sessions, self.effects = runtime, sessions, effects
+        self.configuration = RestartEnvironment.inherit(os.environ)
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
         self.catalog_publish_lock = asyncio.Lock()
         self.session_catalog_generation: dict[str, int] = {}
@@ -201,7 +204,7 @@ class ConfigOptions:
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
-            self.catalogs[member] = member(self.agent_bin, self.agent_args)
+            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)
         return self.catalogs[member]
 
     @property

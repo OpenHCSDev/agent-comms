@@ -60,8 +60,8 @@ def configured_stage(arguments, configured, snapshot):
     # The original owner owns auth/settings/extension selection. Bootstrap is
     # its existing OS-environment decoder, not a second fixture configuration.
     _, environment = NativePiRpcLaunch.bootstrap(
-        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment)
-    source_profile = Path(environment['AGENT_COMMS_NATIVE_CONFIG_DIR'])
+        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment, retained.configuration)
+    source_profile = retained.configuration.native_config
     source_hashes = {}
     for filename in ('auth.json', 'models.json', 'settings.json'):
         original = source_profile/filename
@@ -125,9 +125,8 @@ async def configured_pure_channel(arguments):
         # Existing SessionManager fork owns strict saved-history creation under
         # its native source lock. Its output stays under the owned profile.
         fork = await ForkSessionHelper.run(
-            ForkSessionRequest(str(arguments.package), str(original), source.worktree),
-            cwd=Path(source.worktree),
-            env=dict(os.environ, PI_CODING_AGENT_DIR=str(stage/'native-forks')),
+            ForkSessionRequest(str(arguments.package), str(original), source.worktree, str(stage / 'forks')),
+            cwd=Path(source.worktree), env=dict(os.environ),
         )
         assert Path(fork.session_file).is_relative_to(stage)
         assert hashlib.sha256(original.read_bytes()).hexdigest() == before

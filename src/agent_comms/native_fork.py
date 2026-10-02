@@ -13,6 +13,7 @@ from .pi_helper import PiHelper, SessionHelperRequest
 @dataclass(frozen=True)
 class ForkSessionRequest(SessionHelperRequest):
     cwd: str
+    directory: str | None = None
 
 
 class ForkSessionHelper(PiHelper):

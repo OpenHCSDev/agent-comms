@@ -76,10 +76,9 @@ async def main():
     project = stage / "project"
     project.mkdir()
     environment = dict(retained.environment)
-    fork_env = dict(environment, PI_CODING_AGENT_DIR=str(stage / "native-forks"))
     forks = [await ForkSessionHelper.run(
-        ForkSessionRequest(str(package), str(source_file), str(project)),
-        cwd=project, env=fork_env,
+        ForkSessionRequest(str(package), str(source_file), str(project), str(stage / 'native-forks')),
+        cwd=project, env=environment,
     ) for _ in range(2)]
     assert all(Path(identity.session_file).is_relative_to(stage) for identity in forks)
     service = Comms(stage / "wire")

@@ -61,12 +61,13 @@ class OwnerCompactionCommit:
         """
         from .compaction_records import SelectedSummarySource
         from .owner_compaction_runtime import compact_owner_once
-        from .selected_pi_route import read_selected_compaction_decision, selected_settings_paths
+        from .selected_pi_route import read_selected_compaction_decision
         from .selected_pi_summary_rpc import SelectedSummarySlot
 
         package = self.native.package_dir
         session_file = owner.require_saved_session()
-        settings_paths = selected_settings_paths(persistent)
+        launch = persistent.custody.idle().child.key[0]
+        settings_paths = launch.configuration.settings_paths(launch.cwd)
 
         async def decision():
             return await read_selected_compaction_decision(

@@ -9,13 +9,13 @@ from __future__ import annotations
 import os
 import shlex
 from collections.abc import Mapping
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, PathText
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
 from .registry_document import RegistrySnapshot
 from .threads import Thread
@@ -58,13 +58,61 @@ class RestartEnvironment:
         default=None,
         metadata={"wire_omit_default": True, "wire_name": PACKAGE_ENV, "runtime": True},
     )
+    default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
+    native_config: Annotated[Path, PathText] = field(
+        default=default_agent_directory,
+        metadata={"wire_name": "AGENT_COMMS_NATIVE_CONFIG_DIR", "native": True},
+    )
+    agent_directory: Annotated[Path, PathText] = field(
+        default=default_agent_directory,
+        metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True},
+    )
     owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
     binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
     arguments_key: ClassVar[str] = "AGENT_COMMS_AGENT_ARGS"
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "native_config", self.absolute(self.native_config))
+        object.__setattr__(self, "agent_directory", self.absolute(self.agent_directory))
+
+    def absolute(self, directory: Path) -> Path:
+        if directory.parts and directory.parts[0] == "~":
+            directory = Path(self.home or Path.home()).joinpath(*directory.parts[1:])
+        return directory.expanduser().resolve()
+
     @classmethod
     def inherit(cls, environment: Mapping[str, str]):
-        return cls(**{f.name: environment.get(f.metadata["wire_name"]) for f in fields(cls)})
+        values = {f.metadata["wire_name"]: environment[f.metadata["wire_name"]]
+                  for f in fields(cls) if f.metadata["wire_name"] in environment}
+        native_name = cls.__dataclass_fields__["native_config"].metadata["wire_name"]
+        agent_name = cls.__dataclass_fields__["agent_directory"].metadata["wire_name"]
+        values[native_name] = values.get(native_name) or values.get(agent_name) or str(cls.default_agent_directory)
+        return FieldCodec.decode(cls, values)
+
+    def for_agent(self, directory: Path) -> RestartEnvironment:
+        """Change only the acquired writable resource, retaining original discovery."""
+        return replace(self, agent_directory=directory)
+
+    def encode_native(self) -> dict[str, str]:
+        encoded = self.encode()
+        return {f.metadata["wire_name"]: encoded[f.metadata["wire_name"]]
+                for f in fields(self) if f.metadata.get("native")}
+
+    def auth_revision(self) -> tuple[int, int]:
+        """Observe this owner's credentials, never an ambient or fork directory."""
+        try:
+            info = (self.native_config / "auth.json").stat()
+            return info.st_mtime_ns, info.st_size
+        except OSError:
+            return 0, 0
+
+    def settings_paths(self, worktree: Path) -> tuple[str, ...]:
+        project = worktree / ".pi"
+        return tuple(dict.fromkeys(map(str, (
+            self.agent_directory / "settings.json", project / "settings.json",
+            self.agent_directory / "models.json", self.native_config / "models.json",
+            project / "models.json",
+        ))))
 
     def encode(self) -> dict[str, str]:
         return FieldCodec.encode(self)
@@ -89,6 +137,10 @@ class RetainedOwnerLaunch:
     process: ProcessIdentity
     interpreter: str
     environment: dict[str, str] = field(repr=False)
+    configuration: RestartEnvironment = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "configuration", RestartEnvironment.inherit(self.environment))
 
     @classmethod
     def capture(
