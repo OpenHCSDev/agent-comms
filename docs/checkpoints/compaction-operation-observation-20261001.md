@@ -2,8 +2,10 @@
 
 Owner Arendt. Source base main `9954cdd7`; separate from unfinished #489
 Native6 custody. Schrodinger owns the original CompactionPlan producer;
-Heisenberg owns actual Toad rendering. Parent owns activation. This draft is
-not Ready. Source reasoning and coherent declaration change precede validation.
+Heisenberg owns actual Toad rendering. Parent owns activation. This checkpoint
+is Ready for the scoped stream-publication equality fix. It does not claim full
+compaction completion or latency acceptance. Source reasoning and coherent
+declaration change precede validation.
 
 ## Required relation and existing owners
 
@@ -62,8 +64,8 @@ registry reads on progress delivery remain a separate measured-work question.
 Patterns: IDEN-1/3, IMPL-5, AGENT-6. Existing owner first; declaration equality
 closes the required relation across every consumer. No new classes or copied
 decisions. Wire/store/native formats unchanged. Final batched sanity and an
-affected installed original native/ACP/UI journey come last; no passing or
-Ready claim has been made yet.
+affected installed original native/ACP/UI journey come last. The receiving
+evidence below qualifies publication behavior, not the whole journey.
 
 ## Implemented declaration checkpoint
 
@@ -79,9 +81,9 @@ ran existing progress/codec/phase controls, extending its unchanged-work case
 over all concurrent leaf observations. Eight passed in 0.11s. These controls
 check raw leaf text/phase survive FieldCodec and ACP update encoding while
 unchanged whole-operation work does not become a new turn state. They are not
-an installed configured native/UI qualification. That remains unfilled and
-must join the existing receiving configured compaction journey, without
-replaying the completed original 95fe or creating a competing provider fixture.
+an installed configured native/UI qualification. The actual receiving journey
+below supplies scoped publication evidence without replaying the completed
+original 95fe or creating a competing provider fixture.
 
 The receiving qualification uses the existing fresh canonical fork
 `compaction501-live-architecture-memory`, original saved source 42,044,813 bytes,
@@ -98,7 +100,24 @@ progress snapshot contains 1,042 source observations / 1,039 text deltas /
 is one whole-turn publication for that measured operation, and zero repeated
 whole-turn publications with the same aggregate work. Raw leaf events retain
 both history and current-turn values. This is an **in-flight publication
-finding**, not commit, provider completion, final reply, UI completion or Ready.
+finding**, not commit, provider completion, final reply or whole-UI completion.
 The original pending input remains preserved; no observer submitted or retried
 input. The saved snapshot hash and analysis script are under
 `evidence/compaction-operation-observation-20261001/`.
+
+## Accepted checkpoint and remaining actual failure
+
+Parent accepts the actual installed raw-stream/whole-turn publication finding
+as the narrow Ready boundary for this declaration fix. Production remains byte
+identical to `a29d458e`; subsequent commits only contain evidence and this
+receipt. There is no Native6, native producer, provider or ABI change here.
+
+The same receiving UI subsequently failed on tab return at 00:21:21Z with
+`WorkerFailed: StaleRevision('Transcript application retired before source capture')`.
+Heisenberg retains the actual crash and preceding capture; Schrodinger owns the
+source-lifetime investigation. Therefore full UI continuation is **failed**,
+not passed. A subsequent read reported a committed native compaction but still
+reserved selected attempt/input; those are distinct original facts, not proof
+of final input handling or permission to replay. The one original attempt and
+all uncertainty are preserved. Neither full compaction speed nor final reply
+nor overall application stability is an acceptance claim of this checkpoint.
