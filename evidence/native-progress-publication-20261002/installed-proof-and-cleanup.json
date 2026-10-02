@@ -1,0 +1,69 @@
+{
+  "source_head": "92d0243612a07f2de7984126df1eaa91a3fe2074",
+  "wheel_sha256": "1f2092d8461f1fd3e859838da5d07564ea48c618775110e467d8679e4cfb5131",
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-native-progress528/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "sdk": "0.12.1",
+  "actual_originals": "/home/ts/.cache/agent-scratch/comms-native-progress528-20261002/installed-parallel02",
+  "native_samples": 105,
+  "original_input_ids": [
+    "3b4e562d86a16a9cdf3836c2d0e809b8",
+    "4d58922117766df4d218e2e3bb0d2eda",
+    "64347024a3d1c0925205fbf6903dc403",
+    "7609f282864fb5b4fe294c583cc9a617",
+    "7b1be5a21825bb9ec0bc780199c5d1f9",
+    "c2d9be301778abe43adf7193570c628f",
+    "dfeb951b231a6bff110b9a1677426a13"
+  ],
+  "maximum_parent_receipt_lag_seconds": 0.073111933,
+  "original_native_children": [
+    {
+      "pid": 3802344,
+      "start_time": 41308875
+    },
+    {
+      "pid": 3802284,
+      "start_time": 41308628
+    },
+    {
+      "pid": 3802678,
+      "start_time": 41309454
+    },
+    {
+      "pid": 3802346,
+      "start_time": 41308877
+    },
+    {
+      "pid": 3802618,
+      "start_time": 41309423
+    },
+    {
+      "pid": 3802579,
+      "start_time": 41309351
+    },
+    {
+      "pid": 3802275,
+      "start_time": 41308614
+    }
+  ],
+  "native_children_alive": [],
+  "original_owners": [
+    {
+      "pid": 3802084,
+      "start_time": 41308114
+    },
+    {
+      "pid": 3802085,
+      "start_time": 41308193
+    },
+    {
+      "pid": 3802179,
+      "start_time": 41308269
+    }
+  ],
+  "owners_alive": [],
+  "new_paid_provider_calls": 0,
+  "public_mutations": 0
+}
