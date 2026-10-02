@@ -49,6 +49,11 @@ def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pendi
         with SelectedParticipant.select(comms, store, root_id, "receiver", 0) as selected:
             assert selected.batch.assignments == snapshot
             prompt = SelectedPrompt(selected).triage()
+            from agent_comms.wake_policy import WakePolicy
+
+            # The original instruction is shared by the whole captured batch,
+            # rather than multiplying mandatory context for every source row.
+            assert prompt.count(WakePolicy.relevance_instruction().content) == 1
             # Mandatory original content belongs to native selected-model admission,
             # not a Python-wide byte cap or the optional awareness resource bound.
             assert len(prompt.encode("utf-8")) > 32 * 1024

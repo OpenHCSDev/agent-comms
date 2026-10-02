@@ -63,6 +63,12 @@ class WakePolicy(DeclaredFamily, SourceProofRequirement, affix="Wake"):
     def engage(self, execution_id: str, target: str) -> Engagement:
         return Engagement.decode(self.declared_name)(execution_id, target)
 
+    @classmethod
+    def relevance_instruction(cls):
+        from .turn_context import InstructionFile
+
+        return InstructionFile.read("reply-relevance.md")
+
     def triage_expectation(self):
         raise IntegrityViolationError("wake policy does not permit triage")
 
@@ -87,7 +93,7 @@ class BoundedTriageWake(TriageSourceProof, WakePolicy):
     triage = True
 
     def triage_expectation(self):
-        return "engage only if this concerns your assigned task; otherwise IGNORE"
+        return "evaluate this original under the shared reply relevance instruction"
 
     @classmethod
     def initial_state(cls):
