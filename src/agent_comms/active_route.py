@@ -10,7 +10,6 @@ import fcntl
 import json
 import os
 import stat
-import threading
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -36,6 +35,22 @@ class CommsRoute(ABC):
 
     def observe_root(self) -> Path:
         return self.root.resolve()
+
+    @contextmanager
+    def admit_client(self) -> Iterator[None]:
+        """Borrow the published route until this client's work has retired.
+
+        An explicit selection of the published root is still its borrower.
+        Independent private roots do not participate in default publication.
+        Refuse a publication in progress rather than park a half-open client.
+        """
+        published = read_active_route()
+        current_root = published.root if published else Path.home() / ".agent-comms"
+        if self.root.resolve() == current_root.resolve():
+            with guard_default_route_write(self.root, blocking=False):
+                yield
+        else:
+            yield
 
     @abstractmethod
     def bind_owners(self, owners: OwnerLifecycle) -> None:
@@ -122,9 +137,6 @@ class RoutePublicationUnknownError(RelationViolationError):
     """The new route may be visible after a failed durability boundary."""
 
 
-_route_write_owner = threading.local()
-
-
 @contextmanager
 def guard_original_root_write(root: Path) -> Iterator[None]:
     """Fence a cooperating write through the historical root after migration."""
@@ -186,24 +198,18 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
 
 
 @contextmanager
-def guard_default_route_write(expected_root: Path) -> Iterator[None]:
+def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> Iterator[None]:
     """Keep a default-root write on its selected root through publication.
 
     Callers must enter this guard before the mutating operation, including any
-    thread dispatch. A nested guard in the same thread shares the outer lock.
+    thread dispatch. Nested shared borrowers remain compatible and each owns
+    its descriptor; their lifetime is not inferred from thread-local state.
     """
     path = active_route_path()
-    held = getattr(_route_write_owner, "held", None)
-    identity = (str(path), str(expected_root.expanduser().resolve(strict=True)))
-    if held is not None:
-        if held != identity:
-            raise ValueError("nested default comms write changed its route")
-        yield
-        return
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
     try:
-        fcntl.flock(directory, fcntl.LOCK_SH)
+        fcntl.flock(directory, fcntl.LOCK_SH | (0 if blocking else fcntl.LOCK_NB))
         info = os.fstat(directory)
         parent = path.parent.lstat()
         if (
@@ -218,11 +224,7 @@ def guard_default_route_write(expected_root: Path) -> Iterator[None]:
         current_root = route.root if route is not None else Path.home() / ".agent-comms"
         if expected_root.expanduser().resolve(strict=True) != current_root.resolve(strict=True):
             raise ValueError("default comms route changed before write")
-        _route_write_owner.held = identity
-        try:
-            yield
-        finally:
-            _route_write_owner.held = None
+        yield
     finally:
         os.close(directory)
 
