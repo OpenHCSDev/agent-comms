@@ -30,8 +30,7 @@ from agent_comms.threads import Thread
 from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file
 from retained_summary_reset import RuntimeCompactionFiles, RuntimeGoalFiles
 from runtime_installation import RuntimeInstallation
-from cutover_child import run_cutover_child
-import agent_comms.owner_restart
+from cutover_child import restore_stopped_batch
 
 
 @dataclass(frozen=True)
@@ -316,16 +315,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                          expected_registry).require_original()
         ReviewedArtifact(ROOT / 'registry.json', expected_registry).require_original()
 
-        source = stopped.handoff.owners[0].launch
-        result = run_cutover_child([
-            str(self.cohort.source_interpreter),
-            str(Path(__file__).with_name('restore_stopped_owners.py')),
-            str(Path(agent_comms.owner_restart.__file__).parent), str(stopped.wire.descriptor),
-        ], environment=source.environment, packet=json.dumps(FieldCodec.encode(stopped.handoff)),
-            descriptors=(stopped.wire.descriptor,))
-        from agent_comms.owner_lifecycle import OwnerRestartResult
-
-        restored = FieldCodec.decode(tuple[OwnerRestartResult, ...], json.loads(result.stdout))
+        restored = restore_stopped_batch(stopped)
         self.note('failed-install-original-runtime-restored',
                   restored=FieldCodec.encode(restored), finished=time.time())
         return restored
