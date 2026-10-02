@@ -50,6 +50,10 @@ class NativeSchemaDeclaration:
         from agent_comms.typed_table import TypedTable
         coordination_meta = SchemaMeta.current()
         response_version = get_args(get_type_hints(ResponseSchemaMeta)['version'])[0]
+        native_version = get_args(get_type_hints(NativeRuntimeSchemaMeta)['version'])[0]
+        runtime = _schema()
+        native_meta = NativeRuntimeSchemaMeta(singleton=1, version=native_version,
+                                              ddl_digest=_digest(runtime))
         response = _response_schema()
         # Source-only declaration capture: no product store or original data is
         # opened. SQLite supplies the same normalized DDL spelling as originals.
@@ -62,14 +66,15 @@ class NativeSchemaDeclaration:
             coordination = objects(shape)
             metadata = {name: tuple(rows(shape, name)) for name in
                         (SchemaMeta.declared_name, ResponseSchemaMeta.declared_name)}
-            NativeRuntimeSchemaMeta.create_schema(shape)
-            metadata[NativeRuntimeSchemaMeta.declared_name] = tuple(rows(shape, NativeRuntimeSchemaMeta.declared_name))
+        # Both original4 and current5 declare this metadata row. Source capture
+        # must not require a target-only creation method in the original writer.
+        metadata[NativeRuntimeSchemaMeta.declared_name] = (
+            tuple(getattr(native_meta, name) for name in native_meta.columns()),)
         writable = {table.declared_name: tuple(item.name for item in table._fields()
                     if item.column.generated is None)
                     for family in (CoordinatorTable, ResponseTable, NativeRuntimeTable)
                     for table in TypedTable.members_with(family)}
-        return cls(get_args(get_type_hints(NativeRuntimeSchemaMeta)['version'])[0],
-                   _schema(), _digest(_schema()), binding_schema(PromptBinding), binding_digest(PromptBinding),
+        return cls(native_version, runtime, _digest(runtime), binding_schema(PromptBinding), binding_digest(PromptBinding),
                    coordination_meta.schema_version, coordination_meta.snapshot_version, response_version,
                    coordination, writable, metadata)
 
@@ -182,6 +187,16 @@ def rebuild(db, schema, table_rows):
     for name, sql in schema.items():
         if not sql.lstrip().startswith('CREATE TABLE') and name != 'sqlite_sequence':
             db.execute(sql)
+    # SQLite also drops auxiliary triggers/indices attached to a rebuilt table.
+    # Their existing owners (for example CohortDeliveryReceipts) are outside
+    # this carry. Restore only disappeared objects from the authenticated
+    # original preimage; the caller requires exact external DDL/row equality.
+    remaining = objects(db)
+    for name, sql in existing.items():
+        if name not in schema and name not in remaining:
+            if sql.lstrip().startswith('CREATE TABLE'):
+                raise ValueError('Carry removed an unrelated original table: ' + name)
+            db.execute(sql)
 
 
 def carry_coordination(db, original, target):
@@ -284,8 +299,18 @@ def carry_coordination(db, original, target):
     payload['native_runtime_triage_sources'] = (payload['native_runtime_triage_sources'][0], rows(db, 'native_runtime_triage_sources'))
     target.require_coordination(db)
     after_objects, after_rows = objects(db), inventory(db)
-    if {k:v for k,v in before_objects.items() if k not in original.runtime_objects} != {k:v for k,v in after_objects.items() if k not in target.runtime_objects}:
-        raise ValueError('Carry changed unrelated coordination schema')
+    # An existing capability entering the target family must match its original
+    # definition exactly; target membership cannot authorize an unrelated edit.
+    inherited = (before_objects.keys() & target.runtime_objects.keys()) - original.runtime_objects.keys()
+    if any(before_objects[name] != target.runtime_objects[name] for name in inherited):
+        raise ValueError('Target declaration changes an unrelated existing capability')
+    owned_names = original.runtime_objects.keys() | target.runtime_objects.keys()
+    outside_before = {k:v for k,v in before_objects.items() if k not in owned_names}
+    outside_after = {k:v for k,v in after_objects.items() if k not in owned_names}
+    if outside_before != outside_after:
+        changed = sorted(name for name in outside_before.keys() | outside_after.keys()
+                         if outside_before.get(name) != outside_after.get(name))
+        raise ValueError('Carry changed unrelated coordination schema: ' + ', '.join(changed))
     unchanged_tables = {name for name in before_rows if name not in target.metadata_rows
                         and name not in removed_writable and name not in added_writable}
     untouched = unchanged_tables
@@ -296,7 +321,7 @@ def carry_coordination(db, original, target):
             raise ValueError('Carried native rows differ from exact original projection')
     if db.execute('PRAGMA foreign_key_check').fetchall():
         raise ValueError('Carried native relations violate foreign keys')
-    return {'original_release': original.release_versions, 'target_release': target.release_versions,
+    return {'original_release': list(original.release_versions), 'target_release': list(target.release_versions),
             'historical_routes': {key: value['exact_target'] for key, value in obligations.items()},
             'original_rows':{k:len(v) for k,v in before_rows.items()}, 'carried_rows':{k:len(v) for k,v in after_rows.items()},
             'unchanged_rows_sha256':row_digest({k:before_rows[k] for k in sorted(untouched)}),

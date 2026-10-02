@@ -1,0 +1,91 @@
+{
+  "scope": "one existing installer full490 carry; unactivated",
+  "source_parent": "b3724369e60cabf8633f2c0f6d7c7cce87384b94",
+  "original": [
+    8,
+    2,
+    2,
+    4
+  ],
+  "receiving": [
+    9,
+    3,
+    3,
+    5
+  ],
+  "installed_source_declaration_hashes": {
+    "coordination_schema.py": {
+      "source": "ed0b7bf1b1bcc776690e00cce88ac6bd6e655d53cbc3a0b106234558ebe9e6a1",
+      "installed": "ed0b7bf1b1bcc776690e00cce88ac6bd6e655d53cbc3a0b106234558ebe9e6a1"
+    },
+    "coordination_tables/metadata.py": {
+      "source": "1a8ae630b7f760b7b413b465ea40b71ab726a964547e17914fa0fb2af6701d6f",
+      "installed": "1a8ae630b7f760b7b413b465ea40b71ab726a964547e17914fa0fb2af6701d6f"
+    },
+    "coordination_response.py": {
+      "source": "d51fb8cf0984a0926f650f03556931791d9658357034a23f51360ade964ea18d",
+      "installed": "d51fb8cf0984a0926f650f03556931791d9658357034a23f51360ade964ea18d"
+    },
+    "native_runtime_input.py": {
+      "source": "9ecebd81076f60f3a1a860c3732c8db0128e6488f135fbe560d0cbdbcb80ffaf",
+      "installed": "9ecebd81076f60f3a1a860c3732c8db0128e6488f135fbe560d0cbdbcb80ffaf"
+    },
+    "native_input_record.py": {
+      "source": "3ae12bd401286e78c688e96ec73beab40646af360acf9adc1a162a0b3029db88",
+      "installed": "3ae12bd401286e78c688e96ec73beab40646af360acf9adc1a162a0b3029db88"
+    },
+    "native_prompt_binding.py": {
+      "source": "2d830c60d76314dbbaa200fec23760e604184761f8a0e011ce02769686a2296a",
+      "installed": "2d830c60d76314dbbaa200fec23760e604184761f8a0e011ce02769686a2296a"
+    },
+    "private_sidecar.py": {
+      "source": "22102dbd89a4ca2652a77dcf735a960c93326e5ebdf7362a4e4e5953b96e0f32",
+      "installed": "22102dbd89a4ca2652a77dcf735a960c93326e5ebdf7362a4e4e5953b96e0f32"
+    },
+    "cohort_schema.py": {
+      "source": "f71b7c002d6927117108f518c57142c3e9dc0e672d6bf8045ddf4632f629f706",
+      "installed": "f71b7c002d6927117108f518c57142c3e9dc0e672d6bf8045ddf4632f629f706"
+    },
+    "typed_table.py": {
+      "source": "3d2c97a5c1a57365d37d101142da749386ce89c068f185cc8fcdad13cae45c12",
+      "installed": "3d2c97a5c1a57365d37d101142da749386ce89c068f185cc8fcdad13cae45c12"
+    },
+    "coordination_snapshot.py": {
+      "source": "9f169418cf66845d64fe6b33e4bc8084b77780483059e3e9a8a57d95ca0da749",
+      "installed": "9f169418cf66845d64fe6b33e4bc8084b77780483059e3e9a8a57d95ca0da749"
+    }
+  },
+  "existing_owner": "RuntimeInstallation -> PreserveRuntimeInstallation -> CarryNativeRuntimeInstallation",
+  "auxiliary_owner": "CohortDeliveryReceipts.triggers, not WakeAssignment",
+  "source_reason": "SQLite DROP TABLE automatically drops attached external triggers/indices; restore disappeared auxiliary objects from authenticated original preimage and require exact before/after auxiliary DDL and cells",
+  "native_metadata": "original/current version from actual declared Literal; owner instance derives row and declared DDL digest; original4 lacks target-only create_schema",
+  "source_projection": "exact old scalar obligation/intent supplies one composite receipt/dispatch target; no inferred additional routes or recreated native proofs",
+  "history": [
+    {
+      "attempt": "09",
+      "state": "preserved original seed; prepare refused missing external cohort guard; no install"
+    },
+    {
+      "attempt": "11",
+      "state": "observer refused unsupported concrete property; no install; use original polymorphic binding_fields"
+    },
+    {
+      "attempt": "12",
+      "state": "prepare refused missing external guard; no install"
+    },
+    {
+      "attempt": "13",
+      "state": "candidate prepared; codec equality refused tuple under Any evidence; no install"
+    },
+    {
+      "attempt": "14",
+      "state": "installed full carry and original reader journey PASS; source09 reused without producer replay"
+    }
+  ],
+  "historical_refusals": "completed native-only07 five refusals preserved, not rerun",
+  "public_operations": 0,
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "validation_order": "semantic existing-owner analysis, coherent implementation, final installed journey",
+  "receipt": "installed-complete490-operator14.json"
+}
