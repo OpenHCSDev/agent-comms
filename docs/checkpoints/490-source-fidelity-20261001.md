@@ -291,3 +291,88 @@ the original message contains23. See configured02-original-late-answer-proof.jso
 This confirms the separate late batch answered, not merely acknowledged.
 The driver now checks this original route/body too. No provider/native input
 was repeated; raw exit1 and missing notification measurement remain unchanged.
+
+## Tool authority consumer closure at 25c419cb
+
+This is a source review of the existing contract, not an additional live write
+acceptance claim. No production behavior or native/provider input changed.
+The complete current-main production diff is 44 files, 965 added / 754 deleted;
+the earlier 21-file plural-builder increment is not the complete branch count.
+
+### The actual producer constrains the policy relation
+
+`SelectedExecution.action(session)` selects one trusted policy for this work
+turn: explicit SelectedToolIntent, explicit foreground SelectedExistingFileWrite,
+or the existing SelectedSession.default_action. SelectedAttempt.prepare passes
+that SAME action to SelectedWriteAuthority.select for every original. The only
+production BatchSelectedAction construction is in that method.
+
+NoSelectedWritePlans returns the action unchanged. AcpSelectedWriteAuthority
+loads the original's accepted SelectedWriteIntent through SelectedWritePlans.load:
+root, MessageReference, assignment and AdmissionIdentity must match. It verifies
+the original ACP controller, then replaces only that original's action through
+SelectedAction.with_plan with PlannedSelectedWrite. PlannedSelectedWrite inherits
+NoSelectedTools; it does not acquire a native model-tool capability from the plan.
+
+Consequently, the admitted originals have one common native policy or an
+original-specific post-model operator plan. They do not have independently
+chosen read-only versus read/write native policies. Ordinary CodingSelectedAction
+enables read/bash/edit/write for the selected session, with existing cooperative
+claim checks; a read-only request's prose is not a declared read-only capability.
+
+### Anchor, native policy, and original operator grant are distinct
+
+SelectedAttempt.tool_owner initially binds the execution resource to assignment0.
+BatchSelectedAction.mode does NOT pass that unmodified admission to a broker:
+before calling each action.mode it projects CodingToolOwner.for_original onto
+that action's actual assignment. The projection requires membership in the
+reserved NativeRuntimeInput's original execution relation and replaces source
+seq/message ID, assignment ID/revision and operation ID, retaining the SAME
+execution/attempt/participant/native input. The first nonempty mode therefore
+belongs to its chosen original, not necessarily assignment0.
+
+This is selection of the one admitted turn policy, NOT a general union algorithm
+for arbitrary heterogeneous native policies. No current production producer
+admits such a heterogeneous policy set. If that product contract changes,
+first-nonempty selection must not be reused as authority composition.
+
+For a NoSelectedTools first original and a later controller-bound write plan,
+neither contributes a native tool mode: native launch uses --no-tools. After the
+verified result, BatchSelectedAction.apply separately projects EACH original.
+PlannedSelectedWrite.require_current rechecks its own controller and operation;
+SelectedExistingFileWrite publishes the claim and writes using that projected
+original admission; only then is that original plan marked applied. The later
+plan never borrows the first source's controller or operation.
+
+### All broker and mutation consumers
+
+- CodingSelectedAction.mode -> CodingToolMode -> CodingToolSocket ->
+  CodingToolOwner.admit: verifies the exact sent FULL input and original selected
+  wake before consuming the call slot and admitting any edit/write claim.
+  CodingToolOwner.finish releases observed claim generations through the same
+  selected-owner boundary. CodingTool's existing Read/Bash/Edit/Write declarations
+  own claim behavior; no second per-message permissions table exists.
+- SelectedToolIntent.mode -> selected_tool_mode_for_owner -> SelectedToolMode's
+  owner callback -> verify_sent_full_input / perform_selected_write: captures the
+  already projected original admission, then uses the same selected claim/writer.
+- PlannedSelectedWrite and the explicitly trusted foreground write both use
+  SelectedExistingFileWrite.apply -> publish_selected_resource_claim ->
+  write_selected_claimed_file. The original WakeAdmission.source selects the
+  committed delivery and claim audience; _verify_selected_wake_state verifies
+  exact engaged binding and current attempt membership. The writer requires
+  ClaimOwner.admission equality and the current durable claim before mutation.
+- NativePiRpcLaunch.tracked reads only NativeToolMode.launch_arguments;
+  TrackedTurn.open_tools/result use its authenticated socket and finish hook.
+  Neither reconstructs an original or replaces the captured admission.
+
+Declaration/caller searches over src, tools and tests identify one production
+CodingToolOwner constructor (SelectedAttempt.tool_owner), two for_original
+consumers (BatchSelectedAction.mode/apply), one BatchSelectedAction producer,
+and the two native policy leaves CodingToolMode/SelectedToolMode. All original
+write-plan selectors and post-model writers above were read. This review adds
+no guard, registry, capability class, copied decision or compatibility path;
+production deletion count in THIS source-review checkpoint is zero.
+
+Same-original02 remains the useful mixed-route/native-read functional proof.
+Its unretained ACP callback packets remain an explicit measurement gap, not
+reconstructed facts. No provider call was repeated to obtain counters.
