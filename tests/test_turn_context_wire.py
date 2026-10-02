@@ -249,6 +249,51 @@ def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_pa
     assert comms.bus.log.path.read_bytes() == raw
 
 
+def test_context_pointer_family_rebuilds_and_decodes_only_selected_originals(tmp_path, monkeypatch):
+    """Original wire lookup and cold recovery share declaration-owned pointers."""
+    import cProfile
+    import agent_comms.private_bus_checkpoint as checkpoint
+    from agent_comms.errors import RelationViolationError
+
+    comms, _ = _root(tmp_path)
+    for index in range(12):
+        comms.messaging.send_initial_cohort('sender', '#team', f'@Alice original-{index}')
+    alice = comms.registry.require('Alice')
+    selected = manifest(alice)
+    other = manifest(comms.registry.require('Bob'))
+    comms.bus.log.record_context(selected)
+    comms.bus.log.record_context(other)
+    original = comms.bus.log.path.read_bytes()
+    profile = cProfile.Profile()
+    profile.enable()
+    assert comms.bus.log.context_manifests('Alice', comms.registry) == (selected,)
+    profile.disable()
+    calls = profile.getstats()
+    assert not any(getattr(call.code, 'co_name', '') == '_snapshot_records' for call in calls)
+    decodes = [call for call in calls if getattr(call.code, 'co_name', '') == 'decode_bytes']
+    assert sum(call.callcount for call in decodes) == 1
+    assert comms.bus.log.path.read_bytes() == original
+
+    # A durable append before index publication is UNKNOWN. The canonical cold
+    # recovery must replace ALL derived members, including prior observations.
+    with monkeypatch.context() as patch:
+        patch.setattr(checkpoint, 'append_private_bus_checkpoint_unlocked',
+                      lambda *_: (_ for _ in ()).throw(OSError('interrupted index publication')))
+        with pytest.raises(RelationViolationError, match='outcome UNKNOWN'):
+            comms.bus.log.record_context(replace(selected, counter='original-second-observation'))
+    expected = (selected, replace(selected, counter='original-second-observation'))
+    assert Comms(comms.root).bus.log.context_manifests('Alice', comms.registry) == expected
+    assert comms.bus.log.path.read_bytes().startswith(original)
+    assert comms.bus.log.latest_sequence() == 12
+    assert len(comms.bus.log.full_history()) == 12
+
+    # Changing a sealed pointer file cannot authorize a rebuilt or empty view.
+    index = comms.root / 'private_bus_checkpoint.sqlite3'
+    index.write_bytes(index.read_bytes() + b'changed sealed index')
+    with pytest.raises(RelationViolationError):
+        comms.bus.log.context_manifests('Alice', comms.registry)
+
+
 def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp_path):
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')

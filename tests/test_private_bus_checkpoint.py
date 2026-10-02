@@ -50,7 +50,8 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
 def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     request = AddressedPage.capture(lookup=lookup, after_seq=after, limit=limit)
     with comms.bus.log.certified_read() as source:
-        return source.addressed_page(comms.bus.log, request)
+        witness, captured, more = source.addressed_page(comms.bus.log, request)
+    return witness, tuple(captured), more
 
 
 

@@ -59,6 +59,13 @@ class ThreadIncarnation:
         thread = snapshot.threads.get(snapshot.aliases.get(name, name))
         return thread is not None and self.resolved(snapshot) == thread.incarnation
 
+    def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
+        """Original names retained for this exact current incarnation."""
+        canonical = self.resolved(snapshot)
+        return (canonical, *(type(self)(alias, canonical.created_at)
+                             for alias, name in snapshot.aliases.items()
+                             if name == canonical.name))
+
 
 @dataclass(frozen=True, slots=True)
 class TurnId:
