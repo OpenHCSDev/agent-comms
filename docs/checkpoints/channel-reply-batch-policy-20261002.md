@@ -45,3 +45,7 @@ Arendt confirms current Native5/native5184 is independent of unfinished Native6.
 ONE normal installed configured gate PASS25.911seconds at `/home/ts/wt/b503507c01`. New private originals only; exact3-primary-FULL verified cursor envelopes carry original inputs, injected3, current live owner epochs/PIDs. All9original claim/history/membership/sealed receipts and3channelanswers passed,35ACPfacts. Final3SQL cursors advance legitimate reply TRIAGE; this does not change fanout/wake policy. Original settings/journals hash-identical, owned processes retired; oldgate01/UNKNOWNs preserved.
 
 Immediate primary selected_status=proven publications observed. Deferred refusal→idle-refresh→verified was not individually recorded and is not claimed; no repeat/synthetic provider gate. Installed original admission/empty-refresh controls separately passed. Useful scoped missing-row acceptance now qualified; whole lifecycle/performance remains open. Receiving303 has full69/all4source/native evidence.
+
+## Parent merge correction and normal current-main closure
+
+Parent507 landed before503;503 was not yet merged. Current maine37b49fb normally merged without source conflict into0ba6d70a. Complete tracked src/assets/stack/pyproject/uv.lock inventory is identical to qualifiedad7; current-main source delta is now only SelectedParticipant29+/18− because507 already landed. Existing25.911-second configured gate reused, no builder/provider/native repetition. Manifest: normal-main-integration-inventory.json.
