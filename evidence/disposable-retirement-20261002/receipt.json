@@ -1,0 +1,1032 @@
+{
+  "scope": "new cleanup only; prior e9d9/1e1/Singer/Sch/Mendel/parent excluded",
+  "current_available_bytes": 18803441664,
+  "deletion_window_df_delta_bytes": 2768056320,
+  "concurrent_cleanup_caveat": "Observed df deltas include concurrent host activity. Exclusive native dependency blocks 1421737984 separately measured.",
+  "environments_removed": 17,
+  "computed_caches_removed": 79,
+  "flat_fully_merged_worktrees_removed": 12,
+  "unused_native_dependency_leaves_removed": 10,
+  "native_dist_extensions_locks_preserved_hash_checked": true,
+  "source_feature_loss": false,
+  "saved_sessions_unknown_bus_or_default_mutations": false,
+  "batches": [
+    {
+      "raw_receipt": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/batch01-receipt.json",
+      "before_available_bytes": 7217864704,
+      "after_available_bytes": 7864815616,
+      "observed_df_delta_bytes": 646950912,
+      "removed": [
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930",
+          "allocated": 85385216,
+          "exclusive": 25747456,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/000-runtime-first-ui-end-keypad-20260930-activation.json",
+              "sha256": "895cc745456b76ca3fe3c4277a6ed947a990910508a73e2a35d3733563ba15f1"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-first-ui-end-keypad-20260930/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/000-runtime-first-ui-end-keypad-20260930-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-context-budget-20260929",
+          "allocated": 85848064,
+          "exclusive": 34123776,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-context-budget-20260929/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/001-runtime-context-budget-20260929-activation.json",
+              "sha256": "df4c89cb0723e5e1e611d2c7b1b8fa624e5b7599371db199e0f968e1b3479c68"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-context-budget-20260929/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/001-runtime-context-budget-20260929-pyvenv.cfg",
+              "sha256": "e066b8ccbb785dd7a1d836a1df1a27f03b6bc08abe39f62de98fd549ef1e9148"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-journaled-original-20260929",
+          "allocated": 87015424,
+          "exclusive": 35291136,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-journaled-original-20260929/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/002-runtime-journaled-original-20260929-activation.json",
+              "sha256": "9057d6cd7ac1d6a6316eb9fa88076ffdb967670a97b0a88af34e2f37c22bb804"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-journaled-original-20260929/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/002-runtime-journaled-original-20260929-pyvenv.cfg",
+              "sha256": "e066b8ccbb785dd7a1d836a1df1a27f03b6bc08abe39f62de98fd549ef1e9148"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930",
+          "allocated": 83595264,
+          "exclusive": 23707648,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/003-runtime-native-source-queue-cohort-20260930-activation.json",
+              "sha256": "c354f5e5ad7faff5901b144bf5233ad305d589e0b1d073dc51223eb6f016daa3"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/003-runtime-native-source-queue-cohort-20260930-staging-receipt.json",
+              "sha256": "f3302a072935ed902192143322bea92059677f0a50738436ce05047499f2f880"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-source-queue-cohort-20260930/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/003-runtime-native-source-queue-cohort-20260930-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930",
+          "allocated": 83873792,
+          "exclusive": 24109056,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/004-runtime-canonical-bus-input-visibility-20260930-activation.json",
+              "sha256": "6184aebd2c7bb63f9aec305ac7ce6791736caa40cbafeae652bc988868e76457"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/004-runtime-canonical-bus-input-visibility-20260930-staging-receipt.json",
+              "sha256": "cbc95fe32d62d1c5f5e6dad55482296865780b193c1bdd46e896be153f56279b"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-bus-input-visibility-20260930/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/004-runtime-canonical-bus-input-visibility-20260930-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930",
+          "allocated": 86056960,
+          "exclusive": 31162368,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/005-runtime-canonical-source-publication-20260930-activation.json",
+              "sha256": "1e7cfc5df00200f3bb18f24000bf978119a30f9df27e5f0fa9b343a378c2ae43"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-source-publication-20260930/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/005-runtime-canonical-source-publication-20260930-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930",
+          "allocated": 80629760,
+          "exclusive": 20885504,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/006-runtime-native-custody-integrated-20260930-activation.json",
+              "sha256": "3810698dfcc83a2b2b655e51c01036aca7c943e29c8f4cbfb06772768b2e04d2"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/006-runtime-native-custody-integrated-20260930-staging-receipt.json",
+              "sha256": "f9e3a64b7f90400ce22adc0b614dfc1501717eef76fbc6aceb7f13a6f23df496"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-custody-integrated-20260930/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/006-runtime-native-custody-integrated-20260930-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929",
+          "allocated": 85196800,
+          "exclusive": 30347264,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/007-runtime-ordered-view-disposal-20260929-activation.json",
+              "sha256": "0162967319ffc7db1fc5103c70980733fca9b0d86e8605b0e2abd2625e183ece"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-ordered-view-disposal-20260929/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/007-runtime-ordered-view-disposal-20260929-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930",
+          "allocated": 86708224,
+          "exclusive": 26820608,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/008-runtime-source-publication-custody-20260930-activation.json",
+              "sha256": "48207a4ad51c8008a1011d4d5aa9725cebc1a2d22523ea3ac6417ad7810d7e83"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/008-runtime-source-publication-custody-20260930-staging-receipt.json",
+              "sha256": "b7b59c580be334710ac3e35d3df190efe2a4afd2f38d97198b3d87d834ceadcf"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-source-publication-custody-20260930/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/008-runtime-source-publication-custody-20260930-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930",
+          "allocated": 83996672,
+          "exclusive": 24260608,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/009-runtime-native-budget-request-progress-20260930-activation.json",
+              "sha256": "f68937b7290c776d6c599879b3040c5171465d4573b066237672f5137d909a3e"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/staging-receipt.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/009-runtime-native-budget-request-progress-20260930-staging-receipt.json",
+              "sha256": "290fdb3149dc3a8245828796e4ee474873405f70cc19d01fb911c5264d324976"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-native-budget-request-progress-20260930/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/009-runtime-native-budget-request-progress-20260930-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-summary-accounting-20260929",
+          "allocated": 86925312,
+          "exclusive": 35201024,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-summary-accounting-20260929/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/010-runtime-summary-accounting-20260929-activation.json",
+              "sha256": "07e6ff967769a55bce7096a5d9ba5e4eee0de980cf6565bddf6582f0c2f00e91"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-summary-accounting-20260929/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/010-runtime-summary-accounting-20260929-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929",
+          "allocated": 86257664,
+          "exclusive": 31408128,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/011-runtime-canonical-launch-admission-20260929-activation.json",
+              "sha256": "cc973bc1a1f060988a28bdf5dd27a7f6ab20097b1f80c7b0ce14550ec2d13a3c"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-launch-admission-20260929/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/011-runtime-canonical-launch-admission-20260929-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/runtime-canonical-native-checkpoint-20260929",
+          "allocated": 86872064,
+          "exclusive": 83742720,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-native-checkpoint-20260929/activation.json",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/012-runtime-canonical-native-checkpoint-20260929-activation.json",
+              "sha256": "cfcc895d7fbd8ee71b2770dc79e95ad45f317e5c27156a986dbdcfb992eeb3aa"
+            },
+            {
+              "source": "/home/ts/.local/share/agent-comms/runtime-canonical-native-checkpoint-20260929/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/012-runtime-canonical-native-checkpoint-20260929-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/comms-shared-compaction-scheduling-20260930/installed439",
+          "allocated": 8146944,
+          "exclusive": 8146944,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.cache/agent-scratch/comms-shared-compaction-scheduling-20260930/installed439/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/013-installed439-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/comms-native-compaction-progress-20260929/installed437",
+          "allocated": 31047680,
+          "exclusive": 23453696,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.cache/agent-scratch/comms-native-compaction-progress-20260929/installed437/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/014-installed437-pyvenv.cfg",
+              "sha256": "9a3c89807934a054bd033b4719518b3ca35147f830375b89229bb0a2831a92d6"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/comms-runtime-observation-timestamp-20260930/installed",
+          "allocated": 29204480,
+          "exclusive": 10248192,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.cache/agent-scratch/comms-runtime-observation-timestamp-20260930/installed/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/015-installed-pyvenv.cfg",
+              "sha256": "7f91ca82d97b1e0ceaae191d6be59d879d5d06bb178ae71ad08c76e34dc32bb3"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/installed",
+          "allocated": 29552640,
+          "exclusive": 10592256,
+          "preserved_metadata": [
+            {
+              "source": "/home/ts/.cache/agent-scratch/comms-coordination-state-s14-20260930/installed/pyvenv.cfg",
+              "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/retired-metadata/016-installed-pyvenv.cfg",
+              "sha256": "7f91ca82d97b1e0ceaae191d6be59d879d5d06bb178ae71ad08c76e34dc32bb3"
+            }
+          ]
+        },
+        {
+          "path": "/home/ts/wt/toad-t3-commands-20260928/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr94-private-checkpoint-20260926/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-native-startup-20260930/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-c0-integration-20260928/.ruff_cache",
+          "allocated": 98304,
+          "exclusive": 98304,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-goal-api-20260928/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-s2-pi-rpc-20260927/.ruff_cache",
+          "allocated": 40960,
+          "exclusive": 40960,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr17-proven-binding/.ruff_cache",
+          "allocated": 36864,
+          "exclusive": 36864,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-integration-20260927/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-selected-tool-broker-20260926/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-selected-cold-compaction-native-20260928/.ruff_cache",
+          "allocated": 94208,
+          "exclusive": 94208,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-s4-read-routing-20260927/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-tl0a-legacy-deletion-20260928/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr48-production-20260926/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-queue-view-identity-20260926/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-native-custody-pair-20260930/.ruff_cache",
+          "allocated": 49152,
+          "exclusive": 49152,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor2-r0-20260928/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-certified-source-bootstrap-20260928/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-functional-completion-audit-20260928/.ruff_cache",
+          "allocated": 20480,
+          "exclusive": 20480,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-refactor2-l0a-20260928/.ruff_cache",
+          "allocated": 40960,
+          "exclusive": 40960,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-watcher-peer-close-20260928/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-c1-terminal-data-20260930/.ruff_cache",
+          "allocated": 57344,
+          "exclusive": 57344,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-s4-read-routing-20260927/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr17-admission-20260926/.mypy_cache",
+          "allocated": 10047488,
+          "exclusive": 10047488,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr17-admission-20260926/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-field-codec-closure-20260928/.ruff_cache",
+          "allocated": 36864,
+          "exclusive": 36864,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-wire-receipt-identity-20260929/.ruff_cache",
+          "allocated": 53248,
+          "exclusive": 53248,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor2-s12-20260928/.ruff_cache",
+          "allocated": 45056,
+          "exclusive": 45056,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-selected-observation-proof-20260928/.ruff_cache",
+          "allocated": 20480,
+          "exclusive": 20480,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr95-finish-codex-20260927/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-persistent-selected-pr112-20260927/.mypy_cache",
+          "allocated": 10141696,
+          "exclusive": 10141696,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-persistent-selected-pr112-20260927/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-native-input-proof-streaming-20260928/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-integration-20260928/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-live-compaction-recovery-20260928/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-242-integration-20260928/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-delete-export-compat-20260928/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pf3-native-evidence-20260928/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-t2-boundary-sol-20260928/.ruff_cache",
+          "allocated": 65536,
+          "exclusive": 65536,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-t3-commands-sol-20260928/.ruff_cache",
+          "allocated": 36864,
+          "exclusive": 36864,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-private-native-cursor-view-20260926/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-s3-coordination-20260927/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-s5-identity-20260928/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor2-s9-20260928/.ruff_cache",
+          "allocated": 49152,
+          "exclusive": 49152,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr17-injected-harness/.mypy_cache",
+          "allocated": 10346496,
+          "exclusive": 10346496,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr17-injected-harness/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-acp-saved-session-startup-20260928/.ruff_cache",
+          "allocated": 73728,
+          "exclusive": 73728,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-post-cancel-session-custody-20260929/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-wire-record-ownership-20260929/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-native-retirement-proof/.mypy_cache",
+          "allocated": 10137600,
+          "exclusive": 10137600,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-native-retirement-proof/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-native-compaction-progress-20260929/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-persistent-selected-wake-20260927/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-pending-unread-feedback-20260928/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-t1-settings-20260928/.ruff_cache",
+          "allocated": 77824,
+          "exclusive": 77824,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-message-formatting/.ruff_cache",
+          "allocated": 53248,
+          "exclusive": 53248,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr94-incumbent-effect-bound-20260927/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-fork-first-input-compaction-20260929/.ruff_cache",
+          "allocated": 20480,
+          "exclusive": 20480,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-acp-stop-proof-20260927/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-t4-tab-clipboard-sol-20260928/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-compaction-live-fix-20260928/.ruff_cache",
+          "allocated": 32768,
+          "exclusive": 32768,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-channel-coding-tools-20260927/.ruff_cache",
+          "allocated": 36864,
+          "exclusive": 36864,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-maintenance-gate-20260926/.mypy_cache",
+          "allocated": 10383360,
+          "exclusive": 10383360,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-maintenance-gate-20260926/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-selected-write-successor-20260926/.mypy_cache",
+          "allocated": 10551296,
+          "exclusive": 10551296,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-selected-write-successor-20260926/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-workspace-bound-sol-20260928/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-live-unread-pin-20260928/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-acp-direct-owner-boundary/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-textual-web-20260925/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-t5-comms-interface-20260928/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-navigation-allocation-20260925/.ruff_cache",
+          "allocated": 102400,
+          "exclusive": 102400,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-t2-boundary-sol-20260928/.ruff_cache",
+          "allocated": 65536,
+          "exclusive": 65536,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-t4-conversation-sol-20260928/.ruff_cache",
+          "allocated": 57344,
+          "exclusive": 57344,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr112-ci-baseline/.mypy_cache",
+          "allocated": 10514432,
+          "exclusive": 10514432,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr112-ci-baseline/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/comms-pr95-live-integration-20260927/.ruff_cache",
+          "allocated": 28672,
+          "exclusive": 28672,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-native-response-resource-custody-20260930/.ruff_cache",
+          "allocated": 24576,
+          "exclusive": 24576,
+          "preserved_metadata": []
+        },
+        {
+          "path": "/home/ts/wt/toad-agent-controller-sol-20260928/.ruff_cache",
+          "allocated": 36864,
+          "exclusive": 36864,
+          "preserved_metadata": []
+        }
+      ]
+    },
+    {
+      "raw_receipt": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/batch02-worktree-receipt.json",
+      "before_available_bytes": 8191819776,
+      "after_available_bytes": 8367476736,
+      "observed_df_delta_bytes": 175656960,
+      "removed": [
+        {
+          "path": "/home/ts/wt/comms-ratchet-pinned-ui348-20261001",
+          "head": "3b03785f45df2ef5dc62ba6aed99294192ecbb01",
+          "branch": "",
+          "allocated": 56836096
+        },
+        {
+          "path": "/home/ts/wt/comms-native-request-progress-adapters-20260930",
+          "head": "455211727b375d6277010e7228d852d0a6278452",
+          "branch": "fix/native-request-progress-adapters-20260930",
+          "allocated": 56926208
+        },
+        {
+          "path": "/home/ts/wt/comms-json-shape-field-codec-20260930",
+          "head": "88c9e03fbd1921c19f5041974faee640aa08db5b",
+          "branch": "contribution/external-json-shape-field-codec-20260930",
+          "allocated": 60145664
+        }
+      ]
+    },
+    {
+      "raw_receipt": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/batch03-native-dependencies-receipt.json",
+      "before_available_bytes": 14597369856,
+      "after_available_bytes": 16064225280,
+      "observed_df_delta_bytes": 1466855424,
+      "removed": [
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-b68dfdced9148b50",
+          "path": "/home/ts/.local/share/agent-comms/native-current-b68dfdced9148b50/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142163968,
+          "exclusive_before_bytes": 142163968,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-b68dfdced9148b50-00.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-4230c1eedb5a50a0",
+          "path": "/home/ts/.local/share/agent-comms/native-current-4230c1eedb5a50a0/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142180352,
+          "exclusive_before_bytes": 142180352,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-4230c1eedb5a50a0-01.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd",
+          "path": "/home/ts/.local/share/agent-comms/native-current-5fdef596596173bd/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142168064,
+          "exclusive_before_bytes": 142168064,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-5fdef596596173bd-02.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-689ce4b5d0592b9a",
+          "path": "/home/ts/.local/share/agent-comms/native-current-689ce4b5d0592b9a/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142163968,
+          "exclusive_before_bytes": 142163968,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-689ce4b5d0592b9a-03.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20",
+          "path": "/home/ts/.local/share/agent-comms/native-current-9213ee71479d1b20/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142172160,
+          "exclusive_before_bytes": 142172160,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-9213ee71479d1b20-04.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28",
+          "path": "/home/ts/.local/share/agent-comms/native-current-d3967e8b6ee0cf28/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142176256,
+          "exclusive_before_bytes": 142176256,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-d3967e8b6ee0cf28-05.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-776dc36857e630da",
+          "path": "/home/ts/.local/share/agent-comms/native-current-776dc36857e630da/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142172160,
+          "exclusive_before_bytes": 142172160,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-776dc36857e630da-06.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0",
+          "path": "/home/ts/.local/share/agent-comms/native-current-4ab910061590d1e0/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142184448,
+          "exclusive_before_bytes": 142184448,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-4ab910061590d1e0-07.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-905f9f6facb3070a",
+          "path": "/home/ts/.local/share/agent-comms/native-current-905f9f6facb3070a/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142172160,
+          "exclusive_before_bytes": 142172160,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-905f9f6facb3070a-08.json"
+        },
+        {
+          "root": "/home/ts/.local/share/agent-comms/native-current-7817b54ec2534555",
+          "path": "/home/ts/.local/share/agent-comms/native-current-7817b54ec2534555/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "allocated": 142184448,
+          "exclusive_before_bytes": 142184448,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-preserved-native-current-7817b54ec2534555-09.json"
+        }
+      ]
+    },
+    {
+      "raw_receipt": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/batch04-worktree-receipt.json",
+      "before_available_bytes": 18325544960,
+      "after_available_bytes": 18804137984,
+      "observed_df_delta_bytes": 478593024,
+      "removed": [
+        {
+          "path": "/home/ts/wt/comms-preserved-runtime-cutover-20261001",
+          "head": "4a7a1897ef3f2e29aba28070bfdee663a207f17d",
+          "branch": "tools/preserved-runtime-cutover-20261001",
+          "allocated": 140779520
+        },
+        {
+          "path": "/home/ts/wt/textual-lazy-geometry-publication-damage-20260930",
+          "head": "a5c6678da3873f4a0b3a85dfe876aaa6ffcc8ca3",
+          "branch": "fix/lazy-geometry-publication-damage-20260930",
+          "allocated": 62402560
+        },
+        {
+          "path": "/home/ts/wt/textual-editor-keypad-custody-20260930",
+          "head": "f0051410e33ac51056739fb6d5868b73f7dc41ce",
+          "branch": "fix/editor-keypad-custody-20260930",
+          "allocated": 58576896
+        },
+        {
+          "path": "/home/ts/wt/textual-shutdown-mode-custody-sol-20260928",
+          "head": "eb7064306131f27654cd76a7f5fe26d4c834380e",
+          "branch": "fix/shutdown-mode-custody-sol-20260928",
+          "allocated": 58572800
+        },
+        {
+          "path": "/home/ts/wt/toad-nominal-tool-callers-20260928",
+          "head": "436514d875c01964f3a4fea6919f1892e60c73f8",
+          "branch": "deploy/watchdog-ui-20260928",
+          "allocated": 16433152
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927",
+          "head": "b37d11a95ac04cbffd8ecd99323d2c8747bd412e",
+          "branch": "codex/refactor-a8-relationship-awareness-20260927",
+          "allocated": 9043968
+        },
+        {
+          "path": "/home/ts/wt/textual-frame-damage-identity-sol-20260928",
+          "head": "01c2d08bba43e9db40a2c7aae21dd1a1f8b4a7a5",
+          "branch": "fix/frame-damage-identity-sol-20260928",
+          "allocated": 58503168
+        },
+        {
+          "path": "/home/ts/wt/comms-pr17-injected-harness",
+          "head": "eaa542b8da8b567fa4997e4e9d14fca849bebda0",
+          "branch": "feat/pr17-injected-harness",
+          "allocated": 13430784
+        },
+        {
+          "path": "/home/ts/wt/textual-render-ancestry-20260925",
+          "head": "d9def32ff25b56304b3e03ad4bf59d750b4d238b",
+          "branch": "feat/editor-state-lifetime-20260928",
+          "allocated": 58630144
+        }
+      ]
+    }
+  ],
+  "preserved_ignored_proofs": [
+    {
+      "original": "/home/ts/wt/textual-shutdown-mode-custody-sol-20260928/evidence/shutdown/local/shutdown-terminal.txt.gz",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/textual-shutdown-mode-custody-sol-20260928/evidence/shutdown/local/shutdown-terminal.txt.gz",
+      "sha256": "0707a1f3c0d9c24baa95be054a286ee1c7c2d65e5125803c9b57b737759a37d0",
+      "bytes": 989
+    },
+    {
+      "original": "/home/ts/wt/toad-nominal-tool-callers-20260928/evidence/watchdog-ui-deployment/install-base.log",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/toad-nominal-tool-callers-20260928/evidence/watchdog-ui-deployment/install-base.log",
+      "sha256": "86e067c3cec0593f4675ab3c5826db8d7c818e5a74df7b23e7fe3c372bf601f0",
+      "bytes": 2075
+    },
+    {
+      "original": "/home/ts/wt/toad-nominal-tool-callers-20260928/evidence/watchdog-ui-deployment/install-pair.log",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/toad-nominal-tool-callers-20260928/evidence/watchdog-ui-deployment/install-pair.log",
+      "sha256": "bc0fb84ab669424b86c99cf399dc309a00f857086a76c73c6fdfc51aa27e414c",
+      "bytes": 1103
+    },
+    {
+      "original": "/home/ts/wt/toad-nominal-tool-callers-20260928/evidence/watchdog-ui-deployment/installed-native.log",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/toad-nominal-tool-callers-20260928/evidence/watchdog-ui-deployment/installed-native.log",
+      "sha256": "bed1d8dee71e52c1c2d1762a9fffd536d77c97c558b160b80e7183165173f974",
+      "bytes": 976
+    },
+    {
+      "original": "/home/ts/wt/comms-refactor-a8-relationship-awareness-20260927/evidence/refactor-a8-relationship-awareness/final-publication.json",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/comms-refactor-a8-relationship-awareness-20260927/evidence/refactor-a8-relationship-awareness/final-publication.json",
+      "sha256": "8fb7dbd4d09e82cbfa0bf3aa00483a48ca7db60f44338f61cfe783496373bf84",
+      "bytes": 957
+    },
+    {
+      "original": "/home/ts/wt/textual-frame-damage-identity-sol-20260928/evidence/frame-damage/local/acp-debug.gz",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/textual-frame-damage-identity-sol-20260928/evidence/frame-damage/local/acp-debug.gz",
+      "sha256": "40a8ef8f8aaf07baee56fb54fb7064cd06312442b9914e3189ded2e619aa51fc",
+      "bytes": 1466
+    },
+    {
+      "original": "/home/ts/wt/textual-frame-damage-identity-sol-20260928/evidence/frame-damage/local/frame-terminal.txt.gz",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/textual-frame-damage-identity-sol-20260928/evidence/frame-damage/local/frame-terminal.txt.gz",
+      "sha256": "6a9b3a2cb7deb3dac3215e69224ae40567892eedce6c479684946a10f896b381",
+      "bytes": 10282
+    },
+    {
+      "original": "/home/ts/wt/textual-frame-damage-identity-sol-20260928/evidence/frame-damage/local/toad-acp.log.gz",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/textual-frame-damage-identity-sol-20260928/evidence/frame-damage/local/toad-acp.log.gz",
+      "sha256": "7cadf65cb45d9e8acaf242b54a739399c2842330e960f061275607812a64632f",
+      "bytes": 2818
+    },
+    {
+      "original": "/home/ts/wt/comms-pr17-injected-harness/.coverage",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/comms-pr17-injected-harness/.coverage",
+      "sha256": "0b02148ee2c26912b78793dc5e24689a14ca369102347d200b7ca34e50adcccb",
+      "bytes": 77824
+    },
+    {
+      "original": "/home/ts/wt/textual-render-ancestry-20260925/snapshot_report.html",
+      "retained": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/preserved-worktree-proofs/textual-render-ancestry-20260925/snapshot_report.html",
+      "sha256": "a6f50edf8779c2f38380061d19292576ff1abec55aa22939e5a4e9ec51f0f20a",
+      "bytes": 94407
+    }
+  ],
+  "protected": [
+    "current default/upcoming502 receiving WT",
+    "native5184/53b8/0064/17d donors",
+    "native593b active PID764232",
+    "e36/ceca manifest borrowers",
+    "Heis284/Text19",
+    "Arendt489",
+    "Singer502",
+    "parent432 release-private/originals",
+    "qualified288 URI donor",
+    "UV cache parent-owned",
+    "Sch/Mendel separately claimed scratch/phase WTs"
+  ]
+}
