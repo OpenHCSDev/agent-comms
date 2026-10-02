@@ -18,6 +18,12 @@ One distinct configured human #openhcs input418 was sent ONCE in1.4618s. Ten age
 
 The full goal remains active. Lazy loading, full smooth scrolling, turn latency, peer-compaction recovery and complete S1/S3/S4/workspace acceptance are unfinished. Source owners keep independent work moving; ready usage checkpoints are not held behind final144Hz performance.
 
+### Home cleanup and checkout reuse — 2026-10-02
+
+Home had2.4GiB free at this resumed check and now has7.7GiB. The uv cache fell5.1→1.4GiB during concurrent cleanup; the parent cache-retirement command removed zero already-absent candidates, so that reduction is not attributed to it. Parent compressed1334 closed Toad logs older than seven days, verifying each original SHA256 after decompression, reclaiming0.54GiB without losing their bytes. Removed39 abandoned installer-scratch entries from elan/tmp and Code-OSS CachedExtensionVSIXs/.trash, after a process/import borrower check, reclaiming another0.73GiB. Original sessions, biological/scientific data, native artifacts, current333/rollback330/receiving334 prefixes and uncertain input dispositions were preserved. Receipts: ~/.cache/agent-scratch/dedicated-worktree-cleanup-20261001/urgent-home-20261002/.
+
+All seven active subagents received Tristan's renewed rule: no worktree per task or PR; reuse the existing isolated checkout and branch after publishing the prior checkpoint. Existing AGENTS.md and .pi/APPEND_SYSTEM.md carry that rule. Singer owns retirement of completed published unborrowed whole checkouts, retaining original artifacts; no new cleanup agent/environment was launched. Whole-worktree retirement remains underway, with active source work continuing in its existing checkouts.
+
 ### Further source and merge progress — 2026-10-02T17:34Z
 
 Heisenberg committed331 checkpoint2976a3e2: five production files64 added/71 deleted. Prepared Markdown, streaming Markdown and fragment updates now share the existing MaterializingBody worker. HistoryWindow separates reader/compensation lifetime from native mutation custody, and viewport restoration no longer holds the coarse history lock while awaiting reconstruction. The paint readiness gate remains intact. Parent read the complete diff and related consumers; Heisenberg/Kepler are closing the stream-retirement and output/source lock ordering in the same batch before the changed installed motion/profile recording. This source checkpoint is not installed or speed-qualified.
