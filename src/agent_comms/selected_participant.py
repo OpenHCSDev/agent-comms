@@ -103,7 +103,8 @@ class SelectedParticipant(MroDispatch):
             raise IdentityConflict("Selected owner's configured provider/model is incomplete")
         with cls.lease(comms, owner) as leased:
             sources = tuple(
-                SelectedSource(row, cls.source(bus, store, root_id, row, identity))
+                SelectedSource(row.assignment_id, store.assignments,
+                               cls.source(bus, store, root_id, row, identity))
                 for row in pending
             )
             batch = SelectedSourceBatch(sources)

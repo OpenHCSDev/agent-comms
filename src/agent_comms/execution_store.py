@@ -64,8 +64,9 @@ class ExecutionStore:
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         origin = ExecutionOrigin(origin)
         for source in sources:
-            source.assignment.require_committed_source(source.delivery)
-        assignment_ids = tuple(source.assignment.assignment_id for source in sources)
+            if source.store is not self.assignments:
+                raise IdentityConflict("execution source belongs to another assignment store")
+        assignment_ids = tuple(source.assignment_id for source in sources)
         if origin is ExecutionOrigin.WIRE and not sources:
             raise IdentityConflict("wire execution requires ordered original sources")
         if origin is not ExecutionOrigin.WIRE and sources:
@@ -114,11 +115,8 @@ class ExecutionStore:
             ).insert(db)
             routes = {}
             for ordinal, source in enumerate(sources):
-                assignment_id = source.assignment.assignment_id
-                assignment = self.assignments.get(assignment_id)
-                if assignment != source.assignment:
-                    raise IdentityConflict("original selected assignment changed before engagement")
-                assignment.require_committed_source(source.delivery)
+                assignment_id = source.assignment_id
+                assignment = source.assignment
                 exact_target = derive_exact_reply_target(source.delivery.message)
                 routes.setdefault(exact_target, None)
                 if (
@@ -130,14 +128,16 @@ class ExecutionStore:
                 decision = EngagedAssignment.build(
                     assignment.lifecycle.mode, execution_id, exact_target
                 )
-                WakeAssignment.update(
+                updated = WakeAssignment.update(
                     db,
-                    where="assignment_id=?",
-                    parameters=(assignment_id,),
+                    where="assignment_id=? AND revision=?",
+                    parameters=(assignment_id, assignment.revision),
                     lifecycle=decision,
                     revision=assignment.revision + 1,
                     updated_at_ms=self.session.now(assignment.updated_at_ms),
                 )
+                if updated.rowcount != 1:
+                    raise StaleRevision("original claim changed during engagement")
                 ExecutionAssignmentLink(execution_id, assignment_id, ordinal).insert(db)
             for exact_target in routes:
                 ResponseObligation(
