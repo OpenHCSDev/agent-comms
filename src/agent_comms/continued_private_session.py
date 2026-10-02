@@ -7,8 +7,6 @@ context evidence. All UNKNOWN rows remain unchanged.
 
 from __future__ import annotations
 
-import sqlite3
-from contextlib import closing
 from pathlib import Path
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -115,9 +113,8 @@ def _recorded_private_contexts(
     PrivateFileRole.require(info)
     if database != database.resolve(strict=True) or info.st_nlink != 1:
         raise ValueError("Continued private coordinator is not canonical private storage")
-    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA foreign_keys=ON")
-        db.execute("BEGIN")
+    from .coordination_database import CoordinationStore
+
+    with CoordinationStore.observing(database, lock_timeout=1) as db:
         assert_native_runtime_schema(db)
         return NativeRuntimeInput.recorded_contexts(db, session)

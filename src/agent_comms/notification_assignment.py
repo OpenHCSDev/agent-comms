@@ -87,9 +87,7 @@ class NotificationAssignment(NotificationSource):
         limit: int = 0,
         ascending: bool = False,
     ):
-        import sqlite3
-        from contextlib import closing
-
+        from .coordination_database import CoordinationStore
         from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 
@@ -99,17 +97,7 @@ class NotificationAssignment(NotificationSource):
             return ()
         if failure:
             raise ValueError(f"Channel notification status unavailable: {failure}")
-        with closing(
-            sqlite3.connect(
-                database.resolve().as_uri() + "?mode=ro",
-                uri=True,
-                timeout=0.05,
-                isolation_level=None,
-            )
-        ) as connection:
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA query_only=ON")
-            connection.execute("BEGIN")
+        with CoordinationStore.observing(database, lock_timeout=0.05) as connection:
             if SQLiteUserVersion.read(connection.execute("PRAGMA user_version")) != [
                 SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
             ]:

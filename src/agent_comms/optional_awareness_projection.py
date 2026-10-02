@@ -17,11 +17,12 @@ import sqlite3
 import threading
 import time
 from abc import ABC, abstractmethod
-from contextlib import closing, suppress
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
@@ -443,14 +444,7 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
         path = self.index.bus.log.path.with_name("coordination.sqlite3")
-        with closing(
-            sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=0.05)
-        ) as db:
-            db.row_factory = sqlite3.Row
-            db.execute("PRAGMA query_only=ON")
-            db.execute("PRAGMA foreign_keys=ON")
-            db.execute("PRAGMA busy_timeout=50")
-            db.execute("BEGIN")
+        with CoordinationStore.observing(path, lock_timeout=0.05) as db:
             self._verify_schema_and_owner(db, initial, assignment, owner)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
             candidates = tuple(
@@ -523,9 +517,7 @@ class OptionalAwarenessProjection:
             ).require_snapshot(snapshot, "current registry owner turn changed")
         # A new read transaction, not the earlier candidate/decision snapshot,
         # observes a supported SQL generation advance during the optional read.
-        with closing(
-            sqlite3.connect(f"{Path(path).absolute().as_uri()}?mode=ro", uri=True, timeout=0)
-        ) as db:
+        with CoordinationStore.observing(Path(path), lock_timeout=0) as db:
             rows = _ParticipantOwner.read(
                 db.execute(
                     "SELECT g.generation,p.committed,g.owner_thread FROM owner_generations g "
