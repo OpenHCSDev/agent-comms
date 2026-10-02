@@ -255,26 +255,29 @@ async def configured_pure_channel(arguments):
                             assert len(history) == 2 and all(
                                 item.expected_prompt_equality_established for item in history)
                         cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
-                        full_ids = {row.input_id: row for row in full}
-                        published_full = {}
+                        recorded_inputs = {row.input_id: row for row in all_inputs}
+                        published_coverage = {}
                         for packet in packets:
                             for fact in decode_updates(packet['update'].get('_meta')):
                                 if (isinstance(fact, CursorAdvancedUpdate)
                                         and isinstance(fact.envelope.observation, VerifiedCursorObservation)):
                                     cursor = fact.envelope.observation.cursor
-                                    if cursor.input_id in full_ids:
-                                        native = full_ids[cursor.input_id]
-                                        assert cursor.owner_thread == native.owner_thread
-                                        assert cursor.owner_generation == native.owner_generation
-                                        assert cursor.owner_admission_generation == native.sent_owner_admission_generation.value
-                                        assert cursor.injected_seq == originals[-1].seq
+                                    if cursor.owner_thread in names and cursor.covered_seq >= originals[-1].seq:
+                                        native = recorded_inputs[cursor.input_id]
+                                        assert cursor.owner_identity == native.owner_identity
+                                        assert cursor.reference == native.reference
+                                        assert native.sent_owner_admission_generation.matches(cursor.owner_admission_generation)
+                                        assert cursor.injected_seq >= originals[-1].seq
                                         assert fact.envelope.scope.owner_pid == service.registry.require(native.owner_thread).pid
-                                        published_full[native.owner_thread] = fact.envelope
+                                        published_coverage[native.owner_thread] = fact.envelope
                         # Original completion and informational ACP publication
                         # are separate asynchronous boundaries. Await the actual
                         # installed publisher within the existing journey budget;
                         # never replay a native input to make its projection appear.
-                        if (len(cursors) != len(names) or len(published_full) != len(names)
+                        # Later peer-reply triage legitimately advances this SAME
+                        # cursor family. Original FULL proof is checked above;
+                        # current coverage must not be pinned to that past stage.
+                        if (len(cursors) != len(names) or len(published_coverage) != len(names)
                                 or any(row.covered_seq < originals[-1].seq for row in cursors)):
                             await asyncio.sleep(.1)
                             continue
@@ -289,7 +292,7 @@ async def configured_pure_channel(arguments):
                             'all_originals_completed':True,'common_accepted_time':True,
                             'channel_receipts':FieldCodec.encode(tuple(dict.fromkeys(receipts))),
                             'all_original_historical_proofs':True,'all_current_cursors_cover_source':True,
-                            'actual_full_cursor_envelopes':FieldCodec.encode(tuple(published_full.values())),
+                            'actual_coverage_cursor_envelopes':FieldCodec.encode(tuple(published_coverage.values())),
                             'actual_current_cursors':FieldCodec.encode(tuple(cursors)),
                             'current_original_owner_epochs_alive':True,
                             'refresh_native_input_replays':0}

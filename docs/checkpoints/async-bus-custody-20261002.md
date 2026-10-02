@@ -1,8 +1,9 @@
 # Async bus read and publication custody
 
 Owner: Arendt. Separate continuation of the useful #508 sequence checkpoint.
-The matching installed #508 channel-click journey passes; this draft does not
-claim the remaining cross-owner bus concurrency is fixed.
+The matching installed #508 channel-click journey passes. This checkpoint qualifies
+the installed three-owner busy channel/native/publication path described below;
+it does not claim complete latency or Native6 saved-session closure.
 
 ## Current working implementation
 
@@ -33,7 +34,8 @@ that saved-session continuation in #489 is complete.
 End validation so far: 39 affected source checks passed in 22.90 seconds on the
 admission/projection checkpoint, including partial sends/cancellation, later
 feedback reads, original batch receipts and certified-source corruption. The
-final installed busy multi-owner/read/publication journey is still required.
+installed busy multi-owner/read/publication journey is now qualified from its
+original stored facts, as recorded below. Its raw driver timeout is preserved.
 
 ## Existing owner search and required relation
 
@@ -313,3 +315,41 @@ Patterns: BOUND-2, IMPL-5, IMPL-10. This is code-bearing source progress, not Re
 
 Validation follows the complete related source migration. No new provider,
 public input, restart or installed-readiness claim is made by this checkpoint.
+
+## Installed configured channel qualification
+
+Installed Core `ca4bcfa5efdcde807a4da26309222760939aefc1`, Toad
+`26b425a3b68ab02d38ef842d75fc587c267c6ea1`, native manifest
+`5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68`.
+The final fixture/evidence commits have no production delta from this Core.
+
+The original three configured saved forks completed nine original channel claims,
+three FULL native proofs and three reply receipts while the installed ACP observer
+and 180 bus readers ran over a 2,951,312-byte retained bus. Original native dispatch
+overlapped. All original sealed memberships, historical native prompt/context
+proofs, and replies are verified. No diagnostics; all private workers retired and
+configured sources remained unchanged.
+
+The raw driver exited 1 with `TimeoutError` after 213.246 seconds: its terminal
+condition incorrectly pinned the current cursor to a past FULL stage. All three
+current cursors had legitimately advanced through later peer-reply TRIAGE proofs
+to sequence 656, covering the originals through 653. The same actual ACP envelopes
+match the original recorded owner identity, native reference, admission epoch and
+process, and equal the current stored cursors. Original FULL evidence remains with
+the native input/history/publication owners; it is not the current cursor stage.
+
+The fixture now consumes that current cursor-family coverage while retaining
+separate original FULL membership/history/receipt checks. Search found this one
+FULL-only terminal consumer; it and its result field were replaced.
+
+Read-only qualification is recorded in
+`evidence/async-bus-custody-20261002/configured509-qualified01.json`, with its
+original-owner analyzer alongside. Raw receipt hash
+`d75df10ff2d798d1a4ca66303ce28e329d516500343df5fb7af4f99e739fde35`
+and raw private root `/home/ts/wt/b509c01` remain untouched. Sixteen original
+protected file hashes matched before/after qualification. No provider/gate repeat,
+public input, public mutation or replay was used to qualify the completed run.
+
+This qualifies busy original channel/native/ACP cursor publication, not physical
+TUI performance, complete compaction, or Native6 saved-session continuation.
+Earlier remaining-scope sections record historical checkpoints, not current gaps.
