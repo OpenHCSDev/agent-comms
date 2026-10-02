@@ -62,7 +62,7 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
                     "type": "message",
                     "message": {
                         "role": "assistant",
-                        "content": str(i),
+                        "content": [{"type": "text", "text": str(i)}],
                     },
                 }
             )
@@ -99,7 +99,7 @@ def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
         encoded(extension)
         + encoded({"type": "message", "message": {"role": "assistant", "content": 42}})
         + b'{"type":"message"\n'
-        + encoded({"type": "message", "message": {"role": "assistant", "content": "valid"}})
+        + encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "valid"}]}})
         + b'{"type":"message","message":'
     )
     reader = NativeTranscript(path)
@@ -139,7 +139,7 @@ def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
     bodies = ["before", "λ" * (300 * 1024), "after"]
     path.write_bytes(
         b"".join(
-            encoded({"type": "message", "message": {"role": "assistant", "content": body}})
+            encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": body}]}})
             for body in bodies
         )
     )

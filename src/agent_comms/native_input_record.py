@@ -59,8 +59,25 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         names = tuple(member.declared_name for member in cls.members_with(cls))
         return TextStorage.constraints(column, Literal[names])[0]
 
+    def transcript_events(self, entry, projection, user):
+        """Selected prompts consume original wire sources, never human authorship.
+
+        This display is derived inside the original read snapshot. It is not an
+        annotation, native receipt or another source-membership declaration.
+        """
+        from dataclasses import replace
+        from .transcript_routes import InputDisplay
+
+        return entry.events(replace(
+            projection, input_display=InputDisplay(user.input_id, None)
+        ))
+
     def require_attempt(self) -> FullNativeExecution:
         raise IdentityConflict("Native triage input has no execution attempt")
+
+    def published_replies(self, db, owner_lookup):
+        """TRIAGE has no execution publication; FULL owns that relation."""
+        return ()
 
     def matches_execution(self, execution, owner_lookup: str) -> bool:
         return False
@@ -108,6 +125,10 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
 @dataclass(frozen=True)
 class TriageNativeExecution(NativeInputExecution):
     proof_order: ClassVar[int] = 0
+
+    def transcript_events(self, entry, projection, user):
+        return [event.as_context() for event in
+                super().transcript_events(entry, projection, user)]
 
     @classmethod
     def source_membership_sql(cls) -> str:
@@ -183,6 +204,25 @@ class FullNativeExecution(NativeInputExecution):
             and execution.owner_lookup == owner_lookup
             and execution.lifecycle.current_attempt_ordinal == self.attempt_ordinal
         )
+
+    def published_replies(self, db, owner_lookup):
+        from .coordination_tables.executions import ExecutionRecord
+        from .coordination_tables.responses import ResponseObligation
+        from .message_reference import MessageReference
+
+        execution = ExecutionRecord.one(db, execution_id=self.execution_id)
+        if not self.matches_execution(execution, owner_lookup):
+            return ()
+        obligations = ResponseObligation.select(
+            db, where="execution_id=?", parameters=(self.execution_id,)
+        )
+        if not obligations or not all(row.lifecycle.published for row in obligations):
+            return ()
+        return tuple(sorted(
+            (MessageReference(row.lifecycle.receipt_seq, row.lifecycle.receipt_message_id)
+             for row in obligations),
+            key=lambda reference: reference.seq,
+        ))
 
     def historical_proof(self, record, *, lifecycle, **source):
         from .historical_native_inputs import FullHistoricalNativeInput

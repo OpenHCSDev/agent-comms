@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -86,9 +87,11 @@ class TranscriptTraversal(ABC):
         """Consume each original source coordinate only when its record is read."""
         consumed, records, used = initial, [], 0
         native = self.native(reader, initial, frontier) if frontier.offset else (record for record in ())
+        projected = project_native(reader.fragments(
+            native, max_records=max_messages + 1, max_bytes=max_bytes,
+        ))
         try:
-            record = next(native, None)
-            events = record.project(project_native) if record is not None else ()
+            record, events = next(projected, (None, ()))
             source_rows = iter(
                 receipts.page_rows(
                     self, consumed.wire_seq, frontier, limit=max_messages + 1
@@ -104,8 +107,7 @@ class TranscriptTraversal(ABC):
                     if self.ascending and record.incomplete_tail(frontier.offset):
                         break
                     consumed = consumed.at_offset(self.native_position(record))
-                    record = next(native, None)
-                    events = record.project(project_native) if record is not None else ()
+                    record, events = next(projected, (None, ()))
                     continue
                 # NativeEntry owns one clock for all parts of a record.
                 choose_outcome = outcome is not None and self.chooses_outcome(record, outcome)
@@ -129,8 +131,7 @@ class TranscriptTraversal(ABC):
                     outcome = next(outcome_rows, None)
                 elif choose_native:
                     consumed = consumed.at_offset(self.native_position(record))
-                    record = next(native, None)
-                    events = record.project(project_native) if record is not None else ()
+                    record, events = next(projected, (None, ()))
                 else:
                     consumed = consumed.at_sequence(self.receipt_position(message.message))
                     message = next(source_rows, None)
@@ -142,6 +143,7 @@ class TranscriptTraversal(ABC):
                 consumed = consumed.at_outcome(frontier.outcome_seq if self.ascending else 0)
             return consumed, records
         finally:
+            projected.close()
             native.close()
 
     ascending = False
@@ -247,17 +249,32 @@ class AssignedTranscriptSource:
         predicate, parameters = traversal.predicate(sequence, through)
         return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
-    def native_events(self, record, routes, reader):
-        from dataclasses import replace
+    def native_records(self, fragments, routes, reader):
+        """One original SQL read per bounded fragment, closed before wire/render."""
+        from .native_runtime_input import NativeRuntimeInput
+
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        for fragment in fragments:
+            with NativeRuntimeInput._publication_read(self.root) as db:
+                capture = partial(
+                    NativeRuntimeInput.transcript_projection,
+                    db, reader, owner_lookup=lookup,
+                )
+                originals = tuple((record, record.project(capture)) for record in fragment)
+            for record, projection in originals:
+                yield record, record.project(
+                    lambda record: self.native_events(record, routes, *projection)
+                )
+
+    def native_events(self, record, routes, project_events, references):
         from .native_entries import TranscriptProjection
 
         entry = record.entry
         published = False
         routing = routes.get(entry.id)
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        events = project_events(TranscriptProjection(routing, routes.input_display(entry.input_id)))
         if entry.final_reply:
-            from .native_runtime_input import NativeRuntimeInput
-
-            lookup = stable_thread_lookup(self.recipient.created_at)
             if routing is not None and routing.publications:
                 marks = ",".join("?" for _ in routing.publications)
                 originals = self.rows(
@@ -269,26 +286,17 @@ class AssignedTranscriptSource:
                         and original.audience.sender_lookup == lookup for original in originals)
                     for ref in routing.publications
                 )
-            user = reader.input_ancestor(record) if not published else None
-            if user is not None:
-                references = NativeRuntimeInput.published_replies(self.root, reader, user, lookup)
-                if references:
-                    marks = ",".join("?" for _ in references)
-                    originals = self.rows(
-                        f"w.seq IN ({marks})", tuple(ref.seq for ref in references), limit=len(references),
-                    )
-                    published = all(
-                        any(original.message.reference == ref
-                            and original.audience.sender_lookup == lookup for original in originals)
-                        for ref in references
-                    )
+            if not published and references:
+                marks = ",".join("?" for _ in references)
+                originals = self.rows(
+                    f"w.seq IN ({marks})", tuple(ref.seq for ref in references), limit=len(references),
+                )
+                published = all(
+                    any(original.message.reference == ref
+                        and original.audience.sender_lookup == lookup for original in originals)
+                    for ref in references
+                )
 
-        events = entry.events(
-            TranscriptProjection(
-                routing,
-                routes.input_display(entry.input_id),
-            )
-        )
         result = []
         for event in events:
             if published and isinstance(event, AssistantTranscript):

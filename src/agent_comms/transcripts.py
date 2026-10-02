@@ -459,7 +459,7 @@ class Transcripts:
         from functools import partial
 
         with routes_owner.for_session(session_file) as routes:
-            project_native = partial(receipts.native_events, routes=routes, reader=reader)
+            project_native = partial(receipts.native_records, routes=routes, reader=reader)
             consumed, records = traversal.read_records(
                 reader, project_native, receipts, outcomes.outcomes, initial, frontier,
                 max_messages=max_messages, max_bytes=max_bytes,
