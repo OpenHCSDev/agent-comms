@@ -1,0 +1,121 @@
+.............................F...........................FF......        [100%]
+=================================== FAILURES ===================================
+___ test_plural_originals_preserve_order_and_bind_without_partial_transition ___
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-human-main-20261001/.artifacts/retained-content-owner-batch01/test_plural_originals_preserve0')
+
+    def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp_path):
+        from agent_comms.selected_source import SelectedAdmissionSource
+        from agent_comms.threads import Thread
+    
+        session = tmp_path / "saved.jsonl"
+        session.write_text("{}\n")
+        owner = Thread("project", frozenset(), str(tmp_path),
+                       process_identity=ProcessIdentity.capture(os.getpid()))
+        inputs = InputDispositions(tmp_path / InputDispositions.filename)
+        keys = ("acp:first", "acp:second")
+        for key, text in zip(keys, ("first", "second"), strict=True):
+            inputs.record(key, seq=None, owner=owner.name, admission=1, target=owner.name, text=text)
+        revision = SessionRevision.observe(str(session)).require_available()
+        source = SelectedAdmissionSource.capture(
+            owner, TurnId("turn"), 1, keys, inputs.read(), "first\n\nsecond", revision
+        )
+        assert source.originals == inputs.read().original_provenances(keys)
+>       assert tuple(ref.digest for ref in source.originals) == tuple(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            row.digest for row in inputs.read().originals(keys)
+        )
+
+tests/test_reservation_rules.py:198: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <tuple_iterator object at 0x7f7a30a22b90>
+
+>   assert tuple(ref.digest for ref in source.originals) == tuple(
+                 ^^^^^^^^^^
+        row.digest for row in inputs.read().originals(keys)
+    )
+E   AttributeError: 'InputProvenance' object has no attribute 'digest'
+
+tests/test_reservation_rules.py:198: AttributeError
+_______ test_native_outcome_metadata_uses_existing_frame_owner[outcome1] _______
+
+outcome = CommittedNativeOutcome(entry_id='entry', revision='revision', leaf_id='leaf', metadata_digest='0000000000000000000000000000000000000000000000000000000000000000')
+
+    @pytest.mark.parametrize("outcome", [
+        UnknownNativeOutcome("uncertain original"),
+        CommittedNativeOutcome("entry", "revision", "leaf", "0" * 64),
+        AbortedNoWriteNativeOutcome("revision", "leaf"),
+    ])
+    def test_native_outcome_metadata_uses_existing_frame_owner(outcome):
+>       assert NativeOutcome.read(outcome.journal_json()) == outcome
+                                  ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_retained_journal_framing.py:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_states.py:371: in journal_json
+    return RetainedTaskFacts.frame_journal(FieldCodec.encode(self))
+                                           ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:273: in encode
+    result.update(
+src/agent_comms/field_codec.py:274: in <genexpr>
+    (key, cls.encode(getattr(value, field.name), hints[field.name]))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:265: in encode
+    return representation.encode(value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_revision_text.NativeRevisionText'>
+value = 'revision'
+
+    @classmethod
+    def encode(cls, value):
+        if not isinstance(value, FileRevision):
+>           raise TypeError("Native revision requires the original FileRevision")
+E           TypeError: Native revision requires the original FileRevision
+
+src/agent_comms/native_revision_text.py:12: TypeError
+_______ test_native_outcome_metadata_uses_existing_frame_owner[outcome2] _______
+
+outcome = AbortedNoWriteNativeOutcome(revision='revision', leaf_id='leaf')
+
+    @pytest.mark.parametrize("outcome", [
+        UnknownNativeOutcome("uncertain original"),
+        CommittedNativeOutcome("entry", "revision", "leaf", "0" * 64),
+        AbortedNoWriteNativeOutcome("revision", "leaf"),
+    ])
+    def test_native_outcome_metadata_uses_existing_frame_owner(outcome):
+>       assert NativeOutcome.read(outcome.journal_json()) == outcome
+                                  ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_retained_journal_framing.py:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/compaction_states.py:371: in journal_json
+    return RetainedTaskFacts.frame_journal(FieldCodec.encode(self))
+                                           ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:273: in encode
+    result.update(
+src/agent_comms/field_codec.py:274: in <genexpr>
+    (key, cls.encode(getattr(value, field.name), hints[field.name]))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/field_codec.py:265: in encode
+    return representation.encode(value)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_revision_text.NativeRevisionText'>
+value = 'revision'
+
+    @classmethod
+    def encode(cls, value):
+        if not isinstance(value, FileRevision):
+>           raise TypeError("Native revision requires the original FileRevision")
+E           TypeError: Native revision requires the original FileRevision
+
+src/agent_comms/native_revision_text.py:12: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_reservation_rules.py::test_plural_originals_preserve_order_and_bind_without_partial_transition
+FAILED tests/test_retained_journal_framing.py::test_native_outcome_metadata_uses_existing_frame_owner[outcome1]
+FAILED tests/test_retained_journal_framing.py::test_native_outcome_metadata_uses_existing_frame_owner[outcome2]
+3 failed, 62 passed in 5.30s

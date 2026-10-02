@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Never
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -24,7 +24,7 @@ class PromptAdmission(ABC):
     def dispatch(self) -> PromptAdmission:
         return self
 
-    def raise_native_failure(self, error, attestation):
+    def raise_native_failure(self, error, attestation) -> Never:
         raise error
 
     def acknowledge(self, response: Response) -> PromptAdmission:
@@ -59,7 +59,7 @@ class UnwrittenPrompt(PromptAdmission):
     def dispatch(self):
         return UnacknowledgedPrompt()
 
-    def raise_native_failure(self, error, attestation):
+    def raise_native_failure(self, error, attestation) -> Never:
         from .native_pi import NativePiInputNotSent
 
         raise NativePiInputNotSent(error, attestation) from error

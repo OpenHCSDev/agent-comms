@@ -18,6 +18,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.pi_summary_payloads import SelectedModel
+from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
 from selected_summary_cases import admission_identity, refresh_source, summary_source
 
 
@@ -53,6 +54,7 @@ def continued(tmp_path):
         ).source,
         selected=SelectedModel("fixture", "fixture", 1000),
         settings=PiCompactionSettings(100, 10),
+        retained=RetainedTaskFacts((InputTaskFact(inputs.read().rows["acp:new"]),)),
     )
     return CompactionJournal(tmp_path / "compaction-commits.sqlite3"), session, inputs, source
 

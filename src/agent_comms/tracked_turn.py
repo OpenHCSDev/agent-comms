@@ -8,19 +8,19 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager, AsyncExitStack, contextmanager
+from contextlib import AsyncExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent
 from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
 from .errors import RelationViolationError
-from .fresh_private_session import FreshPrivateSession
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
-from .native_attestation import AttestationError
+from .native_attestation import AttestationError, ObservedAttestation
 from .native_pi import (
     NativeContextProof,
     NativePiPromptRejected,
@@ -28,18 +28,23 @@ from .native_pi import (
     NativePiTerminalFailure,
     NativePiUnavailable,
     NativeTurnResult,
-    _session_location,
     _verify_context,
 )
 from .native_prompt_send import PromptSendFailure, send_fenced_prompt
 from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission
+from .diagnostics import PublicationMeasurements
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
+from .selected_session import SelectedSession
 from .store_files import _async_store_lock
 from .turn_context import InputContributionCoordinates
+
+
+if TYPE_CHECKING:
+    from .private_send_admission import PrivateSendAdmission
 
 
 class NativeCommitObservation[T](ABC):
@@ -150,7 +155,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         super().__init__(
             launch,
             command.message,
-            session_file=launch.session_file,
             model_wait_timeout=model_wait_timeout,
             startup=startup,
         )
@@ -175,17 +179,17 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         prompt: str,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
         worktree: Path,
-        session_dir: Path,
-        session_file: Path | None = None,
+        session: SelectedSession,
         provider: str = "openrouter",
         model: str = "z-ai/glm-5.3-flash",
         thinking_level: str | None = None,
+        environment: dict[str, str] | None = None,
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
-        prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
+        prompt_send_boundary: PrivateSendAdmission | None = None,
         maintenance_root: Path | None = None,
-        fresh_selected: FreshPrivateSession | None = None,
         selected_tool_mode: NativeToolMode | None = None,
-        observe_event: Callable[[pi.PiEvent | AgentEvent], Awaitable[None]] | None = None,
+        observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
+        acquisition_measurements: PublicationMeasurements | None = None,
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -198,14 +202,11 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         launch = NativePiRpcLaunch.tracked(
             package,
             worktree=worktree,
-            session_dir=session_dir,
-            session_file=session_file,
+            session=session,
             provider=provider,
             model=model,
             thinking_level=thinking_level,
-            selected_thinking_level=(
-                fresh_selected.selected_thinking_level if fresh_selected else None
-            ),
+            environment=environment,
             selected_tool_mode=selected_tool_mode,
         )
         turn = cls(
@@ -221,10 +222,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             model_wait_timeout=model_wait_timeout,
             prompt_send_boundary=prompt_send_boundary,
             maintenance_root=maintenance_root,
-            startup=NativeStartupAdmission.for_launch(
-                launch, root=maintenance_root, fresh_selected=fresh_selected,
-                prompt_send_boundary=prompt_send_boundary,
-            ),
+            startup=session.startup_admission(launch, maintenance_root, prompt_send_boundary,
+                                             measurements=acquisition_measurements),
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
         )
@@ -233,17 +232,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     async def complete(self) -> NativeTurnResult:
         async with AsyncExitStack() as custody:
             self.custody = custody
-            custody.callback(self.startup.release)
-            await self.open_tools(custody)
-            self.native = await self.native_session.open(
-                self.launch,
-                self.session_file,
-                reuse=False,
-                require_input_id=True,
-                startup=self.startup,
-                finish_event=self.finish_event,
-                watchdog=self.watchdog,
-            )
+            self.native = await self.acquire_native(custody, reuse=False)
             custody.push_async_callback(self.native_session.close)
             await custody.enter_async_context(self.native.failures())
             custody.callback(self.native.reader.pending.cancel_all)
@@ -253,6 +242,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             try:
                 try:
                     await self.attest()
+                    if self.prompt_send_boundary is not None:
+                        await self.prompt_send_boundary.prepare_context(self)
                     await self.admit_prompt()
                     while not self.finished:
                         event = await self.next_event()
@@ -269,10 +260,17 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             except NativePiUnavailable as error:
                 self.admission.raise_native_failure(error, self.native.attestation)
 
-    async def open_tools(self, custody: AsyncExitStack) -> None:
+    async def resume_prepared(self, resources: AsyncExitStack) -> None:
+        await super().resume_prepared(resources)
+        if self.tool_socket is not None:
+            self.tool_socket.expected_pid = self.native.proc.pid
+        self.watchdog.reading()
+        await self.attest()
+
+    async def open_transport(self, custody: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:
             self.tool_socket = self.selected_tool_mode.socket(
-                self.launch.session_dir, os.urandom(32).hex()
+                self.launch.session.directory, os.urandom(32).hex()
             )
             custody.push_async_callback(self.tool_socket.close)
             await self.tool_socket.start()
@@ -330,8 +328,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def attest(self) -> None:
         request = self.native.attestation.request
-        await self.send(request)
-        event = await self.next_event()
+        with self.startup.measurements.operation("get_state_send"):
+            await self.send(request)
+        with self.startup.measurements.operation("get_state_receive"):
+            event = await self.next_event()
         if not isinstance(event, pi.Response) or self.native.reader.correlate(event) is not request:
             raise NativePiUnavailable("Native Pi emitted an unexpected preflight event")
         try:
@@ -341,12 +341,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         state = observed.state
         if observed.identity is None:
             raise NativePiUnavailable("Native Pi omitted its private session identity")
-        self.active_session_file = _session_location(self.launch.session_dir, state.session_file)
-        if self.session_file is not None and self.active_session_file != self.session_file:
-            raise NativePiUnavailable("Native Pi rebound its session")
+        self.active_session_file = self.launch.session.attest(observed.identity)
         self.native.attestation = observed
         self.startup.release()
         self.startup.attest(state)
+        if self.observe_event is not None:
+            with self.startup.measurements.operation("attestation_publication"):
+                await self.observe_event(observed)
 
     def write(self, command: commands.PiCommand, payload: bytes) -> None:
         if command is self.command:
@@ -355,7 +356,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @contextmanager
     def prompt_boundary(self):
-        with self.startup.prompt_boundary(self.prompt_send_boundary, self.active_session_file):
+        with self.startup.prompt_boundary(self.prompt_send_boundary, self.native.attestation.identity):
             # The isolated writer alone reaches this original granted boundary.
             # The awaiting owner cannot consume native events until it is joined.
             self.grant_prompt()
@@ -365,11 +366,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if self.prompt_send_boundary is None:
             await self.send(self.command)
         else:
-            await send_fenced_prompt(
-                self.native.proc.stdin,
-                self.native.reader.encode(self.command),
-                self.prompt_boundary,
-            )
+            with self.startup.measurements.operation("prompt_writer_join"):
+                await send_fenced_prompt(
+                    self.native.proc.stdin,
+                    self.native.reader.encode(self.command),
+                    self.prompt_boundary,
+                    measurements=self.startup.measurements,
+                )
 
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:
