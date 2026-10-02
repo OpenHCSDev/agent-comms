@@ -1,12 +1,12 @@
 {
   "scope": "new cleanup only; prior e9d9/1e1/Singer/Sch/Mendel/parent excluded",
-  "current_available_bytes": 19855646720,
-  "deletion_window_df_delta_bytes": 3995099136,
+  "current_available_bytes": 19443404800,
+  "deletion_window_df_delta_bytes": 3932684288,
   "concurrent_cleanup_caveat": "Observed df deltas include concurrent host activity. Exclusive native dependency blocks 1421737984 separately measured.",
   "environments_removed": 34,
   "computed_caches_removed": 79,
   "flat_fully_merged_worktrees_removed": 11,
-  "unused_native_dependency_leaves_removed": 15,
+  "unused_native_dependency_leaves_removed": 20,
   "native_dist_extensions_locks_preserved_hash_checked": true,
   "source_feature_loss": false,
   "saved_sessions_unknown_bus_or_default_mutations": false,
@@ -1547,6 +1547,70 @@
           "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/old-native-source-preserved06-02.json"
         }
       ]
+    },
+    {
+      "raw_receipt": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/batch07-superseded-native-dependencies-receipt.json",
+      "before_available_bytes": 19699159040,
+      "after_available_bytes": 19636744192,
+      "observed_df_delta_bytes": -62414848,
+      "exclusive_before_bytes": 710946816,
+      "removed": [
+        {
+          "path": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-4519164ef97bb5ec/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "package": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-4519164ef97bb5ec/node_modules/@earendil-works/pi-coding-agent",
+          "wt": "/home/ts/wt/comms-retained-task-facts-s2-20261001",
+          "root": "/home/ts/wt/comms-retained-task-facts-s2-20261001/stack/.pi-native-4519164ef97bb5ec",
+          "allocated": 142225408,
+          "allocated_bytes": 142225408,
+          "exclusive_before_bytes": 142225408,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-source-preserved07-00.json"
+        },
+        {
+          "path": "/home/ts/wt/comms-refactor2-s9-20260928/stack/.pi-native-50e477b6db64167e/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "package": "/home/ts/wt/comms-refactor2-s9-20260928/stack/.pi-native-50e477b6db64167e/node_modules/@earendil-works/pi-coding-agent",
+          "wt": "/home/ts/wt/comms-refactor2-s9-20260928",
+          "root": "/home/ts/wt/comms-refactor2-s9-20260928/stack/.pi-native-50e477b6db64167e",
+          "allocated": 142151680,
+          "allocated_bytes": 142151680,
+          "exclusive_before_bytes": 142151680,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-source-preserved07-01.json"
+        },
+        {
+          "path": "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/stack/.pi-native-776cd99e55d6917b/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "package": "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/stack/.pi-native-776cd99e55d6917b/node_modules/@earendil-works/pi-coding-agent",
+          "wt": "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001",
+          "root": "/home/ts/wt/comms-retained-task-facts-s2-followup-20261001/stack/.pi-native-776cd99e55d6917b",
+          "allocated": 142225408,
+          "allocated_bytes": 142225408,
+          "exclusive_before_bytes": 142225408,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-source-preserved07-02.json"
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/native-compaction-policy-b3a9c06/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "package": "/home/ts/.local/share/agent-comms/native-compaction-policy-b3a9c06/node_modules/@earendil-works/pi-coding-agent",
+          "root": "/home/ts/.local/share/agent-comms/native-compaction-policy-b3a9c06",
+          "wt": null,
+          "allocated_bytes": 142163968,
+          "exclusive_before_bytes": 142163968,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-source-preserved07-03.json"
+        },
+        {
+          "path": "/home/ts/.local/share/agent-comms/native-entry-store-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent/node_modules",
+          "package": "/home/ts/.local/share/agent-comms/native-entry-store-0d7ebb4f4b5aa1ec/node_modules/@earendil-works/pi-coding-agent",
+          "root": "/home/ts/.local/share/agent-comms/native-entry-store-0d7ebb4f4b5aa1ec",
+          "wt": null,
+          "allocated_bytes": 142180352,
+          "exclusive_before_bytes": 142180352,
+          "preserved_manifest": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/cleanup-aggressive-20261002/native-source-preserved07-04.json"
+        }
+      ],
+      "permission_recovery": {
+        "initial_failure": "Readonly historical generated dependency directories (0555) refused unlink",
+        "scope": "only owned retired dependency directories made owner-writable; package parent original mode restored; no shared files chmod",
+        "directories_adjusted": 1398,
+        "original_package_mode": "0o555",
+        "retained_source_hashes_equal": true
+      }
     }
   ],
   "preserved_ignored_proofs": [
@@ -1641,5 +1705,12 @@
     "current_available_bytes": 18793590784,
     "public_store_mutations": 0
   },
-  "conservative_net_after_restoration_bytes": 3990990848
+  "conservative_net_after_restoration_bytes": 3928576000,
+  "new_continuation_exclusive_bytes": 1939537920,
+  "remaining_operational_borrowers": [
+    "native593b: PID764232 archived477 fixture",
+    "nativef117: original-s2-s5-context activation donor",
+    "reader493: native-evidence-exception observation donor",
+    "485-488 env: runtime-batch-candidate .pth donor"
+  ]
 }
