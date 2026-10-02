@@ -1,0 +1,17 @@
+{
+  "started_at": 1790945946.951091,
+  "returned_at": 1790945948.03762,
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "message": {
+    "seq": 385,
+    "id": "1ec243f17eac",
+    "from": "user",
+    "to": "#openhcs",
+    "ts": 1790945946.952061,
+    "type": "info",
+    "text": "testing after the new install; please reply tersely if you receive this",
+    "sender_role": "user"
+  },
+  "purpose": "one fresh authorized configured-channel acceptance on default326; original372 not replayed",
+  "earlier_cli_refusal": "Generic agent send refused human identity before publication; explicit canonical user operation used"
+}

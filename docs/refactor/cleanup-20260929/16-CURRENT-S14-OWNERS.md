@@ -1,4 +1,16 @@
-## Latest checkpoint — 2026-10-02T12:49Z
+## Current live delivery — 2026-10-02T13:03Z
+
+Default326 is installed: Core530/531 (5c55d1cc), Toad323 receiving4d524813, Textual26 (94c14b57), unchanged nativead533. Receiving326 merged583f8f5f. Parent one-use publisher94109 completed0 in42.625s; all19 original thread births/configurations and new process identities verified alive, all five links and original root/rootID preserved. Original sessions, inputs and UNKNOWN were preserved; no history carry/reset. Raw publisher phase remains unchanged. Sch archived the identity closure in receiving326.
+
+The actual ordinary `toad-comms openhcs-helper` window visibly loaded retained history with Ready/sidebar/details and collapsed coordination; parent viewed before.png while the original recorder4064402 and st4064419 were alive. Recorder46787 ultimately exited1 because the no-script observe branch spent its entire interaction budget before final state export. Its raw incomplete receipt remains preserved; original helper identity unchanged and all owned capture processes closed. This is visible startup/display evidence, not a completed recording or smoothness pass. Heisenberg owns the source correction: observe should use its existing tail observation duration, rather than fill the deadline and leave one second for screenshots/state export. No unchanged capture was repeated.
+
+One distinct fresh real user #openhcs probe385 committed in1.087s. Initial12 claims were accepted+2.782s; all10 running recipients replied38.050–49.253s and completed their original handling. All90 peer-reply claims finished ignored, with no new alerts or deferred active recipients. The two stopped external CLI participants, Linnaeus and openhcs-headless-bootstrap-worker, remain pending as expected. Parent actual receipts are `.release-private/live-openhcs-timing-530-20261002/{send,claims-01,history-02,summary}.json`. Original372 was not replayed. Mendel now owns the fresh385 request/native-phase timing trace; durability passed this journey, response latency remains too high.
+
+Arendt532 mergeddd79dabc after source/producer review and a real no-provider42.9MB saved-native get_state read returned27 messages in2.394s. Same installed count/branch/kept suffix/revision refusal passed, no body reads for count, original source unchanged, child closed. Native0b306 is qualified but not installed in326; original18/20s timeout clocks still do not allocate their whole cause. Heisenberg and Kepler continue the coherent retirement/capture geometry follow-up; Textual27 source is published, and no full scrolling/144Hz claim is made. A persistent delivery question was sent after actual default UI and real configured channel verification.
+
+Earlier updates below are historical.
+
+## Previous checkpoint — 2026-10-02T12:49Z
 
 Toad323 (c08e6c65), Textual26 (94c14b57), and Core530 (5c55d1cc, includes531) are now merged after complete production-source and installed-receipt review. Schrodinger stages ONE combined release with unchanged nativead533; parent owns public installation. Default324 remains installed until that publication.
 
