@@ -21,7 +21,7 @@
     },
     {
       "module": "toad",
-      "head": "ce788178a143bbab3f6fda43b5a73ccda2d53f77",
+      "head": "03f851c4e86fdad1d095948d7fde7b3b3fe413de",
       "location": "/home/ts/wt/comms-channel-reply-batch-policy-20261002/.artifacts/runtime-pending-source503-20261002/lib/python3.14/site-packages/toad",
       "files": 306,
       "python_files": 275,
@@ -30,11 +30,11 @@
         "url": "https://github.com/OpenHCSDev/toad.git",
         "vcs_info": {
           "vcs": "git",
-          "commit_id": "ce788178a143bbab3f6fda43b5a73ccda2d53f77",
-          "requested_revision": "ce788178a143bbab3f6fda43b5a73ccda2d53f77"
+          "commit_id": "03f851c4e86fdad1d095948d7fde7b3b3fe413de",
+          "requested_revision": "03f851c4e86fdad1d095948d7fde7b3b3fe413de"
         }
       },
-      "inventory_sha256": "6c7ba940851d4fe1311063f967950b19e42375d655f1e4c004930e77b478ebfc"
+      "inventory_sha256": "6411bf90c411a0ee34a18f0f910a7e3ed9175bcc9c0b88cb1f579fab69e4f96a"
     },
     {
       "module": "textual",
@@ -356,7 +356,7 @@
       "1.25.1"
     ]
   ],
-  "requirements_sha256": "72a1cb4746862dbae24bdb428f3500e13ce4e6ee599ff67bf6c95fea4db7cf93",
+  "requirements_sha256": "66597db985c4b48b86fe6e5046bd2730fc5d2e39d3012fba75025dbe8f3dca2b",
   "protected_old_prefix_files": 2839,
   "protected_old_prefix_files_unchanged": true,
   "public_install_changed": false,
