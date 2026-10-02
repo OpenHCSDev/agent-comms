@@ -134,3 +134,22 @@ second environment, provider journey, fork or uncertain-input replay is needed.
 Frozen #316/#65a/#c601 are independent and unchanged. Joined installed inspection
 is pending that candidate; #521 remains draft. Broader S2 repeated retention and
 S3/S4 research scope remain open under the original goal ledger.
+
+## Joined installed original-cut inspection
+
+Einstein supplied the ONE normal69 candidate at Core `0faf71dd` / native `ea043`,
+with 521 frozen source integrated. Inspected the same actual configured saved
+architecture-memory fork in `/home/ts/wt/a520s101/wire`, after its original mandatory
+compaction had committed. Installed `retained-context`, `compaction-status` and
+narrow authored export passed; original native/private files compared unchanged.
+One original selected `manual_committed` cut contains one `user_source` fact;
+original operation is committed and publication is pending. Native/input/failure
+sources not captured by this cut are not invented or claimed full-context proof.
+The two-cut CLI diff correctly refuses because only one original selected attempt
+exists. Its full two-cut behavior was exercised in the prior original-store control.
+
+Receipt: `evidence/retained-context-inspection-closure-20261002/joined-installed-original-cut.json`.
+No new environment, fork, owner process, native input, provider call or replay.
+Einstein's S1 whole journey separately failed at native reopen after committed
+compaction; Arendt owns that native failure. This inspected checkpoint does not
+qualify or activate S1. 521 inspection source and installed integration are complete.

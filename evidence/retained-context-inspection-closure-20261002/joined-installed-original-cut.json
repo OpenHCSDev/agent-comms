@@ -1,0 +1,68 @@
+{
+  "state": "PASS",
+  "scope": "joined installed521 original-cut inspection/status/narrow export; two-cut diff precisely refused because only one original exists. Whole520 failed separately after committed mandatory compaction.",
+  "root": "/home/ts/wt/a520s101/wire",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-task-aware-timing-20261002",
+  "source_head": "0faf71dd771c783b67780e0d63910f2c398d1e1f",
+  "source_proof_sha256": "3205366e3ab5f712c29cca5783f773dd36b988c804532acae327a55772b7ea82",
+  "package_count": 69,
+  "native_manifest": "ea043387f66a603182ffa43f4973f641e50a50de4a4bb08ccb70a8f0bf33d8f8",
+  "original_selected_attempts": 1,
+  "selected_state": "manual_committed",
+  "original_fact_kinds": {
+    "user_source": 1
+  },
+  "original_role_counts": {
+    "operations": 1,
+    "selected_summary_attempts": 1,
+    "publications": 1,
+    "private_raw_inputs": 0,
+    "enrolled_private_sessions": 0
+  },
+  "diff_exit": 1,
+  "diff": {
+    "error": "Retained-source diff requires two original selected compaction attempts"
+  },
+  "authored_export": {
+    "destination": "/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/joined/authored.md",
+    "format": "retained",
+    "scope": {
+      "kind": "authored_source",
+      "sources": []
+    },
+    "limit": {
+      "kind": "full"
+    },
+    "boundary": {
+      "through_seq": 2,
+      "export_started_at": 1790935209.0460372
+    },
+    "source_messages": 0,
+    "exported_messages": 0,
+    "omitted_messages": 0,
+    "time_filtered_messages": 0,
+    "invalid_time_messages": 0,
+    "oversized_messages": 0,
+    "bytes_written": 315,
+    "output_sha256": "49739da3325d7444ebdf44e60c4011e4f48ce14795bced76e0ce48f4209ad843",
+    "truncated": false,
+    "redacted_messages": 0,
+    "first_sequence": null,
+    "last_sequence": null,
+    "first_timestamp": null,
+    "last_timestamp": null
+  },
+  "original_files_unchanged": true,
+  "original_hash_check": "completed installed_inspection.py before report key error; original fixture files compared after all four CLI operations",
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "replays": 0,
+  "public_mutations": [],
+  "output_hashes": {
+    "authored.md": "49739da3325d7444ebdf44e60c4011e4f48ce14795bced76e0ce48f4209ad843",
+    "inspect.stdout.json": "0ddb57b8b34e3d99eb3960078c1796901a6fa43bcf7b01ac901603d5691c30c9",
+    "status.stdout.json": "971917848dc1ee71e3ea1e27a72e08a3ff580607264da6b76049485d47a49dbc",
+    "export.stdout.json": "bf57ca88cc7cef20a577bb4e98395c38090afc497504c1bac338b7038afb08f9",
+    "diff.stdout.json": "73c4d88c92c15fe5ef016e65f285383ab17c5283f12242693f83ef5d4b892772"
+  }
+}
