@@ -79,6 +79,10 @@ class SelectedSummarySource:
 class JournalTable:
     """Tables whose schema and transactions belong to the compaction journal."""
 
+    def inspection(self) -> dict[str, object]:
+        """The existing row declaration owns this read-only representation."""
+        return FieldCodec.encode(self)
+
 
 class SessionJournalHistory(JournalTable):
     """Declared history families that exclude enrolling an allegedly fresh file."""
@@ -116,6 +120,14 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
     intent_json: str
     state: OperationState
     evidence_json: str | None
+
+    def inspection(self) -> dict[str, object]:
+        """Expose the original intent view beside its unchanged proof bytes.
+
+        A journal projection is deliberately not a CompactionSource decoder.
+        State and evidence remain those of this original operation, even UNKNOWN.
+        """
+        return dict(super().inspection(), intent=json.loads(self.intent_json))
 
     indexes = (
         Index(

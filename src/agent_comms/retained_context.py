@@ -38,6 +38,15 @@ class RetainedSegment(ContextSegment):
     def original_text_source(self, declaration: Message) -> Message | StoredInput:
         return self.retained.original_text_source(declaration)
 
+    def inspection(self) -> dict[str, object]:
+        """Authored constraints retain their exact source and narrower export scope."""
+        return dict(kind=self.declared_name, text=self.text(),
+                    provenance=FieldCodec.encode(self.provenance), input_supplied=False,
+                    authored=dict(scope="authored declarations and their original pinned inputs only",
+                                  sources=FieldCodec.encode(self.scope.sources),
+                                  facts=FieldCodec.encode(self.retained)),
+                    export_scope="current authored declarations only; never goal, unpinned input, native artifact or failure state")
+
     def export(self, destination: Path | str, *, overwrite: bool = False):
         """Publish this immutable read's selection through the original writer."""
         selected = sorted((source for fact in self.retained.facts

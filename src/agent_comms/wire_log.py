@@ -165,11 +165,15 @@ class WireLog:
                 facts.extend(message.retained_task_facts())
         return digest.hexdigest(), tuple(facts)
 
-    def retained_context(self, name: str, registry):
-        """One certified source cut for read-only context inspection/export."""
+    @contextmanager
+    def retained_sources(self, name: str, registry):
+        """Borrow one certified wire/registry/input cut for retained readers.
+
+        Capture under the existing wire boundary, then decode outside it. The
+        acquired wire prefix remains certified for the entire consumer scope.
+        """
         from .exporting import WireExportBoundary
         from .input_disposition import InputDispositions
-        from .retained_context import RetainedSegment
         from .retained_task_facts import RetainedTaskFacts
         from .turn_context import OwnerProvenance
 
@@ -185,14 +189,22 @@ class WireLog:
             digest, facts = self._compaction_messages(
                 self._snapshot_records(metadata, stream, boundary), owner.incarnation
             )
-            originals = {original.key: original for fact in facts
-                         for message in fact.wire_sources()
-                         for original in message.task.original_input_sources(inputs)}
-            input_facts = tuple(original.origin.retained_fact(original)
-                                for original in originals.values())
-            retained = RetainedTaskFacts((*facts, *input_facts)).for_owner(owner, snapshot)
-            return RetainedSegment.capture(retained, OwnerProvenance(owner.incarnation, digest),
-                owner, snapshot, export)
+            yield (owner, snapshot, RetainedTaskFacts(facts), inputs, export,
+                   OwnerProvenance(owner.incarnation, digest))
+
+    def retained_context(self, name: str, registry):
+        """Authored retained context; also the source of instruction export.
+
+        This deliberately excludes unpinned inputs, goals and native artifacts.
+        CompactionBoundary inspection owns those separate observation scopes.
+        """
+        from .retained_context import RetainedSegment
+        from .retained_task_facts import RetainedTaskFacts
+
+        with self.retained_sources(name, registry) as (owner, snapshot, facts, inputs, export, source):
+            retained = RetainedTaskFacts((*facts.facts, *facts.original_input_facts(inputs)))
+            return RetainedSegment.capture(retained.for_owner(owner, snapshot), source,
+                                           owner, snapshot, export)
 
     def _assert_private_directory(self) -> None:
         """Require a nonredirectable, owned ancestry (root sticky /tmp permitted)."""
