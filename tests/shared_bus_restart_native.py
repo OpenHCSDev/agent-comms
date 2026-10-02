@@ -158,6 +158,11 @@ async def configured_mixed_routes(arguments):
                         assert '17' in channel.body and '12' in channel.body
                         assert 'PRIVATE_ROUTE_490' not in channel.body
                         assert '15' in direct.body and 'PRIVATE_ROUTE_490' in direct.body
+                        late_assignment = next(row for row in assignments if row.wire_seq == late.seq)
+                        late_receipts = PublicationReceipts.select(db,where='execution_id=?',
+                            parameters=(late_assignment.lifecycle.execution_id,))
+                        assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
+                        assert '23' in service.bus.log.message_by_id(late_receipts[0].message_id).body
                         lookup = stable_thread_lookup(service.registry.require(name).created_at)
                         for original in (*originals,late):
                             history = read_historical_native_inputs(store,wire_root_id=root_id,
@@ -168,6 +173,7 @@ async def configured_mixed_routes(arguments):
                             'original_wave_native_inputs':1,'late_wave_native_inputs':1,
                             'per_original_historical_proof':True,'route_receipts':FieldCodec.encode(receipts),
                             'private_route_not_leaked':True,'all_originals_completed':True,
+                            'late_answer_published_on_original_route':True,
                             'original_cursor_covers_late':True}
                         break
                 await asyncio.sleep(.03)

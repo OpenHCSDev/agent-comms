@@ -283,3 +283,11 @@ remains a named acceptance gap. No further provider run was made to hide it.
 Evidence is committed in evidence/pending-message-batch-execution-20261001;
 private originals remain /home/ts/wt/k490c01 and k490c02. This is a useful scoped
 Native5 functional checkpoint, not whole-PR Ready or a public/live claim.
+
+
+Read-only same-original02 late-answer closure: original sequence4's completed
+assignment recovers its own execution/one human-route receipt at sequence7;
+the original message contains23. See configured02-original-late-answer-proof.json.
+This confirms the separate late batch answered, not merely acknowledged.
+The driver now checks this original route/body too. No provider/native input
+was repeated; raw exit1 and missing notification measurement remain unchanged.
