@@ -32,7 +32,7 @@ from agent_comms.native_custody import PiSessionChild
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.registration import Registration
 from agent_comms.native_source_cursor import NativeSourceCursor
-from agent_comms.proven_source_coverage import SourceCoverage
+from agent_comms.proven_source_coverage import ProvenSourceCoverage, SourceCoverage
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 import agent_comms.native_package as native_package
 import agent_comms.selected_session as session_module
@@ -159,7 +159,8 @@ async def main():
                 (PrivateSendAdmission,('reserve','prepare_context','_admit_once','verify','commit')),
                 (Registration,('transition_turn','observe_native_phase','attach_native_session')),
                 (NativeSourceCursor,('advance',)),
-                (SourceCoverage,('prefix','last_proof','evidence')), (OptionalAwarenessProjection,('for_selected','segments')),
+                (SourceCoverage,('prefix',)), (ProvenSourceCoverage,('last_proof','evidence')),
+                (OptionalAwarenessProjection,('for_selected','segments')),
                 (native_package,('verify_native_package',))):
                 for name in names:instrument(resources,target,name)
             instrument(resources,session_module,'_response_boundary',scope=True)

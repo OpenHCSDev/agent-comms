@@ -40,14 +40,40 @@ _MAX_SCAN_SECONDS = 0.25
 
 @dataclass(frozen=True, slots=True)
 class ProvenSourceCoverage:
+    """One bounded source read and its corroborated original native inputs.
+
+    This detached result lives only for the caller's read/publication operation.
+    SQL identity, wire witness and live owner checks remain with the cursor;
+    these historical observations never grant admission or replay.
+    """
+
     wire_root_id: str
     recipient_lookup: str
     covered_seq: int
-    injected_source_seqs: tuple[int, ...]
+    inputs: tuple[HistoricalNativeInput, ...]
     no_wake_seqs: tuple[int, ...]
     blocked_seq: int | None
     more_sources: bool = False
     source_witness: PrefixWitness = field(kw_only=True)
+
+    @property
+    def injected_source_seqs(self) -> tuple[int, ...]:
+        return tuple(dict.fromkeys(item.source_seq for item in self.inputs))
+
+    def evidence(self, *, through_seq: int | None = None) -> tuple[HistoricalNativeInput, ...]:
+        """Consume the native inputs already corroborated in this source read."""
+        if through_seq is None:
+            return self.inputs
+        return tuple(item for item in self.inputs if item.source_seq <= through_seq)
+
+    def last_proof(self, source_seq: int) -> HistoricalNativeInput | None:
+        if source_seq == 0:
+            return None
+        matching = [item for item in self.inputs
+                    if item.source_seq == source_seq and item.expected_prompt_equality_established]
+        if not matching:
+            raise IdentityConflict("current cursor source lacks live-bound native proof")
+        return matching[-1]
 
 
 class SourceCoverage:
@@ -96,7 +122,7 @@ class SourceCoverage:
                 raise IdentityConflict("source coverage requires a committed coordinator snapshot")
             witness, initials, more = self._page(request)
             horizon = initials[-1].message.seq if more else witness.latest_source_seq
-            covered, injected, no_wake, blocked = after_seq if partial else 0, [], [], None
+            covered, inputs, no_wake, blocked = after_seq if partial else 0, [], [], None
             for initial in initials:
                 seq = initial.message.seq
                 matches = [
@@ -119,10 +145,11 @@ class SourceCoverage:
                 if type(decision) is NoWakeDecision:
                     no_wake.append(seq)
                 elif type(decision) is WakeDecision:
-                    if not self._selected_proven(seq, recipient, decision, receipt, source_reads):
+                    evidence = self._selected_inputs(seq, recipient, decision, receipt, source_reads)
+                    if not evidence:
                         blocked = seq
                         break
-                    injected.append(seq)
+                    inputs.extend(evidence)
                 else:
                     raise IdentityConflict("unsupported frozen wake decision")
                 covered = seq
@@ -132,7 +159,7 @@ class SourceCoverage:
                 self.wire_root_id,
                 self.recipient_lookup,
                 covered,
-                tuple(injected),
+                tuple(inputs),
                 tuple(no_wake),
                 blocked,
                 more,
@@ -164,10 +191,10 @@ class SourceCoverage:
             )
             return _receipt_matches(db, initial) if sealed and sealed.sealed else None
 
-    def _selected_proven(
+    def _selected_inputs(
         self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, receipt: AcceptedCohort,
         source_reads: NativeEvidenceScope,
-    ) -> bool:
+    ) -> tuple[HistoricalNativeInput, ...]:
         assignments = [
             a
             for a in receipt.assignments
@@ -177,11 +204,13 @@ class SourceCoverage:
         if len(assignments) != 1 or assignments[0].lifecycle.mode != decision.wake_mode:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
         if not decision.wake_mode.active:
-            return False  # PASSIVE is not native injection.
+            return ()  # PASSIVE is not native injection.
         evidence = self.native_inputs(seq, source_reads=source_reads)
-        return decision.wake_mode.proves_source(evidence) and all(
+        if decision.wake_mode.proves_source(evidence) and all(
             p.assignment_id == assignments[0].assignment_id for p in evidence
-        )
+        ):
+            return evidence
+        return ()
 
     def native_inputs(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> tuple[HistoricalNativeInput, ...]:
         return read_historical_native_inputs(
@@ -190,27 +219,6 @@ class SourceCoverage:
             recipient_lookup=self.recipient_lookup,
             source_seq=source_seq, source_reads=source_reads,
         )
-
-    def evidence(self, coverage: ProvenSourceCoverage, *, through_seq: int | None = None,
-                 source_reads: NativeEvidenceScope | None = None):
-        """Every selected source in the prefix, not only the maximum input."""
-        with NativeEvidenceScope.borrow(source_reads) as source_reads:
-            return tuple(
-                proof
-                for seq in coverage.injected_source_seqs
-                if through_seq is None or seq <= through_seq
-                for proof in self.native_inputs(seq, source_reads=source_reads)
-            )
-
-    def last_proof(self, source_seq: int, *, source_reads: NativeEvidenceScope | None = None) -> HistoricalNativeInput | None:
-        if source_seq == 0:
-            return None
-        matching = [
-            p for p in self.native_inputs(source_seq, source_reads=source_reads) if p.expected_prompt_equality_established
-        ]
-        if not matching:
-            raise IdentityConflict("current cursor source lacks live-bound native proof")
-        return matching[-1]
 
     def prefix(self, *, through_seq: int | None = None,
                source_reads: NativeEvidenceScope | None = None) -> ProvenSourceCoverage:
@@ -223,7 +231,7 @@ class SourceCoverage:
                 floor = marker.admission_after_seq
             if through_seq is not None and 0 < through_seq <= floor:
                 raise IdentityConflict("current source proof precedes this activation")
-            covered, injected, no_wake, witness = floor, [], [], None
+            covered, inputs, no_wake, witness = floor, [], [], None
             for _ in range(self.page_budget):
                 page = self.read(after_seq=covered, partial=True, source_reads=source_reads)
                 if page.covered_seq < covered:
@@ -231,7 +239,7 @@ class SourceCoverage:
                 if witness is not None and page.source_witness != witness:
                     raise IdentityConflict("certified source changed between coverage pages")
                 witness, covered = page.source_witness, page.covered_seq
-                injected.extend(page.injected_source_seqs)
+                inputs.extend(page.inputs)
                 no_wake.extend(page.no_wake_seqs)
                 if (
                     (through_seq is not None and covered >= through_seq)
@@ -242,7 +250,7 @@ class SourceCoverage:
                         self.wire_root_id,
                         self.recipient_lookup,
                         covered if covered > floor else 0,
-                        tuple(injected),
+                        tuple(inputs),
                         tuple(no_wake),
                         page.blocked_seq,
                         page.more_sources,
