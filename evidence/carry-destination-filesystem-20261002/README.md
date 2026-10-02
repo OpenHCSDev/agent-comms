@@ -9,3 +9,5 @@ The private actual original goal fixture uses installed9ccc package declarations
 Before/after AST uses existing audit Package/ParsedModule over all 50 cutover Python modules, zero omissions. It identifies source references, not dynamic dispatch proof. Existing resource owner and all shared callers were read before edits; the HOME .target construction and direct Path.replace decisions were deleted. No format/goal plan/package changes. Patterns: shared resource lifetime and declaration-owned behavior; no new registry or store.
 
 Parent owns the next fresh stopped capture and reviewed-tool continuation. Failed public attempt paths/receipts/preimages remain untouched. Native6 #510 will receive this same resource change by normal merge; no future/native source is needed for Native5 publication.
+
+Frozen tools source: d874f10c2706aec40bc6a4624755960846bc5c99. Tool-only diff: 73 added / 25 deleted across 2 existing files. The 50-file operator manifest is pinned to this source; unchanged runtime plan SHA 17cde43a4fff64f0623523e28f39381b49d9b615746da241dfb4c5b82b09e254. Existing Native5 package remains unchanged.
