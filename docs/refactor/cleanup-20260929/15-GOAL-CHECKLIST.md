@@ -1,6 +1,13 @@
-## Current delivery state — 2026-10-02T09:23Z
+## Current delivery state — 2026-10-02T09:39Z
 
-Default is now Corec601 / Toadc7f5 / Textual2382 / unchanged Native5184.
+Default is now Core48d408a4 / Toad990d091f / Textual2382 / unchanged Native5184.
+Toad316 joined Core515 recording cleanup and Core518 original restart-failure
+custody. Its preserve-only publication took45.078s,19 owners and five links
+verified. Actual ordinary default saved-helper startup took28.640s; the first
+frame was inspected during the run, the final frame after cleanup. No provider
+input was sent. Four original compaction-blocked inboxes remain visible.
+
+Earlier Native6 conversion below records the c601 checkpoint:
 The existing Native6 carry and retained-owner publisher completed in43.3s;
 all19 target owners and five default links passed installed verification.
 Original639 inputs/bindings,48 cursors, four selected-summary source proofs,
@@ -44,10 +51,10 @@ bad. No smoothness or overall speedup acceptance is claimed.
 
 ### Independent next delivery
 
-Core515 and518 are merged; paired Toad316 is qualified/READY, not default.
-Its original c601 owner failure/recovery and target ABI journey passed. Schrodinger
-prepares the existing preserve-Native6 publisher independently; active user
-channel/native work will not be stopped for a cutover.
+Core515/518 and paired Toad316 are merged and installed in the default.
+Its original c601 owner failure/recovery and target ABI journey passed. Its existing preserve-Native6 publisher completed after the exact idle Toad
+window closed normally. No historical carry, reset or input replay occurred.
+Schrodinger retains the actual publication/refusal/closure receipts.
 
 Einstein520 implements S1 task-aware timing through original authored-task and
 compaction-policy owners; hard/manual backstops remain independent. Schrodinger522
