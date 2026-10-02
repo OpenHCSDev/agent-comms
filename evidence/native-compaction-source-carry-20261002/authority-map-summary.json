@@ -1,0 +1,200 @@
+{
+  "classification": "lexical-source-AST-not-native-or-stopped-acceptance",
+  "compressed_output_bytes": 1758067,
+  "expanded_output_bytes": 28075034,
+  "non_python_omission": "Python AST does not parse native JS/MJS or JS inside generated strings. No existing JS parser found; no installation performed. No dynamic/MRO resolution claim.",
+  "output_sha256": "d06c45564783c4c32265f02e23e6b9a6579deeb08bf6cb027f46967a970850fa",
+  "pins_sha256": "38d13f51d5d0f010ce260251444cc7182d5929f4766dbc5ab3357c7ef3008ec9",
+  "query_sha256": "09fdd774b5970f0c90ae156802f42b1cdcc02ff7b0f24ffb2e865333408f103c",
+  "snapshots": [
+    {
+      "label": "authentic-Native5-Core-before",
+      "name_resolution": "lexical; qualified imports and all nonunique declarations retained in full output",
+      "revision": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+      "roots": [
+        {
+          "parsed_modules": 311,
+          "root": "src",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 52,
+          "root": "tools",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 355,
+          "root": "tests",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 1,
+          "root": "scripts",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 13,
+          "root": "stack",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 0,
+          "root": "extensions",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 1,
+          "root": "experiments",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 3,
+          "root": "benchmarks",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 1,
+          "root": "docs",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 0,
+          "root": ".pi",
+          "unparsed": []
+        }
+      ]
+    },
+    {
+      "label": "determining-Native6-Core-after",
+      "name_resolution": "lexical; qualified imports and all nonunique declarations retained in full output",
+      "revision": "479a5222a6dffcea2b51d1cada36aa33d600e6f1",
+      "roots": [
+        {
+          "parsed_modules": 311,
+          "root": "src",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 52,
+          "root": "tools",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 353,
+          "root": "tests",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 1,
+          "root": "scripts",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 13,
+          "root": "stack",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 0,
+          "root": "extensions",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 1,
+          "root": "experiments",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 3,
+          "root": "benchmarks",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 1,
+          "root": "docs",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 0,
+          "root": ".pi",
+          "unparsed": []
+        }
+      ]
+    },
+    {
+      "label": "outside-operator-before",
+      "name_resolution": "lexical; qualified imports and all nonunique declarations retained in full output",
+      "revision": "4cc620fbd9c06f3928cf9079ebd351694068a2e7",
+      "roots": [
+        {
+          "parsed_modules": 52,
+          "root": "tools",
+          "unparsed": []
+        }
+      ]
+    },
+    {
+      "label": "outside-operator-after",
+      "name_resolution": "lexical; qualified imports and all nonunique declarations retained in full output",
+      "revision": "f3f8b9a7dd25309d809ed0ba60fc986dadf66f28",
+      "roots": [
+        {
+          "parsed_modules": 52,
+          "root": "tools",
+          "unparsed": []
+        }
+      ]
+    },
+    {
+      "label": "Toad-dependency-consumers",
+      "name_resolution": "lexical; qualified imports and all nonunique declarations retained in full output",
+      "revision": "f701c34f13bbe619fc0dd6271c772691ff899b9e",
+      "roots": [
+        {
+          "parsed_modules": 275,
+          "root": "src",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 389,
+          "root": "tests",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 41,
+          "root": "tools",
+          "unparsed": []
+        },
+        {
+          "parsed_modules": 0,
+          "root": "docs",
+          "unparsed": []
+        }
+      ]
+    },
+    {
+      "label": "actual-installed-registry-dependency",
+      "name_resolution": "lexical; qualified imports and all nonunique declarations retained in full output",
+      "revision": "installed-metaclass-registry-0.2.1-wheel-content-hashes-in-output",
+      "roots": [
+        {
+          "parsed_modules": 6,
+          "root": "metaclass_registry",
+          "unparsed": []
+        }
+      ]
+    },
+    {
+      "label": "outside-operator-after-durable-owner-correction",
+      "name_resolution": "lexical; qualified imports and all nonunique declarations retained in full output",
+      "revision": "2e447c940ec0a6fdcfc6a5aef7ad0da37dcd0bcc",
+      "roots": [
+        {
+          "parsed_modules": 52,
+          "root": "tools",
+          "unparsed": []
+        }
+      ]
+    }
+  ]
+}

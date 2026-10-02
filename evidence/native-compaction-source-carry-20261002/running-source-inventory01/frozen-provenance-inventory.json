@@ -1,0 +1,99 @@
+{
+  "classification": "running-source-inventory-not-stopped-carry",
+  "source_backup_sha256": "4d48c65ab94a77eeecc8c5aaf026b7184d632252736a3897025bbc3e6792dee4",
+  "purpose": "Shape and equality leads only; authentic original declarations must certify reconstruction",
+  "selected_summaries": [
+    {
+      "operation_id_sha256": "804ca81300b2c24faad978a86ba2943735a379bd6b23f9ec97b6d9180d2950e5",
+      "retained_fact_count": 10,
+      "matching_frozen_input_count": 1,
+      "matching_frozen_inputs": [
+        {
+          "input_keys": [
+            "admission",
+            "key",
+            "kind",
+            "origin",
+            "owner",
+            "sequence",
+            "source_text",
+            "target"
+          ],
+          "origin_present": true,
+          "origin_kind": "human",
+          "source_text_bytes": 10,
+          "digest_equals_original_digest": true
+        }
+      ]
+    },
+    {
+      "operation_id_sha256": "8e9af26656a13c820e4c56776567b8eb6cbe28e561fbbd2f362ce567f00c43d9",
+      "retained_fact_count": 36,
+      "matching_frozen_input_count": 1,
+      "matching_frozen_inputs": [
+        {
+          "input_keys": [
+            "admission",
+            "key",
+            "kind",
+            "origin",
+            "owner",
+            "sequence",
+            "source_text",
+            "target"
+          ],
+          "origin_present": true,
+          "origin_kind": "human",
+          "source_text_bytes": 4,
+          "digest_equals_original_digest": true
+        }
+      ]
+    },
+    {
+      "operation_id_sha256": "44d7b3f43765090abf3be808970c3b5e3b56a23e16a3bb5e0f9a342be7f13c77",
+      "retained_fact_count": 1,
+      "matching_frozen_input_count": 1,
+      "matching_frozen_inputs": [
+        {
+          "input_keys": [
+            "admission",
+            "key",
+            "kind",
+            "origin",
+            "owner",
+            "sequence",
+            "source_text",
+            "target"
+          ],
+          "origin_present": true,
+          "origin_kind": "human",
+          "source_text_bytes": 129,
+          "digest_equals_original_digest": true
+        }
+      ]
+    },
+    {
+      "operation_id_sha256": "f4359770b92fff38fd5656b70d8a601e927bbf75c9580cf8f73b48fc5b0ff1bb",
+      "retained_fact_count": 1,
+      "matching_frozen_input_count": 1,
+      "matching_frozen_inputs": [
+        {
+          "input_keys": [
+            "admission",
+            "key",
+            "kind",
+            "origin",
+            "owner",
+            "sequence",
+            "source_text",
+            "target"
+          ],
+          "origin_present": true,
+          "origin_kind": "human",
+          "source_text_bytes": 129,
+          "digest_equals_original_digest": true
+        }
+      ]
+    }
+  ]
+}

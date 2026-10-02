@@ -1,0 +1,1 @@
+Initial reader check incorrectly compared SQLite logical-backup bytes with original physical DB bytes. All target-reader assertions passed before that check. Comparison corrected to the captured logical-backup hash. Raw public bytes are separately preserved under public-raw-preimages; no carry or source mutation repeated.

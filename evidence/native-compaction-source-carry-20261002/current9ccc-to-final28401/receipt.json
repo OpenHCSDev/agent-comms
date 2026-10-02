@@ -1,0 +1,130 @@
+{
+  "classification": "private-stopped-copy-installed-operator-control",
+  "original_release": [
+    9,
+    3,
+    3,
+    5
+  ],
+  "target_release": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "relation": {
+    "rows": {
+      "operations": 3,
+      "selected_summary_attempts": 4,
+      "publications": 3,
+      "private_raw_inputs": 394,
+      "enrolled_private_sessions": 0
+    },
+    "unchanged_tables_sha256": "c1238601588bb0dd4d4cd22cc04b7814042f7e3d3b856296fe0a54546b0f6e0a",
+    "original_selected_rows_sha256": "d34c3424ddb72315698fee90b06ceac7280c4d55eb3770943264931a56fa25fd"
+  },
+  "custody_refusals": [
+    "candidate-change",
+    "existing-attempt",
+    "companion"
+  ],
+  "installation": {
+    "classification": "runtime/native6-original-source-carry",
+    "stores": [
+      {
+        "kind": "coordination",
+        "original_sha256": "0806bd0974602d12614c28b8b5c45c51739e98f121e05e0f8ba479139b3ec30a",
+        "candidate_sha256": "774cf45c62b98e3a4eeec572857672248cc13a307f1a9cca123ed239ea566e48",
+        "evidence": {
+          "original_release": [
+            9,
+            3,
+            3,
+            5
+          ],
+          "target_release": [
+            9,
+            3,
+            3,
+            6
+          ],
+          "unchanged_rows_sha256": "3810d187691cbc93ce046029e2c56149fbb89276bc695c014a6337eb20a5e1d7",
+          "original_rows": {
+            "cohort_schema_meta": 1,
+            "claim_batch_receipts": 177,
+            "claim_batch_members": 1043,
+            "cohort_delivery_receipts": 1047,
+            "awareness_schema_meta": 1,
+            "awareness_claim_generations": 1043,
+            "wake_claims": 1043,
+            "execution_claims": 108,
+            "participants": 81,
+            "participant_aliases": 81,
+            "owner_generations": 81,
+            "attempts": 108,
+            "replay_assessments": 8,
+            "current_executions": 81,
+            "executions": 108,
+            "schema_meta": 1,
+            "publication_intents": 99,
+            "publication_receipts": 99,
+            "connectivity": 0,
+            "recovery_audit": 1,
+            "obligations": 108,
+            "response_schema_meta": 1,
+            "publication_append_dispatches": 99,
+            "native_runtime_schema_meta": 1,
+            "native_runtime_input": 639,
+            "current_native_cursor": 48,
+            "native_runtime_triage_sources": 531
+          }
+        }
+      },
+      {
+        "kind": "prompt_binding",
+        "original_sha256": "5f18802f306cae19147ebef5c430e95b4fb8ba02085b54a9920b977000cb5759",
+        "candidate_sha256": "5f18802f306cae19147ebef5c430e95b4fb8ba02085b54a9920b977000cb5759",
+        "evidence": {
+          "original_bindings": 639,
+          "unchanged_rows_sha256": "24171be42d98cce95444376512a0b215fc6536a1a83e64468509e9b2c20eccc5"
+        }
+      },
+      {
+        "kind": "compaction",
+        "original_sha256": "87dd3ae4e688ac769526ce41e333b46b2d75c7c097be4c29fe94b456e1f87e4c",
+        "candidate_sha256": "6a7aa4538fb3dc1a3933e9779e24d6a0fcd2116f10a45c7e99c5455b2f9b741c",
+        "evidence": {
+          "attempts": 4,
+          "original_selected_rows_sha256": "eae496d4d866579deeb34f8b6aa452186deb64d1fbd5ce99d8270a8ff2c03b83",
+          "unchanged_tables_sha256": "c1238601588bb0dd4d4cd22cc04b7814042f7e3d3b856296fe0a54546b0f6e0a",
+          "original_source_bytes_preserved": true,
+          "admission_receipts_minted": 0,
+          "input_replays": 0
+        }
+      }
+    ],
+    "original_preimages": "/home/ts/.cache/agent-scratch/comms-native-compaction-source-carry-20261002/current9ccc-historical01/original-preimages",
+    "retired": [],
+    "reconstructed_proofs": 0,
+    "input_replays": 0,
+    "compaction_original_files": [
+      {
+        "path": "/home/ts/.cache/agent-scratch/comms-native-compaction-source-carry-20261002/current9ccc-historical01/private-original/compaction-commits.sqlite3",
+        "sha256": "87dd3ae4e688ac769526ce41e333b46b2d75c7c097be4c29fe94b456e1f87e4c",
+        "revision": {
+          "identity": {
+            "device": 2084,
+            "inode": 2533754
+          },
+          "size": 446464,
+          "mtime_ns": 1790927797787708073,
+          "ctime_ns": 1790927797787708073
+        }
+      }
+    ]
+  },
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "owner_signals": 0,
+  "public_cutover_qualified": false
+}
