@@ -13,26 +13,39 @@ from native_schema_carry import NativeSchemaCarryPlan, NativeSchemaDeclaration, 
 
 @dataclass(frozen=True)
 class RuntimeInstallation(DeclaredFamily, affix='RuntimeInstallation'):
-    # Frozen whole-family source declaration, captured by the authentic writer.
-    # No table roster, target DDL, reason cases or version shortcut live here.
-    goal_schema: dict[str, str]
+    @abstractmethod
+    def original_goal(self) -> dict[str, str]: ...
 
     def synchronize_goal(self, acquired, destination):
-        return NativeSchemaDeclaration.observe().synchronize_goal(acquired, destination, self.goal_schema)
+        return NativeSchemaDeclaration.observe().synchronize_goal(acquired, destination, self.original_goal())
 
     def unchanged_protected(self, paths: frozenset[Path], acquired: AcquiredRuntimeFiles) -> frozenset[Path]:
         """The member owns which original bytes its installation may change."""
         return frozenset(paths)
 
-    @abstractmethod
-    def retain_protected(self, paths: frozenset[Path], directory: Path): ...
+    def retain_protected(self, paths: frozenset[Path], directory: Path):
+        # Preserving installations authenticate originals without copying them.
+        return []
 
     @abstractmethod
     def install(self, acquired: AcquiredRuntimeFiles, destination: Path): ...
 
 
 @dataclass(frozen=True)
-class ResetRuntimeInstallation(RuntimeInstallation):
+class PreserveRuntimeInstallation(RuntimeInstallation):
+    goal_schema: dict[str, str]
+
+    def original_goal(self):
+        return self.goal_schema
+
+    def install(self, acquired, destination):
+        acquired.require_original()
+        return {'classification': 'runtime/preserve', 'original_files': acquired.evidence(),
+                'retired': [], 'copied_bytes': 0}
+
+
+@dataclass(frozen=True)
+class ResetRuntimeInstallation(PreserveRuntimeInstallation):
     def retain_protected(self, paths: frozenset[Path], directory: Path):
         return [retain_file(path, directory / f'protected-{index}')
                 for index, path in enumerate(sorted(paths))]
@@ -42,25 +55,15 @@ class ResetRuntimeInstallation(RuntimeInstallation):
 
 
 @dataclass(frozen=True)
-class PreserveRuntimeInstallation(RuntimeInstallation):
-    def retain_protected(self, paths: frozenset[Path], directory: Path):
-        # Original protected bytes are hashed by the installation before/after.
-        # The earlier reset's private preimages remain at their original paths.
-        return []
-
-    def install(self, acquired, destination):
-        acquired.require_original()
-        return {'classification': 'runtime/preserve', 'original_files': acquired.evidence(),
-                'retired': [], 'copied_bytes': 0}
-
-
-@dataclass(frozen=True)
-class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
+class CarryNativeRuntimeInstallation(RuntimeInstallation):
     """Native6 declarations; original compaction proof facts remain unchanged."""
 
     original: NativeSchemaDeclaration
     source_python: Annotated[Path, PathText]
     candidate: Annotated[Path, PathText]
+
+    def original_goal(self):
+        return self.original.goal
 
     def unchanged_protected(self, paths: frozenset[Path], acquired: AcquiredRuntimeFiles) -> frozenset[Path]:
         return super().unchanged_protected(paths, acquired).difference(

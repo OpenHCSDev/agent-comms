@@ -126,10 +126,12 @@ def run(base, source_python, root):
     if not before_journal['selected_summary_attempts']:
         raise ValueError('Actual historical selected summary evidence is required')
     installed = CarryNativeRuntimeInstallation(
-        goal_schema=original.goal, original=original,
+        original=original,
         source_python=source_python, candidate=base/'matched-candidate')
     if FieldCodec.decode(RuntimeInstallation, FieldCodec.encode(installed)) != installed:
         raise AssertionError('Canonical runtime installation declaration does not round-trip')
+    if installed.original_goal() is not installed.original.goal:
+        raise AssertionError('Carry goal declaration is not derived from original source')
     refused = []
     # One-use custody refusals operate on ONLY this private copy, with exact
     # original bytes restored afterward. No original session or proof is edited.
