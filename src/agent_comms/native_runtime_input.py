@@ -9,6 +9,7 @@ from __future__ import annotations
 import sqlite3
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
@@ -185,8 +186,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         return rows
 
     @classmethod
-    def transcript_events(cls, root, reader, record, projection, owner_lookup):
-        """Capture immutable stage/replies, then release SQL before rendering/wire.
+    def transcript_projection(cls, db, reader, record, owner_lookup):
+        """Borrow original stage/replies; defer rendering until SQL closes.
 
         No current lifecycle witness is retained. These original identities are
         frozen; TranscriptRead's original publication revision fences appends.
@@ -194,17 +195,15 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         entry = record.entry
         user = entry if entry.input_boundary else reader.input_ancestor(record)
         originals, publications = (), ()
-        if user is not None:
-            with cls._publication_read(root) as db:
-                if db is not None:
-                    originals = cls.for_native_user(db, reader, user)
-                    if entry.final_reply:
-                        for original in originals:
-                            publications = original.published_replies(db, user, owner_lookup)
+        if user is not None and user.input_id is not None and db is not None:
+            originals = cls.for_native_user(db, reader, user)
+            if entry.final_reply:
+                for original in originals:
+                    publications = original.published_replies(db, user, owner_lookup)
         for original in originals:
-            return original.execution.transcript_events(entry, projection, user), publications
+            return partial(original.execution.transcript_events, entry, user=user), publications
         # Untracked/detached history is not classified by text or native role.
-        return entry.events(projection), publications
+        return entry.events, publications
 
     @classmethod
     def publication_revision(cls, root, reader, owner_lookup):

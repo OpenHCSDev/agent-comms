@@ -28,7 +28,7 @@ with service.transcripts.routes.for_session(str(saved)) as routes:
  for record in reader.reverse(saved.stat().st_size):
   if record.entry is None:continue
   if record.entry.id in ('73e6068a','9937decf'):
-   events=source.native_events(record,routes,reader)
+   _,events=next(source.native_records(((record,),),routes,reader))
    assert events and all(isinstance(event,ContextTranscript) for event in events)
    matched[record.entry.id]=[dict(kind=event.declared_name,timestamp=event.timestamp,text_sha256=hashlib.sha256(event.text.encode()).hexdigest()) for event in events]
   if len(matched)==2:break
@@ -53,14 +53,17 @@ with service.transcripts.routes.for_session(str(saved)) as routes:
   if entry is None:continue
   if entry.id==full['session_entry_id']:
    full_user=record
-   assert all(isinstance(e,ContextTranscript) for e in source.native_events(record,routes,reader))
+   _,events=next(source.native_records(((record,),),routes,reader))
+   assert all(isinstance(e,ContextTranscript) for e in events)
    break
   if full_reply is None and entry.final_reply:
    user=reader.input_ancestor(record)
    if user is not None and user.input_id==full['input_id']:
-    raw,refs=NativeRuntimeInput.transcript_events(root,reader,record,TranscriptProjection(),full['owner_lookup'])
+    with NativeRuntimeInput._publication_read(root) as db:
+     project,refs=NativeRuntimeInput.transcript_projection(db,reader,record,full['owner_lookup'])
+    raw=project(TranscriptProjection())
     assert refs and any(isinstance(e,AssistantTranscript) for e in raw)
-    projected=source.native_events(record,routes,reader)
+    _,projected=next(source.native_records(((record,),),routes,reader))
     assert not any(isinstance(e,AssistantTranscript) for e in projected)
     full_reply=dict(entry_id=entry.id,input_id=user.input_id,publication_sequences=[ref.seq for ref in refs])
 assert full_user is not None and full_reply is not None
