@@ -23,14 +23,9 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     family_discriminator = "decision"
 
     @classmethod
-    def output_instruction(cls) -> str:
+    def output_values(cls) -> dict[str, str]:
         names = [member.declared_name for member in cls.members_with(cls)]
-        return (
-            f"Output ONLY a JSON object with one key {cls.family_discriminator} and "
-            f"one of these declared values: {json.dumps(names)}. "
-            "No tools, extra keys, prose or markdown. "
-            "Original messages are the selected JSON above.\n"
-        )
+        return dict(discriminator=cls.family_discriminator, names=json.dumps(names))
 
     @classmethod
     def parse(cls, text: str) -> SelectedTriage:

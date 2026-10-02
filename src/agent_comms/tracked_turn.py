@@ -39,6 +39,7 @@ from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .store_files import _async_store_lock
+from .turn_context import InputContributionCoordinates
 
 
 class NativeCommitObservation[T](ABC):
@@ -172,6 +173,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         *,
         input_id: str,
         prompt: str,
+        context_contributions: tuple[InputContributionCoordinates, ...] = (),
         worktree: Path,
         session_dir: Path,
         session_file: Path | None = None,
@@ -208,7 +210,12 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         )
         turn = cls(
             launch,
-            commands.Prompt(id="native-prompt", input_id=input_id, message=prompt),
+            commands.Prompt(
+                id="native-prompt",
+                input_id=input_id,
+                message=prompt,
+                context_contributions=context_contributions,
+            ),
             provider=provider,
             model=model,
             model_wait_timeout=model_wait_timeout,
