@@ -49,14 +49,14 @@ async def retained_summary(native_backend):
     model = native.persistent.custody.child.attestation.state.model
     assert model is not None
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
-    preparation = await asyncio.to_thread(
+    preparation = (await asyncio.to_thread(
         prepare_native_source,
         package,
         str(native.session),
         settings=settings,
         context_window=model.context_window,
-    )
-    assert preparation is not None
+    )).require_ready()
+
     comms = Comms(native.root)
     comms.registry.declare(
         Thread(
@@ -484,14 +484,14 @@ async def test_retained_native_summary_preserves_source_and_blocks_replay(native
     assert model is not None and model.provider and model.id and model.context_window
     selected_model = SelectedModel(model.provider, model.id, model.context_window)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
-    preparation = await asyncio.to_thread(
+    preparation = (await asyncio.to_thread(
         prepare_native_source,
         package,
         str(native.session),
         settings=settings,
         context_window=model.context_window,
-    )
-    assert preparation is not None
+    )).require_ready()
+
     comms = Comms(native.root)
     comms.registry.declare(
         Thread(

@@ -13,7 +13,7 @@ from pathlib import Path
 from .backend import PersistentPiSession
 from .compaction_errors import CompactionJournalError
 from .compaction_records import SelectedSummaryAttempt, SelectedSummarySource
-from .compaction_result import CommittedCompactionResult
+from .compaction_result import CompactionResult
 from .compaction_states import ManualCommittedSummary
 from .native_input_owner import RegistryOwner
 from .owner_compaction_commit import OwnerCompactionCommit
@@ -35,8 +35,8 @@ class ManualSelectedSummary(NativeSummary):
         return {"selected_attempt": self.attempt}
 
     def admit_original(self, bridge, owner, owner_generation, operation, source):
-        if operation is None or not operation.state.committed:
-            raise CompactionJournalError("Manual native commit is not complete")
+        assert operation is not None
+        operation.state.require_committed(operation.commit_id)
         bridge.journal.summaries.link_commit(
             self.attempt.operation_id, operation.commit_id, state_type=ManualCommittedSummary
         )
@@ -45,7 +45,7 @@ class ManualSelectedSummary(NativeSummary):
 
 async def compact_manual_owner(
     runner, session_id: str, thread_name: str, prepared: StateData, instructions: str | None
-) -> CommittedCompactionResult:
+) -> CompactionResult:
     persistent: PersistentPiSession | None = runner.persistent_backends.get(session_id)
     if persistent is None or not persistent.available:
         raise ValueError(
@@ -92,10 +92,8 @@ async def compact_manual_owner(
         )
 
     settings = await decision()
-    summary_text = ""
 
     async def summarize(prepared: NativePreparation, captured):
-        nonlocal summary_text
         attestation = owner.compaction_attestation(generation, prepared.witness)
         attestation.require_registry(runner.comms.registry, owner)
         settings.require_current(await decision())
@@ -119,6 +117,7 @@ async def compact_manual_owner(
             bridge.journal,
             prepared.witness,
             source,
+            owner=owner,
             expected_package=Path(package),
             tokens_before=prepared.tokens_before,
             custom_instructions=instructions.strip() if instructions else None,
@@ -128,10 +127,9 @@ async def compact_manual_owner(
         summary = result.manual_summary(bridge.journal)
         attestation.require_registry(runner.comms.registry, owner)
         settings.require_current(await decision())
-        summary_text = summary.text
         return summary
 
-    operation = await compact_owner_once(
+    return await compact_owner_once(
         bridge,
         owner,
         generation,
@@ -141,6 +139,3 @@ async def compact_manual_owner(
         context_window=selected.context_window,
         pending_input_key=pending_input_key,
     )
-    if operation is None:
-        raise ValueError("Selected native history has no complete safe compaction cut")
-    return CommittedCompactionResult(summary_text, operation.commit_id)

@@ -35,7 +35,14 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
 
     monkeypatch.setattr(owner_compaction_runtime.asyncio, "wrap_future", retained_wrapper)
 
+    prepared = NativePreparation(
+        NativeWitness("session-id", "/tmp/fake-saved", "leaf", "kept", "1:2:3:4:5"),
+        1, False,
+    )
+    monkeypatch.setattr(owner_compaction_runtime, "prepare_native_source", lambda *_a, **_kw: prepared)
+
     class Bridge:
+        native = SimpleNamespace(package_dir="test-owned-package")
         def require_source_current(self, *_args):
             pass
 
@@ -66,7 +73,7 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
         async with turn_lock:
             await compact_owner_once(
                 Bridge(),
-                object(),
+                SimpleNamespace(require_saved_session=lambda: "/tmp/fake-saved"),
                 1,
                 Persistent(),
                 synthetic_summary,

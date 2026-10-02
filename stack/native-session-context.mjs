@@ -29,11 +29,9 @@ export class SessionContext {
     requireReady() { throw new Error('Native compaction did not admit the retained context'); }
     messages(agent) { throw new Error("Concrete context messages required"); }
     requiresCompaction() { return false; }
-    summaryDeclineReason(reason) { throw new Error("Concrete context admission required"); }
     async beforeInput(session) {}
 }
 export class ReadyContext extends SessionContext {
-    summaryDeclineReason(reason) { return reason; }
     requireReady() {}
     messages(agent) { return agent.state.messages.values(); }
     install(agent) {
@@ -41,7 +39,6 @@ export class ReadyContext extends SessionContext {
     }
 }
 export class CompactionContext extends SessionContext {
-    summaryDeclineReason(reason) { return "context_requires_compaction"; }
     requiresCompaction() { return true; }
     messages() { return this.manager.buildContextEntries().flatMap(sessionEntryToContextMessages); }
     install(agent) { agent.state.messages=[]; }

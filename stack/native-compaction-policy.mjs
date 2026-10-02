@@ -2,6 +2,9 @@
  * This is the sole declaration of adapter defaults and accepted configuration.
  * Provider/model selection, context window, and no-replay are not policy knobs.
  */
+import { ContextBudget, BudgetAdmissionError } from '@earendil-works/pi-ai/api/agent-comms-context-budget';
+import { convertToLlm } from '../messages.js';
+
 const strategies = Object.freeze({
     serial: Object.freeze({ plan: segments => new CompactionPlan(segments, 1) }),
     parallel: Object.freeze({ plan: (segments, policy) => new CompactionPlan(segments, policy.concurrency) }),
@@ -112,27 +115,38 @@ export class CompactionPolicy {
     plan(segments) {
         return Object.freeze(strategies[this.strategy].plan(segments, this));
     }
-    inputBytes(model, reserveTokens) {
+    inputTokens(model, reserveTokens) {
         if (!(model.contextWindow > 0)) throw new Error('Compaction model context is unavailable');
-        const bytes = Math.floor((model.contextWindow - reserveTokens) * this.inputBudgetRatio);
-        if (bytes < 4096) throw new Error('Compaction model context is too small');
-        return bytes;
+        const tokens = Math.floor((model.contextWindow - reserveTokens) * this.inputBudgetRatio);
+        if (tokens < 4096) throw new BudgetAdmissionError('Compaction model context is too small');
+        return tokens;
     }
-    messageBytes(message) {
-        return Buffer.byteLength(JSON.stringify(message));
+    sourceTokens(model, reserveTokens) {
+        return Math.floor(this.inputTokens(model, reserveTokens) * this.sourceBudgetRatio);
+    }
+    contextTokens(messages, model) {
+        return new ContextBudget(model, convertToLlm(Array.from(messages))).input;
     }
     contextFits(messages, model, reserveTokens) {
-        const limit = this.inputBytes(model, reserveTokens);
-        let bytes = 0;
-        for (const message of messages) {
-            bytes += this.messageBytes(message);
-            if (bytes > limit) return false;
-        }
-        return true;
+        return this.requestFits({messages: convertToLlm(Array.from(messages))}, model, reserveTokens);
     }
     requireContext(messages, model, reserveTokens) {
-        if (!this.contextFits(messages, model, reserveTokens))
-            throw new Error('Compaction result exceeds its selected context budget');
+        this.requireRequest({messages: convertToLlm(Array.from(messages))}, model, reserveTokens);
+    }
+    requestFits(context, model, reserveTokens) {
+        return new ContextBudget(model, context).input <= this.inputTokens(model, reserveTokens);
+    }
+    requireRequest(context, model, reserveTokens) {
+        if (!this.requestFits(context, model, reserveTokens))
+            throw new BudgetAdmissionError('Compaction result exceeds its selected context budget');
+    }
+    retainedFits(required, messages, model, reserveTokens) {
+        // Required exact source and cumulative file annotations are allocated
+        // first. Recent atomic messages share only the remaining token capacity.
+        const mandatory = this.contextTokens([required], model);
+        const limit = mandatory + Math.floor(
+            (this.inputTokens(model, reserveTokens) - mandatory) * this.sourceBudgetRatio);
+        return this.contextTokens([required, ...messages], model) <= limit;
     }
     packSummary(exactText, narrative, annotations, tokensBefore, retainedMessages,
                 model, reserveTokens, createSummary) {
@@ -144,7 +158,7 @@ export class CompactionPolicy {
             function* context() { yield synthesized; yield* retainedMessages; }
             return this.contextFits(context(), model, reserveTokens);
         };
-        if (!fits('')) throw new Error('Mandatory exact task source exceeds the selected context budget');
+        if (!fits('')) throw new BudgetAdmissionError('Mandatory exact task source exceeds the selected context budget');
         if (fits(narrative)) return compose(narrative);
         let lower = 0, upper = narrative.length;
         while (lower < upper) {
@@ -154,12 +168,8 @@ export class CompactionPolicy {
         }
         return compose(narrative.slice(0, lower).toWellFormed());
     }
-    retainedBytes(model, reserveTokens) {
-        // The existing source allocation leaves room for synthesized context.
-        return Math.floor(this.inputBytes(model, reserveTokens) * this.sourceBudgetRatio);
-    }
-    summaryTokens(model, byteLimit, reserveTokens) {
-        return Math.min(reserveTokens, this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(byteLimit * this.summaryOutputRatio)),
+    summaryTokens(model, inputTokens, reserveTokens) {
+        return Math.min(reserveTokens, this.summaryMaxTokens, Math.max(CompactionPolicy.declarations.summaryMaxTokens.min, Math.floor(inputTokens * this.summaryOutputRatio)),
             model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY);
     }
     requireSummaryOutput(usage, maxTokens) {

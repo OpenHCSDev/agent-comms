@@ -26,7 +26,8 @@ from agent_comms.compaction_publication import publish_pending_local
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
-from agent_comms.owner_compaction_prepare import NativePreparationError, prepare_native_source
+from agent_comms.owner_compaction_prepare import (NativePreparationError, SkipPreparationResult,
+                                                 prepare_native_source)
 from agent_comms.owner_compaction_provider import NativeSummary
 from agent_comms.owner_compaction_runtime import compact_owner_once
 from agent_comms.owner_compaction_settings import PiCompactionSettings, PiSettingsEvidenceError
@@ -71,8 +72,7 @@ def test_native_preparation_is_read_only_and_matches_saved_cutpoint(session):
     package = Path(PACKAGE)
     prepared = prepare_native_source(
         package, str(session), settings=PiCompactionSettings(16384, 1), context_window=128000
-    )
-    assert prepared is not None
+    ).require_ready()
     assert prepared.witness.session_id
     assert prepared.witness.session_file == str(session)
     assert prepared.tokens_before > 0
@@ -88,7 +88,7 @@ def test_native_preparation_is_read_only_and_matches_saved_cutpoint(session):
             settings=PiCompactionSettings(16384, 20000),
             context_window=128000,
         )
-        is None
+        .declared_name == SkipPreparationResult.declared_name
     )
     assert session.read_bytes() == original
 
@@ -113,9 +113,13 @@ def test_canonical_owner_prepares_source_before_summary_and_commits_once(session
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     before = session.read_bytes()
     candidate = bridge.prepare_source(
-        owner, owner_generation, settings=PiCompactionSettings(16384, 1), context_window=128000
+        owner, owner_generation,
+        prepared=prepare_native_source(
+            bridge.native.package_dir, owner.require_saved_session(),
+            settings=PiCompactionSettings(16384, 1), context_window=128000,
+        ).require_ready(),
+        settings=PiCompactionSettings(16384, 1), context_window=128000
     )
-    assert candidate is not None
     prepared, source = candidate
     assert session.read_bytes() == before
     operation = bridge.commit(
@@ -516,9 +520,13 @@ def test_large_history_cli_prepare_commit_reopen_under_memory_budget(
             bridge = OwnerCompactionCommit(root / "registry.json", package)
             monkeypatch.setenv("AC_CAPACITY_PHASE", "prepare")
             candidate = bridge.prepare_source(
-                owner, generation, settings=PiCompactionSettings(16384, 1), context_window=128000
+                owner, generation,
+                prepared=prepare_native_source(
+                    bridge.native.package_dir, owner.require_saved_session(),
+                    settings=PiCompactionSettings(16384, 1), context_window=128000,
+                ).require_ready(),
+                settings=PiCompactionSettings(16384, 1), context_window=128000
             )
-            assert candidate is not None
             prepared, source = candidate
             receipt["phases"].append("prepare")
             assert prepared.witness.session_id == fixture["session_id"]
@@ -592,9 +600,13 @@ def test_prepared_owner_source_refuses_later_bus_correction(session):
     )
     bridge = OwnerCompactionCommit(root / "registry.json", Path(PACKAGE))
     candidate = bridge.prepare_source(
-        owner, owner_generation, settings=PiCompactionSettings(16384, 1), context_window=128000
+        owner, owner_generation,
+        prepared=prepare_native_source(
+            bridge.native.package_dir, owner.require_saved_session(),
+            settings=PiCompactionSettings(16384, 1), context_window=128000,
+        ).require_ready(),
+        settings=PiCompactionSettings(16384, 1), context_window=128000
     )
-    assert candidate is not None
     prepared, source = candidate
     before = session.read_bytes()
     comms = Comms(root)
@@ -863,9 +875,13 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                 timeout=5,
             )
         candidate = bridge.prepare_source(
-            owner, owner_generation, settings=PiCompactionSettings(16384, 1), context_window=128000
+            owner, owner_generation,
+            prepared=prepare_native_source(
+                bridge.native.package_dir, owner.require_saved_session(),
+                settings=PiCompactionSettings(16384, 1), context_window=128000,
+            ).require_ready(),
+            settings=PiCompactionSettings(16384, 1), context_window=128000
         )
-        assert candidate is not None
         prepared, source = candidate
         operation = bridge.commit(
             owner,
@@ -963,7 +979,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'continued'}]
                 settings=PiCompactionSettings(16384, 1),
                 context_window=128000,
             )
-            assert operation is not None and operation.state.declared_name == "committed"
+            assert operation.adaptive_result()
             commit_ids.append(operation.commit_id)
             assert persistent.custody.session_file == str(session)
             assert await publish_pending_local(agent, "project", "project") == 1

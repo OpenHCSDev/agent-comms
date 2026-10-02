@@ -2,10 +2,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { CompactionPolicy } from './native-compaction-policy.mjs';
 
 const { createCompactionSummaryMessage } = await import(pathToFileURL(
     process.env.AGENT_COMMS_PI_PACKAGE_DIR + '/dist/core/messages.js'));
+const { CompactionPolicy } = await import(pathToFileURL(
+    process.env.AGENT_COMMS_PI_PACKAGE_DIR + '/dist/core/compaction/agent-comms-policy.js'));
 const exact = readFileSync(process.argv[2], 'utf8');
 const policy = new CompactionPolicy();
 const model = { contextWindow: 12000, maxTokens: 4096 };

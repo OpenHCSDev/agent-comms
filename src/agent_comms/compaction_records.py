@@ -33,6 +33,7 @@ from .typed_table import Column, Index, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
+    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,13 @@ class SelectedSummarySource:
     def __post_init__(self):
         if not self.source:
             raise ValueError("Selected source witness required")
+
+    def summary_instructions(self, owner: Thread, instructions: str | None) -> str:
+        from .turn_context import CoordinationSegment
+
+        if owner.incarnation != self.source.incarnation:
+            raise CompactionJournalError("Summary instructions belong to another current owner")
+        return CoordinationSegment.capture(owner, ()).summary_instructions(instructions)
 
     def journal_json(self) -> str:
         record = FieldCodec.encode(self)
