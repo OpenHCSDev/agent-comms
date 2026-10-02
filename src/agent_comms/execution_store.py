@@ -61,6 +61,7 @@ class ExecutionStore:
         max_attempts: int,
         *,
         sources: tuple[SelectedSource, ...] = (),
+        expected_assignments: tuple[WakeAssignment, ...] | None = None,
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         origin = ExecutionOrigin(origin)
         for source in sources:
@@ -96,6 +97,8 @@ class ExecutionStore:
                 ):
                     raise IdentityConflict("execution identity conflicts")
                 return AlreadyApplied(snapshot)
+            if expected_assignments is not None and assignments != expected_assignments:
+                raise StaleRevision("original claims changed after proved native settlement")
             participant = self.participants.get(owner_lookup)
             if not participant.committed or participant.owner_thread != owner_thread:
                 raise IdentityConflict("execution requires committed current owner")

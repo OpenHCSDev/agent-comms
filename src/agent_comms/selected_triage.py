@@ -101,7 +101,7 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
             return RejectedTriageOutcome(error)
 
     @abstractmethod
-    def settle(self, participant, stage, admission, context) -> None: ...
+    def settle(self, participant, stage, admission, context) -> tuple[WakeAssignment, ...] | None: ...
 
     @abstractmethod
     def continue_turn(self, participant, session, input_id): ...
@@ -112,8 +112,8 @@ class DecidedTriageOutcome(SelectedTriageOutcome):
     decision: SelectedTriage
 
     def settle(self, participant, stage, admission, context):
-        stage.commit(participant.store, participant.identity, admission.input_id,
-                     admission.token_digest, context, self.decision)
+        return stage.commit(participant.store, participant.identity, admission.input_id,
+                            admission.token_digest, context, self.decision)
 
     def continue_turn(self, participant, session, input_id):
         return self.decision.continue_turn(participant, session, input_id)

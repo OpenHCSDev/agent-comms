@@ -103,12 +103,12 @@ class SelectedExecution:
                 self.fresh_private_enrollment,
                 self.selected_thinking_level,
             )
-            session, ignored = await SelectedConsideration(participant).run(
+            session, ignored, settled = await SelectedConsideration(participant).run(
                 self.native_package, session
             )
             if ignored is not None:
                 return ignored
-            attempt = SelectedAttempt.engage(participant)
+            attempt = SelectedAttempt.engage(participant, settled)
             return await attempt.run(
                 self.native_package, session, self.action(session), self.write_authority
             )

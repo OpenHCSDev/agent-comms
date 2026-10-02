@@ -58,3 +58,23 @@ src/agent_comms/native_admission_rules.py:224:class NativeClaimSequenceRule(Rese
 src/agent_comms/native_admission_rules.py:232:class NativeClaimMessageRule(ReservationRule):
 src/agent_comms/native_admission_rules.py:240:class NativeClaimModeRule(ReservationRule):
 
+COMMAND ['rg', '-n', 'expected_assignments|settled|SelectedConsideration|SelectedAttempt.engage|def commit|def settle', 'src/agent_comms/execution_store.py', 'src/agent_comms/selected_triage.py', 'src/agent_comms/selected_turn.py', 'src/agent_comms/coordinated_runtime.py', 'src/agent_comms/private_send_stage.py']
+src/agent_comms/private_send_stage.py:277:    def commit(
+src/agent_comms/private_send_stage.py:344:    def commit(
+src/agent_comms/selected_turn.py:99:               settled: tuple[WakeAssignment, ...] | None = None) -> SelectedAttempt:
+src/agent_comms/selected_turn.py:115:            expected_assignments=settled,
+src/agent_comms/selected_turn.py:248:class SelectedConsideration:
+src/agent_comms/selected_turn.py:276:            settled = outcome.settle(participant, stage, request.admission, result.context)
+src/agent_comms/selected_turn.py:280:            ), settled
+src/agent_comms/coordinated_runtime.py:24:from .selected_turn import SelectedAttempt, SelectedConsideration
+src/agent_comms/coordinated_runtime.py:106:            session, ignored, settled = await SelectedConsideration(participant).run(
+src/agent_comms/coordinated_runtime.py:111:            attempt = SelectedAttempt.engage(participant, settled)
+src/agent_comms/selected_triage.py:39:    def settle(self, store, db, current: WakeAssignment) -> None: ...
+src/agent_comms/selected_triage.py:51:    def settle(self, store, db, current):
+src/agent_comms/selected_triage.py:85:    def settle(self, store, db, current):
+src/agent_comms/selected_triage.py:104:    def settle(self, participant, stage, admission, context) -> tuple[WakeAssignment, ...] | None: ...
+src/agent_comms/selected_triage.py:114:    def settle(self, participant, stage, admission, context):
+src/agent_comms/selected_triage.py:126:    def settle(self, participant, stage, admission, context):
+src/agent_comms/execution_store.py:64:        expected_assignments: tuple[WakeAssignment, ...] | None = None,
+src/agent_comms/execution_store.py:100:            if expected_assignments is not None and assignments != expected_assignments:
+

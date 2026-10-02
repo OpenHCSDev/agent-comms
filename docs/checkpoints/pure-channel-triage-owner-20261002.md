@@ -21,6 +21,16 @@ reads current claims inside its existing write transaction, and engages with
 the current revision CAS. The obsolete comparison with a copied lifecycle row
 is deleted. No refresh after triage, new class, registry, queue or state mirror.
 
+TriageNativeSend.commit returns the authoritative settled rows from the same
+transaction which records the original native context/verdict. DecidedTriageOutcome,
+SelectedConsideration and SelectedExecution carry that transaction witness to
+SelectedAttempt.engage. ExecutionStore requires exact equality with its current
+transaction-owned rows before creating a new execution. An intervening change
+therefore refuses engagement; this is not an unfenced refresh of a source cache.
+The original AlreadyApplied membership/identity path remains idempotent and does
+not create another execution. Mandatory direct FULL does not have a triage
+settlement witness; its claims remain owned and checked by the execution transaction.
+
 The other selected_source.SelectedSource is the existing native selected-summary
 DeclaredFamily (filesystem/session revision and coverage). It does not own wire
 claim lifecycle. It remains a distinct required semantic relation; this change
@@ -32,7 +42,8 @@ does not create a second family or copy its authority.
   recipient/delivery membership; AssignmentStore owns current claim rows.
 - SelectedPrompt.triage/full: original delivery plus selected/current stage rows.
 - SelectedConsideration and TriageNativeSend: capture exact stage rows for native
-  claim/phase fences; original reservation, context and verdict unchanged.
+  claim/phase fences; return the proof transaction's settlement witness. Original
+  reservation, context and verdict unchanged.
 - SelectedAttempt.engage and ExecutionStore.create: same original IDs, current
   mutable lifecycle derived inside the execution transaction, strict revision CAS.
 - FullNativeSend/AttemptStore/RecoveryReader: exact engaged snapshot and evolving

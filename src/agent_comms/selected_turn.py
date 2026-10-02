@@ -14,6 +14,7 @@ from .channel_coding_tools import CodingToolOwner
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import prepare_fenced_response, publish_fenced_response
 from .coordination_tables.executions import ExecutionOrigin
+from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import WakeAdmission
@@ -94,7 +95,8 @@ class SelectedAttempt:
     obligations: tuple[ResponseObligation, ...]
 
     @classmethod
-    def engage(cls, participant: SelectedParticipant) -> SelectedAttempt:
+    def engage(cls, participant: SelectedParticipant,
+               settled: tuple[WakeAssignment, ...] | None = None) -> SelectedAttempt:
         participant.owner.require_registry(participant.comms.registry)
         store = participant.store
         with store.session.read():
@@ -110,6 +112,7 @@ class SelectedAttempt:
             participant.owner.thread.name,
             1,
             sources=participant.batch.sources,
+            expected_assignments=settled,
         )
         with store.session.read():
             participant.identity.require(store, participant.lookup)
@@ -248,7 +251,7 @@ class SelectedConsideration:
     async def run(self, package, session):
         participant = self.participant
         if not participant.batch.requires_triage:
-            return session, None
+            return session, None, None
         participant.transition(
             PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {', '.join(participant.batch.targets)}")
         )
@@ -270,8 +273,8 @@ class SelectedConsideration:
             )
             participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
-            outcome.settle(participant, stage, request.admission, result.context)
+            settled = outcome.settle(participant, stage, request.admission, result.context)
             continued = session.continued(result.context.session_file)
             return continued, outcome.continue_turn(
                 participant, continued, request.admission.input_id
-            )
+            ), settled
