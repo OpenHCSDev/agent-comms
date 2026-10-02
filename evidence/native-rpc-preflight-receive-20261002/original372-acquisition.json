@@ -1,0 +1,194 @@
+{
+  "public_read_only": true,
+  "provider_calls": 0,
+  "rows": [
+    {
+      "diagnostic_id": "0884315c2eb20a75054e8a49d98a19f1",
+      "lease_id": "a02b021bd1549bc0c7f39e2cf1a8f7e7",
+      "thread": "openhcs-audit-merged-models",
+      "sequences": [
+        382
+      ],
+      "diagnostic_sha256": "51b36b00a4dd01a8addecc16c57ccc920debf8ef09efb765a79555f58e26d9a1",
+      "request_journal_sha256": "bd55e9db7a40b5737863a4db9c95d4e417550360d13bf7c21c6162c5b8c171d7",
+      "input_disposition": "not_sent",
+      "initialization": {
+        "control_command": {
+          "id": "agent-comms-preflight-06f4de4e7fbdf9f0bd377cc63a03c32b",
+          "type": "get_state"
+        }
+      },
+      "stderr_bytes": 0,
+      "acquisition_records": [
+        {
+          "turn": {
+            "identity": {
+              "incarnation": {
+                "name": "openhcs-audit-merged-models",
+                "created_at": 1790873447.6164267
+              },
+              "generation": 48
+            },
+            "turn_id": "a02b021bd1549bc0c7f39e2cf1a8f7e7",
+            "admission_generation": 1836
+          },
+          "input_id": "0884315c2eb20a75054e8a49d98a19f1",
+          "acquisition": {
+            "count": 0,
+            "total_ns": 0,
+            "maximum_ns": 0,
+            "maximum_started_ns": 0,
+            "maximum_finished_ns": 0,
+            "operations": {
+              "open_transport": {
+                "count": 1,
+                "total_ns": 2385,
+                "maximum_ns": 2385,
+                "maximum_started_ns": 415389253522982,
+                "maximum_finished_ns": 415389253525367,
+                "operations": {}
+              },
+              "native_open": {
+                "count": 1,
+                "total_ns": 20389228,
+                "maximum_ns": 20389228,
+                "maximum_started_ns": 415389253531138,
+                "maximum_finished_ns": 415389273920366,
+                "operations": {}
+              },
+              "startup_slot": {
+                "count": 1,
+                "total_ns": 90772,
+                "maximum_ns": 90772,
+                "maximum_started_ns": 415389253581153,
+                "maximum_finished_ns": 415389253671925,
+                "operations": {}
+              },
+              "native_spawn": {
+                "count": 1,
+                "total_ns": 20197084,
+                "maximum_ns": 20197084,
+                "maximum_started_ns": 415389253703545,
+                "maximum_finished_ns": 415389273900629,
+                "operations": {}
+              },
+              "get_state_send": {
+                "count": 1,
+                "total_ns": 1058526,
+                "maximum_ns": 1058526,
+                "maximum_started_ns": 415389274013263,
+                "maximum_finished_ns": 415389275071789,
+                "operations": {}
+              },
+              "get_state_receive": {
+                "count": 1,
+                "total_ns": 19999911110,
+                "maximum_ns": 19999911110,
+                "maximum_started_ns": 415389275078642,
+                "maximum_finished_ns": 415409274989752,
+                "operations": {}
+              }
+            }
+          },
+          "recorded_monotonic_ns": 415411367744083
+        }
+      ],
+      "native_progress_records": 0,
+      "native_process_identity_recorded": false
+    },
+    {
+      "diagnostic_id": "087471776b85cd8040b9e94bf2db0d25",
+      "lease_id": "f53393a2110b4b42dbe730bc8ce0bd3a",
+      "thread": "openhcs-audit-merged-boundaries",
+      "sequences": [
+        382
+      ],
+      "diagnostic_sha256": "c2de03a64a0f9bcfd0f4ede6bd56bc446d5392232c06d51ef2e750008a6de696",
+      "request_journal_sha256": "a26b333bbace568c4f694a9899eaf8a33a716c81d8c0b4c62e5668ac5d1d671d",
+      "input_disposition": "not_sent",
+      "initialization": {
+        "control_command": {
+          "id": "agent-comms-preflight-affb84e09e0d0a49e3608f1f1a5b2558",
+          "type": "get_state"
+        }
+      },
+      "stderr_bytes": 0,
+      "acquisition_records": [
+        {
+          "turn": {
+            "identity": {
+              "incarnation": {
+                "name": "openhcs-audit-merged-boundaries",
+                "created_at": 1790873473.1996155
+              },
+              "generation": 49
+            },
+            "turn_id": "f53393a2110b4b42dbe730bc8ce0bd3a",
+            "admission_generation": 1837
+          },
+          "input_id": "087471776b85cd8040b9e94bf2db0d25",
+          "acquisition": {
+            "count": 0,
+            "total_ns": 0,
+            "maximum_ns": 0,
+            "maximum_started_ns": 0,
+            "maximum_finished_ns": 0,
+            "operations": {
+              "open_transport": {
+                "count": 1,
+                "total_ns": 2134,
+                "maximum_ns": 2134,
+                "maximum_started_ns": 415389243426254,
+                "maximum_finished_ns": 415389243428388,
+                "operations": {}
+              },
+              "native_open": {
+                "count": 1,
+                "total_ns": 20400850,
+                "maximum_ns": 20400850,
+                "maximum_started_ns": 415389243434109,
+                "maximum_finished_ns": 415389263834959,
+                "operations": {}
+              },
+              "startup_slot": {
+                "count": 1,
+                "total_ns": 65925,
+                "maximum_ns": 65925,
+                "maximum_started_ns": 415389243484835,
+                "maximum_finished_ns": 415389243550760,
+                "operations": {}
+              },
+              "native_spawn": {
+                "count": 1,
+                "total_ns": 20243442,
+                "maximum_ns": 20243442,
+                "maximum_started_ns": 415389243578793,
+                "maximum_finished_ns": 415389263822235,
+                "operations": {}
+              },
+              "get_state_send": {
+                "count": 1,
+                "total_ns": 582524,
+                "maximum_ns": 582524,
+                "maximum_started_ns": 415389263886687,
+                "maximum_finished_ns": 415389264469211,
+                "operations": {}
+              },
+              "get_state_receive": {
+                "count": 1,
+                "total_ns": 18003808655,
+                "maximum_ns": 18003808655,
+                "maximum_started_ns": 415389264473630,
+                "maximum_finished_ns": 415407268282285,
+                "operations": {}
+              }
+            }
+          },
+          "recorded_monotonic_ns": 415411104366681
+        }
+      ],
+      "native_progress_records": 0,
+      "native_process_identity_recorded": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+  "tree": "5c9d304db96618de00d96b0c5143bb24cdeb935c802e29f97ef988ec38131df7",
+  "files": {
+    "dist/main.js": "04262c7460ed53e5135e8327c31921cc2117b2c11141c65db0d10d59f668025e",
+    "dist/modes/rpc/rpc-mode.js": "9fc253340fd231c5bdb40a584e1980101f36b25222502979a02f1797a03a2f7c",
+    "dist/core/session-context.js": "98156e826bb8ebc13329a003ed5f4c349fee59d2d1bf77a669001f20198ea1c5",
+    "dist/core/session-entry-store.js": "456254c763e05b16378c70ee8fa364e138521690cd30bc421805cb62f01a8479",
+    "dist/core/native-proof-journal.js": "223b4e3cc99b8f7a46c2243df77bfb02e4127d3101180fe4e2be072a28c98622",
+    "dist/core/output-guard.js": "1a1dcab01172e65dab4e0d2e8684e7ad123bb027abe66b4ac5daee748576a24d",
+    "dist/core/timings.js": "9bec37f6fcacd80ca07ad7bafdc6aec91821f691698aa9d81dcdd2d7d5b08531"
+  },
+  "missing_original_observations": [
+    "native process identity for either failed acquisition",
+    "native initialization subspans",
+    "get_state command handler entry",
+    "response queued/flushed timestamps"
+  ]
+}
