@@ -501,9 +501,8 @@ class CarriedNativeStore(DeclaredFamily, affix='NativeStore'):
     evidence: dict[str, Any]
 
     def publisher(self, root, custody):
-        def publish(staging):
-            staging.replace(root / self.name)
-            fsync_directory((root / self.name).parent)
+        def publish(staging, original):
+            staging.replace_original(original)
         return publish
 
 
@@ -541,9 +540,8 @@ class PromptBindingNativeStore(NativeReleaseStore):
         snapshot = _read_snapshot(directory, self.name)
         if snapshot is None:
             raise ValueError('Original prompt binding disappeared')
-        def publish(staging):
-            _publish(directory, self.name, snapshot[1], staging.read_bytes())
-            staging.unlink()
+        def publish(staging, original):
+            _publish(directory, self.name, snapshot[1], staging.path.read_bytes())
         return publish
 
 
@@ -617,24 +615,26 @@ class NativeSchemaCarryPlan:
         fsync_directory(destination)
         fsync_directory(destination.parent)
         acquired.require_original()
-        # All preimages and both candidates exist before the first replace.
+        # All preimages and held candidates exist before the first replace.
         # Any exception leaves the existing stopped batch and this attempt
         # directory intact. No implicit rollback, launch or retry.
-        for item in stores:
-            staging = destination / (item.name + '.target')
-            retain_file(candidate / item.name, staging)
-            if digest(staging) != item.candidate_sha256:
-                raise ValueError('Staged candidate differs from reviewed carry')
-        acquired.require_original()
-        for item in stores:
-            staging = destination / (item.name + '.target')
-            publishers[item.name](staging)
-        if any(digest(root / item.name) != item.candidate_sha256 for item in stores):
-            raise ValueError('Installed native carry differs; remain stopped')
-        result = {'classification':classification, 'stores':FieldCodec.encode(stores),
-                  'original_preimages':str(destination), 'retired':[], 'reconstructed_proofs':0, 'input_replays':0}
-        write_original(destination / 'installed.json', (json.dumps(result,indent=2)+'\n').encode())
-        fsync_directory(destination)
+        originals = {original.path: original for original in acquired.originals}
+        with ExitStack() as staging_custody:
+            staged = [(item, staging_custody.enter_context(
+                originals[root / item.name].prepare_replacement(
+                    candidate / item.name, item.candidate_sha256))) for item in stores]
+            write_original(destination / 'publication-staging.json',
+                           (json.dumps([stage.evidence() for _, stage in staged], indent=2)+'\n').encode())
+            fsync_directory(destination)
+            acquired.require_original()
+            for item, stage in staged:
+                publishers[item.name](stage, originals[root / item.name])
+            if any(digest(root / item.name) != item.candidate_sha256 for item in stores):
+                raise ValueError('Installed native carry differs; remain stopped')
+            result = {'classification':classification, 'stores':FieldCodec.encode(stores),
+                      'original_preimages':str(destination), 'retired':[], 'reconstructed_proofs':0, 'input_replays':0}
+            write_original(destination / 'installed.json', (json.dumps(result,indent=2)+'\n').encode())
+            fsync_directory(destination)
         return result
 
 
