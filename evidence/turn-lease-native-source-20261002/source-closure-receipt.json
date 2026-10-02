@@ -1,0 +1,108 @@
+{
+  "state": "source-closure-complete-installed-journey-owned-by-Mendel-pending",
+  "source_revision": "1c899c6c02d2c5f634351aa72956e139d79e37fb",
+  "packaged_production_equivalent_revision": "7dd5c14cdd88f3046f44613d22d346ef9d2fe833",
+  "main_ancestor": "356068c7",
+  "original_coverage_qualifier_ancestor": "fd3812a62bd0079ce17208622f4eb227274efb84",
+  "production_delta": [
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "added": 4,
+      "deleted": 2
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "added": 2,
+      "deleted": 1
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "added": 6,
+      "deleted": 0
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "added": 23,
+      "deleted": 7
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "added": 24,
+      "deleted": 18
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "added": 2,
+      "deleted": 2
+    }
+  ],
+  "production_added": 61,
+  "production_deleted": 30,
+  "original_registry_turn_rule_unchanged": true,
+  "authority_declarations": {
+    "RegistryOwner": "src/agent_comms/native_input_owner.py:35",
+    "OwnedTurn": "src/agent_comms/owned_turn.py:51",
+    "TurnProgress": "src/agent_comms/turn_progress.py:52",
+    "RegistryTurnRule": "src/agent_comms/native_admission_rules.py:110"
+  },
+  "source_ast": {
+    "before_modules": {
+      "src": 311,
+      "tests": 357,
+      "tools": 53
+    },
+    "after_modules": {
+      "src": 311,
+      "tests": 358,
+      "tools": 53
+    },
+    "parse_omissions": [],
+    "begin_calls": 68,
+    "begin_call_consumption": {
+      "Assign": 6,
+      "Attribute": 22,
+      "Expr": 39,
+      "Assert": 1
+    },
+    "dynamic_resolution": "Lexical leads and syntactic inheritance only; dynamic dispatch is not proven by AST."
+  },
+  "sanity": {
+    "passed": 17,
+    "failed": 3,
+    "seconds": 2.5,
+    "source_only": true,
+    "risks_checked": [
+      "ordinary idle admission/begin/native AgentInfo attachment after progress phase change shares original owner",
+      "same turn ID replacement and admission replacement refuse stale source publication without registry mutation",
+      "exact turn generation and alias/deletion settlement boundaries"
+    ],
+    "failures": [
+      {
+        "case": "test_admission_scope_cannot_decode_a_registry_process_owner",
+        "cause": "Existing fixture calls QueuedInputContext.capture with old three positional arguments; current method accepts two."
+      },
+      {
+        "case": "test_durable_private_admission_names_each_changed_authority[False]",
+        "cause": "Existing fixture reads removed TriageNativeSend.assignment; current plural owner declares assignments."
+      },
+      {
+        "case": "test_durable_private_admission_names_each_changed_authority[True]",
+        "cause": "Existing fixture reads removed FullNativeSend.assignment; current plural owner declares assignments."
+      }
+    ],
+    "log": "sanity.log",
+    "log_sha256": "a38ad016a2f186de0786d8bb7d8518afab89879ca24585191603b0d4dc3bf68d"
+  },
+  "installed_acceptance": {
+    "owner": "Mendel",
+    "builder": "Schrodinger",
+    "scope": "ONE configured retained SDK fork, original begin/native AgentInfo attachment/native completion through installed ACP; source guards retained",
+    "result": "pending"
+  },
+  "preservation": [
+    "79cb original UNKNOWN untouched/no replay",
+    "540 NotSentInput refusal and original source/preparation receipts retained",
+    "No native/wire/durable schema change",
+    "No new environment/worktree/provider call by this source contributor"
+  ]
+}
