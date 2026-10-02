@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .agent_events import CompactionEnd
+from .compaction_result import CompactionResult, CommittedCompactionResult
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 
 if TYPE_CHECKING:
@@ -32,6 +33,10 @@ class OwnerSummaryOutcome(ABC):
     def completion_event(self) -> CompactionEnd:
         """Report only a completed, authoritative outcome."""
 
+    @abstractmethod
+    def compaction_result(self, operation: CompactionOperation | None) -> CompactionResult:
+        """Project the original outcome for manual and adaptive consumers."""
+
     def admit_original(
         self,
         bridge: OwnerCompactionCommit,
@@ -55,6 +60,11 @@ class NativeSummary(OwnerSummaryOutcome):
         operation = await writer(self)
         operation.state.require_committed(operation.commit_id)
         return operation
+
+    def compaction_result(self, operation: CompactionOperation | None) -> CommittedCompactionResult:
+        assert operation is not None
+        operation.state.require_committed(operation.commit_id)
+        return CommittedCompactionResult(self.text, operation.commit_id)
 
     @property
     def completion_event(self) -> CompactionEnd:

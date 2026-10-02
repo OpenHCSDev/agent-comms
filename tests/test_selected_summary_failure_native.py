@@ -159,14 +159,14 @@ async def native_failure_owner(tmp_path, status):
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
     session.chmod(0o600)
     original = session.read_bytes()
-    preparation = await asyncio.to_thread(
+    preparation = (await asyncio.to_thread(
         prepare_native_source,
         package,
         str(session),
         settings=settings,
         context_window=selected.context_window,
-    )
-    assert preparation is not None
+    )).require_ready()
+
     env = {
         "PATH": "/usr/local/bin:/usr/bin",
         "HOME": str(tmp_path),
