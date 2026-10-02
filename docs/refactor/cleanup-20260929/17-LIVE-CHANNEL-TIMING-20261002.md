@@ -33,3 +33,8 @@ replays uncertainty or hides errors by rewriting original outcomes.
 
 This run verifies a failure on the user's real workload. It is not a fix or a
 performance acceptance result. Repeat only after the owning mechanism changes.
+
+Later canonical observation: all30 peer-reply claims among the six functioning
+owners settled. Last settlement occurred340.105s after the original send.
+Four blocked native and two absent external owners remain pending; the complete
+audience journey still fails. No second test message or retry was sent.
