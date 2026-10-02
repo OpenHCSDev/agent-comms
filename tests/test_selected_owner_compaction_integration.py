@@ -410,9 +410,11 @@ async def acp_selected_summary_journey(
                         )
                         attempt = journal.summaries.get(reference.operation_id)
                         source = attempt.request.source
-                        assert source.pending_input_key is not None
-                        original = dispositions.read().lookup(source.pending_input_key)
-                        assert original.exists and not original.has_native_binding
+                        assert source.pending_input_keys
+                        inputs = dispositions.read()
+                        for key in source.pending_input_keys:
+                            original = inputs.lookup(key)
+                            assert original.exists and not original.has_native_binding
                         publications.append(event.publication.commit_id)
 
         agent = CommsAgent(

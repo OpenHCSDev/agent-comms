@@ -19,6 +19,7 @@ from agent_comms.reservation_rules import (
 )
 from agent_comms.selected_source import ManualSource, SelectedSource, SessionRevision
 from agent_comms.text_digest import TextDigest
+from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
 from agent_comms.thread_identity import ThreadIncarnation, TurnId
 from selected_summary_cases import admission_identity
 
@@ -87,6 +88,7 @@ def test_rule_family_names_actual_refusals_and_discovers_new_policy(tmp_path, mo
         source=source,
         revision=source.reserved_revision,
         rows=(row,),
+        retained=RetainedTaskFacts((InputTaskFact(row),)),
         incarnation=source.incarnation,
         turn=TurnId("now"),
     )
@@ -117,6 +119,7 @@ def test_rule_family_names_actual_refusals_and_discovers_new_policy(tmp_path, mo
             source=source,
             revision=source.reserved_revision,
             rows=(inputs.read().lookup(source.originals[0].key),),
+            retained=check.retained,
         ),
         "native_binding_exists": replace(check, rows=(inputs.read().lookup(source.originals[0].key),)),
         "input_owner_changed": replace(check, rows=(replace(row, owner="another"),)),
@@ -160,7 +163,8 @@ def test_source_family_roundtrips_nested_values_and_requires_declared_kind(tmp_p
     )
     assert not hasattr(manual, "ingress_key")
     manual.interrupted_check(
-        manual.reserved_revision, InputDocument(), manual.incarnation, TurnId("later")
+        manual.reserved_revision, InputDocument(), manual.incarnation, TurnId("later"),
+        RetainedTaskFacts(()),
     ).require_valid()
     values = {value.declared_name: value for value in (manual, admission)}
     for name in SelectedSource.names():

@@ -92,11 +92,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ContextObserved)
     async def observe_context(self, event):
-        from .thread_identity import TurnId
-        from .turn_context import RecordedContextTurn
-
-        turn = RecordedContextTurn(TurnId(self.turn_lease.turn_id), self.turn_lease.identity)
-        self.comms.bus.log.record_context(event.context.for_turn(self.thread.incarnation, turn))
+        event.context.record(self.comms.bus.log, self.thread, self.turn_lease)
 
     @property
     def reply_targets(self):

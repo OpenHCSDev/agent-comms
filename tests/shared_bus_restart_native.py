@@ -94,6 +94,9 @@ async def configured_pure_channel(arguments):
     from agent_comms.coordination_tables.publications import PublicationReceipts
     from agent_comms.field_codec import FieldCodec
     from agent_comms.store_files import _store_lock
+    from agent_comms.native_entries import NativeEntry
+    from agent_comms.coordination_cohort import _receipt_matches
+    from agent_comms.acp_extension import CursorAdvancedUpdate, VerifiedCursorObservation
 
     public = wire()
     original_names = (arguments.configured_owner, *arguments.configured_peers)
@@ -142,27 +145,37 @@ async def configured_pure_channel(arguments):
     originals, proof, failure = [], {}, None
     begun = time.perf_counter()
     try:
+        sender = service.registry.require('human')
+        with _store_lock(service._wire_lock_path):
+            originals = [service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
+                f'{stage.name} original {ordinal}: New isolated user channel question to all participants: '
+                'please answer here with the value of 10+2. This is a fresh question, '
+                'not continuation or retry of any previous input. No project edits are requested.',
+                MessageType.INFO),
+                _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                for ordinal in range(arguments.wave_size)]
+        assert originals and len({row.message_id for row in originals}) == arguments.wave_size
+        # All originals exist before dispatch. No coalescing timer or forced FULL
+        # changes the channel policy; owners snapshot the already pending wave.
         await asyncio.gather(*(asyncio.to_thread(service.owners.start, name) for name in names))
         await asyncio.gather(*(attach(service, name) for name in names))
         await asyncio.gather(*(attachment.load_session(cwd=source.worktree, session_id=name)
             for name, source in zip(names, sources, strict=True)))
-        sender = service.registry.require('human')
-        with _store_lock(service._wire_lock_path):
-            originals = [service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
-                f'{stage.name}: New isolated user channel question to all participants: '
-                'please answer here with the value of 10+2. This is a fresh question, '
-                'not continuation or retry of any previous input. No project edits are requested.',
-                MessageType.INFO),
-                _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))]
         overlap = False
         async with asyncio.timeout(arguments.observation_seconds):
             while True:
                 with Coordination(str(service.root/'coordination.sqlite3')) as store:
                     with store.session.read():
                         db = store.session._connection
-                        claims = WakeAssignment.select(db, where='wire_seq=?',
-                            parameters=(originals[0].seq,))
-                        inputs = NativeRuntimeInput.select(db)
+                        claims = WakeAssignment.select(db,
+                            where="wire_seq IN (" + ",".join("?" for _ in originals) + ")",
+                            parameters=tuple(row.seq for row in originals),order_by=('wire_seq',))
+                        all_inputs = NativeRuntimeInput.select(db)
+                        original_ids = {row.assignment_id for row in claims}
+                        membership = {row.input_id: row.execution.source_assignment_ids(db,row.input_id)
+                                      for row in all_inputs}
+                        inputs = [row for row in all_inputs
+                                  if original_ids.intersection(membership[row.input_id])]
                         dispatched = tuple(row for row in inputs if
                             row.sent_owner_admission_generation.reservation_violation()
                             and row.session_id is None)
@@ -181,16 +194,32 @@ async def configured_pure_channel(arguments):
                                 'disposition':row.lifecycle.declared_name} for row in claims]}
                     if not timeline or observed['dispatched_unproven_inputs'] != timeline[-1]['dispatched_unproven_inputs'] or observed['claims'] != timeline[-1]['claims']:
                         timeline.append(observed)
-                    overlap |= len({row.owner_thread for row in dispatched}) >= 2
+                    overlap |= len({row.owner_thread for row in dispatched}) == len(names)
                     triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
                     full = [row for row in inputs if row.reference_stage is FullNativeExecution]
-                    if len(claims) == len(names) and all(row.lifecycle.completed for row in claims) and not active:
+                    if len(claims) == len(names)*len(originals) and all(row.lifecycle.completed for row in claims) and not active:
                         assert len(triage) == len(full) == len(names)
                         assert all(row.verdict is FullSelectedTriage for row in triage)
                         assert all(row.session_id and row.session_entry_id for row in inputs)
-                        assert len({row.accepted_at_ms for row in claims}) == 1
+                        assert all(len({row.accepted_at_ms for row in claims if row.wire_seq == original.seq}) == 1
+                                   for original in originals)
+                        for native in inputs:
+                            expected = tuple(row.assignment_id for row in claims if row.recipient == native.owner_thread)
+                            assert membership[native.input_id] == expected, "Native input did not capture the complete ordered wave"
+                            with NativeEntry.open_evidence(Path(native.session_file)) as evidence:
+                                _, entries = evidence.observe()
+                            tracked = NativeEntry.tracked_users(entries)[native.input_id]
+                            assert all(assignment_id in tracked.message.text for assignment_id in expected)
+                            assert all(json.dumps(original.body,ensure_ascii=True) in tracked.message.text
+                                       for original in originals)
                         assert all(row.lifecycle.mode.triage for row in claims)
                         receipts = []
+                        for original in originals:
+                            initial = service.bus.log.read_delivery_cohort(root_id,original.seq)
+                            with store.session.read():
+                                sealed = _receipt_matches(db,initial)
+                            assert {row.assignment_id for row in sealed.assignments} == {
+                                row.assignment_id for row in claims if row.wire_seq == original.seq}
                         for claim in claims:
                             rows = PublicationReceipts.select(db, where='execution_id=?',
                                 parameters=(claim.lifecycle.execution_id,))
@@ -199,19 +228,48 @@ async def configured_pure_channel(arguments):
                             assert reply.sender == claim.recipient and '12' in reply.body
                             receipts.extend(rows)
                             history = read_historical_native_inputs(store,wire_root_id=root_id,
-                                recipient_lookup=claim.recipient_lookup,source_seq=originals[0].seq)
+                                recipient_lookup=claim.recipient_lookup,source_seq=claim.wire_seq)
                             assert len(history) == 2 and all(
                                 item.expected_prompt_equality_established for item in history)
                         cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
-                        assert len(cursors) == len(names) and all(
-                            row.covered_seq >= originals[0].seq for row in cursors)
+                        full_ids = {row.input_id: row for row in full}
+                        published_full = {}
+                        for packet in packets:
+                            for fact in decode_updates(packet['update'].get('_meta')):
+                                if (isinstance(fact, CursorAdvancedUpdate)
+                                        and isinstance(fact.envelope.observation, VerifiedCursorObservation)):
+                                    cursor = fact.envelope.observation.cursor
+                                    if cursor.input_id in full_ids:
+                                        native = full_ids[cursor.input_id]
+                                        assert cursor.owner_thread == native.owner_thread
+                                        assert cursor.owner_generation == native.owner_generation
+                                        assert cursor.owner_admission_generation == native.sent_owner_admission_generation.value
+                                        assert cursor.injected_seq == originals[-1].seq
+                                        assert fact.envelope.scope.owner_pid == service.registry.require(native.owner_thread).pid
+                                        published_full[native.owner_thread] = fact.envelope
+                        # Original completion and informational ACP publication
+                        # are separate asynchronous boundaries. Await the actual
+                        # installed publisher within the existing journey budget;
+                        # never replay a native input to make its projection appear.
+                        if (len(cursors) != len(names) or len(published_full) != len(names)
+                                or any(row.covered_seq < originals[-1].seq for row in cursors)):
+                            await asyncio.sleep(.1)
+                            continue
                         assert overlap, 'No overlapping actual dispatched native inputs observed'
                         proof = {'recipients':len(names),'pure_channel':True,
+                            'pending_originals_per_owner':len(originals),
+                            'complete_ordered_native_membership':True,
+                            'all_original_sealed_receipts':True,
+                            'original_claim_count':len(claims),
                             'dm_or_mention_forcing_full':False,'triage_inputs':len(triage),
                             'full_inputs':len(full),'overlapping_dispatched_native_inputs':True,
                             'all_originals_completed':True,'common_accepted_time':True,
-                            'channel_receipts':FieldCodec.encode(receipts),
-                            'all_original_historical_proofs':True,'all_current_cursors_cover_source':True}
+                            'channel_receipts':FieldCodec.encode(tuple(dict.fromkeys(receipts))),
+                            'all_original_historical_proofs':True,'all_current_cursors_cover_source':True,
+                            'actual_full_cursor_envelopes':FieldCodec.encode(tuple(published_full.values())),
+                            'actual_current_cursors':FieldCodec.encode(tuple(cursors)),
+                            'current_original_owner_epochs_alive':True,
+                            'refresh_native_input_replays':0}
                         break
                 diagnostics = list((service.root/'diagnostics').glob('*.json'))
                 if diagnostics:
@@ -230,7 +288,9 @@ async def configured_pure_channel(arguments):
             await asyncio.to_thread(service.owners.stop, name)
         (stage/'acp-observer.json').write_text(json.dumps(packets,indent=2)+'\n')
         (stage/'native-overlap-timeline.json').write_text(json.dumps(timeline,indent=2)+'\n')
-        receipt = {'elapsed_seconds':time.perf_counter()-begun,'failure':failure,
+        with Coordination(str(service.root/'coordination.sqlite3')) as store:
+            final_inputs = NativeRuntimeInput.select(store.session._connection)
+        receipt = {'final_native_inputs':FieldCodec.encode(final_inputs),'elapsed_seconds' :time.perf_counter()-begun,'failure':failure,
             'settings':settings,'installed_interpreter':sys.executable,
             'original_sequences':[row.seq for row in originals],'proof':proof,
             'public_inputs':0,'original_seq326_replays':0,'provider':'actual configured provider',

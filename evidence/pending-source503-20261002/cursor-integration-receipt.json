@@ -1,0 +1,284 @@
+{
+  "production": "ad7bf20bc5a30ee7728d4b6f22794ae1cbf49a94",
+  "base": "95d7c03a99126741c444793e5eae55dbc418184d",
+  "cursor_source": "777a27c588f1bae7bc1dcf77e7a16e2635b9f7bd",
+  "production_added": 71,
+  "production_deleted": 29,
+  "production_changed_files": 5,
+  "deleted_competing_decisions": [
+    "per-original source reacquisition/acceptance writes",
+    "transient completed-ID requirement over immutable original sent admission",
+    "independent pre-scan cursor witness"
+  ],
+  "owners": {
+    "membership": "NativeInputExecution/SelectedSourceBatch",
+    "proof": "NativeRuntimeInput/PromptBinding/historical native evidence",
+    "coverage": "SourceCoverage/ProvenSourceCoverage.source_witness",
+    "admission": "CursorOwner",
+    "monotonic_writer": "NativeSourceCursor._publish",
+    "refresh": "CursorPublication.refresh/InputDrain",
+    "wire": "CursorEnvelope/CursorScope/CursorObservation",
+    "view": "CommsSessionUpdateHandler/ProjectionAttachment/Conversation.on_private_native_cursor_update"
+  },
+  "searches": {
+    "declarations": {
+      "argv": [
+        "rg",
+        "-n",
+        "class CursorOwner|class NativeSourceCursor|class CursorPublication|class EmptyCursorObservation",
+        "src/agent_comms"
+      ],
+      "exit_code": 0,
+      "stdout": "src/agent_comms/cursor_owner.py:22:class CursorOwner(RegistryOwner):\nsrc/agent_comms/cursor_publication.py:57:class CursorPublication:\nsrc/agent_comms/native_source_cursor.py:30:class NativeSourceCursor:\nsrc/agent_comms/acp_extension.py:213:class EmptyCursorObservation(CursorObservation):\n",
+      "stderr": ""
+    },
+    "consumers": {
+      "argv": [
+        "rg",
+        "-n",
+        "NativeSourceCursor|cursors.refresh|cursor_status_for|needs_refresh",
+        "src/agent_comms/cursor_publication.py",
+        "src/agent_comms/input_drain.py",
+        "src/agent_comms/selected_result.py",
+        "src/agent_comms/acp.py",
+        "src/agent_comms/acp_extension.py"
+      ],
+      "exit_code": 0,
+      "stdout": "src/agent_comms/acp_extension.py:197:    def needs_refresh(self) -> bool:\nsrc/agent_comms/acp_extension.py:204:    def needs_refresh(self) -> bool:\nsrc/agent_comms/acp_extension.py:215:    def needs_refresh(self) -> bool:\nsrc/agent_comms/selected_result.py:15:from .native_source_cursor import NativeSourceCursor\nsrc/agent_comms/selected_result.py:39:            cls.cursor_status_for(participant, input_id),\nsrc/agent_comms/selected_result.py:44:    def cursor_status_for(participant, input_id) -> str:\nsrc/agent_comms/selected_result.py:48:            cursor = NativeSourceCursor(\nsrc/agent_comms/input_drain.py:295:            await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))\nsrc/agent_comms/acp.py:48:from agent_comms.native_source_cursor import NativeSourceCursor\nsrc/agent_comms/acp.py:440:                    cursor = NativeSourceCursor(bus, store, wire_root_id=wire_root_id).advance(\nsrc/agent_comms/cursor_publication.py:4:the durable cursor. Every observation reads NativeSourceCursor's original proof.\nsrc/agent_comms/cursor_publication.py:29:from .native_source_cursor import NativeSourceCursor\nsrc/agent_comms/cursor_publication.py:53:    def needs_refresh(self) -> bool:\nsrc/agent_comms/cursor_publication.py:54:        return self.published is None or self.published.observation.needs_refresh\nsrc/agent_comms/cursor_publication.py:100:                cursor = NativeSourceCursor(bus, store, wire_root_id=self.root_id).read(\nsrc/agent_comms/cursor_publication.py:155:        if self.delivery(session_id).needs_refresh:\nsrc/agent_comms/cursor_publication.py:167:                    NativeSourceCursor(bus, store, wire_root_id=self.root_id).advance(\n",
+      "stderr": ""
+    },
+    "removedscalar": {
+      "argv": [
+        "rg",
+        "-n",
+        "SelectedParticipant.source\\b|cls.source\\(",
+        "src",
+        "tests",
+        "tools"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  "installed_original_relation": {
+    "state": "ORIGINAL_ADMISSION_RELATION_PASS",
+    "module": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-pending503-cursor507-candidate-20261002/lib/python3.14/site-packages/agent_comms/cursor_owner.py",
+    "original_input": "d4eece9aee310bf4b9733ba3888e7008",
+    "source_members": 3,
+    "controls": [
+      "same_admission_without_transient_id",
+      "explicit_original_id",
+      "wrong_explicit_id_refused",
+      "new_admission_refused",
+      "empty_observation_requests_refresh"
+    ],
+    "original_sql_bus_registry_journal_unchanged": true,
+    "original_cursor_still_missing": true,
+    "native_inputs": 0,
+    "provider_calls": 0,
+    "product_mutations": 0,
+    "live_gate_qualification": false
+  },
+  "original_assertions_active": true,
+  "original_missing_cursor_preserved": true,
+  "remaining": "Scoped503 original missing-current-cursor live case qualified. Deferred contention/refresh invocation was not individually observed; full runtime-lifecycle/performance remains with existing owners. Parent upstream merge and default activation pending.",
+  "schema_native_policy_changes": false,
+  "fresh_live_receiving_qualification": {
+    "state": "SCOPED_READY: fresh actual configured3-owner3-source FULL/current cursor/ACP publication PASS; deferred-contention refresh branch unobserved",
+    "core": "ad7bf20bc5a30ee7728d4b6f22794ae1cbf49a94",
+    "toad": "758882bebe4c9aa552543e0b9c0412a856d0e4f3",
+    "textual": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7",
+    "sdk": "0.12.1",
+    "prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-pending503-cursor507-candidate-20261002",
+    "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+    "native_manifest": "5184ffa6d842fe232b370e40f9ee532696e9f83b789ab009e047c9f164026c68",
+    "native_tree": "5c9d304db96618de00d96b0c5143bb24cdeb935c802e29f97ef988ec38131df7",
+    "normal_packages": 69,
+    "all4_source_inventory_directURL_assets_equal": true,
+    "pip_check": "Using Python 3.14.2 environment at: .artifacts/runtime-pending503-cursor507-candidate-20261002\nChecked 69 packages in 1ms\nAll installed packages are compatible\n",
+    "receiving_pin_lines": 3,
+    "receiving_production_changes": 0,
+    "protected_package_files_unchanged": 17035,
+    "installed_original_relation": {
+      "state": "ORIGINAL_ADMISSION_RELATION_PASS",
+      "module": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-pending503-cursor507-candidate-20261002/lib/python3.14/site-packages/agent_comms/cursor_owner.py",
+      "original_input": "d4eece9aee310bf4b9733ba3888e7008",
+      "source_members": 3,
+      "controls": [
+        "same_admission_without_transient_id",
+        "explicit_original_id",
+        "wrong_explicit_id_refused",
+        "new_admission_refused",
+        "empty_observation_requests_refresh"
+      ],
+      "original_sql_bus_registry_journal_unchanged": true,
+      "original_cursor_still_missing": true,
+      "native_inputs": 0,
+      "provider_calls": 0,
+      "product_mutations": 0,
+      "live_gate_qualification": false
+    },
+    "assertions_active": true,
+    "fresh_configured_gate": {
+      "raw": "/home/ts/wt/b503507c01",
+      "elapsed_seconds": 25.911002826993354,
+      "result": "PASS",
+      "original_pending_wave": 3,
+      "owners": 3,
+      "original_claims": 9,
+      "ordinary_channel_receipts": 3,
+      "acp_facts": 35,
+      "primary_full_cursor_envelopes": [
+        {
+          "scope": {
+            "session_id": "purechannel-owner-0",
+            "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+            "admission": {
+              "incarnation": {
+                "name": "purechannel-owner-0",
+                "created_at": 1790915196.1280735
+              },
+              "admission_generation": 5
+            },
+            "owner_pid": 3103796
+          },
+          "revision": 7,
+          "observation": {
+            "kind": "verified",
+            "cursor": {
+              "kind": "current_native_cursor",
+              "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+              "recipient_lookup": "4e91b8abddd559a6917c1f41a0991722",
+              "owner_thread": "purechannel-owner-0",
+              "owner_generation": 1,
+              "owner_admission_generation": 5,
+              "covered_seq": 4,
+              "injected_seq": 3,
+              "input_id": "da17d8ffbf8f23b6579ecdc7c24ca24c",
+              "stage": "full",
+              "session_id": "01a0fadd-5afe-72c5-8cbe-134774f8c1f5",
+              "request_generation": 2
+            }
+          }
+        },
+        {
+          "scope": {
+            "session_id": "purechannel-owner-2",
+            "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+            "admission": {
+              "incarnation": {
+                "name": "purechannel-owner-2",
+                "created_at": 1790915200.2406924
+              },
+              "admission_generation": 7
+            },
+            "owner_pid": 3103878
+          },
+          "revision": 7,
+          "observation": {
+            "kind": "verified",
+            "cursor": {
+              "kind": "current_native_cursor",
+              "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+              "recipient_lookup": "4e1a1cb6fc74ca930bb855440fb532b9",
+              "owner_thread": "purechannel-owner-2",
+              "owner_generation": 1,
+              "owner_admission_generation": 7,
+              "covered_seq": 3,
+              "injected_seq": 3,
+              "input_id": "598d3abc4ed4a0558e77af334f227e81",
+              "stage": "full",
+              "session_id": "01a0fadd-5df8-7025-87f2-9af7f6348a4c",
+              "request_generation": 2
+            }
+          }
+        },
+        {
+          "scope": {
+            "session_id": "purechannel-owner-1",
+            "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+            "admission": {
+              "incarnation": {
+                "name": "purechannel-owner-1",
+                "created_at": 1790915198.1961262
+              },
+              "admission_generation": 6
+            },
+            "owner_pid": 3103877
+          },
+          "revision": 7,
+          "observation": {
+            "kind": "verified",
+            "cursor": {
+              "kind": "current_native_cursor",
+              "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+              "recipient_lookup": "773d163b59b63b7aea8ae6e770e271a2",
+              "owner_thread": "purechannel-owner-1",
+              "owner_generation": 1,
+              "owner_admission_generation": 6,
+              "covered_seq": 3,
+              "injected_seq": 3,
+              "input_id": "99d6f280b29e3717d7a8d02e3ed29364",
+              "stage": "full",
+              "session_id": "01a0fadd-5dc8-741e-9185-4a3d6693d07a",
+              "request_generation": 2
+            }
+          }
+        }
+      ],
+      "current_sql_cursors": [
+        {
+          "kind": "current_native_cursor",
+          "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+          "recipient_lookup": "4e1a1cb6fc74ca930bb855440fb532b9",
+          "owner_thread": "purechannel-owner-2",
+          "owner_generation": 1,
+          "owner_admission_generation": 7,
+          "covered_seq": 4,
+          "injected_seq": 4,
+          "input_id": "5abc917c1243e5a429cfd237f582c5b3",
+          "stage": "triage",
+          "session_id": "01a0fadd-8c49-76ff-87d8-5163b707dfab",
+          "request_generation": 1
+        },
+        {
+          "kind": "current_native_cursor",
+          "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+          "recipient_lookup": "4e91b8abddd559a6917c1f41a0991722",
+          "owner_thread": "purechannel-owner-0",
+          "owner_generation": 1,
+          "owner_admission_generation": 5,
+          "covered_seq": 5,
+          "injected_seq": 5,
+          "input_id": "e898ab85022d45a40a4df4ce4cdbaac6",
+          "stage": "triage",
+          "session_id": "01a0fadd-8b6a-7167-8815-a722e2d65275",
+          "request_generation": 1
+        },
+        {
+          "kind": "current_native_cursor",
+          "wire_root_id": "1d6e261976274130b1dee8ada4077c94",
+          "recipient_lookup": "773d163b59b63b7aea8ae6e770e271a2",
+          "owner_thread": "purechannel-owner-1",
+          "owner_generation": 1,
+          "owner_admission_generation": 6,
+          "covered_seq": 6,
+          "injected_seq": 5,
+          "input_id": "0ed716bd84cb8bbee4f6a6777665e337",
+          "stage": "triage",
+          "session_id": "01a0fadd-8ff0-70bc-b1c5-04dfd45a677c",
+          "request_generation": 1
+        }
+      ],
+      "original_native_membership_history_receipts": true,
+      "original_epochs_alive_at_qualification": true,
+      "configured_sources_unchanged": true,
+      "all_private_workers_retired": true,
+      "unknown_replays": 0
+    },
+    "known_scope": "All primary FULL publications were immediate selected_status=proven. No controlled transient refusal/deferred selected_status=None\u2192verified refresh was induced in this one gate; original installed admission and empty-refresh controls passed separately. Original failed gate01 and UNKNOWNs remain protected. No full-performance/runtime-lifecycle claim.",
+    "activation_owner": "parent",
+    "public_changes": false
+  }
+}

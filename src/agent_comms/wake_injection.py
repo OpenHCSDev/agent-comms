@@ -9,94 +9,107 @@ has no bus/registry/SQLite reads, inbox cursor, or model-launch operation.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 
 from .bus_publication import CommittedDelivery
 from .threads import Thread
+from .turn_context import (
+    InstructionFile,
+    InstructionSegment,
+    OwnerProvenance,
+    NextContextTurn,
+    WireProvenance,
+)
+from .wake_policy import WakePolicy
 
 
-def render_selected_wake_frame(
-    initial: CommittedDelivery,
-    assignment: WakeAssignment,
-    owner: Thread,
-    *,
-    obligation: ResponseObligation | None = None,
-) -> str:
-    """Render one selected wake; do not manufacture one from message text.
+@dataclass(frozen=True, kw_only=True)
+class SelectedWakeSegment(InstructionSegment):
+    """Original sealed sources and their captured owner, never wake authority."""
 
-    The caller must first verify the original bus row, sealed SQL receipt and
-    live owner. These exact-data checks are defense in depth, not admission.
-    A bounded triage has no response obligation until it engages FULL work.
-    """
-    return render_selected_batch_frame(
-        ((initial, assignment),), owner,
-        obligations=() if obligation is None else (obligation,),
-    )
+    sources: tuple[tuple[CommittedDelivery, WakeAssignment], ...]
+    owner: Thread
+    obligations: tuple[ResponseObligation, ...]
+    relevance: InstructionFile
 
-
-def render_selected_batch_frame(
-    sources, owner: Thread, *, obligations: tuple[ResponseObligation, ...] = (),
-) -> str:
-    """Validate every original and render common owner context exactly once."""
-    selected = []
-    for initial, assignment in sources:
-        assignment.require_selected_source(initial, owner)
-        matching = tuple(
-            obligation for obligation in obligations
-            if obligation.exact_target == assignment.lifecycle.exact_target
-        )
-        if len(matching) > 1:
-            from .coordination_errors import IdentityConflict
-
-            raise IdentityConflict("Selected source has ambiguous response obligations")
-        expectation, obligation_line = assignment.lifecycle.wake_frame(
-            initial.message, next(iter(matching), None)
-        )
-        selected.append({
-            "source_seq": assignment.wire_seq,
-            "claim_id": assignment.assignment_id,
-            "sender": initial.message.sender,
-            "target": initial.message.target,
-            "audience": assignment.audience.value,
-            "wake_mode": assignment.lifecycle.mode.declared_name,
-            "expectation": expectation,
-            "response_obligation": obligation_line,
-            "body": initial.message.body,
-        })
-    selected_line = json.dumps(
-        selected,
-        ensure_ascii=True,
-        separators=(",", ":"),
-    )
-    work_context = json.dumps(
-        {
-            "name": owner.name,
-            "title": owner.title,
-            "tags": sorted(owner.tags),
-            "original_assignment": owner.task,
-            "current_goal": (
-                None
-                if owner.goal is None
-                else {
-                    "text": owner.goal.text,
-                    "status": owner.goal.state.declared_name,
-                    "progress": owner.goal.progress,
-                }
+    @classmethod
+    def capture(cls, sources, owner, *, obligations=()):
+        instruction = InstructionFile.read("selected-wake.md")
+        relevance = WakePolicy.relevance_instruction()
+        return cls(
+            provenance=(
+                instruction.source,
+                relevance.source,
+                OwnerProvenance(owner.incarnation, NextContextTurn().source_revision(owner)),
+                *(WireProvenance(initial.message.reference) for initial, _ in sources),
             ),
-        },
-        ensure_ascii=True,
-        separators=(",", ":"),
-    )
-    return (
-        f"── comms: {len(selected)} selected ──\n"
-        f"selected: {selected_line}\n"
-        "── your state ──\n"
-        f"work_context: {work_context}\n"
-        "Judge relevance using your current goal, thread role/title, channel tags and the "
-        "new request. The original assignment records how the thread started; an old "
-        "bootstrap instruction to wait for a task does not exclude a new relevant request. "
-        "A current goal takes precedence over that original assignment. Preserve explicit "
-        "goal pauses; answering a coordination question need not resume paused work.\n"
-        "This frame is a read-only projection, not file-write permission.\n"
-    )
+            instruction=instruction,
+            sources=tuple(sources),
+            owner=owner,
+            obligations=tuple(obligations),
+            relevance=relevance,
+        )
+
+    def values(self):
+        sources, owner = self.sources, self.owner
+        obligations, relevance = self.obligations, self.relevance
+        selected = []
+        for initial, assignment in sources:
+            assignment.require_selected_source(initial, owner)
+            matching = tuple(
+                obligation
+                for obligation in obligations
+                if obligation.exact_target == assignment.lifecycle.exact_target
+            )
+            if len(matching) > 1:
+                from .coordination_errors import IdentityConflict
+
+                raise IdentityConflict("Selected source has ambiguous response obligations")
+            expectation, obligation_line = assignment.lifecycle.wake_frame(
+                initial.message, next(iter(matching), None)
+            )
+            selected.append(
+                {
+                    "source_seq": assignment.wire_seq,
+                    "claim_id": assignment.assignment_id,
+                    "sender": initial.message.sender,
+                    "target": initial.message.target,
+                    "audience": assignment.audience.value,
+                    "wake_mode": assignment.lifecycle.mode.declared_name,
+                    "expectation": expectation,
+                    "response_obligation": obligation_line,
+                    "body": initial.message.body,
+                }
+            )
+        selected_line = json.dumps(
+            selected,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        work_context = json.dumps(
+            {
+                "name": owner.name,
+                "title": owner.title,
+                "tags": sorted(owner.tags),
+                "original_assignment": owner.task,
+                "current_goal": (
+                    None
+                    if owner.goal is None
+                    else {
+                        "text": owner.goal.text,
+                        "status": owner.goal.state.declared_name,
+                        "progress": owner.goal.progress,
+                    }
+                ),
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        return dict(
+            count=len(selected),
+            selected=selected_line,
+            work_context=work_context,
+            relevance=relevance.content,
+        )

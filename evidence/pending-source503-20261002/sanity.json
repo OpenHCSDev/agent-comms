@@ -1,0 +1,16 @@
+{
+  "case": "101 original pending wave captures one fenced input; late arrivals remain pending and UNKNOWN cannot reserve again",
+  "state": "PASS",
+  "elapsed_seconds": 8.311455073999241,
+  "installed_core_url": {
+    "url": "https://github.com/OpenHCSDev/agent-comms.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "4701ee10a54d8151724f102cd1861a97ce385452",
+      "requested_revision": "4701ee10a54d8151724f102cd1861a97ce385452"
+    }
+  },
+  "source_overlay": false,
+  "provider_calls": 0,
+  "fixture_cleanup": true
+}

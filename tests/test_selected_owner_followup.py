@@ -35,7 +35,6 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
     tmp_path, monkeypatch, goal_mode, native_ok
 ):
     comms, agent, _ = _session(tmp_path)
-    agent.turns.adaptive_compaction_enabled = False
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
@@ -205,7 +204,6 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
     from agent_comms.owned_turn import OwnedTurn
 
     comms, agent, _ = _session(tmp_path)
-    agent.turns.adaptive_compaction_enabled = False
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(coordinated_runtime, "_trusted_package", lambda _: None)
@@ -389,7 +387,6 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
     parked_goal = comms.registry.require("beta").goal
     parked_wait = comms.goals.goal_wait("beta")
     agent._private_nk_native_package = Path(package)
-    agent.turns.adaptive_compaction_enabled = False
     agent.turns.agent_args = NativeArguments.parse(
         [
             "--no-extensions",
@@ -445,7 +442,6 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
     from types import SimpleNamespace
 
     comms, agent, _ = _session(tmp_path)
-    agent.turns.adaptive_compaction_enabled = False
 
     async def session_update(**_kwargs):
         pass

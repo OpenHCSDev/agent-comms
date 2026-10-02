@@ -1,0 +1,76 @@
+{
+  "head": "4ab98a59e1de22274d7330b1654e50b0f21f4c1d",
+  "installed_production": "4701ee10a54d8151724f102cd1861a97ce385452",
+  "production_diff": "29\t18\tsrc/agent_comms/selected_participant.py\n",
+  "changed_production_files": [
+    "src/agent_comms/selected_participant.py"
+  ],
+  "deleted_production_lines": 18,
+  "added_production_lines": 29,
+  "removed_independent_work": [
+    "per-original acceptance writes for already sealed pending cohorts",
+    "second per-original original-source read",
+    "scalar source assembly loop and removed source method"
+  ],
+  "retained_owner_facts": {
+    "membership": "pending_sealed_assignments/SelectedSourceBatch",
+    "lifecycle": "AssignmentStore",
+    "source_certificate": "WireLog.certified_read/CertifiedSourceRead",
+    "sealed_original_receipt": "coordination_cohort._receipt_matches",
+    "original_recipient": "WakeAssignment.require_selected_source/ParticipantOwner.require"
+  },
+  "new_types": 0,
+  "schema_change": false,
+  "channel_policy_change": false,
+  "searches": {
+    "selection owner": {
+      "command": [
+        "rg",
+        "-n",
+        "class SelectedParticipant|def sources\\(|cls.sources\\(",
+        "src/agent_comms/selected_participant.py"
+      ],
+      "exit_code": 0,
+      "output": "30:class SelectedParticipant(MroDispatch):\n110:            sources = cls.sources(bus, store, root_id, pending, identity)\n152:    def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:\n",
+      "stderr": ""
+    },
+    "no replaced scalar call sites": {
+      "command": [
+        "rg",
+        "-n",
+        "SelectedParticipant.source\\b|cls.source\\(",
+        "src",
+        "tests",
+        "tools"
+      ],
+      "exit_code": 1,
+      "output": "",
+      "stderr": ""
+    },
+    "source/receipt declaration owners": {
+      "command": [
+        "rg",
+        "-n",
+        "def certified_read|def _receipt_matches|class SelectedSourceBatch|def pending_sealed_assignments",
+        "src/agent_comms"
+      ],
+      "exit_code": 0,
+      "output": "src/agent_comms/wire_log.py:63:    def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):\nsrc/agent_comms/store_files.py:57:    def certified_read(self) -> CertifiedSourceRead:\nsrc/agent_comms/selected_source_batch.py:45:class SelectedSourceBatch(InputBatch):\nsrc/agent_comms/coordination_cohort.py:105:def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:\nsrc/agent_comms/coordination_cohort.py:341:def pending_sealed_assignments(\n",
+      "stderr": ""
+    },
+    "receipt consumers": {
+      "command": [
+        "rg",
+        "-n",
+        "_receipt_matches",
+        "src/agent_comms"
+      ],
+      "exit_code": 0,
+      "output": "src/agent_comms/optional_awareness_projection.py:46:from .coordination_cohort import _receipt_matches\nsrc/agent_comms/optional_awareness_projection.py:531:        receipt = _receipt_matches(db, initial)\nsrc/agent_comms/proven_source_coverage.py:27:from .coordination_cohort import AcceptedCohort, _receipt_matches\nsrc/agent_comms/proven_source_coverage.py:168:            return _receipt_matches(db, initial) if sealed and sealed.sealed else None\nsrc/agent_comms/claim_admission.py:22:from .coordination_cohort import _receipt_matches\nsrc/agent_comms/claim_admission.py:87:        receipt = _receipt_matches(store.session._connection, initial)\nsrc/agent_comms/selected_participant.py:14:from .coordination_cohort import _receipt_matches, pending_sealed_assignments\nsrc/agent_comms/selected_participant.py:170:                    receipt = _receipt_matches(store.session._connection, initial)\nsrc/agent_comms/coordination_cohort.py:105:def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:\nsrc/agent_comms/coordination_cohort.py:253:            return AlreadyApplied(_receipt_matches(db, initial))\nsrc/agent_comms/coordination_cohort.py:308:        return Applied(_receipt_matches(db, initial))\nsrc/agent_comms/coordination_tables/publications.py:364:            \"publication_receipt_matches_authorities\": (\nsrc/agent_comms/coordination_tables/publications.py:365:                \"\"\"CREATE TRIGGER publication_receipt_matches_authorities\n",
+      "stderr": ""
+    }
+  },
+  "lock_order": "bus then coordinator read; all resources closed before native preparation/provider",
+  "validation": "installed101-source sanity PASS; same real configured3owner\u00d73pending original input/answer/receipt/proof PASS; full gate FAILED missing owner2 auxiliary current cursor; no actual exception retained",
+  "remaining_owner": "Arendt489 existing source coverage/cursor publication; no competing patch"
+}

@@ -100,7 +100,7 @@ class SelectedSummaries(JournalRole):
                     ).reading() as inputs,
                     self.journal.transaction() as db,
                 ):
-                    envelope.source.reservation_check(
+                    envelope.reservation_check(
                         SessionRevision.observe(canonical), inputs
                     ).require_valid()
                     covered_inputs = (

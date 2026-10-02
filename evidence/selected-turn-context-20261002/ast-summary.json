@@ -1,0 +1,51 @@
+{
+  "results": {
+    "before": {
+      "parsed": 1014,
+      "failures": 25,
+      "declarations": 25,
+      "consumers": 658,
+      "retired": 18,
+      "duplicates": {
+        "SelectedSource": [
+          "agent_comms.selected_source.SelectedSource",
+          "agent_comms.selected_source_batch.SelectedSource"
+        ]
+      }
+    },
+    "after": {
+      "parsed": 1014,
+      "failures": 25,
+      "declarations": 29,
+      "consumers": 712,
+      "retired": 6,
+      "duplicates": {
+        "SelectedSource": [
+          "agent_comms.selected_source.SelectedSource",
+          "agent_comms.selected_source_batch.SelectedSource"
+        ]
+      }
+    }
+  },
+  "before_after_is_source_evidence": true,
+  "dynamic_correctness_proof": false,
+  "supplement": {
+    "before": {
+      "nra_supported": 1014,
+      "nra_parser_omissions": 25,
+      "stdlib_supplement_parsed": 25,
+      "remaining_parse_failures": [],
+      "total_declared_modules": 1039,
+      "candidate_references": 14838
+    },
+    "after": {
+      "nra_supported": 1014,
+      "nra_parser_omissions": 25,
+      "stdlib_supplement_parsed": 25,
+      "remaining_parse_failures": [],
+      "total_declared_modules": 1039,
+      "candidate_references": 14841
+    }
+  },
+  "tooling_boundary": "Existing NRA3.11 + preserved candidate Python3.14 standard ast. No configured NRA3.14 environment is relied on."
+}

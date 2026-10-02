@@ -65,7 +65,8 @@ from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
-from agent_comms.wake_injection import render_selected_wake_frame
+from agent_comms.wake_injection import SelectedWakeSegment
+from agent_comms.turn_context import TurnContext
 from agent_comms.wake_policy import PassiveWake
 from native_proof_cases import read_proof_rows, write_proof_rows
 from selected_summary_cases import manual_summary_record
@@ -274,7 +275,21 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         )
         proof_file = Path(str(session_file) + ".input-proof")
         write_proof_rows(session_file, proof_rows)
-        reply = json.dumps({"decision": decision}) if "bounded triage" in prompt else "42"
+        # The original selected stage owns this control's response grammar.
+        # Relevance guidance can mention triage inside a FULL prompt too.
+        from agent_comms.private_send_stage import TriageNativeSend
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.messages import Message, MessageType
+
+        admission = _kwargs["prompt_send_boundary"]
+        if isinstance(admission.stage, TriageNativeSend):
+            reply = json.dumps({"decision": decision})
+        else:
+            targets = tuple(dict.fromkeys(row.lifecycle.exact_target for row in admission.stage.assignments))
+            reply = json.dumps(FieldCodec.encode(tuple(
+                Message(admission.owner.thread.name, target, "42", MessageType.INFO, timestamp=0)
+                for target in targets
+            )))
         observer = _kwargs.get("observe_event")
         if observer is not None:
             from agent_comms.pi_events import PiEvent
@@ -313,7 +328,9 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert len(alpha_calls) == 1
     assert "── comms: 1 selected ──" in alpha_calls[0][1]
     assert f'"source_seq":{initial.message.seq}' in alpha_calls[0][1]
-    assert "engage only if this concerns your assigned task" in alpha_calls[0][1]
+    from agent_comms.wake_policy import WakePolicy
+
+    assert WakePolicy.relevance_instruction().content in alpha_calls[0][1]
     assert "No response obligation exists until triage engages" in alpha_calls[0][1]
     assert "you owe a response" not in alpha_calls[0][1]
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -337,7 +354,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert beta is not None and beta.disposition is CompletedAssignment
     assert tuple(receipt.exact_target for receipt in beta.publications) == ("#team",) and beta.publications
     assert len(beta_calls) == 2
-    assert "engage only if this concerns your assigned task" in beta_calls[0][1]
+    assert WakePolicy.relevance_instruction().content in beta_calls[0][1]
     assert "expected: this is yours" in beta_calls[1][1]
     assert '"target":"#team"' in beta_calls[1][1]
     assert f'"source_seq":{initial.message.seq}' in beta_calls[1][1]
@@ -411,10 +428,10 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
     with pytest.raises(IdentityConflict, match="response obligation"):
-        render_selected_wake_frame(initial, selected, people[2])
+        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, selected),), people[2]),)).text
     forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
     with pytest.raises(IdentityConflict, match="selected N/K"):
-        render_selected_wake_frame(initial, forged, people[1])
+        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[1]),)).text
     assert len(comms.views.channel_history("#team")) == 1  # Framing never publishes a row.
 
 
@@ -423,7 +440,7 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
         assignment = sealed_cohort_assignments(store, lookup)[0]
-    frame = render_selected_wake_frame(initial, assignment, people[1])
+    frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1]),)).text
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
     assert initial.message.body not in frame
@@ -750,10 +767,10 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
         admission_generation=1,
     )
     try:
-        assert await projection.render(first_initial, assignment, owner) == ""
+        assert await projection.segments(first_initial, assignment, owner) == ()
         assert entered.is_set()
         for _ in range(40):
-            assert await projection.render(first_initial, assignment, owner) == ""
+            assert await projection.segments(first_initial, assignment, owner) == ()
         assert len(calls) == 1  # no queued/retired builder fleet
         assert await asyncio.wait_for(asyncio.to_thread(lambda: 42), timeout=1) == 42
         second_base = tmp_path / "second"

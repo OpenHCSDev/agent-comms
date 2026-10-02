@@ -1,0 +1,501 @@
+{
+  "state": "original batch/receipt/prompt path PASS; actual whole gate FAILED current cursor publication",
+  "original_failed_receipt": "/home/ts/wt/b503c01/receipt.json",
+  "original_gate_seconds": 21.076633997028694,
+  "original_sequences": [
+    1,
+    2,
+    3
+  ],
+  "original_claims": [
+    {
+      "source_seq": 1,
+      "assignment_id": "cohort-v1:0bda169a6fcec6cdf9520fce1d6d7c725994e2d50b8659d0407c30b72260f9a7",
+      "owner": "purechannel-owner-1",
+      "disposition": "completed",
+      "native_inputs": [
+        "4913661ec591c4c4c27ce1b270808538",
+        "0c1d016c021a459e822f68759d23eefc"
+      ],
+      "original_prompt_equality": true
+    },
+    {
+      "source_seq": 1,
+      "assignment_id": "cohort-v1:559ed1f9049b8a68807471913b9a32fc3e8dfbef1996f481972995f712aa2ebf",
+      "owner": "purechannel-owner-0",
+      "disposition": "completed",
+      "native_inputs": [
+        "c245263bea7ff11b1908009cc108127c",
+        "535827b336168340ea1c7b848c6af790"
+      ],
+      "original_prompt_equality": true
+    },
+    {
+      "source_seq": 1,
+      "assignment_id": "cohort-v1:e6f2d36918fb71f9a9c490f6116f9c54992efc7443e6c7d938d2f2ab740d1943",
+      "owner": "purechannel-owner-2",
+      "disposition": "completed",
+      "native_inputs": [
+        "3c894db31874cf330849460b622f2d1d",
+        "d4eece9aee310bf4b9733ba3888e7008"
+      ],
+      "original_prompt_equality": true
+    },
+    {
+      "source_seq": 2,
+      "assignment_id": "cohort-v1:7d3773b8b1e06a3449f8e17d086392fc5515c4a982d0b5a62492af1908aa190a",
+      "owner": "purechannel-owner-1",
+      "disposition": "completed",
+      "native_inputs": [
+        "4913661ec591c4c4c27ce1b270808538",
+        "0c1d016c021a459e822f68759d23eefc"
+      ],
+      "original_prompt_equality": true
+    },
+    {
+      "source_seq": 2,
+      "assignment_id": "cohort-v1:d81d88625faa4421567137bd5fe97ec135565cabfa48b2ab114f1f241d677f77",
+      "owner": "purechannel-owner-0",
+      "disposition": "completed",
+      "native_inputs": [
+        "c245263bea7ff11b1908009cc108127c",
+        "535827b336168340ea1c7b848c6af790"
+      ],
+      "original_prompt_equality": true
+    },
+    {
+      "source_seq": 2,
+      "assignment_id": "cohort-v1:4210461a71b889076507686743aef62b0ba86d9a3720815801bb12da66dad1b5",
+      "owner": "purechannel-owner-2",
+      "disposition": "completed",
+      "native_inputs": [
+        "3c894db31874cf330849460b622f2d1d",
+        "d4eece9aee310bf4b9733ba3888e7008"
+      ],
+      "original_prompt_equality": true
+    },
+    {
+      "source_seq": 3,
+      "assignment_id": "cohort-v1:a9744d17fa005063311e27a612ee3e3ddbc5acd3d9115fdf05ccbf7143260d1f",
+      "owner": "purechannel-owner-1",
+      "disposition": "completed",
+      "native_inputs": [
+        "4913661ec591c4c4c27ce1b270808538",
+        "0c1d016c021a459e822f68759d23eefc"
+      ],
+      "original_prompt_equality": true
+    },
+    {
+      "source_seq": 3,
+      "assignment_id": "cohort-v1:73cae218980057a5e80036e7834a9d3ff2a5dbc1cb2131df04f54609331c2df8",
+      "owner": "purechannel-owner-0",
+      "disposition": "completed",
+      "native_inputs": [
+        "c245263bea7ff11b1908009cc108127c",
+        "535827b336168340ea1c7b848c6af790"
+      ],
+      "original_prompt_equality": true
+    },
+    {
+      "source_seq": 3,
+      "assignment_id": "cohort-v1:c643eac24c47885cfb2aee179e9e91aab99514534f4c534bbff05dcdd0881a53",
+      "owner": "purechannel-owner-2",
+      "disposition": "completed",
+      "native_inputs": [
+        "3c894db31874cf330849460b622f2d1d",
+        "d4eece9aee310bf4b9733ba3888e7008"
+      ],
+      "original_prompt_equality": true
+    }
+  ],
+  "native_ordered_membership": [
+    {
+      "owner": "purechannel-owner-1",
+      "input_id": "0c1d016c021a459e822f68759d23eefc",
+      "stage": "full",
+      "assignment_ids": [
+        "cohort-v1:0bda169a6fcec6cdf9520fce1d6d7c725994e2d50b8659d0407c30b72260f9a7",
+        "cohort-v1:7d3773b8b1e06a3449f8e17d086392fc5515c4a982d0b5a62492af1908aa190a",
+        "cohort-v1:a9744d17fa005063311e27a612ee3e3ddbc5acd3d9115fdf05ccbf7143260d1f"
+      ],
+      "tracked_original_ids_in_prompt": true,
+      "session_entry_id": "e46f02de",
+      "context_digest": "9ac77d70164866a0a1ea4111ba7e376623265e7ac3301dbae272b0e2c241c39a"
+    },
+    {
+      "owner": "purechannel-owner-2",
+      "input_id": "3c894db31874cf330849460b622f2d1d",
+      "stage": "triage",
+      "assignment_ids": [
+        "cohort-v1:e6f2d36918fb71f9a9c490f6116f9c54992efc7443e6c7d938d2f2ab740d1943",
+        "cohort-v1:4210461a71b889076507686743aef62b0ba86d9a3720815801bb12da66dad1b5",
+        "cohort-v1:c643eac24c47885cfb2aee179e9e91aab99514534f4c534bbff05dcdd0881a53"
+      ],
+      "tracked_original_ids_in_prompt": true,
+      "session_entry_id": "645a7258",
+      "context_digest": "bd0fc40d699873a662b7248c34e724fdd645defff0a0a00fd0b5c6cb978bf65f"
+    },
+    {
+      "owner": "purechannel-owner-1",
+      "input_id": "4913661ec591c4c4c27ce1b270808538",
+      "stage": "triage",
+      "assignment_ids": [
+        "cohort-v1:0bda169a6fcec6cdf9520fce1d6d7c725994e2d50b8659d0407c30b72260f9a7",
+        "cohort-v1:7d3773b8b1e06a3449f8e17d086392fc5515c4a982d0b5a62492af1908aa190a",
+        "cohort-v1:a9744d17fa005063311e27a612ee3e3ddbc5acd3d9115fdf05ccbf7143260d1f"
+      ],
+      "tracked_original_ids_in_prompt": true,
+      "session_entry_id": "4ecd2181",
+      "context_digest": "58f4a0e0594ed8c89ee8eb41c8272c9b2741f33ff71a3a47ce81cc825db6d9c2"
+    },
+    {
+      "owner": "purechannel-owner-0",
+      "input_id": "535827b336168340ea1c7b848c6af790",
+      "stage": "full",
+      "assignment_ids": [
+        "cohort-v1:559ed1f9049b8a68807471913b9a32fc3e8dfbef1996f481972995f712aa2ebf",
+        "cohort-v1:d81d88625faa4421567137bd5fe97ec135565cabfa48b2ab114f1f241d677f77",
+        "cohort-v1:73cae218980057a5e80036e7834a9d3ff2a5dbc1cb2131df04f54609331c2df8"
+      ],
+      "tracked_original_ids_in_prompt": true,
+      "session_entry_id": "02f2bcce",
+      "context_digest": "f94a57c7b5c35545675fa69ef914a713012a6b4edbe27f2b5ce56ad4846281e2"
+    },
+    {
+      "owner": "purechannel-owner-0",
+      "input_id": "c245263bea7ff11b1908009cc108127c",
+      "stage": "triage",
+      "assignment_ids": [
+        "cohort-v1:559ed1f9049b8a68807471913b9a32fc3e8dfbef1996f481972995f712aa2ebf",
+        "cohort-v1:d81d88625faa4421567137bd5fe97ec135565cabfa48b2ab114f1f241d677f77",
+        "cohort-v1:73cae218980057a5e80036e7834a9d3ff2a5dbc1cb2131df04f54609331c2df8"
+      ],
+      "tracked_original_ids_in_prompt": true,
+      "session_entry_id": "804425be",
+      "context_digest": "747021d8eb587d0799ef504ae2c43cb403534fcfe5ca72d2842f32c3210f9519"
+    },
+    {
+      "owner": "purechannel-owner-2",
+      "input_id": "d4eece9aee310bf4b9733ba3888e7008",
+      "stage": "full",
+      "assignment_ids": [
+        "cohort-v1:e6f2d36918fb71f9a9c490f6116f9c54992efc7443e6c7d938d2f2ab740d1943",
+        "cohort-v1:4210461a71b889076507686743aef62b0ba86d9a3720815801bb12da66dad1b5",
+        "cohort-v1:c643eac24c47885cfb2aee179e9e91aab99514534f4c534bbff05dcdd0881a53"
+      ],
+      "tracked_original_ids_in_prompt": true,
+      "session_entry_id": "45f9df31",
+      "context_digest": "56fb40f2b2feeb7ebe0841aebc077f4d52716209a168eb19b05d7fbb5770d234"
+    }
+  ],
+  "sealed_original_receipts": [
+    {
+      "source_seq": 1,
+      "message_id": "d5ded2fc0a2f",
+      "assignment_ids": [
+        "cohort-v1:0bda169a6fcec6cdf9520fce1d6d7c725994e2d50b8659d0407c30b72260f9a7",
+        "cohort-v1:559ed1f9049b8a68807471913b9a32fc3e8dfbef1996f481972995f712aa2ebf",
+        "cohort-v1:e6f2d36918fb71f9a9c490f6116f9c54992efc7443e6c7d938d2f2ab740d1943"
+      ],
+      "audience": {
+        "wire_seq": 1,
+        "message_id": "d5ded2fc0a2f",
+        "exact_target": "#openhcs",
+        "sender_lookup": "08ec263daa1e9cce83af4189e2ab8b17",
+        "sender_name": "human",
+        "source_revision": "1d757b9277401e9999bac2caae02440fa2bf9103996b89b9532a680d5d902098",
+        "recipients": [
+          {
+            "recipient_lookup": "1349db00a4d6ce817f329669859fc338",
+            "canonical_thread": "purechannel-owner-1"
+          },
+          {
+            "recipient_lookup": "7708fc5d39c963922f33e4c85e94b51a",
+            "canonical_thread": "purechannel-owner-0"
+          },
+          {
+            "recipient_lookup": "f4fc8d66d77440c88ac3e78dd660db1b",
+            "canonical_thread": "purechannel-owner-2"
+          }
+        ],
+        "wire_envelope_digest": "bba72741656ba065f72be835c15e0052dbaf1560c1ff3ed433940e4a1bf7ad6d",
+        "digest": "475d3083e3cda827b3a7969798306110bb4b2709a1d9898419d37fb94e5c4609",
+        "version": 1
+      },
+      "decisions": [
+        {
+          "recipient": "1349db00a4d6ce817f329669859fc338",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "7708fc5d39c963922f33e4c85e94b51a",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "f4fc8d66d77440c88ac3e78dd660db1b",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        }
+      ],
+      "original_receipt_valid": true
+    },
+    {
+      "source_seq": 2,
+      "message_id": "a88c9b6b62ca",
+      "assignment_ids": [
+        "cohort-v1:7d3773b8b1e06a3449f8e17d086392fc5515c4a982d0b5a62492af1908aa190a",
+        "cohort-v1:d81d88625faa4421567137bd5fe97ec135565cabfa48b2ab114f1f241d677f77",
+        "cohort-v1:4210461a71b889076507686743aef62b0ba86d9a3720815801bb12da66dad1b5"
+      ],
+      "audience": {
+        "wire_seq": 2,
+        "message_id": "a88c9b6b62ca",
+        "exact_target": "#openhcs",
+        "sender_lookup": "08ec263daa1e9cce83af4189e2ab8b17",
+        "sender_name": "human",
+        "source_revision": "1d757b9277401e9999bac2caae02440fa2bf9103996b89b9532a680d5d902098",
+        "recipients": [
+          {
+            "recipient_lookup": "1349db00a4d6ce817f329669859fc338",
+            "canonical_thread": "purechannel-owner-1"
+          },
+          {
+            "recipient_lookup": "7708fc5d39c963922f33e4c85e94b51a",
+            "canonical_thread": "purechannel-owner-0"
+          },
+          {
+            "recipient_lookup": "f4fc8d66d77440c88ac3e78dd660db1b",
+            "canonical_thread": "purechannel-owner-2"
+          }
+        ],
+        "wire_envelope_digest": "f60ef001a01bd69a2c02f64caa29f7a098a2bf6f760f23f6fc09eb7fdcf94ff7",
+        "digest": "1ec5a9ffb315a04d0b1a85efe7eb9a64103a32330f4e4dea8efb808a43583db9",
+        "version": 1
+      },
+      "decisions": [
+        {
+          "recipient": "1349db00a4d6ce817f329669859fc338",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "7708fc5d39c963922f33e4c85e94b51a",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "f4fc8d66d77440c88ac3e78dd660db1b",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        }
+      ],
+      "original_receipt_valid": true
+    },
+    {
+      "source_seq": 3,
+      "message_id": "c28dd6b01a72",
+      "assignment_ids": [
+        "cohort-v1:a9744d17fa005063311e27a612ee3e3ddbc5acd3d9115fdf05ccbf7143260d1f",
+        "cohort-v1:73cae218980057a5e80036e7834a9d3ff2a5dbc1cb2131df04f54609331c2df8",
+        "cohort-v1:c643eac24c47885cfb2aee179e9e91aab99514534f4c534bbff05dcdd0881a53"
+      ],
+      "audience": {
+        "wire_seq": 3,
+        "message_id": "c28dd6b01a72",
+        "exact_target": "#openhcs",
+        "sender_lookup": "08ec263daa1e9cce83af4189e2ab8b17",
+        "sender_name": "human",
+        "source_revision": "1d757b9277401e9999bac2caae02440fa2bf9103996b89b9532a680d5d902098",
+        "recipients": [
+          {
+            "recipient_lookup": "1349db00a4d6ce817f329669859fc338",
+            "canonical_thread": "purechannel-owner-1"
+          },
+          {
+            "recipient_lookup": "7708fc5d39c963922f33e4c85e94b51a",
+            "canonical_thread": "purechannel-owner-0"
+          },
+          {
+            "recipient_lookup": "f4fc8d66d77440c88ac3e78dd660db1b",
+            "canonical_thread": "purechannel-owner-2"
+          }
+        ],
+        "wire_envelope_digest": "9e3f8eba5d7ac6a116aed37971edce33da925fc4f8afaa903f9b76e6756e7827",
+        "digest": "7f8643a2ae63348d8990c416aae8ffcb030074a7c6754cbbee152562ebae830c",
+        "version": 1
+      },
+      "decisions": [
+        {
+          "recipient": "1349db00a4d6ce817f329669859fc338",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "7708fc5d39c963922f33e4c85e94b51a",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        },
+        {
+          "recipient": "f4fc8d66d77440c88ac3e78dd660db1b",
+          "audience": "collective",
+          "wake_mode": {
+            "kind": "bounded_triage"
+          }
+        }
+      ],
+      "original_receipt_valid": true
+    }
+  ],
+  "canonical_channel_replies": [
+    {
+      "receipt": {
+        "kind": "publication_receipts",
+        "execution_id": "wirev14e0605d177aff04a6aabf4b4227873c2c1ae71f3d0cefbc5f3e007561d0208b3",
+        "exact_target": "#openhcs",
+        "seq": 4,
+        "message_id": "e15585e5834d",
+        "received_at_ms": 1790910155511
+      },
+      "sender": "purechannel-owner-0",
+      "body": "For originals 0, 1, and 2 (source_seq 1\u20133): 10+2 = 12."
+    },
+    {
+      "receipt": {
+        "kind": "publication_receipts",
+        "execution_id": "wirev1c7635e2f77063a02bbc272768fb9e14d98d47d35762572647f3f9dd877cadfb7",
+        "exact_target": "#openhcs",
+        "seq": 5,
+        "message_id": "3bde7cb4fb77",
+        "received_at_ms": 1790910156562
+      },
+      "sender": "purechannel-owner-2",
+      "body": "For originals 0, 1, and 2: 10 + 2 = 12."
+    },
+    {
+      "receipt": {
+        "kind": "publication_receipts",
+        "execution_id": "wirev1fce13915650564ba1a52a6a34afd1977fd32f2aa05588ce39de8e9cf2020ed19",
+        "exact_target": "#openhcs",
+        "seq": 6,
+        "message_id": "405a071d6ed9",
+        "received_at_ms": 1790910156885
+      },
+      "sender": "purechannel-owner-1",
+      "body": "For originals 0, 1, and 2 (source_seq 1\u20133): 10+2 = 12."
+    }
+  ],
+  "three_owner_dispatched_overlap": 3,
+  "acp_packets": 20,
+  "current_cursors": [
+    {
+      "kind": "current_native_cursor",
+      "wire_root_id": "77cb2b0fe8e044a28ef1dd346bcdb882",
+      "recipient_lookup": "1349db00a4d6ce817f329669859fc338",
+      "owner_thread": "purechannel-owner-1",
+      "owner_generation": 1,
+      "owner_admission_generation": 6,
+      "covered_seq": 3,
+      "injected_seq": 3,
+      "input_id": "0c1d016c021a459e822f68759d23eefc",
+      "stage": "full",
+      "session_id": "01a0fa90-2964-76e6-9ccb-787f7702e101",
+      "request_generation": 2
+    },
+    {
+      "kind": "current_native_cursor",
+      "wire_root_id": "77cb2b0fe8e044a28ef1dd346bcdb882",
+      "recipient_lookup": "7708fc5d39c963922f33e4c85e94b51a",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_admission_generation": 5,
+      "covered_seq": 4,
+      "injected_seq": 3,
+      "input_id": "535827b336168340ea1c7b848c6af790",
+      "stage": "full",
+      "session_id": "01a0fa90-25b1-743e-b3ec-f662b109398f",
+      "request_generation": 2
+    }
+  ],
+  "missing_cursor_owners": [
+    "purechannel-owner-2"
+  ],
+  "unproven_followup_inputs": [
+    {
+      "kind": "native_runtime_input",
+      "input_id": "1e8e600e53f206895c8b431d9c388ea8",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "7708fc5d39c963922f33e4c85e94b51a",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "51ad27c6b3abc6f6cf99cf45f95e24ef7ecfff47d6b4275653b7ee371afca5c1",
+      "sent_owner_admission_generation": 5,
+      "session_id": null,
+      "session_file": null,
+      "session_entry_id": null,
+      "request_generation": null,
+      "llm_context_digest": null,
+      "verdict": null
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "974c743aac2163d0d1465153ce7e8628",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "f4fc8d66d77440c88ac3e78dd660db1b",
+      "owner_thread": "purechannel-owner-2",
+      "owner_generation": 1,
+      "owner_token_digest": "f0dd725a364b368781d8032293db10f6bcb561fdcf9d7008314b9b02cce6f0b5",
+      "sent_owner_admission_generation": null,
+      "session_id": null,
+      "session_file": null,
+      "session_entry_id": null,
+      "request_generation": null,
+      "llm_context_digest": null,
+      "verdict": null
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "b293899a99a632af8ba0aa72a18e2460",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "1349db00a4d6ce817f329669859fc338",
+      "owner_thread": "purechannel-owner-1",
+      "owner_generation": 1,
+      "owner_token_digest": "abc813a4d270a0a5fd99e90923bb153fe8c857b9201280d69ef234a412a590d4",
+      "sent_owner_admission_generation": null,
+      "session_id": null,
+      "session_file": null,
+      "session_entry_id": null,
+      "request_generation": null,
+      "llm_context_digest": null,
+      "verdict": null
+    }
+  ],
+  "no_replay_or_new_provider": true,
+  "all_owned_workers_retired": true,
+  "original_settings_unchanged": true,
+  "source_overlay": false,
+  "cursor_owner": "Arendt489; original advance outcome/exception not retained, no causal attribution"
+}

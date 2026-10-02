@@ -64,7 +64,7 @@ def manual_summary_record(
 
 def summary_source(
     source, *, selected=SelectedModel("fixture", "model", 1000),
-    settings=PiCompactionSettings(100, 100), retained=RetainedTaskFacts(()),
+    settings=PiCompactionSettings(100, 100), retained,
 ):
     return FieldCodec.encode(SelectedSummarySource(
         source=source, selected=selected, settings=settings, retained=retained,

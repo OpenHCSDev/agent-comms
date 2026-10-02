@@ -17,6 +17,7 @@ from .thread_identity import ThreadIncarnation, TurnId
 
 if TYPE_CHECKING:
     from .input_disposition import InputDocument
+    from .retained_task_facts import RetainedTaskFacts
     from .reservation_rules import ReservationCheck
 
 class SessionRevisionUnavailable(ValueError):
@@ -113,7 +114,7 @@ class SelectedSource(DeclaredFamily, affix="Source"):
     turn: TurnId
     reserved_revision: SessionRevision
 
-    def interrupted_check(self, revision, inputs, incarnation, turn):
+    def interrupted_check(self, revision, inputs, incarnation, turn, retained):
         from .reservation_rules import InterruptedReservationCheck
 
         return InterruptedReservationCheck(
@@ -123,8 +124,11 @@ class SelectedSource(DeclaredFamily, affix="Source"):
     def matches_pending_inputs(self, keys: tuple[str, ...]) -> bool:
         return True
 
-    def original_has_started(self, inputs: InputDocument) -> bool:
+    def original_has_started(self, inputs: InputDocument, retained: RetainedTaskFacts) -> bool:
         return False
+
+    def require_retained(self, retained: RetainedTaskFacts) -> None:
+        """A source without original input membership needs no input facts."""
 
     @abstractmethod
     def summary_outcome(self, result, journal):
@@ -136,7 +140,7 @@ class SelectedSource(DeclaredFamily, affix="Source"):
 
     @abstractmethod
     def reservation_check(
-        self, revision: SessionObservation, inputs: InputDocument
+        self, revision: SessionObservation, inputs: InputDocument, retained: RetainedTaskFacts
     ) -> ReservationCheck: ...
 
 
@@ -151,7 +155,7 @@ class ManualSource(SelectedSource):
     def pending_input_keys(self) -> tuple[str, ...]:
         return ()
 
-    def reservation_check(self, revision, inputs):
+    def reservation_check(self, revision, inputs, retained):
         from .reservation_rules import ReservationCheck
 
         return ReservationCheck(source=self, revision=revision)
@@ -197,24 +201,29 @@ class SelectedAdmissionSource(SelectedSource):
             journal, SelectedAdmissionIdentity(self, self.reserved_revision)
         )
 
+    def require_retained(self, retained: RetainedTaskFacts) -> None:
+        retained.original_inputs(self.originals)
+
     @property
     def pending_input_keys(self) -> tuple[str, ...]:
         return self.ingress_keys
 
-    def reservation_check(self, revision, inputs):
+    def reservation_check(self, revision, inputs, retained):
         from .reservation_rules import InputReservationCheck
 
         return InputReservationCheck(
-            source=self, revision=revision, rows=tuple(inputs.lookup(key) for key in self.ingress_keys)
+            source=self, revision=revision, rows=tuple(inputs.lookup(key) for key in self.ingress_keys),
+            retained=retained,
         )
 
-    def interrupted_check(self, revision, inputs, incarnation, turn):
+    def interrupted_check(self, revision, inputs, incarnation, turn, retained):
         from .reservation_rules import InterruptedInputCheck
 
         return InterruptedInputCheck(
             source=self,
             revision=revision,
             rows=tuple(inputs.lookup(key) for key in self.ingress_keys),
+            retained=retained,
             incarnation=incarnation,
             turn=turn,
         )
@@ -222,11 +231,11 @@ class SelectedAdmissionSource(SelectedSource):
     def matches_pending_inputs(self, keys: tuple[str, ...]) -> bool:
         return self.ingress_keys == keys
 
-    def original_has_started(self, inputs: InputDocument) -> bool:
+    def original_has_started(self, inputs: InputDocument, retained: RetainedTaskFacts) -> bool:
         return all(inputs.lookup(original.key).proves_started(
             owner=self.incarnation,
             admission=self.admission_generation,
             turn=self.turn,
             sent_digest=self.input_digest,
-            original_digest=original.digest,
-        ) for original in self.originals)
+            original=original,
+        ) for original in retained.original_inputs(self.originals))

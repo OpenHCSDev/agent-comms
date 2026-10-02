@@ -1,0 +1,115 @@
+{
+  "kind": "AST attribute-reference inventory with manually reviewed source receivers",
+  "source_head": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+  "references": [
+    {
+      "file": "src/agent_comms/goal_actions.py",
+      "line": 300,
+      "consumer": "StandbyGoalAction.before_publish",
+      "member": "latest_sequence",
+      "receiver": "ctx.goals.bus.log"
+    },
+    {
+      "file": "src/agent_comms/history_views.py",
+      "line": 259,
+      "consumer": "HistoryViews.export_wire",
+      "member": "full_history_snapshot",
+      "receiver": "self.bus.log"
+    },
+    {
+      "file": "src/agent_comms/message_bus.py",
+      "line": 93,
+      "consumer": "MessageBus.view_unread_counts",
+      "member": "_record_snapshot",
+      "receiver": "self.log"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 237,
+      "consumer": "MessagePageRequest.read",
+      "member": "_record_snapshot",
+      "receiver": "log"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 251,
+      "consumer": "BusPresentation.snapshot",
+      "member": "_record_snapshot",
+      "receiver": "self.bus.log"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 318,
+      "consumer": "BusPresentation.mark_channel_read",
+      "member": "latest_sequence",
+      "receiver": "self.bus.log"
+    },
+    {
+      "file": "src/agent_comms/read_basis.py",
+      "line": 181,
+      "consumer": "DMDisplayBasis.fetch_page",
+      "member": "_record_snapshot",
+      "receiver": "bus.log"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 154,
+      "consumer": "ThreadManagement.import_thread",
+      "member": "latest_sequence",
+      "receiver": "self.bus.log"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 225,
+      "consumer": "ThreadManagement.claim_thread",
+      "member": "latest_sequence",
+      "receiver": "self.bus.log"
+    },
+    {
+      "file": "src/agent_comms/thread_management.py",
+      "line": 544,
+      "consumer": "ThreadManagement._fork_unlocked",
+      "member": "latest_sequence",
+      "receiver": "self.bus.log"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 530,
+      "consumer": "Transcripts.repair_input_routing",
+      "member": "full_history_snapshot",
+      "receiver": "self.bus.log"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 367,
+      "consumer": "WireLog._record_snapshot",
+      "member": "_committed_sequence_unlocked",
+      "receiver": "self"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 395,
+      "consumer": "WireLog.full_history_snapshot",
+      "member": "_record_snapshot",
+      "receiver": "self"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 404,
+      "consumer": "WireLog.message_by_id",
+      "member": "full_history_snapshot",
+      "receiver": "self"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 426,
+      "consumer": "WireLog.latest_sequence",
+      "member": "_committed_sequence_unlocked",
+      "receiver": "self"
+    }
+  ],
+  "source_sha256": {
+    "src/agent_comms/wire_log.py": "b784f7b3e183c652ef4388252be4f2a4bfb669305bd9c23b13a871de9632bf9b",
+    "src/agent_comms/private_bus_checkpoint.py": "11aad423c74f35f53e3976bf324456df8a62802b1eec4b8355155b5dfb0a1b27"
+  }
+}
