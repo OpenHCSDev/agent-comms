@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .registration import Registration
+from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
@@ -163,7 +164,8 @@ class AgentActivity:
 
     def begin_turn(
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
-    ) -> TurnLeaseFence:
+    ) -> RegistryOwner:
+        """Return the exact owner installed by this atomic begin, including its lease."""
         with _store_lock(self._wire_lock_path):
             leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
             lease = leased.turn_lease
@@ -173,7 +175,7 @@ class AgentActivity:
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
-            return lease
+            return RegistryOwner(thread=leased, admission_generation=lease.admission_generation)
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, shared=True):

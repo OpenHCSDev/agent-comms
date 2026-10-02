@@ -146,7 +146,7 @@ async def run(stage, package):
             original_bytes=Path(original.session_file).stat().st_size,
             fork_bytes=Path(fork.session_file).stat().st_size)
         for kind in ('reserved', 'unknown', 'refused'):
-            prior = service.agents.begin_turn('recovery523', f'prior-{kind}')
+            prior = service.agents.begin_turn('recovery523', f'prior-{kind}').turn_lease
             owner = service.registry.require('recovery523')
             revision = SessionRevision.observe(fork.session_file).require_available()
             source = ManualSource(owner=owner.process_identity, incarnation=owner.incarnation,
@@ -168,7 +168,7 @@ async def run(stage, package):
                 bridge.journal.summaries.refuse(op, 'context_requires_compaction')
                 bridge.inputs.settle_unbound((key,))
             service.agents.finish_turn(prior)
-            fresh = service.agents.begin_turn('recovery523', f'distinct-recovery-{kind}')
+            fresh = service.agents.begin_turn('recovery523', f'distinct-recovery-{kind}').turn_lease
             owner, generation = bridge.registry.live_owner_with_generation('recovery523')
             original_inputs = bridge.inputs.read()
             await asyncio.to_thread(bridge.reconcile_interrupted_summaries, owner, generation, witness)

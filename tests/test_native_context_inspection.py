@@ -146,7 +146,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
         process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=c_identity.session_file, model='response-local/fixture', thinking_level='off')
     owner._comms.registry.declare(receiver)
-    peer_lease = owner._comms.agents.begin_turn(peer.name, "context-fixture-peer", "Independent context fixture")
+    peer_lease = owner._comms.agents.begin_turn(peer.name, "context-fixture-peer", "Independent context fixture").turn_lease
     output = fixture.root.parent / "context-journey"
     output.mkdir(mode=0o700)
 
