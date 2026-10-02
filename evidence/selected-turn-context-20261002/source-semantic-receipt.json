@@ -41,7 +41,8 @@
     "original UNKNOWN and custody",
     "proof/claim and publication/cursor fences",
     "original sessions and compaction data",
-    "native package constant"
+    "native package constant",
+    "Two original action instruction files intentionally retain final spaces and no final newline to preserve exact baseline bytes; git diff whitespace warning is recorded, not normalized away."
   ],
   "coordination": {
     "Einstein506": "specific prompt/request/participant handler grant; native_source/native_phase untouched",
@@ -52,18 +53,19 @@
     "final_provider_free": "29 passed in20.08s; source-only sanity, not installed/native receiving",
     "original_bytes": "five authentic baseline renderer cases; pure-channel/direct-full/mixedroutes NoTools+Coding",
     "initial_control_failures": "3 stale preexisting shared fake provider failures: global relevance mentions boundedtriage in FULL; now control derives original selected stage and declared Message replygrammar",
-    "installed_native_receiving": "NOT QUALIFIED; coordinate ONE installed context inspection with Schrodinger304/307 existing receiving seam; no dependency on Native6 assumed"
+    "installed_native_receiving": "NOT QUALIFIED; coordinate ONE installed context inspection with Schrodinger304/307 existing receiving seam; no dependency on Native6 assumed",
+    "source_finalization": "After recorded final controls, removed unused inherited coordinate copy and reused existing require_turn_lease. No rendered bytes/send/reservation behavior changed; controls not gratuitously repeated."
   },
   "source_sha256": {
     "src/agent_comms/native_turn_context.py": "a5c0890ec3e053b1346dfb4d39024d51dddfe5b957db26dfd85e130ee54b4835",
     "src/agent_comms/optional_awareness_projection.py": "8a73c67129985d1659904ac0ed40a62962219f2eab3c1a09bf25dd57c46316a6",
     "src/agent_comms/private_send_admission.py": "f9045ab5d1f28d8351c8dc1bf935764eaa531f329edb8889bce2afb9c95ef2f7",
     "src/agent_comms/selected_actions.py": "10a55a3e9029d576de8fdd99ca094a20f66ffd8bf24916868d9eba4559706d9a",
-    "src/agent_comms/selected_participant.py": "1c601e02b41bc35b920e8f33a0218217cab17802868289b5015338133d320db1",
+    "src/agent_comms/selected_participant.py": "c4e92631b58fc30cf7a4d7cf7211c370bc21789a71f292dfac86d54d41aff6ce",
     "src/agent_comms/selected_request.py": "914e5f641c58cc24ecfd49a928ff05c55c5a5572ad67b8afd5c7da9795aa9184",
     "src/agent_comms/selected_source_batch.py": "7f9d7c89f81cb1e19ac519395a68d1eae215c327e9a2a6b352fadacc70c9d001",
     "src/agent_comms/selected_triage.py": "b0998a3e705748d54b4c08d35a672054b42cccaee165f35b90b6f7e0ad34f620",
-    "src/agent_comms/selected_turn.py": "4fc1d1314553dca81e64dfa44dbfa3e3954deb039b821fb5b04389d6c2714f47",
+    "src/agent_comms/selected_turn.py": "669d08ab5b3e66dcd77cb91d4c84d90e665dfc451c8d96ac9bd8ee6c385444a7",
     "src/agent_comms/tracked_turn.py": "b8093beb3fd9d989a9feb412bc90c0237eeccb160fcc012ac4e571ab42933c72",
     "src/agent_comms/turn_progress.py": "f2ef22d236055fb50072913271d3fb93d80bf2df7d6913881cc83313395c6378",
     "src/agent_comms/wake_injection.py": "b53afaf8cc665feb504f6ff8588e19fb1c48a6ee0ef1893d6b6223aa26d36546",
@@ -121,16 +123,27 @@
     "transport": "TrackedTurnSession.complete invokes attest/admit_prompt/event loop, not inherited TurnSession.run/prepare_launch. Its immutable commands.Prompt is exact send/ack/input/context identity object. Selected RenderedInput is retained by existing PrivateSendAdmission and derives .text/.contributions at native boundary; added base coordinate copy deleted.",
     "actions": "Sole production BatchSelectedAction constructor in SelectedAttempt.prepare maps original leaf actions via write_authority.select; native request/foreground action constructors supply CodingSelectedAction, NoSelectedTools or existing planned NoSelectedTools subtype. No recursive batch consumer. InstructionFile dedup preserves original first-source order for these existing leaves; no action behavior changed.",
     "context_readers": "Existing WireLog.context_manifests/context_manifest_at, ContextManifest.changed_from_history, and context CLI decode original text-free native manifest. No copied formatter/token/source registry or new historical reader.",
-    "native_boundary": "Existing Prompt wire field contextContributions and native input claim/SDK contribution validation preserve original coordinates; pinned SDK estimateTokens supplies token counts. Native TypeScript/JavaScript source not included in Python AST proof."
+    "native_boundary": "Existing Prompt wire field contextContributions and native input claim/SDK contribution validation preserve original coordinates; pinned SDK estimateTokens supplies token counts. Native TypeScript/JavaScript source not included in Python AST proof.",
+    "leased_identity": "Both new selected callers reuse existing Thread.require_turn_lease; owner retains admitted identity checks, no optional-property state assertions copied into callers."
   },
   "deleted_lines": {
-    "production": 180,
+    "production": 182,
     "per_file": {
+      "src/agent_comms/instructions/selected-awareness-content.md": 0,
+      "src/agent_comms/instructions/selected-awareness.md": 0,
+      "src/agent_comms/instructions/selected-coding.md": 0,
+      "src/agent_comms/instructions/selected-no-tools.md": 0,
+      "src/agent_comms/instructions/selected-response-example.md": 0,
+      "src/agent_comms/instructions/selected-response.md": 0,
+      "src/agent_comms/instructions/selected-triage-output.md": 0,
+      "src/agent_comms/instructions/selected-triage.md": 0,
+      "src/agent_comms/instructions/selected-wake.md": 0,
+      "src/agent_comms/instructions/selected-work.md": 0,
       "src/agent_comms/native_turn_context.py": 0,
       "src/agent_comms/optional_awareness_projection.py": 27,
       "src/agent_comms/private_send_admission.py": 9,
       "src/agent_comms/selected_actions.py": 14,
-      "src/agent_comms/selected_participant.py": 0,
+      "src/agent_comms/selected_participant.py": 2,
       "src/agent_comms/selected_request.py": 1,
       "src/agent_comms/selected_source_batch.py": 12,
       "src/agent_comms/selected_triage.py": 7,

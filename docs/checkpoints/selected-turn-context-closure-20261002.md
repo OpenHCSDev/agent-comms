@@ -63,9 +63,11 @@ state. `NativeContextManifestData.record` owns original manifest publication for
 both raw selected Pi events and ordinary projected events. `DurableTurn` has no
 second context observation handler.
 
-The change deletes 180 production lines, including free selected frame renderers,
+The change deletes 182 production lines, including free selected frame renderers,
 raw prompt assembly, guidance literals and the ordinary local manifest decision.
-The replaced fake provider control now derives the actual selected stage rather
+Both new lease consumers call the existing `Thread.require_turn_lease` capability;
+they do not repeat its optional-property decision. The replaced fake provider
+control now derives the actual selected stage rather
 than searching prompt text. It is final validation support, not product behavior.
 
 Evidence under `evidence/selected-turn-context-20261002/` includes:
@@ -92,6 +94,11 @@ definitions have distinct native-compaction and delivery/AssignmentStore meaning
 511 creates no new source family. Raw census output is retained in the owned
 `.artifacts/selected-context511-ast-raw` directory. The temporary analysis dependency
 target was removed and is not used for the published census.
+
+Production source is frozen at `47d16ba74bb8658e3aa35047025f2f4b6b5e6f79`.
+The two action instruction assets intentionally retain their original final spaces
+and absence of a final newline: removing these whitespace warnings would change
+the required original prompt bytes.
 
 ## Original goal remains open
 

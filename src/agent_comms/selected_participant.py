@@ -55,8 +55,7 @@ class SelectedParticipant(MroDispatch):
         )
 
     def transition(self, phase: TurnPhase) -> None:
-        lease = self.owner.thread.turn_lease
-        assert lease is not None
+        lease = self.owner.thread.require_turn_lease()
         self.comms.agents.transition_turn(lease, phase)
 
     def consume_reply_wait(self) -> None:
