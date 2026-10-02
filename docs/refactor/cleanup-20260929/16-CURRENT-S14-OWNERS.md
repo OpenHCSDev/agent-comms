@@ -10,6 +10,16 @@ Arendt532 mergeddd79dabc after source/producer review and a real no-provider42.9
 
 Earlier updates below are historical.
 
+### Lazy-loading follow-up: source progress after delivery
+
+Heisenberg owns Toad325 and Kepler owns Textual27. Parent read current Toad990df270 and Textual2e354126 production source. Capture now borrows the original published placement once, before asynchronous preparation or pruning, and never requests a whole-screen arrangement to establish retirement eligibility. The corrected joined cohort check captured all three bodies with zero whole-scene arrangements; a subsequent style-change publication check failed and remains preserved. Heisenberg is closing the parked fixture's publication paths in the same batch. Neither PR is ready or installed yet.
+
+The same source review confirms two related lifetime fixes: StreamingMarkdown validates its original stream under existing retirement custody after worker preparation, and deferred restoration work is requested only for bodies that actually restored. The current Toad production diff against323 deletes35 lines and adds77 across the body, streaming and existing recorder files. This is source progress, not measured scrolling acceptance. Next is the changed installed busy saved-history motion/profile journey, with held PageUp/PageDown, reversal, idle and End and the existing bounded observer. Heisenberg and Kepler coordinate that joint gate directly; Schrodinger stages the next useful qualified bundle with merged532 without another native build.
+
+Mendel's actual385 timing trace now separates native completion from subsequent cleanup and publication: native completion to execute return2.234–14.243s, execute return to SQL receipt1.432–11.663s. Those logs do not isolate child shutdown, terminal proof or publication lock acquisition, so no global-lock cause is claimed. Mendel owns the complete source pass across those original owners. Arendt separately pushed533's removal of a second decode of the same selected source during native cold restoration; its matching native acceptance remains unfinished and it is not live.
+
+Singer removed five verified superseded runtime prefixes and nine merged build copies, reclaiming1.15GiB. Current326, rollback324, active native artifacts,325/27 evidence, source, saved sessions and uncertain inputs remain protected. Fresh reported home headroom is5.15GiB.
+
 ## Previous checkpoint — 2026-10-02T12:49Z
 
 Toad323 (c08e6c65), Textual26 (94c14b57), and Core530 (5c55d1cc, includes531) are now merged after complete production-source and installed-receipt review. Schrodinger stages ONE combined release with unchanged nativead533; parent owns public installation. Default324 remains installed until that publication.
