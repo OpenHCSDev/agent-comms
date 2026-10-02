@@ -42,26 +42,10 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.bus_publication import stable_thread_lookup
 
 
-async def configured_mixed_routes(arguments):
-    """The same installed owner/ACP path, using the actual configured provider.
-
-    Only fresh private originals are submitted. The public owner supplies its
-    configured model/level, not a saved input or permission to restart it.
-    """
-    from agent_comms.comms import wire
-    from agent_comms.native_input_record import FullNativeExecution
+def configured_stage(arguments, configured):
+    """Share the original installed/configured private receiving preparation."""
     from agent_comms.native_package import verify_native_package
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.native_entries import NativeEntry
-    from agent_comms.pi_payloads import ToolResultMessage
-    from agent_comms.coordination_tables.publications import PublicationReceipts
-    from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-    from agent_comms.store_files import _store_lock
 
-    assert arguments.owners == 1 and arguments.collective
-    assert not (arguments.saved_source or arguments.contention or arguments.cancel_before_grant)
-    configured = wire().registry.require(arguments.configured_owner)
-    assert configured.model, "Configured owner has no selected model"
     verify_native_package(arguments.package)
     stage = arguments.stage.absolute()
     assert stage.is_relative_to('/home/ts/wt')
@@ -94,6 +78,186 @@ async def configured_mixed_routes(arguments):
         AGENT_COMMS_AGENT_BIN='pi', AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
         PATH=str(Path(sys.executable).parent)+os.pathsep+environment.get('PATH', ''))
     os.environ.clear(); os.environ.update(environment)
+    return stage, project, service, root_id, source_hashes
+
+
+async def configured_pure_channel(arguments):
+    """Actual saved settings, native forks and overlapping pure channel owners.
+
+    No mention or direct message forces FULL. Original proofs/UNKNOWNs are never
+    copied into the private coordinator or submitted as new inputs.
+    """
+    from agent_comms.comms import wire
+    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+    from agent_comms.native_input_record import FullNativeExecution
+    from agent_comms.selected_triage import FullSelectedTriage
+    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.store_files import _store_lock
+
+    public = wire()
+    original_names = (arguments.configured_owner, *arguments.configured_peers)
+    assert arguments.collective and len(original_names) == arguments.owners >= 2
+    assert len(set(original_names)) == len(original_names)
+    snapshot = public.registry.snapshot()
+    sources = tuple(snapshot.require(name) for name in original_names)
+    assert all(source.model and source.session_file for source in sources)
+    common_tags = set.intersection(*(set(source.tags) for source in sources))
+    assert 'openhcs' in common_tags
+    stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0])
+    assert len(str(service.root/'native-sessions'/('0'*32)/'s')) < 108
+    names, settings = [], []
+    for index, source in enumerate(sources):
+        original = Path(source.session_file)
+        before = hashlib.sha256(original.read_bytes()).hexdigest()
+        # Existing SessionManager fork owns strict saved-history creation under
+        # its native source lock. Its output stays under the owned profile.
+        fork = await ForkSessionHelper.run(
+            ForkSessionRequest(str(arguments.package), str(original), source.worktree),
+            cwd=Path(source.worktree), env=dict(os.environ),
+        )
+        assert Path(fork.session_file).is_relative_to(stage)
+        assert hashlib.sha256(original.read_bytes()).hexdigest() == before
+        source_hashes[str(original)] = before
+        name = f'purechannel-owner-{index}'
+        child = Thread(name, source.tags, source.worktree, parent=source.name,
+            task=source.task, session_file=fork.session_file, model=source.model,
+            thinking_level=source.thinking_level, execution=source.execution)
+        service.registry.declare(child)
+        names.append(name)
+        settings.append({'source_owner':source.name, 'private_owner':name,
+            'model':source.model, 'thinking':source.thinking_level.declared_name,
+            'worktree':source.worktree, 'tags':sorted(source.tags),
+            'source_session_bytes':original.stat().st_size,
+            'source_session_sha256':before, 'owned_fork':fork.session_file,
+            'original_task_sha256':hashlib.sha256((source.task or '').encode()).hexdigest()})
+    service.registry.declare(Thread('human', frozenset(), str(project), role=ThreadRole.USER))
+    packets, timeline = [], []
+    class Observation:
+        async def session_update(self, **kwargs):
+            packets.append(kwargs)
+    attachment = CommsClient(service, runtime_enabled=True,
+        private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
+    attachment.on_connect(Observation())
+    originals, proof, failure = [], {}, None
+    begun = time.perf_counter()
+    try:
+        await asyncio.gather(*(asyncio.to_thread(service.owners.start, name) for name in names))
+        await asyncio.gather(*(attach(service, name) for name in names))
+        await asyncio.gather(*(attachment.load_session(cwd=source.worktree, session_id=name)
+            for name, source in zip(names, sources, strict=True)))
+        sender = service.registry.require('human')
+        with _store_lock(service._wire_lock_path):
+            originals = [service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
+                f'{stage.name}: New isolated user channel question to all participants: '
+                'please answer here with the value of 10+2. This is a fresh question, '
+                'not continuation or retry of any previous input. No project edits are requested.',
+                MessageType.INFO),
+                _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))]
+        overlap = False
+        async with asyncio.timeout(180):
+            while True:
+                with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                    with store.session.read():
+                        db = store.session._connection
+                        claims = WakeAssignment.select(db, where='wire_seq=?',
+                            parameters=(originals[0].seq,))
+                        inputs = NativeRuntimeInput.select(db)
+                        dispatched = tuple(row for row in inputs if
+                            row.sent_owner_admission_generation.reservation_violation()
+                            and row.session_id is None)
+                        active = tuple(name for name in names
+                            if service.registry.require(name).active_turn is not None)
+                        observed = {'elapsed_seconds':time.perf_counter()-begun,
+                            'active_owners':active,
+                            'dispatched_unproven_inputs':[{'owner':row.owner_thread,
+                                'stage':row.reference_stage.declared_name,'input_id':row.input_id}
+                                for row in dispatched],
+                            'claims':[{'owner':row.recipient,'revision':row.revision,
+                                'disposition':row.lifecycle.declared_name} for row in claims]}
+                        if not timeline or observed['dispatched_unproven_inputs'] != timeline[-1]['dispatched_unproven_inputs'] or observed['claims'] != timeline[-1]['claims']:
+                            timeline.append(observed)
+                        overlap |= len({row.owner_thread for row in dispatched}) >= 2
+                        triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
+                        full = [row for row in inputs if row.reference_stage is FullNativeExecution]
+                        if len(claims) == len(names) and all(row.lifecycle.completed for row in claims) and not active:
+                            assert len(triage) == len(full) == len(names)
+                            assert all(row.verdict is FullSelectedTriage for row in triage)
+                            assert all(row.session_id and row.session_entry_id for row in inputs)
+                            assert len({row.accepted_at_ms for row in claims}) == 1
+                            assert all(row.lifecycle.mode.triage for row in claims)
+                            receipts = []
+                            for claim in claims:
+                                rows = PublicationReceipts.select(db, where='execution_id=?',
+                                    parameters=(claim.lifecycle.execution_id,))
+                                assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
+                                reply = service.bus.log.message_by_id(rows[0].message_id)
+                                assert reply.sender == claim.recipient and '12' in reply.body
+                                receipts.extend(rows)
+                                history = read_historical_native_inputs(store,wire_root_id=root_id,
+                                    recipient_lookup=claim.recipient_lookup,source_seq=originals[0].seq)
+                                assert len(history) == 2 and all(
+                                    item.expected_prompt_equality_established for item in history)
+                            cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
+                            assert len(cursors) == len(names) and all(
+                                row.covered_seq >= originals[0].seq for row in cursors)
+                            assert overlap, 'No overlapping actual dispatched native inputs observed'
+                            proof = {'recipients':len(names),'pure_channel':True,
+                                'dm_or_mention_forcing_full':False,'triage_inputs':len(triage),
+                                'full_inputs':len(full),'overlapping_dispatched_native_inputs':True,
+                                'all_originals_completed':True,'common_accepted_time':True,
+                                'channel_receipts':FieldCodec.encode(receipts),
+                                'all_original_historical_proofs':True,'all_current_cursors_cover_source':True}
+                            break
+                diagnostics = list((service.root/'diagnostics').glob('*.json'))
+                if diagnostics:
+                    diagnostic = json.loads(diagnostics[0].read_text())
+                    raise AssertionError(diagnostic.get('source_error',diagnostic.get('reason')))
+                await asyncio.sleep(.1)
+        facts = [fact for packet in packets for fact in decode_updates(packet['update'].get('_meta'))]
+        assert facts and {packet['session_id'] for packet in packets} == set(names)
+        proof['acp_fact_count'] = len(facts)
+    except BaseException as error:
+        failure = f'{type(error).__name__}: {error}'
+        raise
+    finally:
+        await attachment.shutdown()
+        for name in reversed(names):
+            await asyncio.to_thread(service.owners.stop, name)
+        (stage/'acp-observer.json').write_text(json.dumps(packets,indent=2)+'\n')
+        (stage/'native-overlap-timeline.json').write_text(json.dumps(timeline,indent=2)+'\n')
+        receipt = {'elapsed_seconds':time.perf_counter()-begun,'failure':failure,
+            'settings':settings,'installed_interpreter':sys.executable,
+            'original_sequences':[row.seq for row in originals],'proof':proof,
+            'public_inputs':0,'original_seq326_replays':0,'provider':'actual configured provider',
+            'all_owned_workers_retired':all(not service.registry.require(name).process_alive for name in names),
+            'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                for path,digest in source_hashes.items())}
+        (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+        print(json.dumps(receipt,indent=2),flush=True)
+
+
+async def configured_mixed_routes(arguments):
+    """The same installed owner/ACP path, using the actual configured provider.
+
+    Only fresh private originals are submitted. The public owner supplies its
+    configured model/level, not a saved input or permission to restart it.
+    """
+    from agent_comms.comms import wire
+    from agent_comms.native_input_record import FullNativeExecution
+    from agent_comms.native_package import verify_native_package
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_entries import NativeEntry
+    from agent_comms.pi_payloads import ToolResultMessage
+    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
+    from agent_comms.store_files import _store_lock
+
+    assert arguments.owners == 1 and arguments.collective
+    assert not (arguments.saved_source or arguments.contention or arguments.cancel_before_grant)
+    configured = wire().registry.require(arguments.configured_owner)
+    assert configured.model, "Configured owner has no selected model"
+    stage, project, service, root_id, source_hashes = configured_stage(arguments, configured)
     name = 'batch-receiver'
     service.registry.declare(Thread('human',frozenset(),str(project),role=ThreadRole.USER))
     service.registry.declare(Thread(name,frozenset({'team'}),str(project),
@@ -357,6 +521,8 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
 
 
 async def run(arguments):
+    if arguments.configured_pure_channel:
+        return await configured_pure_channel(arguments)
     if arguments.configured_owner:
         return await configured_mixed_routes(arguments)
     if arguments.wave_size > 1:
@@ -839,4 +1005,6 @@ if __name__=='__main__':
     parser.add_argument('--cancel-before-grant',action='store_true')
     parser.add_argument('--wave-size',type=int,default=1)
     parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
+    parser.add_argument('--configured-pure-channel',action='store_true')
+    parser.add_argument('--configured-peers',nargs='*',default=[])
     asyncio.run(run(parser.parse_args()))
