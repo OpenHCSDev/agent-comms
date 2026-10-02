@@ -1,3 +1,46 @@
+## Parallel source and qualified checkpoint progress — 2026-10-02 04:37 UTC
+
+Default remains the qualified505/508/297/295/301 bundle recorded below.
+NEW merged checkpoints: Toad298 dd267730 (11 production lines deleted/33added,
+original sidebar resource reuse), Textual21 108298a5 (20deleted/23added,
+original same-parent child ordering), Toad302 7b7e9c27 (238deleted/184added,
+four copied-value classes removed, original Agent mode/model selection owner),
+and Core507 e37b49fb (original native proof cursor projection).
+
+298/Text21 actual quiet-public original saved-history102.374s journey passed
+warm16/input7 with visible sidebars, held/reverse/input-focused paging, mididle,
+End,A/B/A,draft+undo. Parent inspected actual readable returned nra PNG.
+CPU remains75–98%scroll/37.8%mididle/28%End: no final CPU/smoothness claim.
+Heisenberg owns the entire main-based performance follow-up; no unchanged recapture.
+302 actual configured selectors04/navigation05/reconnect-paint06 is a bounded
+qualified continuation with driver negatives retained, not one uninterrupted run.
+Sch owns one combined current-main receiving304 with those tested sources.
+
+Core503 sourcead7 +507 actual ONE fresh configured3-owner3-pending-original
+journey PASS25.911s:9claims,3channel replies,35ACPfacts,3VerifiedFULL cursor
+envelopes/current epochs, later legitimate TRIAGE currentSQLcursors.
+Original failed gate01/current absent cursor/UNKNOWN retained; zero old input
+replay. Deferred contention/refresh branch was not individually observed.
+503 merge attempted after507 landed: actual GH reported a merge conflict, so503
+is NOT merged yet. Kepler owns normal current-main integration; no repeat gate
+if full production remains byte-identical. Existing receiving303 is the scoped
+batch/cursor pair; combined304 carries merged Toad298/302/Text21 once sourcequalified.
+
+Arendt509 source b31e652b captures bounded certified original bytes then decodes
+outside EX custody; removes two duplicate helper algorithms.84c26c8a extends
+existing Platform/StoreLockContention for shared sync/async acquisition, tracked
+maintenance uses async custody. Full history/count/context/wait/scheduler and
+publication consumers remain under one owner, including newly merged507 refresh
+and503 batch readers. Not Ready/live. Arendt489 lifecycle and Einstein506 same-
+tracked-child compaction/preparation continue separately.506 removed full mutable
+StoredInput copies from proof control data: existing compact InputProvenance+
+digest reduces samplecontrol70805→841B without changing retained70158B.
+Mendel510 owns original outside-src carry: immutable sourceJSON SHA/native
+reference vs current semantic request, preserve341UNKNOWN rawinputs and all
+three original committed SHA links. No reset, silent rehash, old runtime reader,
+archive-as-proof or native input replay. Singer owns original S5 residual source
+closure after507; no competing bus/carry/frontend owners.
+
 ## Current default checkpoint: reply, command, restoration and certified bus read — 2026-10-02 04:19 UTC
 
 Core #505 and #508, Toad #297/#295 and receiving #301 are merged and installed
