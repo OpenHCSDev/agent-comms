@@ -1,0 +1,458 @@
+{
+  "scope": "original resource/publication consumers; AST references require semantic review",
+  "files": [
+    "wire_log.py",
+    "private_bus_checkpoint.py",
+    "store_files.py",
+    "presentation.py",
+    "history_views.py",
+    "transcript_receipts.py",
+    "transcript_routes.py",
+    "proven_source_coverage.py",
+    "coordination_response.py",
+    "native_prompt_send.py",
+    "private_send_admission.py",
+    "tracked_turn.py",
+    "goal_waits.py",
+    "turn_input_source.py",
+    "cohort_foreground.py",
+    "goal_management.py"
+  ],
+  "references": [
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 56,
+      "definition": "locked"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 64,
+      "definition": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 73,
+      "definition": "conversation_sources"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 293,
+      "definition": "read_delivery_cohort"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 304,
+      "definition": "delivery_cohorts_unlocked"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 353,
+      "definition": "_record_snapshot"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 423,
+      "definition": "latest_sequence"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 59,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 66,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 68,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 77,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 81,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 83,
+      "call": "conversation_sources_unlocked"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 90,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 97,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 108,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 108,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 144,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 144,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 193,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 299,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 336,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 361,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 395,
+      "call": "_record_snapshot"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 416,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 417,
+      "call": "delivery_references_unlocked"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 420,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 425,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 498,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 542,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/wire_log.py",
+      "line": 442,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 719,
+      "definition": "delivery_references_unlocked"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 739,
+      "definition": "conversation_sources_unlocked"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 142,
+      "definition": "addressed_page"
+    },
+    {
+      "file": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 372,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/store_files.py",
+      "line": 64,
+      "definition": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/store_files.py",
+      "line": 33,
+      "definition": "acquire_posix"
+    },
+    {
+      "file": "src/agent_comms/store_files.py",
+      "line": 57,
+      "definition": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/store_files.py",
+      "line": 106,
+      "call": "acquire_posix"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 306,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 318,
+      "call": "latest_sequence"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 242,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 251,
+      "call": "_record_snapshot"
+    },
+    {
+      "file": "src/agent_comms/history_views.py",
+      "line": 133,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/history_views.py",
+      "line": 451,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/history_views.py",
+      "line": 257,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/transcript_receipts.py",
+      "line": 227,
+      "call": "conversation_sources"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 157,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 192,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 233,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 258,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 287,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/transcript_routes.py",
+      "line": 245,
+      "call": "conversation_sources_unlocked"
+    },
+    {
+      "file": "src/agent_comms/proven_source_coverage.py",
+      "line": 79,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/proven_source_coverage.py",
+      "line": 148,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/proven_source_coverage.py",
+      "line": 154,
+      "call": "addressed_page"
+    },
+    {
+      "file": "src/agent_comms/proven_source_coverage.py",
+      "line": 226,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 207,
+      "definition": "_response_boundary"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 216,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 217,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 218,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 354,
+      "call": "_response_boundary"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 452,
+      "call": "_response_boundary"
+    },
+    {
+      "file": "src/agent_comms/coordination_response.py",
+      "line": 273,
+      "call": "delivery_cohorts_unlocked"
+    },
+    {
+      "file": "src/agent_comms/private_send_admission.py",
+      "line": 180,
+      "call": "_response_boundary"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 309,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_waits.py",
+      "line": 65,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/turn_input_source.py",
+      "line": 90,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 65,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 89,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 167,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 157,
+      "call": "locked"
+    },
+    {
+      "file": "src/agent_comms/cohort_foreground.py",
+      "line": 219,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 45,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 64,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 81,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 90,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 124,
+      "call": "certified_read"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 160,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 174,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 225,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 314,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 340,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 366,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 380,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 404,
+      "call": "_store_lock"
+    },
+    {
+      "file": "src/agent_comms/goal_management.py",
+      "line": 349,
+      "call": "certified_read"
+    }
+  ]
+}

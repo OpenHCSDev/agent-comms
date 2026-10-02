@@ -1,0 +1,184 @@
+# Async bus read and publication custody
+
+Owner: Arendt. Separate continuation of the useful #508 sequence checkpoint.
+The matching installed #508 channel-click journey passes; this draft does not
+claim the remaining cross-owner bus concurrency is fixed.
+
+## Existing owner search and required relation
+
+The physical owner is `StoreLock`, acquired by `_store_lock`; bounded physical
+wait is already owned by `StoreLockContention`. `WireLog` owns ordered append,
+marker reservation and certification. `CertifiedSourceRead` borrows its opened
+file and SQLite connection from that one barrier. `PrefixWitness` describes the
+original sealed prefix; `FinalSeal`/`PendingSeal` own current/recovery relations.
+`DeliverySources` owns exact original pointers and validates frozen rows, not a
+second message store. None of these facts needs a replacement family or cache.
+
+Two existing read lifetimes differ. `_record_snapshot` opens a fixed inode and
+byte boundary and releases the physical writer lock before public decoding.
+Conversely `conversation_sources`, reference windows, addressed pages and exact
+cohort resolution decode original typed payloads inside the certified lock.
+`certified_read` cannot simply become a shared lock: its acquisition guard can
+complete/recover an original writer checkpoint. Publication retains the original
+wire -> bus -> registry -> coordinator order; no provider await belongs there.
+
+The source census includes history/sidebar/notification, transcript routing,
+source coverage, goal waits, cohort foreground, original input and response
+publication consumers. Current-fence consumers at actual admission/publication
+remain distinct from display consumers of an immutable bounded original cut.
+Read snapshots grant no input, cursor, replay or owner authority.
+
+## Implementation trajectory
+
+Extend the original resource owners so bounded original bytes/pointers are
+captured once under certification, and display decoding happens after release.
+Keep exact root/seq/id/audience checks with `DeliverySources`; delete replaced
+locked decode paths across every affected reader. Current proof consumers retain
+freshness at their actual write boundary. Reuse `StoreLock` acquisition/custody
+for async wait; do not block owner loops with flock/sleep, move coordinator
+connections across threads, or introduce a second lock/admission algorithm.
+
+Mendel owns the disjoint Toad caller census and migrations only if the original
+Core API needs an explicit change. Existing readers already run in worker
+threads; no speculative frontend wrapper, snapshot cache or high-water copy is
+required. Singer owns NativeSourceCursor producer/consumer closure separately;
+Einstein owns compaction preparation hooks.
+
+Order: semantic source/caller closure, coherent implementation and deletion,
+then one batched affected sanity and actual configured multi-owner/publication
+and isolated UI read qualification. Original UNKNOWN/native inputs and durable
+bus/session bytes are protected. No public prompt/replay/restart is authorized to
+this worker. Parent owns release publication.
+
+## Working code checkpoint — bounded read capture
+
+`CertifiedSourceRead.capture_deliveries` captures original sealed pointers and
+bounded raw row bytes while the certificate is held. Its returned decoder owns
+only those immutable bytes/pointers and the original root ID: no live stream,
+SQL connection, current marker, owner status or admission authority survives.
+`DeliverySources.read_bytes`/`decode_bytes` retain the single original seq/id and
+frozen sender/audience validation algorithm; the ordinary locked delivery path
+uses these same methods. No new class, store or wire format was introduced.
+
+`WireLog.conversation_sources` and `deliveries_for_references` now finish
+certification and release their publication lock before consuming the captured
+decoder. `SourceCoverage._page` captures its original page witness, addressed
+high-water and marker floor under the same certificate; it decodes after leaving
+the bus lock. Whole-prefix/UNKNOWN and final cursor publication checks remain
+with their existing owners. `TranscriptRoutes` and `TaskSources` consume the
+same API *inside their actual write custody*, preserving original publication
+freshness. Deleted free algorithms `delivery_references_unlocked` and
+`conversation_sources_unlocked`, including every production/test import.
+
+This is a published implementation checkpoint, not Ready. Exact remaining
+relations: physical acquisition still needs the shared async wait algorithm;
+`full_history`/`total_messages` and context-manifest reads still retain a writer
+lock while decoding; goal-wait addressed iteration needs bounded snapshot
+iteration; exact keyed response lookup still resolves under its publication
+transaction. Fresh source/prewrite and publication/cursor transactions must
+consume the original current fence, not a display iterator. Source/admission
+scheduler callsites must use async acquisition without moving live coordinator
+connections across threads. These are owned remaining closure, not hidden
+compatibility fallbacks. No validation or provider journey has been claimed for
+this checkpoint; validation follows the coherent source implementation.
+
+## Working code checkpoint — physical async acquisition
+
+The existing `Platform` family now owns its irreducible native file-lock attempt
+and release: inherited POSIX last-close custody and original Windows byte unlock.
+`StoreLockContention.waits` is the one bounded physical wait algorithm. Its
+synchronous driver sleeps; its async driver yields to the owner event loop.
+Untimed synchronous POSIX callers keep their original kernel-blocking acquisition,
+so this change does not introduce polling into synchronous legacy callsites.
+No new OS family, state store, timeout, provider retry or lock registry exists.
+
+`_store_lock` and `_async_store_lock` share `_store_lock_file` descriptor custody
+and `_held_store_source` durability/refusal/release behavior. Cancellation while
+an async acquisition waits closes the unacquired descriptor; it cannot leave a
+background lock-acquisition thread or a later stray write. Acquired guard/consumer
+failure closes the same original resource. TrackedTurnSession.send now awaits
+maintenance-wire acquisition before the original capability write. Its final
+pipe-drain watchdog and irreversible prompt-writer boundary remain unchanged.
+
+This does not yet claim all async owner callsites are migrated. Certification
+itself can recover a damaged prefix and still runs synchronously inside custody;
+that operation must remain one guarded owner transaction, with async callsites
+borrowing capture work through a complete owned operation rather than exporting
+its SQLite connection to a thread. Remaining reader/publication relations above
+are still explicit closure obligations. No tests or installed journey have run
+for this unfinished source checkpoint.
+
+## Source error-family closure
+
+The source trace confirms `CommittedDelivery.from_wire` does **not** normalize
+raw/FieldCodec failures: duplicate JSON keys, malformed JSON, Unicode decoding,
+message/private-field shape and frozen policy checks raise ValueError/TypeError.
+A non-object JSON root otherwise reaches mapping operations before those checks.
+`DeliverySources.decode_bytes` now owns that boundary once: require an object,
+then call the original committed decoder, preserve existing RelationViolationError,
+and translate malformed source ValueError/TypeError to RelationViolationError
+with the original cause. Its locked `delivery` and every captured iterator call
+this same method. `read_bytes` similarly translates only its own seek/read
+OSError; it does not catch consumer exceptions. No per-caller catches or generic
+error suppression was added, and input/UNKNOWN disposition is unchanged.
+
+## Working code checkpoint — complete read stream lifetime
+
+`_opened_wire_snapshot` factors the original fixed inode/byte-boundary acquisition
+and closes its resources through ExitStack. Public page accounting and strict
+`verified_snapshot` consume that same opened resource after publication custody
+ends. `full_history` and `total_messages` now use the original WireScan outside
+the publication lock; uncertified original streams keep strict parsing instead
+of a generic fallback. `context_manifests` captures source and registry rename
+membership under the original maintenance-wire ordering, then releases both
+physical locks before strict decoding. The registry observation is a read
+snapshot, not a competing current identity/admission authority.
+
+New incoming consumers from #503/#507 are explicit remaining closure:
+`SelectedParticipant.sources` is a plural certified acquisition but still
+invokes locked delivery decoding; `CursorPublication.refresh` is async yet
+calls synchronous NativeSourceCursor.advance. The latter needs a complete
+operation-owned async resource path, not a consumer-only thread wrapper or a
+connection transferred across threads. Singer keeps cursor proof/participant
+behavior; this draft owns its acquisition/scheduling API. These unfinished
+relations keep the draft non-Ready.
+
+## Incoming 503/507 closure — owned async cursor operation
+
+Normal main integration includes the qualified plural-source and cursor owners
+from #503/#507. Kepler owns migration of `SelectedParticipant.sources`/selection
+to the bounded captured originals and async resource contract; no competing
+scalar selector or copied assignment state is being added.
+
+The existing `Coordination` owner now lends a complete `run_async` operation.
+Its worker opens and closes a connection to the same canonical database; only
+the operation result returns. This is resource callback custody, like the
+existing LockedStore update callback, not a selectable lifecycle policy. The
+existing `join_retirement` accepts its executor Future and retains acquired
+operation custody through cancellation until the connection has closed. No
+SQLite connection is transferred, no background task can later publish after
+the caller releases custody, and no new store or executor registry is created.
+
+`NativeSourceCursor` owns async read/advance/refresh operations using that
+resource. Each invokes the existing read/advance algorithm and its original
+CursorOwner, prefix, participant, native receipt and final publication fences.
+Refresh derives the current registry admission and participant inside that
+same complete operation; it cannot resume an input. No proof predicate or
+2-second auxiliary physical wait policy changed.
+
+All ACP consumers await the original operation: CursorPublication observation
+and refresh, no-selected-input drain projection, and CoordinatedTurn capture
+for completed/ignored/rejected outcomes. Trusted metadata is now async, with
+all session new/load/rename, subscribe and identity publication consumers
+migrated together. Existing test callers have matching async signatures; no
+tests have run during this source pass. CursorDelivery stays on the connection
+event loop and publishes the original observation, never a worker copy of its
+ordering/bookkeeping. The small outer registry scope checks remain explicit
+remaining event-loop acquisition work, not a claim of total async closure.
+
+This checkpoint removes three consumer-built cursor acquisition lifetimes;
+the cursor operation owner supplies them once. Remaining relations are the
+plural selection contribution, bounded goal/foreground addressed iteration,
+full async durability acquisition and current keyed-publication lookup. Final
+validation stays last after their coherent closure. Native5/durable formats,
+original UNKNOWN inputs and all native history remain unchanged.

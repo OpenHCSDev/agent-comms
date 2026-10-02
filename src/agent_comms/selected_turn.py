@@ -216,7 +216,7 @@ class SelectedAttempt:
                 ).value
                 published.require_published_evidence(reply.target)
             participant.consume_reply_wait()
-            return CoordinatedTurn.capture(
+            return await CoordinatedTurn.capture(
                 participant, session, request.admission.input_id, CompletedAssignment,
                 published.publication_receipts,
             )

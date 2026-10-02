@@ -333,7 +333,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
         root_id = comms.bus.log.read_metadata_unlocked().root_id
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": sid, "body": "Compute 17+25"})
     original = comms.bus.log.message_by_id(sent["id"])
-    before = cursor_envelope(agent.sessions.metadata(sid))
+    before = cursor_envelope((await agent.sessions.metadata(sid)))
     assert before.status == "none"
     assert before.revision >= 1
     assert before.scope.admission.incarnation.name == sid
@@ -348,7 +348,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
     agent.on_connect(Client())
     async with asyncio.timeout(30):
         assert await agent.inputs.drain_inbox(sid) == 1
-    current = cursor_envelope(agent.sessions.metadata(sid))
+    current = cursor_envelope((await agent.sessions.metadata(sid)))
     assert current.status == "proven"
     (reply,) = comms.bus.inbox("sender")
     assert reply.sender == sid and reply.body == "42"
@@ -460,7 +460,7 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "first"})
     assert await agent.inputs.drain_inbox("beta") == 1
-    proven = cursor_envelope(agent.sessions.metadata("beta"))
+    proven = cursor_envelope((await agent.sessions.metadata("beta")))
     assert proven.status == "proven"
     comms.registry.unregister("beta")
     assert await agent.inputs.drain_inbox("beta") == 0
@@ -482,10 +482,10 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
 
 async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
     comms, agent, _ = _session(tmp_path)
-    before = cursor_envelope(agent.sessions.metadata("beta"))
+    before = cursor_envelope((await agent.sessions.metadata("beta")))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    unavailable = cursor_envelope(agent.sessions.metadata("beta"))
+    unavailable = cursor_envelope((await agent.sessions.metadata("beta")))
     assert unavailable.status == "unavailable"
     assert unavailable.scope == before.scope
     assert unavailable.revision > before.revision
@@ -512,7 +512,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     assert updates[-1].status == "proven"
     before = len(updates)
     for _ in range(3):
-        loaded = cursor_envelope(agent.sessions.metadata("beta"))
+        loaded = cursor_envelope((await agent.sessions.metadata("beta")))
         assert loaded.same_observation(updates[-1])
         await agent.cursors.refresh("beta", "beta")
         assert len(updates) == before, "Unchanged trusted reads republished the same cursor"
@@ -525,7 +525,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
         # mocked error. A new attachment cannot claim an unread observation.
         loaded = next(
             update.envelope
-            for update in agent.cursors.trusted_metadata("beta", "beta")
+            for update in (await agent.cursors.trusted_metadata("beta", "beta"))
             if isinstance(update, CursorAdvancedUpdate)
         )
         assert loaded.status == "unavailable"
@@ -631,7 +631,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     original = comms.bus.log.message_by_id(sent["id"])
     assert await agent.inputs.drain_inbox("beta") == 0
     assert calls == []
-    cursor = cursor_envelope(agent.sessions.metadata("beta"))
+    cursor = cursor_envelope((await agent.sessions.metadata("beta")))
     assert cursor.status == "coverage_only"
     assert cursor.observation.cursor.covered_seq == original.seq
     assert (
