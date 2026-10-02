@@ -35,17 +35,20 @@ export class SessionContext {
     install(agent) { throw new Error('Concrete session context required'); }
     requireReady() { throw new Error('Native compaction did not admit the retained context'); }
     messages(agent) { throw new Error("Concrete context messages required"); }
+    messageCount(agent) { throw new Error("Concrete context message count required"); }
     async beforeInput(session) {}
 }
 export class ReadyContext extends SessionContext {
     requireReady() {}
     messages(agent) { return agent.state.messages.values(); }
+    messageCount(agent) { return agent.state.messages.length; }
     install(agent) {
         agent.state.messages=this.manager.buildContextEntries().flatMap(sessionEntryToContextMessages).toArray();
     }
 }
 export class CompactionContext extends SessionContext {
     messages() { return this.manager.buildContextEntries().flatMap(sessionEntryToContextMessages); }
+    messageCount() { return this.manager.entryStore.contextMessageCount(this.manager.getLeafId()); }
     install(agent) { agent.state.messages=[]; }
     async beforeInput(session) {
         // The canonical Python owner must reserve/commit before any original input.

@@ -3029,7 +3029,7 @@
                      sessionName: session.sessionName,
                      autoCompactionEnabled: session.autoCompactionEnabled,
 -                    messageCount: session.messages.length,
-+                    messageCount: session.storedContext.messages(session.agent).reduce(count => count + 1, 0),
++                    messageCount: session.storedContext.messageCount(session.agent),
                      pendingMessageCount: session.pendingMessageCount,
                      nativeInputProofCapability: session.sessionManager.nativeInputProofAvailable() ? "pi-native-input-v1-live-only" : null,
                  };
