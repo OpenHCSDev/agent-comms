@@ -21,3 +21,9 @@ Normally integrated Mendel538 (`ebb7ca44`). Existing NativeSchemaDeclaration own
 The exact installed96ab wheel then read the carried journal through CompactionJournal.retained_history in0.0415s, decoding all six declared table families. All five old tables, source/proof bytes and uncertain dispositions match their retained originals; original, preimage and carried files were unchanged by this read. Both joined tool merges change zero production/native bytes; existing342-resource/SDK/native qualification remains exact. No repeat configured or provider journey.
 
 The source is merge-ready. Parent receiving9f12 and actual stopped public publication remain separate; optional timing stays OFF. The existing configured216.596s receipt remains the actual S1 native/ACP acceptance. S3/S4 and public/UI performance are not claimed.
+
+## Final carry family freeze
+
+Normally integrated538 final483e06c6 (operator source de60e38e). Both Native5→Native6 request conversion and additive Native6→Native6 use the same NativeSchemaDeclaration.empty_journal_members. The follow-up removes the equal-membership refusal; 17 added/8 deleted in the existing carry tool. No production/native package changes or new environment. Reviewed operator hashes match the joined source.
+
+The affected Native5 control used the existing authentic513/514 installation and retained original inventory: four attempts, three operations, three publications and394 raw inputs. Conversion preserves original source_json/proof/disposition facts and creates NativeForkCreation empty; the existing installed reader reopened all six table families. This is private inventory qualification, distinct from the earlier stopped private6→6 publication control and fresh public custody. Both receipts are retained. No configured202/provider journey repeated. Final source is frozen for parent review/publication; optional timing remains OFF.
