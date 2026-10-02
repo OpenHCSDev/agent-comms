@@ -1,0 +1,89 @@
+{
+  "state": "changed-tool-readonly-admission-batch-passed",
+  "installed_library": "3c48ace44f2f8ce00c55638e23655b1ed50a3b5a unchanged",
+  "source_tools_head": "9610f42c",
+  "managed_count": 19,
+  "managed_names": [
+    "agent-comms-ux",
+    "nra-architecture",
+    "nra-class-first-name-review",
+    "nra-domain-mapping",
+    "nra-ordered-branch-call-review",
+    "nra-roster-heuristic-map",
+    "refactor-r1",
+    "openhcs-architecture-memory",
+    "openhcs-pr159-viewer-bind-owner",
+    "nominal-refactor-advisor-2",
+    "openhcs-helper",
+    "openhcs-helper2",
+    "comms428",
+    "openhcs-audit-merged-runtime",
+    "openhcs-audit-merged-models",
+    "openhcs-audit-merged-boundaries",
+    "openhcs-audit-open-prs",
+    "compaction499-live-architecture-memory",
+    "compaction501-live-architecture-memory"
+  ],
+  "external": {
+    "name": "dedicated-worktree-cleanup-20261001",
+    "execution": "ExternalThreadExecution",
+    "active": false,
+    "process_alive": false,
+    "incarnation": {
+      "name": "dedicated-worktree-cleanup-20261001",
+      "created_at": 1790874801.3895755
+    }
+  },
+  "checks": [
+    {
+      "case": "actual_complete19",
+      "accepted": true
+    },
+    {
+      "member": "summary",
+      "case": "includes_external",
+      "refused": "Complete original owner audience changed; recapture/review required"
+    },
+    {
+      "member": "summary",
+      "case": "missing_native",
+      "refused": "Complete original owner audience changed; recapture/review required"
+    },
+    {
+      "member": "index_and_inherited_routing",
+      "case": "includes_external",
+      "refused": "Index cutover requires every managed restart owner."
+    },
+    {
+      "member": "index_and_inherited_routing",
+      "case": "missing_native",
+      "refused": "Index cutover requires every managed restart owner."
+    },
+    {
+      "member": "task_carry",
+      "case": "includes_external",
+      "refused": "Task carry requires the whole live owner audience."
+    },
+    {
+      "member": "task_carry",
+      "case": "missing_native",
+      "refused": "Task carry requires the whole live owner audience."
+    },
+    {
+      "member": "thread_retirement",
+      "case": "includes_external",
+      "refused": "Thread retirement requires the complete live batch"
+    },
+    {
+      "member": "thread_retirement",
+      "case": "missing_native",
+      "refused": "Thread retirement requires the complete live batch"
+    }
+  ],
+  "original_owner_identities_unchanged": true,
+  "failed_receipt_sha256": "0c0418296bfa69f7354e815ba486d37e925b4a3815a660860ee20bd2ed722cad",
+  "failed_receipt_unchanged": true,
+  "fence_stop_launch_install_calls": 0,
+  "provider_inputs": 0,
+  "scope": "Real installed canonical owner request and current typed registry; changed tool admission only. No public cutover, new native/UI or fabricated participant state."
+}
