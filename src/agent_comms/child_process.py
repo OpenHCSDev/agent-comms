@@ -157,9 +157,24 @@ class NamespaceContainment:
 
 
 class Platform(DeclaredFamily, affix="Platform"):
+    store_lock_interval = 0.025
+
     @classmethod
     def current(cls) -> Platform:
         return cls.decode(sys.platform)()
+
+    @abstractmethod
+    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+        """One nonblocking native attempt; busy is BlockingIOError."""
+
+    def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
+        """Use the common physical wait driver when the platform needs polling."""
+        from .store_files import StoreLockContention
+
+        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, shared=shared)
+
+    def release_store_lock(self, descriptor: int) -> None:
+        """POSIX custody ends at last close, including inherited descriptors."""
 
     @abstractmethod
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
@@ -198,6 +213,18 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(ProcessGroups, Platform):
+    def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
+        import fcntl
+
+        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        fcntl.flock(descriptor, mode | (0 if blocking else fcntl.LOCK_NB))
+
+    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+        import fcntl
+
+        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        fcntl.flock(descriptor, mode | fcntl.LOCK_NB)
+
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
         return PosixLaunch(command, pass_fds)
 
@@ -352,6 +379,26 @@ class DarwinPlatform(PosixPlatform):
 
 class Win32Platform(ProcessGroups, Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
+
+    store_lock_interval = 0.01
+
+    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+        import errno
+        import msvcrt
+
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(descriptor, msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK, 1)
+        except OSError as error:
+            if error.errno not in {errno.EACCES, errno.EDEADLK}:
+                raise
+            raise BlockingIOError(error.errno, error.strerror) from error
+
+    def release_store_lock(self, descriptor: int) -> None:
+        import msvcrt
+
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        msvcrt.locking(descriptor, msvcrt.LK_UNLCK, 1)
 
     class ThreadEntry(ctypes.Structure):
         _fields_ = [

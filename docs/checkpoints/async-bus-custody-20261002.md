@@ -81,3 +81,29 @@ scheduler callsites must use async acquisition without moving live coordinator
 connections across threads. These are owned remaining closure, not hidden
 compatibility fallbacks. No validation or provider journey has been claimed for
 this checkpoint; validation follows the coherent source implementation.
+
+## Working code checkpoint — physical async acquisition
+
+The existing `Platform` family now owns its irreducible native file-lock attempt
+and release: inherited POSIX last-close custody and original Windows byte unlock.
+`StoreLockContention.waits` is the one bounded physical wait algorithm. Its
+synchronous driver sleeps; its async driver yields to the owner event loop.
+Untimed synchronous POSIX callers keep their original kernel-blocking acquisition,
+so this change does not introduce polling into synchronous legacy callsites.
+No new OS family, state store, timeout, provider retry or lock registry exists.
+
+`_store_lock` and `_async_store_lock` share `_store_lock_file` descriptor custody
+and `_held_store_source` durability/refusal/release behavior. Cancellation while
+an async acquisition waits closes the unacquired descriptor; it cannot leave a
+background lock-acquisition thread or a later stray write. Acquired guard/consumer
+failure closes the same original resource. TrackedTurnSession.send now awaits
+maintenance-wire acquisition before the original capability write. Its final
+pipe-drain watchdog and irreversible prompt-writer boundary remain unchanged.
+
+This does not yet claim all async owner callsites are migrated. Certification
+itself can recover a damaged prefix and still runs synchronously inside custody;
+that operation must remain one guarded owner transaction, with async callsites
+borrowing capture work through a complete owned operation rather than exporting
+its SQLite connection to a thread. Remaining reader/publication relations above
+are still explicit closure obligations. No tests or installed journey have run
+for this unfinished source checkpoint.
