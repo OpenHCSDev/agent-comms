@@ -118,9 +118,9 @@ class CodingToolOwner:
             )
             self.claims[canonical] = claimed
 
-    def finish(self) -> None:
+    def finish(self, store: Coordination) -> None:
         release_selected_resources(
-            self.comms, self.store, self.admission, self.owner_name, tuple(self.claims.values())
+            self.comms, store, self.admission, self.owner_name, tuple(self.claims.values())
         )
         self.claims.clear()
 
@@ -140,7 +140,7 @@ class CodingToolMode(NativeToolMode):
         return CodingToolSocket(directory, token, self.owner)
 
     async def finish(self) -> None:
-        await Coordination.run_worker(self.owner.finish)
+        await Coordination.run_async(self.owner.store.session.path, self.owner.finish)
 
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):
