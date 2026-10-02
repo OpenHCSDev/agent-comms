@@ -1,9 +1,11 @@
 # Selected turn context: original S5 consumer closure
 
 Owner: Singer. Source baseline: `d51100ec`, including merged 503 and 507.
-Implementation and one installed reader journey are published. New selected native
-producer observation belongs to the combined 509 receiving journey; this is not
-an S5 completion or live activation claim.
+Implementation and one installed reader journey are published. Normal integration
+of merged 509 leaves **zero production delta** against main `f9135463`.
+The selected producer is already in 509's qualified configured workflow. This is
+not an S5 completion or default-activation claim; 511 now closes documentation and
+original evidence only.
 
 ## Existing owner search and concrete gap
 
@@ -128,11 +130,19 @@ replacement also correctly refused its old turn. Earlier positive 504 query
 receipts describe earlier fixture states and were not reused as current evidence.
 
 `installed-reader-journey.json` records the exact installed package provenance,
-commands, original proof coordinates and protected hashes. The existing combined
-509 journey owns observation of the newly instrumented selected producer. Kepler
-has the granted async handler seam: move the entire original manifest record call
-through the existing worker owner, keeping the typed lease and coordinating the
-ordinary `TurnProgress` caller with Arendt. No copied manifest decisions return.
+commands, original proof coordinates and protected hashes. The merged combined
+509 checkpoint contains the same selected producer and its existing worker
+callback with `require_turn_lease`. Normal three-way integration preserves it.
+509's original configured qualification is recorded in
+`evidence/async-bus-custody-20261002/configured509-qualified01.json`: nine completed
+claims, three FULL native proofs and channel receipts, preserved original settings
+and sixteen files. Its raw driver timeout remains recorded; current cursors
+legitimately advanced to later TRIAGE. No new provider or test gate is run here.
+
+The separately granted follow-up will put the manifest writer's async resource
+lifetime in the existing declaration, make both callbacks await it and delete the
+selected forwarding helper. That new source change is outside 511's final zero
+production delta and outside the frozen 509 receiving stage.
 
 ## Original goal remains open
 
