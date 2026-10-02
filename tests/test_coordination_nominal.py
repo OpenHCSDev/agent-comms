@@ -146,11 +146,28 @@ async def test_execution_extension_is_stored_transitioned_and_read_over_gateway_
 
 
 @pytest.mark.asyncio
-async def test_durable_turn_records_native_phases_before_completion(tmp_path):
+async def test_durable_turn_records_native_phases_before_completion(tmp_path, monkeypatch):
+    import asyncio
+    import os
+    import sqlite3
+    from contextlib import closing
+
+    from agent_comms.agent_events import NativePhaseChanged
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.coordinator import Coordination
     from agent_comms.durable_turn import DurableTurn
     from agent_comms.owner_fence import prepare_fence_token
     from agent_comms.pi_events import PiEvent
+    from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
+
+    selected = []
+    original_selection = DurableTurn.handlers_for
+
+    def observed_selection(self, event):
+        selected.append(event)
+        yield from original_selection(self, event)
+
+    monkeypatch.setattr(DurableTurn, "handlers_for", observed_selection)
 
     with Coordination(tmp_path / "coordination.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
@@ -178,20 +195,49 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path):
                 "prompt_accepted",
             ),
             ({"type": "context_committed", "inputId": "input"}, "model_running"),
-            ({"type": "tool_execution_start", "toolCallId": "one"}, "tool_running"),
-            ({"type": "tool_execution_start", "toolCallId": "two"}, "tool_running"),
-            ({"type": "tool_execution_end", "toolCallId": "one"}, "tool_running"),
-            ({"type": "tool_execution_end", "toolCallId": "two"}, "model_running"),
-            ({"type": "compaction_start"}, "compaction"),
-            ({"type": "compaction_end"}, "model_running"),
         ]
         for raw, expected in samples:
-            await progress.dispatch(PiEvent.from_wire(raw))
+            event = PiEvent.from_wire(raw)
+            await progress.dispatch(event)
+            assert sum(observation is event for observation in selected) == 1
             attempt = store.snapshots.get("e").attempt
             assert attempt.lifecycle.declared_name == expected
             assert not attempt.lifecycle.backend_done and not attempt.lifecycle.process_dead
+        identity = ProcessIdentity.capture(os.getpid())
+        # Native owns phase interpretation; durable projection consumes the
+        # observed phase rather than independently counting tool starts/ends.
+        phases = [
+            (ToolRunningPhase(), "tool_running"),
+            (ModelWaitPhase(), "model_running"),
+            (CompactionPhase(), "compaction"),
+            (ModelWaitPhase(), "model_running"),
+        ]
+        for phase, expected in phases:
+            event = NativePhaseChanged(phase, identity)
+            await progress.dispatch(event)
+            assert sum(observation is event for observation in selected) == 1
+            assert store.snapshots.get("e").attempt.lifecycle.declared_name == expected
+
+        # A real SQLite blocker must not prevent the loop from releasing it.
+        # Cancellation joins the owned observation, retaining its exact fence.
+        with closing(sqlite3.connect(store.session.path, isolation_level=None)) as blocker:
+            blocker.execute("BEGIN EXCLUSIVE")
+            unhandled = PiEvent.from_wire({"type": "unhandled-observation"})
+            assert await progress.dispatch(unhandled) is unhandled
+            event = NativePhaseChanged(ToolRunningPhase(), identity)
+            observation = asyncio.create_task(progress.dispatch(event))
+            asyncio.get_running_loop().call_later(0.1, blocker.rollback)
+            await asyncio.sleep(0)
+            observation.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await observation
+        assert sum(observation is event for observation in selected) == 1
+        observed = store.snapshots.get("e").attempt
+        assert observed.lifecycle.declared_name == "tool_running"
+        assert progress.fence.revision == observed.revision
+        before_finish = progress.fence.revision
         final = progress.finish()
-        assert final.revision > started.fence.revision
+        assert final.revision == before_finish + 1
         assert store.snapshots.get("e").attempt.lifecycle.backend_done
         assert isinstance(store.snapshots.get("e").attempt.lifecycle, SettlingAttempt)
         store.attempts.settle_nonpublication(

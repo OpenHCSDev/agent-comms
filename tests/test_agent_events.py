@@ -2,7 +2,7 @@
 
 import ast
 import os
-from dataclasses import FrozenInstanceError, dataclass
+from dataclasses import FrozenInstanceError, dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -50,6 +50,53 @@ async def test_mro_specific_before_shared_and_consumer_override():
     await Override().dispatch(Diamond())
     assert seen == ["override", "right", "root"]
     assert Diamond.__mro__.count(events.AgentEvent) == 1
+
+
+@pytest.mark.parametrize("synchronous", [False, True])
+async def test_selected_handlers_preserve_replacements_and_identity(synchronous):
+    @dataclass(frozen=True)
+    class Value(events.AgentEvent):
+        text: str
+
+    selected = []
+    seen = []
+
+    class SyncConsumer(MroDispatch):
+        def handlers_for(self, value):
+            selected.append(value)
+            yield from super().handlers_for(value)
+
+        @handles(Value)
+        def specific(self, value):
+            if value.text == "wrong":
+                return events.Notice("wrong event")
+            return replace(value, text="replacement")
+
+        @handles(events.AgentEvent)
+        def shared(self, value):
+            seen.append(value.text)
+
+    class AsyncConsumer(SyncConsumer):
+        @handles(Value)
+        async def specific(self, value):
+            return super().specific(value)
+
+        @handles(events.AgentEvent)
+        async def shared(self, value):
+            return super().shared(value)
+
+    consumer = SyncConsumer() if synchronous else AsyncConsumer()
+    value = Value("original")
+    result = (consumer.dispatch_sync(value) if synchronous
+              else await consumer.dispatch(value))
+    assert selected == [value]
+    assert seen == ["replacement"]
+    assert result == Value("replacement")
+    with pytest.raises(TypeError, match="preserve event identity"):
+        if synchronous:
+            consumer.dispatch_sync(Value("wrong"))
+        else:
+            await consumer.dispatch(Value("wrong"))
 
 
 def test_payload_fields_and_frozen_multiple_inheritance():
