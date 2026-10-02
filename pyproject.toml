@@ -68,12 +68,14 @@ packages = ["src/agent_comms"]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel.force-include]
+".pi/APPEND_SYSTEM.md" = "agent_comms/_native/APPEND_SYSTEM.md"
 "stack/pi-native.sha256" = "agent_comms/_native/pi-native.sha256"
 "stack/native-compaction-commit-child.mjs" = "agent_comms/_native/native-compaction-commit-child.mjs"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src", "tests", "extensions", "README.md", "LICENSE",
+    ".pi/APPEND_SYSTEM.md", "stack/APPEND_SYSTEM.md",
     "stack/pi-native.sha256", "stack/native-compaction-commit-child.mjs",
 ]
 

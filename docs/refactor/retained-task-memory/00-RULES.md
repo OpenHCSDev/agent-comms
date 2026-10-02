@@ -45,13 +45,17 @@ after their producers stop.
 
 ## Verification and delivery
 
-Review directly with Python and the skill tools; do not delegate review. Tests
-protect behavior and exact-state invalidation, rather than internal-format goldens.
-Measure storage availability, prompt presence and model recall separately. Add a
-new-case maintenance experiment and narrow guard with each ownership change;
-finish every consumer before closing a surface.
+Reason first by reading source: trace each fact to its owner, storage, lifecycle
+and every consumer. Search every declaration, decision and check. Implement the
+coherent change through behavior-owning types, inheritance and polymorphism;
+consumers take the owner type and derive from it. Delete competing authorities
+in the same change and finish every consumer before closing a surface. A PR
+claiming derivation includes the search demonstrating exactly one declaration.
 
-Run bounded provider-free tests first, retaining errors and negative controls.
+Tests and installed live-path verification come last, after implementation, as
+proportionate sanity checks. They are not the investigation or design method.
+Batch validation across the coherent change; retain errors and negative controls.
+Measure storage availability, prompt presence and model recall separately.
 Real-model runs require a declared model/sample/spend budget. Report source,
 native, model and deployment results separately. Matching text cannot establish a
 provider cache hit. Publish useful verified checkpoints without waiting for CI;
