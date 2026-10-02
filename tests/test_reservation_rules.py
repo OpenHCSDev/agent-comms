@@ -190,8 +190,10 @@ def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp
     source = SelectedAdmissionSource.capture(
         owner, TurnId("turn"), 1, keys, inputs.read(), "first\n\nsecond", revision
     )
-    assert source.originals == inputs.read().originals(keys)
-    assert tuple(row.source_text for row in source.originals) == ("first", "second")
+    assert source.originals == inputs.read().original_provenances(keys)
+    assert tuple(ref.digest for ref in source.originals) == tuple(
+        row.digest for row in inputs.read().originals(keys)
+    )
     assert FieldCodec.decode(SelectedSource, FieldCodec.encode(source)) == source
     assert source.pending_input_keys == keys
     assert not source.matches_pending_inputs(tuple(reversed(keys)))

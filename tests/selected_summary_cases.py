@@ -83,7 +83,7 @@ def admission_identity(
             originals=(ReservedInput(
                 key=key, sequence=None, owner=owner, admission=admission,
                 target=owner, source_text=text if original_text is None else original_text,
-            ),),
+            ).context_provenance(),),
             admission_generation=admission,
             correction_witness=f"{admission}:{digest.value}",
             input_digest=digest,

@@ -11,6 +11,7 @@ from .errors import RelationViolationError
 from .goals import GoalCheckpoint
 from .message_reference import MessageReference
 from .thread_identity import AdmissionIdentity
+from .text_digest import TextDigest
 from .wire_metadata import WireRootIdText
 from .turn_context import Provenance
 
@@ -42,8 +43,10 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
 
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
+    """Original identity, author and content witness, independent of disposition."""
     key: str
     origin: InputOrigin
+    digest: TextDigest
 
     def require_human_input(self):
         self.origin.require_human()

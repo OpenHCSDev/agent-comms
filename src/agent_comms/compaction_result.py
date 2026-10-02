@@ -24,7 +24,7 @@ class CompactionResult(DeclaredFamily, affix="CompactionResult"):
 
     @abstractmethod
     def require_prepared(self) -> None:
-        """Require a committed saved context before reserving a future input."""
+        """Require a committed saved context before the original raw prompt write."""
 
     async def after_terminal(self, runner, session_id: str) -> None:
         """A refused result publishes no committed transcript invalidation."""

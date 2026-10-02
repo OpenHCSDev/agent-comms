@@ -23,6 +23,7 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
+    from .input_origin import InputProvenance
     from .selected_source import SelectedSource
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence
@@ -76,6 +77,10 @@ class InputDocument:
             return tuple(self.rows[key] for key in keys)
         except KeyError as error:
             raise ValueError("Original input receipt is unavailable") from error
+
+    def original_provenances(self, keys: tuple[str, ...]) -> tuple[InputProvenance, ...]:
+        """Source proofs reference originals without copying mutable disposition data."""
+        return tuple(row.context_provenance() for row in self.originals(keys))
 
     def compaction_rows(
         self, owner: Thread, pending_input_keys: tuple[str, ...], queue: FutureInputQueue | None = None
