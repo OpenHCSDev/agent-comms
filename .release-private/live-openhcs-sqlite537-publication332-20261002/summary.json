@@ -1,0 +1,120 @@
+{
+  "classification": "default333 startup/history display accepted; original channel replies completed; peer compaction follow-through failed",
+  "original_message": {
+    "seq": 418,
+    "id": "660958a8c77d",
+    "from": "user",
+    "to": "#openhcs",
+    "ts": 1790961083.1415808,
+    "type": "info",
+    "text": "testing the installed database and history-read fix; please reply tersely if you receive this",
+    "sender_role": "user"
+  },
+  "commit_seconds": 1.4618451595306396,
+  "reply_seconds": [
+    {
+      "sender": "openhcs-audit-merged-runtime",
+      "seconds": 30.23410201072693
+    },
+    {
+      "sender": "openhcs-helper2",
+      "seconds": 41.92798662185669
+    },
+    {
+      "sender": "openhcs-audit-merged-models",
+      "seconds": 42.07174634933472
+    },
+    {
+      "sender": "openhcs-pr159-viewer-bind-owner",
+      "seconds": 42.27946400642395
+    },
+    {
+      "sender": "compaction501-live-architecture-memory",
+      "seconds": 42.76498532295227
+    },
+    {
+      "sender": "openhcs-audit-open-prs",
+      "seconds": 42.996575355529785
+    },
+    {
+      "sender": "compaction499-live-architecture-memory",
+      "seconds": 56.03500962257385
+    },
+    {
+      "sender": "openhcs-architecture-memory",
+      "seconds": 56.0964081287384
+    },
+    {
+      "sender": "openhcs-helper",
+      "seconds": 56.15924048423767
+    },
+    {
+      "sender": "openhcs-audit-merged-boundaries",
+      "seconds": 56.34914207458496
+    }
+  ],
+  "original_claims": {
+    "completed": 10,
+    "triage_pending": 2
+  },
+  "peer_claims": {
+    "deferred": 9,
+    "ignored": 81,
+    "triage_pending": 20
+  },
+  "deferred_peers": [
+    {
+      "seq": 420,
+      "recipient": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "seq": 421,
+      "recipient": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "seq": 419,
+      "recipient": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "seq": 422,
+      "recipient": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "seq": 423,
+      "recipient": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "seq": 424,
+      "recipient": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "seq": 425,
+      "recipient": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "seq": 426,
+      "recipient": "openhcs-audit-merged-boundaries"
+    },
+    {
+      "seq": 427,
+      "recipient": "openhcs-audit-merged-boundaries"
+    }
+  ],
+  "ui": {
+    "duration_seconds": 125.66616020299261,
+    "completed": true,
+    "application_exit": 0,
+    "runtime_unchanged": true,
+    "remaining_owned_pids": [],
+    "cleanup_errors": [],
+    "required_exports_complete": true,
+    "born_timestamp": 1790961168.52,
+    "last_original_reply_timestamp": 1790961139.490723,
+    "original_arrival_while_open_verified": false,
+    "original_receipt": "/home/ts/.cache/agent-scratch/333-default-live-wave-20261002/capture/receipt.json",
+    "original_receipt_sha256": "68eefdf46675b6b055912dbbfe9a07b3fb0c71335122aa148a5b660ae2b5b71c"
+  },
+  "input_replayed": false,
+  "raw_receipts_modified": false,
+  "source_owner": "Mendel: original boundaries peer compaction; Heisenberg/Kepler: restore/publish lock family and native readiness"
+}
