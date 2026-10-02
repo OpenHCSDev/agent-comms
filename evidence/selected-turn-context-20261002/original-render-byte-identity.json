@@ -1,0 +1,97 @@
+{
+  "mode": "source-only original renderer comparison after coherent implementation",
+  "base": "d51100ece6b86a91618fb479fa33ea98960420d3",
+  "authenticated_blob_sha256": {
+    "src/agent_comms/wake_injection.py": "568f189fb96b6c0cbf2789a31520924851320dc3f78b7f87d8106ba1ff1a1bba",
+    "src/agent_comms/selected_triage.py": "7173c4e303fc6cac6dfd0ae1e8cb20d25f635fea1b2a3e27a95865b7b9656fb6",
+    "src/agent_comms/selected_source_batch.py": "66b2d1294bcd652b8828b0a6e6b4b3d3582627125282ec3fab5671a82c5ec5a6",
+    "src/agent_comms/optional_awareness_projection.py": "89acb38c924410e20fd306abc30784765e8c697618e3c33114c15786b2a882e7",
+    "src/agent_comms/selected_turn.py": "7d80e538a162fa57a72172ad64768bc0905d6dbc6164698ded8833f7c87e4714"
+  },
+  "cases": [
+    {
+      "case": "pure-channel-triage",
+      "variant": "triage",
+      "utf8_bytes": 2428,
+      "sha256": "e5472f1581409b1ee07182abdd4982865198f9af3072508da4c284ef05e161c3",
+      "sources": 2,
+      "contributors": [
+        "selected_wake",
+        "selected_triage"
+      ],
+      "exact_original_bytes": true,
+      "complete_original_coordinates": true
+    },
+    {
+      "case": "direct-full",
+      "variant": "NoSelectedTools",
+      "utf8_bytes": 3171,
+      "sha256": "0a605fbd834b2b498356c02adc05358e78f9cdfb0af16917ec3cb9d3d12217ee",
+      "sources": 1,
+      "contributors": [
+        "selected_wake",
+        "complete_awareness",
+        "selected_work",
+        "selected_response"
+      ],
+      "exact_original_bytes": true,
+      "complete_original_coordinates": true
+    },
+    {
+      "case": "direct-full",
+      "variant": "CodingSelectedAction",
+      "utf8_bytes": 3649,
+      "sha256": "ec8115daec712ac515a10f34f5637fccca840f32a55341918cfc63b7407b7057",
+      "sources": 1,
+      "contributors": [
+        "selected_wake",
+        "complete_awareness",
+        "selected_work",
+        "selected_response"
+      ],
+      "exact_original_bytes": true,
+      "complete_original_coordinates": true
+    },
+    {
+      "case": "mixed-route-full",
+      "variant": "NoSelectedTools",
+      "utf8_bytes": 4207,
+      "sha256": "689fb96100595c3f0688a1e6ab0a33dda7a747bea4485ad1ab32791947b27a63",
+      "sources": 2,
+      "contributors": [
+        "selected_wake",
+        "complete_awareness",
+        "selected_work",
+        "selected_response"
+      ],
+      "exact_original_bytes": true,
+      "complete_original_coordinates": true
+    },
+    {
+      "case": "mixed-route-full",
+      "variant": "CodingSelectedAction",
+      "utf8_bytes": 4685,
+      "sha256": "ad8369d719f0f8711b365c750d29ed02240819206535237ffed975f9f2bff56f",
+      "sources": 2,
+      "contributors": [
+        "selected_wake",
+        "complete_awareness",
+        "selected_work",
+        "selected_response"
+      ],
+      "exact_original_bytes": true,
+      "complete_original_coordinates": true
+    }
+  ],
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "public_mutations": 0,
+  "installed_native_qualification": false,
+  "comparison_operator_sha256": "e99317043fe7522b800c0e28fdfeb845bf1c55bc8e9b38528774fdf3f374e62a",
+  "comparison_operator_removed_after_evidence": true,
+  "owned_fixture_paths": [
+    "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/selected-context511-render-pure-channel-triage",
+    "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/selected-context511-render-direct-full",
+    "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/selected-context511-render-mixed-route-full"
+  ]
+}

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import ExistingFileClaim
+from .turn_context import InstructionFile
 
 if TYPE_CHECKING:
     from .channel_coding_tools import CodingToolOwner
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 class SelectedAction(ABC):
     @property
     @abstractmethod
-    def instruction(self) -> str: ...
+    def instruction_files(self) -> tuple[InstructionFile, ...]: ...
 
     def mode(self, owner: CodingToolOwner) -> NativeToolMode | None:
         return None
@@ -45,7 +46,9 @@ class SelectedAction(ABC):
 
 
 class NoSelectedTools(SelectedAction):
-    instruction = "Use no tools. "
+    @property
+    def instruction_files(self):
+        return (InstructionFile.read("selected-no-tools.md"),)
 
 
 @dataclass(frozen=True)
@@ -55,8 +58,14 @@ class BatchSelectedAction(SelectedAction):
     originals: tuple[tuple[WakeAssignment, SelectedAction], ...]
 
     @property
-    def instruction(self) -> str:
-        return " ".join(dict.fromkeys(action.instruction for _, action in self.originals))
+    def instruction_files(self):
+        return tuple(
+            dict.fromkeys(
+                instruction
+                for _, action in self.originals
+                for instruction in action.instruction_files
+            )
+        )
 
     def mode(self, owner):
         return next((mode for assignment, action in self.originals
@@ -68,16 +77,9 @@ class BatchSelectedAction(SelectedAction):
 
 
 class CodingSelectedAction(SelectedAction):
-    instruction = (
-        "Answer the committed request and do the requested work using the normal "
-        "read, bash, edit and write tools. "
-        "Edit/write claims are checked by the owner before execution. "
-        "Bash is cooperative: respect other agents' claims, stay in your worktree, "
-        "and do not bypass a denied edit through shell. "
-        "Never retry a tool or input with UNKNOWN outcome; report the concrete failure. "
-        "Do not send a duplicate reply or launch another agent. "
-        "Finish with the actual result and tests, not a promise of later work. "
-    )
+    @property
+    def instruction_files(self):
+        return (InstructionFile.read("selected-coding.md"),)
 
     def mode(self, owner: CodingToolOwner) -> NativeToolMode:
         from .channel_coding_tools import CodingToolMode

@@ -32,6 +32,7 @@ from .pi_vocabulary import ThinkingLevel
 from .private_path import FileRevision
 from .text_digest import TextDigest
 from .tracked_turn import TrackedTurnSession
+from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
@@ -52,7 +53,7 @@ class PrivateSendAdmission:
     stage: NativeSendStage
     input_id: str
     token_digest: str
-    prompt: str
+    prompt: RenderedInput
     expected_session: Path | None
     fresh_selected: FreshPrivateSession | None
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
@@ -77,7 +78,7 @@ class PrivateSendAdmission:
         participant: ParticipantOwner,
         stage: NativeSendStage,
         token: str,
-        prompt: str,
+        prompt: RenderedInput,
         expected_session: Path | None,
         fresh_selected: FreshPrivateSession | None,
     ) -> PrivateSendAdmission:
@@ -94,7 +95,7 @@ class PrivateSendAdmission:
             stage=stage,
             owner=owner.thread,
             generation=participant.generation,
-            prompt=prompt,
+            prompt=prompt.text,
         )
         return cls(
             bus=bus,
@@ -123,7 +124,7 @@ class PrivateSendAdmission:
             context,
             session_dir=self.session_dir,
             wire_root_id=self.wire_root_id,
-            prompt=self.prompt,
+            prompt=self.prompt.text,
         )
         self.owner.require_registry(self.bus._registry)
 
@@ -147,7 +148,8 @@ class PrivateSendAdmission:
                 result = await TrackedTurnSession.execute(
                     package,
                     input_id=self.input_id,
-                    prompt=self.prompt,
+                    prompt=self.prompt.text,
+                    context_contributions=self.prompt.contributions,
                     worktree=Path(self.owner.thread.worktree).absolute(),
                     session_dir=self.session_dir,
                     session_file=self.expected_session,
@@ -179,10 +181,16 @@ class PrivateSendAdmission:
                 store = authority.enter_context(Coordination(str(self.store_path), lock_timeout=0))
                 registry = authority.enter_context(_response_boundary(self.bus, blocking=False))
                 db = authority.enter_context(store.session.irreversible_admission())
-                authority.enter_context(self.stage.bound_prompt(
-                    store, self.input_id, self.participant, self.wire_root_id,
-                    self.prompt, blocking=False,
-                ))
+                authority.enter_context(
+                    self.stage.bound_prompt(
+                        store,
+                        self.input_id,
+                        self.participant,
+                        self.wire_root_id,
+                        self.prompt.text,
+                        blocking=False,
+                    )
+                )
                 saved = self._saved_session(actual_session_file, selected_runtime_revision)
                 raw = authority.enter_context(
                     self._journal.private_inputs.admission(saved, blocking=False)

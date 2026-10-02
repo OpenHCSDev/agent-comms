@@ -1,0 +1,32 @@
+{
+  "results": {
+    "before": {
+      "parsed": 1014,
+      "failures": 25,
+      "declarations": 25,
+      "consumers": 658,
+      "retired": 18,
+      "duplicates": {
+        "SelectedSource": [
+          "agent_comms.selected_source.SelectedSource",
+          "agent_comms.selected_source_batch.SelectedSource"
+        ]
+      }
+    },
+    "after": {
+      "parsed": 1014,
+      "failures": 25,
+      "declarations": 29,
+      "consumers": 712,
+      "retired": 6,
+      "duplicates": {
+        "SelectedSource": [
+          "agent_comms.selected_source.SelectedSource",
+          "agent_comms.selected_source_batch.SelectedSource"
+        ]
+      }
+    }
+  },
+  "before_after_is_source_evidence": true,
+  "dynamic_correctness_proof": false
+}
