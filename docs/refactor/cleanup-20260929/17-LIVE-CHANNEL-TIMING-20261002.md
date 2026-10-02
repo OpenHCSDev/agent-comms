@@ -38,3 +38,33 @@ Later canonical observation: all30 peer-reply claims among the six functioning
 owners settled. Last settlement occurred340.105s after the original send.
 Four blocked native and two absent external owners remain pending; the complete
 audience journey still fails. No second test message or retry was sent.
+
+
+## Installed523/524 repeat — original365 (2026-10-02)
+
+The same user-authorized text was published once after the new default installed.
+Original365/d5e82a0ffd5f, wire timestamp1790936041.144690. Human operation0.901s;
+all12 claims accepted at+2.073s. Six actual configured native replies arrived
+at51.245,52.934,58.329,63.280,63.912 and66.102s. Their30 mutual claims all
+ended ignored by+109.348s. This improves the prior255.582/340.105s result but
+fails the complete one-minute target. Two absent external participants remain
+explicit; four originally blocked native owners did not answer this original.
+
+Those four old reservations are now retired through523 with old input proofs
+preserved. Fresh mandatory operations hit source-change continuation errors;
+four later summary/native operations committed, while365 originals remain
+unadmitted/deferred. Arendt owns the source/commit/admission consumer closure.
+No failed input was replayed and the test message was not resent.
+
+Mendel joined365 to original native inputs: provider/native windows3.1–6.3s,
+TRIAGE completion14.8–19.7s, FULL starts35.3–44.6s, native FULL finishes41.7–49.7s,
+wire51.2–66.1s. Progress reaches parent diagnostics4.6–16.3s late; inline
+SelectedParticipant registry phase writes sit inside native event draining.
+Draft528 removes transport-sample mirroring through the original TurnSession
+consumer family; it is implementation in progress, not a measured new speedup.
+
+Raw original receipts stay in parent .release-private/live-openhcs-timing-524-20261002.
+Installed318 preservation publication43.253s/all19 process identities/five links;
+actual ordinary default helper startup28.706s, final Ready/history reviewed,
+owned observer cleanup empty. Source changed inbox warnings were visible and
+remain part of the evidence, not omitted from readiness.

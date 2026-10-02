@@ -1,3 +1,19 @@
+## Current delivery update — 2026-10-02T10:28:31.794965+00:00
+
+Default Core155b0007 / Toad48377132 / Textual2382 / Native5184. Core523/524 and paired Toad318 are **installed**. Preserve-only publication43.253s; all19 actual process identities and five links verified. Actual ordinary saved-helper history/Ready startup28.706s, observer clients closed. Original inputs, native sessions and UNKNOWN remain preserved.
+
+Fresh actual configured channel365: human publication0.901s,12 claims sealed2.073s, six capable replies51.245–66.102s (previous56.777–255.582s), all30 mutual claims settled109.348s (previous340.105s). Two external participants are absent. Four original blocked summary rows retired through523; fresh mandatory compactions then hit source-change continuation failures. Their summaries later committed successfully, but365 triage inputs remain unadmitted/deferred. Arendt traces the exact captured/current source relation and all successor consumers; no replay or state override.
+
+Textual22/23 and Toad311 **merged**, not yet installed. E03 actual public saved-thread candidate88.360s: complete cached bodies engage, both final10-second mid-history windows have zero viewport request/admission/materialization/retirement/scroll/relocation, input7 checks pass, cleanup empty. Parent inspected mid-idle while running; Heisenberg inspected consecutive moving frames while running. Foreground heldUp91%CPU remains poor; no smoothness claim. Last live82–83 sheet had incorrect timestamps; final MP4 is correct, original negative retained. Sch stages a useful paint/idle checkpoint; Heisenberg/Kepler continue foreground/style/sidebar work in existing worktrees.
+
+Mendel524's next actual-source finding: native events reach parent diagnostics4.6–16.3s late despite3–6s provider windows. Inline progress publication repeatedly reads/writes global registry before draining later events. He traces the complete lifecycle/status consumers for an owned fix. S3 prefix/cache scope is preserved in draft527 while the measured user latency takes priority.
+
+Einstein520/Sch526 native7074 fixes task-policy enablement and saved-summary message projection; actual mandatory compaction/reopen/first answer passed. An unsupported self-addressed task caused the final fixture to fail; continuation now uses the same preserved private fork, fresh distinct inputs and supported authored channel notice, avoiding another mandatory-compaction loop. Singer521 inspection is qualified;525 stage-derived transcript display is ready except a per-entry SQL-scope hot-path concern now under source review. No new provider/model research or S3/S4 acceptance claims.
+
+Full original scope remains active. Earlier sections below retain historical observations and do not override this update.
+
+---
+
 # Current ownership update — 2026-10-02T09:39Z
 
 Current checklist: [15-GOAL-CHECKLIST.md](15-GOAL-CHECKLIST.md).
