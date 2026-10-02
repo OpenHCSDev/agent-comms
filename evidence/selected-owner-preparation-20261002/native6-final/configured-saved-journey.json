@@ -1,0 +1,323 @@
+{
+  "final_native_inputs": [
+    {
+      "kind": "native_runtime_input",
+      "input_id": "11bc2538af9e888f9aece5229d16dc65",
+      "stage": "full",
+      "execution_id": "wirev18bbd914237b5da2ece4ba62781043c5ea80d440334131357b2ffe1af0383163f",
+      "attempt_ordinal": 1,
+      "owner_lookup": "1fad034e83e1646a4607280595cac177",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "3f78cc386b74d79680b87b9767f7d2affcbc961845d4a3653c747ed9472b8e81",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+      "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+      "session_entry_id": "c83b0b0f",
+      "request_generation": 5,
+      "llm_context_digest": "8b0a57f89b11ec3851b52f52623774a6f7e548a3bbe95c8d4a31a00e8a74c179",
+      "verdict": null
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "43404ebdc1fe96c6f38b0a30a6aa84b9",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "1fad034e83e1646a4607280595cac177",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "0678e304c5c272506e8f8f61bb77a317441953b1f05610f3fdef8bf62be54dc1",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+      "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+      "session_entry_id": "de471661",
+      "request_generation": 1,
+      "llm_context_digest": "5440cf37bde1e1f361f8c685e63f6d795de9ee0dcd3b1aa4b8f0889e30d54bbf",
+      "verdict": "full"
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "5682d8c1a060fbc5e0ed6d39892701a3",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "1fad034e83e1646a4607280595cac177",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "d5cda9b91f35e7669e4dd84f476329c143ddb7f269bcf05054b754d903cb99dc",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+      "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+      "session_entry_id": null,
+      "request_generation": null,
+      "llm_context_digest": null,
+      "verdict": null
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "c5fe38787f758e6eafb3d9254c92d246",
+      "stage": "triage",
+      "execution_id": null,
+      "attempt_ordinal": null,
+      "owner_lookup": "1fad034e83e1646a4607280595cac177",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "d95b788582847af7ac97ed9c962b322bcae4b10c8fc8c84f14f25a4a8338d780",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+      "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+      "session_entry_id": "2d53f17d",
+      "request_generation": 4,
+      "llm_context_digest": "3e5179c9f42db956c4602899422553395e37f589f55bd1afde0ff3acf7a4b9b3",
+      "verdict": "full"
+    },
+    {
+      "kind": "native_runtime_input",
+      "input_id": "dc4899ebe2a295949d3bab4375f122eb",
+      "stage": "full",
+      "execution_id": "wirev1de06b47e78b171ccf0c4ef27c334d9fc386a43cb9b0b3c17edeeeebd8e507dd1",
+      "attempt_ordinal": 1,
+      "owner_lookup": "1fad034e83e1646a4607280595cac177",
+      "owner_thread": "purechannel-owner-0",
+      "owner_generation": 1,
+      "owner_token_digest": "e924b181dccdd8eafd8d20fa08ab04769ef0b7408ef2162156022ba972107d3f",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+      "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+      "session_entry_id": "e52160aa",
+      "request_generation": 2,
+      "llm_context_digest": "dbca5e8188f0e84f822d484f6e498f61d895ef1405e8a29003092a29fa0a74b0",
+      "verdict": null
+    }
+  ],
+  "elapsed_seconds": 198.51515252998797,
+  "failure": null,
+  "settings": [
+    {
+      "source_owner": "openhcs-architecture-memory",
+      "private_owner": "purechannel-owner-0",
+      "model": "openai-codex/gpt-6.1-sol",
+      "thinking": "high",
+      "worktree": "/home/ts/code/projects/openhcs",
+      "tags": [
+        "openhcs"
+      ],
+      "source_session_bytes": 42044804,
+      "source_session_sha256": "a46d4826d76cac0dfab481586e05cad9583170526155ffdf17b2c2e5a095acdb",
+      "owned_fork": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+      "original_task_sha256": "079c2d9fcf2bc90817641ff295f5e0ce24b2c51af9cb8bdb91f3bea70a8a1500"
+    }
+  ],
+  "installed_interpreter": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-native6-wire-source-20261002/bin/python",
+  "original_sequences": [
+    1
+  ],
+  "proof": {
+    "recipients": 1,
+    "pure_channel": true,
+    "pending_originals_per_owner": 1,
+    "complete_ordered_native_membership": true,
+    "all_original_sealed_receipts": true,
+    "original_claim_count": 1,
+    "dm_or_mention_forcing_full": false,
+    "triage_inputs": 1,
+    "full_inputs": 1,
+    "overlapping_dispatched_native_inputs": false,
+    "all_originals_completed": true,
+    "common_accepted_time": true,
+    "channel_receipts": [
+      {
+        "kind": "publication_receipts",
+        "execution_id": "wirev1de06b47e78b171ccf0c4ef27c334d9fc386a43cb9b0b3c17edeeeebd8e507dd1",
+        "exact_target": "#openhcs",
+        "seq": 2,
+        "message_id": "ee20dedd8ca0",
+        "received_at_ms": 1790925439832
+      }
+    ],
+    "all_original_historical_proofs": true,
+    "all_current_cursors_cover_source": true,
+    "actual_coverage_cursor_envelopes": [
+      {
+        "scope": {
+          "session_id": "purechannel-owner-0",
+          "wire_root_id": "8e9214c305e14286b0341b3afc9e5cd2",
+          "admission": {
+            "incarnation": {
+              "name": "purechannel-owner-0",
+              "created_at": 1790925292.2702825
+            },
+            "admission_generation": 3
+          },
+          "owner_pid": 3437266
+        },
+        "revision": 7,
+        "observation": {
+          "kind": "verified",
+          "cursor": {
+            "kind": "current_native_cursor",
+            "wire_root_id": "8e9214c305e14286b0341b3afc9e5cd2",
+            "recipient_lookup": "1fad034e83e1646a4607280595cac177",
+            "owner_thread": "purechannel-owner-0",
+            "owner_generation": 1,
+            "owner_admission_generation": 3,
+            "covered_seq": 2,
+            "injected_seq": 1,
+            "input_id": "dc4899ebe2a295949d3bab4375f122eb",
+            "stage": "full",
+            "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+            "request_generation": 2
+          }
+        }
+      }
+    ],
+    "actual_current_cursors": [
+      {
+        "kind": "current_native_cursor",
+        "wire_root_id": "8e9214c305e14286b0341b3afc9e5cd2",
+        "recipient_lookup": "1fad034e83e1646a4607280595cac177",
+        "owner_thread": "purechannel-owner-0",
+        "owner_generation": 1,
+        "owner_admission_generation": 3,
+        "covered_seq": 2,
+        "injected_seq": 1,
+        "input_id": "dc4899ebe2a295949d3bab4375f122eb",
+        "stage": "full",
+        "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+        "request_generation": 2
+      }
+    ],
+    "current_original_owner_epochs_alive": true,
+    "refresh_native_input_replays": 0,
+    "saved_preparation": {
+      "ordinary_acp_selected_original_fork": true,
+      "explicit_selected_execution_override": false,
+      "selected_summary_states": [
+        "manual_committed"
+      ],
+      "summary_source_digests": [
+        "86ffdac151e08a9405d8a71cb94cb4275c2f6934a7c697fca9dcbaa8e49b5694"
+      ],
+      "naturally_triggered_compaction": true,
+      "configured_budget_changed": false,
+      "cancel_continue": {
+        "cancelled_original": {
+          "seq": 3,
+          "message_id": "ba98e42ca86d"
+        },
+        "continued_original": {
+          "seq": 4,
+          "message_id": "5eae5d875206"
+        },
+        "cancelled_admission_stages": [
+          "triage"
+        ],
+        "cancelled_native_inputs": [
+          {
+            "kind": "native_runtime_input",
+            "input_id": "5682d8c1a060fbc5e0ed6d39892701a3",
+            "stage": "triage",
+            "execution_id": null,
+            "attempt_ordinal": null,
+            "owner_lookup": "1fad034e83e1646a4607280595cac177",
+            "owner_thread": "purechannel-owner-0",
+            "owner_generation": 1,
+            "owner_token_digest": "d5cda9b91f35e7669e4dd84f476329c143ddb7f269bcf05054b754d903cb99dc",
+            "sent_owner_admission_generation": 3,
+            "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+            "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+            "session_entry_id": null,
+            "request_generation": null,
+            "llm_context_digest": null,
+            "verdict": null
+          }
+        ],
+        "cancelled_claims": [
+          {
+            "kind": "wake_claims",
+            "claim_id": "cohort-v1:98bdd5b322dd4fce1cd2c82a5516481506b03350f4358b6b5a6b29d35b203916",
+            "recipient": "purechannel-owner-0",
+            "recipient_lookup": "1fad034e83e1646a4607280595cac177",
+            "wire_seq": 3,
+            "message_id": "ba98e42ca86d",
+            "audience": "collective",
+            "lifecycle": {
+              "kind": "deferred",
+              "decision": {
+                "mode": {
+                  "kind": "bounded_triage"
+                }
+              }
+            },
+            "accepted_at_ms": 1790925459808,
+            "updated_at_ms": 1790925461756,
+            "revision": 2,
+            "resolver_version": "resolver-v1",
+            "policy_version": "policy-v1"
+          }
+        ],
+        "cancelled_publications": [],
+        "continuation_native_inputs": [
+          {
+            "kind": "native_runtime_input",
+            "input_id": "11bc2538af9e888f9aece5229d16dc65",
+            "stage": "full",
+            "execution_id": "wirev18bbd914237b5da2ece4ba62781043c5ea80d440334131357b2ffe1af0383163f",
+            "attempt_ordinal": 1,
+            "owner_lookup": "1fad034e83e1646a4607280595cac177",
+            "owner_thread": "purechannel-owner-0",
+            "owner_generation": 1,
+            "owner_token_digest": "3f78cc386b74d79680b87b9767f7d2affcbc961845d4a3653c747ed9472b8e81",
+            "sent_owner_admission_generation": 3,
+            "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+            "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+            "session_entry_id": "c83b0b0f",
+            "request_generation": 5,
+            "llm_context_digest": "8b0a57f89b11ec3851b52f52623774a6f7e548a3bbe95c8d4a31a00e8a74c179",
+            "verdict": null
+          },
+          {
+            "kind": "native_runtime_input",
+            "input_id": "c5fe38787f758e6eafb3d9254c92d246",
+            "stage": "triage",
+            "execution_id": null,
+            "attempt_ordinal": null,
+            "owner_lookup": "1fad034e83e1646a4607280595cac177",
+            "owner_thread": "purechannel-owner-0",
+            "owner_generation": 1,
+            "owner_token_digest": "d95b788582847af7ac97ed9c962b322bcae4b10c8fc8c84f14f25a4a8338d780",
+            "sent_owner_admission_generation": 3,
+            "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+            "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+            "session_entry_id": "2d53f17d",
+            "request_generation": 4,
+            "llm_context_digest": "3e5179c9f42db956c4602899422553395e37f589f55bd1afde0ff3acf7a4b9b3",
+            "verdict": "full"
+          }
+        ],
+        "continuation_publications": [
+          {
+            "kind": "publication_receipts",
+            "execution_id": "wirev18bbd914237b5da2ece4ba62781043c5ea80d440334131357b2ffe1af0383163f",
+            "exact_target": "#openhcs",
+            "seq": 5,
+            "message_id": "8f71d9f7b908",
+            "received_at_ms": 1790925486099
+          }
+        ],
+        "joined_cancel_originals_retained": true,
+        "uncertain_original_replays": 0,
+        "new_original_completed_once": true
+      }
+    },
+    "acp_fact_count": 14
+  },
+  "public_inputs": 0,
+  "original_seq326_replays": 0,
+  "provider": "actual configured provider",
+  "all_owned_workers_retired": true,
+  "configured_sources_unchanged": true,
+  "bus_reads": [],
+  "retained_bus_bytes": 46903
+}

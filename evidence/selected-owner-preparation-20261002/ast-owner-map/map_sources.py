@@ -18,7 +18,7 @@ CORE = Repository(OUTPUT.parents[2])
 TOAD = Repository(Path("/home/ts/wt/toad-receiving-native5-batch490-20261001"))
 SEEDS = {
     "InputProvenance", "StoredInput", "InputDocument", "InputBatch", "ChannelInputBatch",
-    "OriginalTurnInput", "SelectedSource", "CompactionSource", "HeldCompaction",
+    "OriginalTurnInput", "SelectedSource", "SelectedSourceBatch", "CompactionSource", "HeldCompaction",
     "SelectedSummarySource", "SelectedSummaryAttempt", "SelectedSummaries",
     "SelectedCommitReference", "SelectedSummaryAdmission", "SelectedAdmissionIdentity",
     "SummaryState", "PrivateInputs", "OwnerCompactionCommit", "SelectedSession",
@@ -37,9 +37,13 @@ ATTRS = {"source_json", "originals", "pending_inputs", "ingress_key", "pending_i
          "input_sources", "original_inputs", "matches_original_source", "require_retained"}
 RETIRED = {"read_compaction_decision", "read_compaction_settings", "adaptive_compaction_enabled"}
 
-for label, revision in [("before", "a87a7065"), ("after", sys.argv[1] if len(sys.argv) > 1 else "62719ea96dc646d6dff0d717ae747d9bc6ceacb3")]:
+if len(sys.argv) > 3:
+    OUTPUT = Path(sys.argv[3]).resolve()
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+
+for label, revision in [("before", sys.argv[2] if len(sys.argv) > 2 else "a87a7065"), ("after", sys.argv[1] if len(sys.argv) > 1 else "62719ea96dc646d6dff0d717ae747d9bc6ceacb3")]:
     entries = [(CORE, revision, root) for root in ("src", "tests", "tools")]
-    toad_revision = TOAD.git("rev-parse", "HEAD").strip()
+    toad_revision = TOAD.git("rev-parse", sys.argv[4] if len(sys.argv) > 4 else "HEAD").strip()
     entries.append((TOAD, toad_revision, "src"))
     coverage, modules, omissions = [], [], []
     for repository, rev, root in entries:
