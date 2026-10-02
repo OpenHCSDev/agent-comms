@@ -226,7 +226,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         InputDispositions(ROOT / InputDispositions.filename).read()
         self.task_carry.require_selection(snapshot, owners)
 
-    def protected_files(self):
+    def protected_files(self) -> frozenset[Path]:
         # Original uncertainty and evidence stay in their OWN stores. Runtime
         # compaction rows and task-carry bus rows are not competing authorities.
         paths = set()
@@ -247,7 +247,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                         paths.add(proof)
         paths.update(path for path in RuntimeGoalFiles(ROOT).paths
                      if path.exists() or path.is_symlink())
-        return paths
+        return frozenset(paths)
 
     def after_stopped(self, lifecycle):
         self.cohort.require_original()
@@ -261,12 +261,14 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         PrivateDirectoryRole.require(directory.lstat())
         paths = self.protected_files()
         protected = {str(path): digest(path) for path in sorted(paths)}
-        unchanged = self.runtime_installation.unchanged_protected(paths)
-        invariant = {str(path): protected[str(path)] for path in unchanged}
         # No decoding of old input records from a target-compaction journal.
         with ExitStack() as custody:
             runtime = custody.enter_context(RuntimeCompactionFiles(ROOT).acquire())
             goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
+            # Freeze original membership before deriving the byte-preserved
+            # partition. Goal members have their own preimage/row/DDL proof.
+            unchanged = self.runtime_installation.unchanged_protected(paths).difference(goals.paths)
+            invariant = {str(path): protected[str(path)] for path in unchanged}
             original_files = self.runtime_installation.retain_protected(paths, directory)
             retain_file(ROOT / 'registry.json', directory / 'registry.json')
             fsync_directory(directory)
@@ -276,10 +278,6 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
             goal_installation = self.runtime_installation.synchronize_goal(
                 goals, directory / 'goal-ledger')
             installed_goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
-            # These members have their own retained-preimage, exact row-identity
-            # and target-DDL proof. Unchanged files retain their byte invariant.
-            unchanged -= set(goals.paths)
-            invariant = {str(path): protected[str(path)] for path in unchanged}
             # The carry and runtime member share the ORIGINAL stopped wire custody.
             self.task_carry.after_stopped(lifecycle)
             installed = self.runtime_installation.install(runtime, directory / 'runtime-compaction')

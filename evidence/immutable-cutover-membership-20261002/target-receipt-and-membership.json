@@ -1,0 +1,32 @@
+{
+  "state": "PASS-immutable-membership-and-readonly-typed-committed-goal-receipt",
+  "installed_package": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "interpreter": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002/bin/python",
+  "membership": {
+    "full": 39,
+    "byte_preserved": 38,
+    "full_membership_unchanged": true,
+    "immutable_owner_output": true
+  },
+  "publication_receipt": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/merged509-513-514-517-sidebar308-20261002/publication.json",
+  "outer_phase": "all-original-owners-stopped-originals-audited",
+  "goal_installed_receipt": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/merged509-513-514-517-sidebar308-20261002/publication.originals/goal-ledger/installed.json",
+  "goal_classification": "goal/declaration-preserve",
+  "typed_target_sha256": "1befd181b44ed3884d02154526dbf38d8b57bfdcadef0ace00f6a6db98224080",
+  "target_ddl_qualified": true,
+  "target_rows": {
+    "failed_turn_evidence": 4,
+    "generation": 8,
+    "attempt_record": 36,
+    "goal_human_decision": 7,
+    "goal_provider_usage": 437,
+    "goal_attempt_schema": 1
+  },
+  "fact_rows_and_rowids_match_carry_receipt": true,
+  "disposition": "Goal carry already committed. Outer phase does not erase the installed receipt. Parent alone continues from current target qualification; no old-DDL authentication or carry replay.",
+  "carry_executions": 0,
+  "public_mutations": 0,
+  "provider_calls": 0,
+  "input_replays": 0,
+  "limits": "Read-only current target observation and private membership derivation. Not public publication or stopped-custody continuation."
+}
