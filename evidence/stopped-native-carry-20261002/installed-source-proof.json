@@ -1,0 +1,20 @@
+{
+  "state": "Changed outside-src installed operator control passed on authentic preserved Native6 stopped-copy; parent public acceptance pending",
+  "installed_python": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-native-read532-534-retirement325-20261002/bin/python",
+  "installed_core": "399fef69a02429237647109ef16e49d6455a6e45",
+  "operator_source": "435b8c57564f9cdb3d5dc10f6f6932bd8c317d5b",
+  "operators": {
+    "tools/cutover/runtime_installation.py": "0796b235b74674597c2720d7e7fcd931f1a262d4720ccfa285547d81612521db",
+    "tools/cutover/native_schema_carry.py": "e7faf702b534056696229c145402b935f7872e89ae8432c848cbae5cbe811534",
+    "tools/cutover/native_schema_carry_controls.py": "2217f529e527dd8947e1f69162d6e65277a602b0a5bb0a5483e063044208b56e",
+    "tools/cutover/publish_retained_summary.py": "63e92ac87b2474159eb6c89e32cb649a872712f9bb69a2d0b4170911eb16efa4"
+  },
+  "src_stack_pyproject_uvlock_delta": "",
+  "native_build": false,
+  "new_environment": false,
+  "provider_calls": 0,
+  "public_changes": 0,
+  "source_originals": "/home/ts/.cache/agent-scratch/mendel-native-fork-carry538-20261002/original-preimages",
+  "no_source_overlay": "Installed Core imports untouched; changed outside-src tool owner invoked directly, no PYTHONPATH/repo src overlay",
+  "receipt_sha256": "05a89c3d30072c0d4f23bb02559821776ecd74318b00117e7762eb05ac234993"
+}
