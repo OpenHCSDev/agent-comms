@@ -224,7 +224,7 @@ class NativeSendStage(ABC):
 
 
 class TriageNativeSend(NativeSendStage):
-    def reject(self, store, owner, input_id, token_digest, context):
+    def reject(self, store, owner, input_id, token_digest, context) -> tuple[WakeAssignment, ...]:
         """Settle this proved result atomically; never reserve a replacement input."""
         with store.session.transaction() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
@@ -242,6 +242,8 @@ class TriageNativeSend(NativeSendStage):
                 )
                 if updated.rowcount != 1:
                     raise StaleFence("rejected triage lost an original batch claim")
+            return tuple(store.assignments.get(captured.assignment_id)
+                         for captured in self.assignments)
 
     @property
     def execution(self) -> TriageNativeExecution:

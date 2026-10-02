@@ -1,5 +1,6 @@
 """Captured selected sources share one input; they do not create another inbox."""
 
+import hashlib
 import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -71,6 +72,12 @@ class SelectedSourceBatch(InputBatch):
     @property
     def assignment_ids(self) -> tuple[str, ...]:
         return tuple(source.assignment_id for source in self.sources)
+
+    @property
+    def execution_id(self) -> str:
+        return "wirev1" + hashlib.sha256(
+            json.dumps(self.assignment_ids, separators=(",", ":")).encode()
+        ).hexdigest()
 
     @property
     def requires_triage(self) -> bool:

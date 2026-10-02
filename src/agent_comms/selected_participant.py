@@ -39,6 +39,11 @@ class SelectedParticipant(MroDispatch):
     provider: str
     model: str
 
+    def require_current(self) -> None:
+        self.owner.require_registry(self.comms.registry)
+        with self.store.session.read():
+            self.identity.require(self.store, self.lookup)
+
     @property
     def response_owner(self) -> LiveResponseOwner:
         return LiveResponseOwner(

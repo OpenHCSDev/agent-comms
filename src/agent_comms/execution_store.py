@@ -61,8 +61,32 @@ class ExecutionStore:
         max_attempts: int,
         *,
         sources: tuple[SelectedSource, ...] = (),
-        expected_assignments: tuple[WakeAssignment, ...] | None = None,
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
+        with self.session.transaction() as db:
+            assignments = tuple(source.assignment for source in sources)
+            return self._create(db, execution_id, origin, owner_lookup, owner_thread, max_attempts, sources, assignments)
+
+    def create_after_triage(
+        self,
+        execution_id: str,
+        origin: ExecutionOrigin,
+        owner_lookup: str,
+        owner_thread: str,
+        max_attempts: int,
+        *,
+        sources: tuple[SelectedSource, ...],
+        settled: tuple[WakeAssignment, ...],
+    ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
+        """Engage exactly the rows witnessed by the original triage proof commit."""
+        with self.session.transaction() as db:
+            assignments = tuple(source.assignment for source in sources)
+            if assignments != settled:
+                raise StaleRevision("original claims changed after proved native settlement")
+            return self._create(db, execution_id, origin, owner_lookup, owner_thread, max_attempts, sources, assignments)
+
+    def _create(self, db, execution_id, origin, owner_lookup, owner_thread,
+                max_attempts, sources, assignments):
+        """The single creation algorithm, under its caller's owning transaction."""
         origin = ExecutionOrigin(origin)
         for source in sources:
             if source.store is not self.assignments:
@@ -72,89 +96,83 @@ class ExecutionStore:
             raise IdentityConflict("wire execution requires ordered original sources")
         if origin is not ExecutionOrigin.WIRE and sources:
             raise IdentityConflict("claimless execution cannot bind claims")
-        with self.session.transaction() as db:
-            # Lifecycle/revision is a witness from this owner's transaction,
-            # not a lifecycle copy retained by the captured delivery relation.
-            assignments = tuple(source.assignment for source in sources)
-            row = ExecutionRecord.one(self.session._connection, execution_id=execution_id)
-            if row is not None:
-                snapshot = self.snapshots.get(execution_id)
-                e = snapshot.execution
-                if (
-                    e.origin,
-                    e.owner_lookup,
-                    e.owner_thread,
-                    e.max_attempts,
-                    tuple(sorted(row.exact_target for row in snapshot.obligations)),
-                    tuple(link.assignment_id for link in snapshot.links),
-                ) != (
-                    origin,
-                    owner_lookup,
-                    owner_thread,
-                    max_attempts,
-                    tuple(sorted({derive_exact_reply_target(source.delivery.message) for source in sources})),
-                    assignment_ids,
-                ):
-                    raise IdentityConflict("execution identity conflicts")
-                return AlreadyApplied(snapshot)
-            if expected_assignments is not None and assignments != expected_assignments:
-                raise StaleRevision("original claims changed after proved native settlement")
-            participant = self.participants.get(owner_lookup)
-            if not participant.committed or participant.owner_thread != owner_thread:
-                raise IdentityConflict("execution requires committed current owner")
-            if not isinstance(max_attempts, int) or max_attempts <= 0:
-                raise ValueError("max_attempts must be positive")
-            if len(set(assignment_ids)) != len(assignment_ids):
-                raise IdentityConflict("duplicate claim membership")
-            now = self.session.now()
-            ExecutionRecord(
-                execution_id=execution_id,
-                origin=origin,
-                lifecycle=QueuedExecution(),
-                owner_thread=owner_thread,
-                owner_lookup=owner_lookup,
-                revision=1,
-                max_attempts=max_attempts,
-                reason_code=None,
-                created_at_ms=now,
-                updated_at_ms=now,
+        row = ExecutionRecord.one(self.session._connection, execution_id=execution_id)
+        if row is not None:
+            snapshot = self.snapshots.get(execution_id)
+            e = snapshot.execution
+            if (
+                e.origin,
+                e.owner_lookup,
+                e.owner_thread,
+                e.max_attempts,
+                tuple(sorted(row.exact_target for row in snapshot.obligations)),
+                tuple(link.assignment_id for link in snapshot.links),
+            ) != (
+                origin,
+                owner_lookup,
+                owner_thread,
+                max_attempts,
+                tuple(sorted({derive_exact_reply_target(source.delivery.message) for source in sources})),
+                assignment_ids,
+            ):
+                raise IdentityConflict("execution identity conflicts")
+            return AlreadyApplied(snapshot)
+        participant = self.participants.get(owner_lookup)
+        if not participant.committed or participant.owner_thread != owner_thread:
+            raise IdentityConflict("execution requires committed current owner")
+        if not isinstance(max_attempts, int) or max_attempts <= 0:
+            raise ValueError("max_attempts must be positive")
+        if len(set(assignment_ids)) != len(assignment_ids):
+            raise IdentityConflict("duplicate claim membership")
+        now = self.session.now()
+        ExecutionRecord(
+            execution_id=execution_id,
+            origin=origin,
+            lifecycle=QueuedExecution(),
+            owner_thread=owner_thread,
+            owner_lookup=owner_lookup,
+            revision=1,
+            max_attempts=max_attempts,
+            reason_code=None,
+            created_at_ms=now,
+            updated_at_ms=now,
+        ).insert(db)
+        routes = {}
+        for ordinal, (source, assignment) in enumerate(zip(sources, assignments, strict=True)):
+            assignment_id = source.assignment_id
+            exact_target = derive_exact_reply_target(source.delivery.message)
+            routes.setdefault(exact_target, None)
+            if (
+                assignment.recipient_lookup != owner_lookup
+                or assignment.lifecycle.execution_id is not None
+                or not assignment.lifecycle.engageable
+            ):
+                raise IdentityConflict("claim cannot engage this execution")
+            decision = EngagedAssignment.build(
+                assignment.lifecycle.mode, execution_id, exact_target
+            )
+            updated = WakeAssignment.update(
+                db,
+                where="assignment_id=? AND revision=?",
+                parameters=(assignment_id, assignment.revision),
+                lifecycle=decision,
+                revision=assignment.revision + 1,
+                updated_at_ms=self.session.now(assignment.updated_at_ms),
+            )
+            if updated.rowcount != 1:
+                raise StaleRevision("original claim changed during engagement")
+            ExecutionAssignmentLink(execution_id, assignment_id, ordinal).insert(db)
+        for exact_target in routes:
+            ResponseObligation(
+                execution_id,
+                exact_target,
+                PendingResponse(),
+                None,
+                now,
+                now,
+                1,
             ).insert(db)
-            routes = {}
-            for ordinal, (source, assignment) in enumerate(zip(sources, assignments, strict=True)):
-                assignment_id = source.assignment_id
-                exact_target = derive_exact_reply_target(source.delivery.message)
-                routes.setdefault(exact_target, None)
-                if (
-                    assignment.recipient_lookup != owner_lookup
-                    or assignment.lifecycle.execution_id is not None
-                    or not assignment.lifecycle.engageable
-                ):
-                    raise IdentityConflict("claim cannot engage this execution")
-                decision = EngagedAssignment.build(
-                    assignment.lifecycle.mode, execution_id, exact_target
-                )
-                updated = WakeAssignment.update(
-                    db,
-                    where="assignment_id=? AND revision=?",
-                    parameters=(assignment_id, assignment.revision),
-                    lifecycle=decision,
-                    revision=assignment.revision + 1,
-                    updated_at_ms=self.session.now(assignment.updated_at_ms),
-                )
-                if updated.rowcount != 1:
-                    raise StaleRevision("original claim changed during engagement")
-                ExecutionAssignmentLink(execution_id, assignment_id, ordinal).insert(db)
-            for exact_target in routes:
-                ResponseObligation(
-                    execution_id,
-                    exact_target,
-                    PendingResponse(),
-                    None,
-                    now,
-                    now,
-                    1,
-                ).insert(db)
-            return Applied(self.snapshots.get(execution_id))
+        return Applied(self.snapshots.get(execution_id))
 
     def mark_pending(
         self, execution_id: str, *, expected_revision: int

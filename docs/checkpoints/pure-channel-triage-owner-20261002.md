@@ -22,14 +22,24 @@ the current revision CAS. The obsolete comparison with a copied lifecycle row
 is deleted. No refresh after triage, new class, registry, queue or state mirror.
 
 TriageNativeSend.commit returns the authoritative settled rows from the same
-transaction which records the original native context/verdict. DecidedTriageOutcome,
-SelectedConsideration and SelectedExecution carry that transaction witness to
-SelectedAttempt.engage. ExecutionStore requires exact equality with its current
-transaction-owned rows before creating a new execution. An intervening change
-therefore refuses engagement; this is not an unfenced refresh of a source cache.
-The original AlreadyApplied membership/identity path remains idempotent and does
-not create another execution. Mandatory direct FULL does not have a triage
-settlement witness; its claims remain owned and checked by the execution transaction.
+transaction which records the original native context/verdict. The existing
+SelectedTriageOutcome/SelectedTriage members now OWN async continuation: FULL
+creates through ExecutionStore.create_after_triage with the exact settled-row
+witness, IGNORE consumes reply wait and returns its terminal result, and rejection
+returns its existing failed result. Direct FULL creates from the transaction-owned
+source directly. One ExecutionStore._create algorithm owns actual mutation for
+both entry paths. The proved triage entry refuses any intervening row change.
+SelectedAttempt receives the actual created RecoverySnapshot and starts the
+attempt with its original revision/pointer fences. No new optional/None state,
+strategy type, member wrapper, compatibility path or cached lifecycle.
+
+SelectedParticipant.require_current reuses the existing registry/participant
+owners before either execution creation and attempt start. SelectedSourceBatch
+owns the existing deterministic execution identity derived from immutable ordered
+assignment IDs; the runner's copied construction is deleted. FULL continuation
+is outside the already-proved TRIAGE request's failure context: the FULL native
+request retains its own failure/UNKNOWN owner. Action selection occurs on the
+continued session, preserving the existing FirstSelectedSession action behavior.
 
 The other selected_source.SelectedSource is the existing native selected-summary
 DeclaredFamily (filesystem/session revision and coverage). It does not own wire
