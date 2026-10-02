@@ -54,7 +54,7 @@ class PreserveRuntimeInstallation(RuntimeInstallation):
 
 @dataclass(frozen=True)
 class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
-    """Complete490 release declarations; compaction remains original bytes."""
+    """Native6 declarations; original compaction proof facts remain unchanged."""
 
     plan: NativeSchemaCarryPlan
 
@@ -66,7 +66,9 @@ class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
     def install(self, acquired, destination):
         if acquired.paths[0].parent != self.plan.root:
             raise ValueError('Native carry names another stopped root')
-        preserved = super().install(acquired, destination)
-        carried = self.plan.install(destination)
         acquired.require_original()
-        return {**carried, 'compaction': preserved}
+        original_evidence = acquired.evidence()
+        carried = self.plan.install(destination)
+        changed = {self.plan.root / item.name for item in self.plan.stores}
+        acquired.unchanged_by(changed).require_original()
+        return {**carried, 'compaction_original_files': original_evidence}

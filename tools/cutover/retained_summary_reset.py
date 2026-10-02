@@ -96,6 +96,13 @@ class AcquiredRuntimeFiles:
     paths: tuple[Path, ...]
     originals: tuple[RetainedRuntimeFile, ...]
 
+    def unchanged_by(self, changed: set[Path]):
+        """Project these same opened resources after a declared carry replaces files."""
+        return AcquiredRuntimeFiles(
+            tuple(path for path in self.paths if path not in changed),
+            tuple(original for original in self.originals if original.path not in changed),
+        )
+
     def require_original(self):
         present = {item.path for item in self.originals}
         if {path for path in self.paths if path.exists() or path.is_symlink()} != present:
