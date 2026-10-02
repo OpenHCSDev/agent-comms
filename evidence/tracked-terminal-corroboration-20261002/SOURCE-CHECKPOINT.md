@@ -1,6 +1,6 @@
 # Joined tracked proof and completion
 
-Source42aa8c74, Core549. Source controls passed; installed native turn pending.
+Source42aa8c74, Core549. Source controls and installed configured native turn passed.
 No dependency on551 public checkpoint schema rebuild or U1.
 
 TrackedTurnSession.context_proof now performs the existing exact _verify_context
@@ -35,8 +35,9 @@ Four focused source controls passed in0.76s with the existing534 interpreter:
   errors are not relabeled as source failures.
 
 These are resource/proof controls, not model/native/UI or seconds attribution.
-The final configured saved-fork native turn uses a released existing normal
-holder with unchanged reviewed native960. Sch owns that holder's package build;
+The final configured saved-fork native turn uses Bohr's cleared existing normal69
+485/488 holder with unchanged reviewed native960. A normal declared wheel update
+replaced only agent-comms; SDK0.12.1 and all other distributions remained installed.
 no new checkout/environment/native copy, source overlay or public action.
 Original79cb UNKNOWN and418 NotSent remain protected and are never replayed.
 
@@ -44,3 +45,6 @@ After AST uses the existing NRA Package parser over production/tests/tools.
 Zero parse omissions; candidate receiver/MRO ambiguity remains explicit.
 No schema/native-format change. Parent's next configured channel journey owns
 user-level end-to-end latency acceptance; historic8–16s remain unattributed.
+
+Installed receipt and actual timing are in INSTALLED-ACCEPTANCE.md. Source
+production is unchanged from42aa; the later commits publish source/evidence only.
