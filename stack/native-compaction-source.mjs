@@ -20,6 +20,15 @@ export class EntryMessageRange {
         const iterator = this[Symbol.iterator]();
         try { return iterator.next().done; } finally { iterator.return?.(); }
     }
+    *prefixMessages() {
+        // The original context owner places the previous compaction first,
+        // even though that record was appended after its retained messages.
+        // Stop at this source's end; never reconstruct the old summary envelope.
+        for (const meta of this.store.contextMetadata(this.leafId)) {
+            if (meta.type !== 'compaction' && meta.sequence >= this.end) return;
+            yield* sessionEntryToContextMessages(this.store.get(meta.id));
+        }
+    }
 }
 
 export class SummarySource {
@@ -72,12 +81,28 @@ export class HistorySummarySource extends SummarySource {
     summaryInstructions(instructions) { return instructions; }
     consume(bytes) { this.#consumedBytes += bytes; }
     complete() { this.#consumedBytes = this.sourceBytes; }
+    async requestContext(policy, model, reserveTokens, instructions, systemPrompt, options, summaryPrefix) {
+        // Capability absence/oversize selects the bounded source BEFORE any
+        // provider request. A failed or uncertain request never selects again.
+        const prefix = await summaryPrefix?.(this.messages, `${systemPrompt}\n\n${instructions}`, options);
+        if (prefix && policy.requestFits(prefix.context, model, reserveTokens)) return prefix;
+        const context = { systemPrompt, messages: [{ role: 'user',
+            content: [{ type: 'text', text: this.boundedPrompt(instructions) }], timestamp: Date.now() }] };
+        policy.requireRequest(context, model, reserveTokens);
+        return { context, options };
+    }
+    boundedPrompt(instructions) {
+        let prompt = `<conversation>\n${[...this.historyPieces()].join('')}\n</conversation>\n\n`;
+        if (this.previousSummary) prompt += `<previous-summary>\n${this.previousSummary}\n</previous-summary>\n\n`;
+        return prompt + instructions;
+    }
     *pieces() {
-        let emitted = false;
         if (this.previousSummary) {
             yield `<previous-summary>\n${this.previousSummary}\n</previous-summary>`;
-            emitted = true;
         }
+        yield* this.historyPieces(Boolean(this.previousSummary));
+    }
+    *historyPieces(emitted = false) {
         for (const message of this.messages) {
             const text = serializeConversation(convertToLlm([message]));
             if (!text) continue;

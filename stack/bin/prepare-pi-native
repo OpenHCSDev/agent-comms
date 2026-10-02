@@ -93,6 +93,8 @@ python3 "$stack_root/patch-native-file-artifact.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
     -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-request-progress-adapters.patch"
+patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
+    -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-summary-prefix.patch"
 python3 "$stack_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 verify "$stage"
