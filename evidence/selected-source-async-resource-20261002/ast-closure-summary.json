@@ -1,0 +1,826 @@
+{
+  "state": "AST_DECLARATION_AND_CONSUMER_CLOSURE_RECORDED_NOT_RUNTIME_DISPATCH_PROOF",
+  "tools": {
+    "archive": "/home/ts/code/projects/nominal-refactor-advisor/skills/refactor-audit.skill",
+    "archive_sha256": "ef0367d878cc57565f2b257a8e6647a234d4ba4298f61391709d9c3c82bec9f7",
+    "parser": "audit.findings.Package.load",
+    "repository": "audit.repository.Repository",
+    "projection": "/home/ts/code/projects/nominal-refactor-advisor/nominal_refactor_advisor/ast_projection.py",
+    "projection_sha256": "d896e95a7bb1e1672cc2e8941f3c02aba16af3fd3dff1e2c6b096b786007a3a0"
+  },
+  "reference_gate": {
+    "repository": "/home/ts/code/projects/openhcs",
+    "commit": "5e8812ee83d0dc8714392445bad3e32fc47a1755",
+    "path": "tests/unit/test_cellprofiler_static_deletion_gates.py"
+  },
+  "before": "9d557bf469ff1c61494b323a8cccb9fa9dd947c8",
+  "after": "d45f6287456411254165cbfe6e4d4135ce7ba269",
+  "production_deleted_lines": 63,
+  "production_added_lines": 81,
+  "raw_output": "ast-before-after.json.gz",
+  "raw_sha256": "8a6ee3ee0a1fb68bf5a7f339a3446485832ec254a25feee52b1a3808d6bf50cf",
+  "limits": [
+    "Imported/dotted spellings and class ancestry are source evidence, not native MRO or descriptor execution.",
+    "Receiver variables, monkeypatches, shadowing and dynamic getattr/import dispatch remain unproved; candidate references are retained.",
+    "Historical installed-original producer scripts are parsed and reported, not migrated to the current producer API.",
+    "Non-Python native/provider protocol implementations and generated/embedded source are not parsed by this Python query; matching string literals are retained as candidates.",
+    "External stdlib/SQLite and official ACP SDK runtime resolution is not proved by scanning declared project/dependency roots."
+  ],
+  "snapshots": [
+    {
+      "label": "core-before",
+      "revision": "9d557bf469ff1c61494b323a8cccb9fa9dd947c8",
+      "roots": [
+        "benchmarks",
+        "docs",
+        "evidence",
+        "experiments",
+        "scripts",
+        "stack",
+        "tests",
+        "tools",
+        "src/agent_comms"
+      ],
+      "tracked_python_files": 902,
+      "parsed_files": 902,
+      "parse_failures": [],
+      "enumeration_omissions": [],
+      "qualified_owner_definition_duplicates": [],
+      "simple_name_collisions": {
+        "SelectedSource": 2
+      },
+      "selection_and_acceptance_consumer_candidates": [
+        {
+          "path": "tests/test_acp_private_nk_delivery.py",
+          "line": 255,
+          "context": "test_private_rename_compensates_registry_failure_with_new_old_owner_generation",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_acp_private_nk_delivery.py",
+          "line": 186,
+          "context": "test_private_rename_does_not_replay_unserved_old_name_selected_source",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_acp_selected_write_plan.py",
+          "line": 134,
+          "context": "test_public_acp_preplan_one_selected_write_after_verified_fake_native",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_acp_selected_write_plan.py",
+          "line": 129,
+          "context": "test_public_acp_preplan_one_selected_write_after_verified_fake_native",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_acp_selected_write_plan.py",
+          "line": 354,
+          "context": "test_second_pid_public_acp_owner_ipc_preplan",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_channel_participant_registration.py",
+          "line": 30,
+          "context": "test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_channel_participant_registration.py",
+          "line": 40,
+          "context": "test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_cutover_admission.py",
+          "line": 63,
+          "context": "test_reset_rebuild_and_reopen_never_readmit_old_pending_input",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_cutover_admission.py",
+          "line": 44,
+          "context": "test_reset_rebuild_and_reopen_never_readmit_old_pending_input",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_keyed_response_delivery.py",
+          "line": 42,
+          "context": "test_reply_has_frozen_awareness_and_selected_native_barrier",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_keyed_response_delivery.py",
+          "line": 69,
+          "context": "test_reply_has_frozen_awareness_and_selected_native_barrier",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 27,
+          "context": "test_quiescent_private_drain_does_no_package_or_repeated_cursor_work.accepted",
+          "kind": "Call",
+          "terminal": "accept",
+          "spelling": "accept",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 156,
+          "context": "test_sealed_cohorts_are_not_reaccepted_or_rewritten.observed",
+          "kind": "Call",
+          "terminal": "accept",
+          "spelling": "accept",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 171,
+          "context": "test_sealed_cohorts_are_not_reaccepted_or_rewritten",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "cohort_foreground._accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 176,
+          "context": "test_sealed_cohorts_are_not_reaccepted_or_rewritten",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "cohort_foreground._accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 163,
+          "context": "test_sealed_cohorts_are_not_reaccepted_or_rewritten",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "cohort_foreground._accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_selected_source_batch.py",
+          "line": 49,
+          "context": "test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tools/cutover/native_schema_carry_controls.py",
+          "line": 39,
+          "context": "seed",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tools/cutover/native_schema_carry_controls.py",
+          "line": 50,
+          "context": "seed",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tools/cutover/seed_thread_retirement_fixture.py",
+          "line": 70,
+          "context": "seed_historical_failure",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 399,
+          "context": "CommsAgent._drain_private_nk",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/cohort_foreground.py",
+          "line": 184,
+          "context": "run_foreground_once",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/coordinated_runtime.py",
+          "line": 90,
+          "context": "SelectedExecution.run",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 110,
+          "context": "SelectedParticipant.select",
+          "kind": "Call",
+          "terminal": "sources",
+          "spelling": "cls.sources",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        }
+      ],
+      "changed_contract_declarations": [
+        {
+          "path": "src/agent_comms/cohort_foreground.py",
+          "line": 72,
+          "context": "",
+          "kind": "FunctionDef",
+          "name": "_accept_visible_deliveries",
+          "arguments": "bus: MessageBus, root_id: str, store: Coordination, lookup: str, after_seq: int, *, owner_name: str, native_package: Path | None=None",
+          "returns": "int",
+          "decorators": []
+        },
+        {
+          "path": "src/agent_comms/coordinator.py",
+          "line": 25,
+          "context": "Coordination",
+          "kind": "AsyncFunctionDef",
+          "name": "run_async",
+          "arguments": "cls, path: str | Path, operation: Callable[[Self], Result], *, clock_ms: Callable[[], int] | None=None, lock_timeout: float=5.0",
+          "returns": "Result",
+          "decorators": [
+            "classmethod"
+          ]
+        },
+        {
+          "path": "src/agent_comms/coordinator.py",
+          "line": 42,
+          "context": "Coordination",
+          "kind": "FunctionDef",
+          "name": "_run_owned",
+          "arguments": "cls, path: str | Path, operation: Callable[[Self], Result], clock_ms: Callable[[], int] | None, lock_timeout: float",
+          "returns": "Result",
+          "decorators": [
+            "classmethod"
+          ]
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 42,
+          "context": "SelectedParticipant",
+          "kind": "FunctionDef",
+          "name": "require_current",
+          "arguments": "self",
+          "returns": "None",
+          "decorators": []
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 75,
+          "context": "SelectedParticipant",
+          "kind": "FunctionDef",
+          "name": "select",
+          "arguments": "cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int",
+          "returns": "",
+          "decorators": [
+            "classmethod",
+            "contextmanager"
+          ]
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 129,
+          "context": "SelectedParticipant",
+          "kind": "FunctionDef",
+          "name": "lease",
+          "arguments": "comms: Comms, owner: RegistryOwner",
+          "returns": "",
+          "decorators": [
+            "staticmethod",
+            "contextmanager"
+          ]
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 152,
+          "context": "SelectedParticipant",
+          "kind": "FunctionDef",
+          "name": "sources",
+          "arguments": "bus, store, root_id, assignments, identity",
+          "returns": "tuple[SelectedSource, ...]",
+          "decorators": [
+            "staticmethod"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "core-after",
+      "revision": "d45f6287456411254165cbfe6e4d4135ce7ba269",
+      "roots": [
+        "benchmarks",
+        "docs",
+        "evidence",
+        "experiments",
+        "scripts",
+        "stack",
+        "tests",
+        "tools",
+        "src/agent_comms"
+      ],
+      "tracked_python_files": 902,
+      "parsed_files": 902,
+      "parse_failures": [],
+      "enumeration_omissions": [],
+      "qualified_owner_definition_duplicates": [],
+      "simple_name_collisions": {
+        "SelectedSource": 2
+      },
+      "selection_and_acceptance_consumer_candidates": [
+        {
+          "path": "tests/test_acp_private_nk_delivery.py",
+          "line": 256,
+          "context": "test_private_rename_compensates_registry_failure_with_new_old_owner_generation",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_acp_private_nk_delivery.py",
+          "line": 186,
+          "context": "test_private_rename_does_not_replay_unserved_old_name_selected_source",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_acp_selected_write_plan.py",
+          "line": 134,
+          "context": "test_public_acp_preplan_one_selected_write_after_verified_fake_native",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_acp_selected_write_plan.py",
+          "line": 129,
+          "context": "test_public_acp_preplan_one_selected_write_after_verified_fake_native",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_acp_selected_write_plan.py",
+          "line": 354,
+          "context": "test_second_pid_public_acp_owner_ipc_preplan",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_channel_participant_registration.py",
+          "line": 33,
+          "context": "test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_channel_participant_registration.py",
+          "line": 43,
+          "context": "test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_cutover_admission.py",
+          "line": 64,
+          "context": "test_reset_rebuild_and_reopen_never_readmit_old_pending_input",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_cutover_admission.py",
+          "line": 45,
+          "context": "test_reset_rebuild_and_reopen_never_readmit_old_pending_input",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_keyed_response_delivery.py",
+          "line": 43,
+          "context": "test_reply_has_frozen_awareness_and_selected_native_barrier",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_keyed_response_delivery.py",
+          "line": 70,
+          "context": "test_reply_has_frozen_awareness_and_selected_native_barrier",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 157,
+          "context": "test_sealed_cohorts_are_not_reaccepted_or_rewritten.observed",
+          "kind": "Call",
+          "terminal": "accept",
+          "spelling": "accept",
+          "awaited": false,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 27,
+          "context": "test_quiescent_private_drain_does_no_package_or_repeated_cursor_work.accepted",
+          "kind": "Call",
+          "terminal": "accept",
+          "spelling": "accept",
+          "awaited": true,
+          "resource_context": "",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 179,
+          "context": "test_sealed_cohorts_are_not_reaccepted_or_rewritten",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "cohort_foreground._accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 184,
+          "context": "test_sealed_cohorts_are_not_reaccepted_or_rewritten",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "cohort_foreground._accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_private_idle_drain.py",
+          "line": 171,
+          "context": "test_sealed_cohorts_are_not_reaccepted_or_rewritten",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "cohort_foreground._accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tests/test_selected_source_batch.py",
+          "line": 51,
+          "context": "test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "AsyncWith",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tools/cutover/native_schema_carry_controls.py",
+          "line": 39,
+          "context": "seed",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tools/cutover/native_schema_carry_controls.py",
+          "line": 50,
+          "context": "seed",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "tools/cutover/seed_thread_retirement_fixture.py",
+          "line": 70,
+          "context": "seed_historical_failure",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/acp.py",
+          "line": 399,
+          "context": "CommsAgent._drain_private_nk",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/cohort_foreground.py",
+          "line": 188,
+          "context": "run_foreground_once",
+          "kind": "Call",
+          "terminal": "_accept_visible_deliveries",
+          "spelling": "_accept_visible_deliveries",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/coordinated_runtime.py",
+          "line": 89,
+          "context": "SelectedExecution.run",
+          "kind": "Call",
+          "terminal": "select",
+          "spelling": "SelectedParticipant.select",
+          "awaited": false,
+          "resource_context": "AsyncWith",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 111,
+          "context": "SelectedParticipant.select",
+          "kind": "Call",
+          "terminal": "sources",
+          "spelling": "cls.sources",
+          "awaited": true,
+          "resource_context": "With",
+          "resolution": "nominal spelling candidate; receiver/import binding and dynamic dispatch require semantic review"
+        }
+      ],
+      "changed_contract_declarations": [
+        {
+          "path": "src/agent_comms/cohort_foreground.py",
+          "line": 72,
+          "context": "",
+          "kind": "AsyncFunctionDef",
+          "name": "_accept_visible_deliveries",
+          "arguments": "bus: MessageBus, root_id: str, store: Coordination, lookup: str, after_seq: int, *, owner_name: str, native_package: Path | None=None",
+          "returns": "int",
+          "decorators": []
+        },
+        {
+          "path": "src/agent_comms/coordinator.py",
+          "line": 25,
+          "context": "Coordination",
+          "kind": "AsyncFunctionDef",
+          "name": "run_async",
+          "arguments": "cls, path: str | Path, operation: Callable[[Self], Result], *, clock_ms: Callable[[], int] | None=None, lock_timeout: float=5.0",
+          "returns": "Result",
+          "decorators": [
+            "classmethod"
+          ]
+        },
+        {
+          "path": "src/agent_comms/coordinator.py",
+          "line": 42,
+          "context": "Coordination",
+          "kind": "FunctionDef",
+          "name": "_run_owned",
+          "arguments": "cls, path: str | Path, operation: Callable[[Self], Result], clock_ms: Callable[[], int] | None, lock_timeout: float",
+          "returns": "Result",
+          "decorators": [
+            "classmethod"
+          ]
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 43,
+          "context": "SelectedParticipant",
+          "kind": "FunctionDef",
+          "name": "require_current",
+          "arguments": "self",
+          "returns": "None",
+          "decorators": []
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 76,
+          "context": "SelectedParticipant",
+          "kind": "AsyncFunctionDef",
+          "name": "select",
+          "arguments": "cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int",
+          "returns": "",
+          "decorators": [
+            "classmethod",
+            "asynccontextmanager"
+          ]
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 131,
+          "context": "SelectedParticipant",
+          "kind": "FunctionDef",
+          "name": "lease",
+          "arguments": "comms: Comms, owner: RegistryOwner",
+          "returns": "",
+          "decorators": [
+            "staticmethod",
+            "contextmanager"
+          ]
+        },
+        {
+          "path": "src/agent_comms/selected_participant.py",
+          "line": 154,
+          "context": "SelectedParticipant",
+          "kind": "AsyncFunctionDef",
+          "name": "sources",
+          "arguments": "bus, store, root_id, assignments, identity",
+          "returns": "tuple[SelectedSource, ...]",
+          "decorators": [
+            "staticmethod"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "toad-consumer",
+      "revision": "00cbf62c8d69857df03cfed374f6a6d0f0e4240b",
+      "roots": [
+        "evidence",
+        "src",
+        "tests",
+        "tools"
+      ],
+      "tracked_python_files": 740,
+      "parsed_files": 740,
+      "parse_failures": [],
+      "enumeration_omissions": [],
+      "qualified_owner_definition_duplicates": [],
+      "simple_name_collisions": {},
+      "selection_and_acceptance_consumer_candidates": [],
+      "changed_contract_declarations": []
+    },
+    {
+      "label": "textual-dependency",
+      "revision": "23822923a02b75a1fad10751d97dc009c36b598b",
+      "roots": [
+        "docs",
+        "evidence",
+        "examples",
+        "src",
+        "tests",
+        "tools"
+      ],
+      "tracked_python_files": 1044,
+      "parsed_files": 1044,
+      "parse_failures": [],
+      "enumeration_omissions": [],
+      "qualified_owner_definition_duplicates": [],
+      "simple_name_collisions": {},
+      "selection_and_acceptance_consumer_candidates": [],
+      "changed_contract_declarations": []
+    }
+  ],
+  "selected_source_collision_semantics": {
+    "agent_comms.selected_source.SelectedSource": "native selected-summary reservation owner/process/incarnation/turn/session revision, inherited ManualSource and SelectedAdmissionSource behavior",
+    "agent_comms.selected_source_batch.SelectedSource": "original committed delivery bound to the owning mutable AssignmentStore; shared input batch membership",
+    "action": "Both were present before this change. Distinct facts, fields, bases and explicit imports; no synonym alias or duplicate source authority was inferred from the simple name alone."
+  },
+  "remaining_named_source_gap": {
+    "owner": "Kepler512 with Arendt509 resource seam",
+    "fact": "Initial select preparation, registry lease acquisition/retirement and final current-owner check remain synchronous in d45 source",
+    "dependency": "Complete registry operation must retire without first opening SQLite; acquisition cancellation must join then close original lease even if its result was not delivered. Shared owner API/contract coordinated directly; no duplicate worker/helper/type will be added locally.",
+    "installed_gate": "One changed combined installed real-path qualification by Arendt509 after coherent closure; no independent duplicate gate."
+  }
+}
