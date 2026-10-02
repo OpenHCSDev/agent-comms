@@ -1,22 +1,21 @@
-# Current ownership update — 2026-10-02T08:29Z
+# Current ownership update — 2026-10-02T09:23Z
 
-The authoritative current checklist is [15-GOAL-CHECKLIST.md](15-GOAL-CHECKLIST.md)
-and the current open-PR/worktree snapshot is [OPEN-PR-WORKTREES-20261002.md](OPEN-PR-WORKTREES-20261002.md).
-The sections below retain earlier evidence and scopes; their old "current" headings
-are historical, not an instruction to reopen completed work.
+Current checklist: [15-GOAL-CHECKLIST.md](15-GOAL-CHECKLIST.md).
+Default Corec601/Toadc7f5/Text2382/Native5184 is installed; Native6 historical
+carry,19 retained launches, five links and actual saved-helper startup passed.
 
-Default: Core9ccc/Toadf07f/Text2382/Native5184, actual installed native goal and
-physical default-read journeys passed. Core516/510 and Toad315 are merged;
-their already-qualified Corec601/Toadc7f5 package is the next stopped publication,
-owned by parent with Arendt/Mendel preparing the existing operators.
+| Owner | Current substantial work | Actual latest result / next step |
+| --- | --- | --- |
+| Parent | Paired live integration and original channel timing | Exact user request358 sent once; replies56.8/58.8/162.4/163.4/207.9/255.6s; save original timing/ack evidence, integrate qualified checkpoints |
+| Arendt | Canonical blocked-summary recovery | Four current stopped drains mapped; original refused reservation has unchanged source/no commit/no sent input; classify manual reservations and delete duplicate recovery decisions |
+| Mendel524 | Cross-owner admission/concurrency | Claims published together+3s; native triage/answer/publication gaps dominate short model outputs; trace/fix shared mechanism, no duplicate test inputs |
+| Heisenberg | Toad311 rendered history and motion/profile gate | Three actual source defects fixed; real Native6 capture running with Rendered bodies and writer deliveries; initial history27.1s and stepwise scrolling remain |
+| Kepler | Textual23 subtree capture | Shared native arrange path replaces optional scene-cache admission; delivered b9477ff to sole integration owner Heisenberg |
+| Schrodinger | Joined515/518 default checkpoint and S1 native producer | Toad316 READY, actual originalc601 ABI recovery passed; Core522 native producer delivered, independent preserve-Native6 publication preparation |
+| Einstein | Core520 S1 task-aware timing | Existing authored task/policy consumers migrated; use delivered native producer for final installed configured journey |
+| Singer | Core521 S2/S5 inspection closure | Source212+/34−; joins unfrozen520 receiving candidate for one installed inspection |
 
-Singer515 is merged after the installed joined callback/cancellation/CLI journey.
-Sch518 owns stopped-failure restoration through the original lifetime; its shared
-installed candidate includes515. Einstein520 owns genuinely unimplemented S1
-through existing authored task/source and compaction policy owners. Heisenberg311
-owns retained rendered body performance and its actual public-workload motion/profile
-run; Kepler23 delivered native subtree strips. No broader performance acceptance or
-new default activation is claimed here. S3/S4 and the full original backlog remain open.
+Earlier sections below are historical, not instructions to reopen completed work.
 
 ---
 

@@ -1,58 +1,63 @@
-## Current delivery state — 2026-10-02
+## Current delivery state — 2026-10-02T09:23Z
 
-The combined goal, async messaging and sidebar checkpoint is now the default
-installed package: Core9ccc / Toadf07f / Textual2382 / unchanged Native5184.
-All19 target owners are alive. Installed source inventories and the configured
-saved-fork native set/complete/send plus physical Edit/Clear journey passed.
-Actual default Toad saved-helper history/Ready/editor verification passed19.695s;
-frames were inspected during the same isolatedst run and all capture resources closed.
+Default is now Corec601 / Toadc7f5 / Textual2382 / unchanged Native5184.
+The existing Native6 carry and retained-owner publisher completed in43.3s;
+all19 target owners and five default links passed installed verification.
+Original639 inputs/bindings,48 cursors, four selected-summary source proofs,
+three commit/publication links and394 UNKNOWN were preserved at publication;
+36 other protected files were byte-identical at the stopped boundary. Later
+user-created summary reservations are legitimate new activity, not evidence of
+failed preservation. No original input was replayed.
 
-The public carry preserved492 original fact rows and rowids, retained original
-preimages, and left38 other protected files byte-identical before publication.
-Two real operator bugs were fixed at their shared owners:517 moves held atomic
-replacement to the destination filesystem;519 freezes original file membership
-and derives its partition once. Both failed attempts and the explicit committed-
-carry continuation remain in parent .release-private notes; no carry/input replay.
+The actual ordinary toad-comms entrypoint loaded openhcs-helper saved history,
+Ready sidebar/chat and focused empty editor in23.599s. All observation clients
+closed. This establishes installed startup/read behavior, not motion acceptance
+or recovery of every historical blocked compaction.
 
-Original failed goalaa78 remains the same identity/text and has no Generation.
-The existing Goal.after_failed_turn lifecycle correctly marked it Blockedrev2.
-It was not recreated, granted, resumed or resent. All other durable thread
-settings are unchanged. Explicit normal configured starts were used after the
-old in-RAM launch custody was lost; extinct transient environments are not
-claimed retained. Sch518 owns that lifecycle failure-custody gap.
+### Current live defects and named owners
 
-Core489/506 and paired Toad314 are merged. Their198.515s configured saved-fork
-natural compaction, triage cancellation and distinct continuation passed;
-they are NOT in this default package. Mendel510 owns current-producer historical
-carry, including immutable original proof/source/UNKNOWN preservation.
+Parent sent the user's exact #openhcs connectivity request once, original
+message358/c9ef4ce2dcda. Human publication returned in0.828s; all12 recipient
+claims were sealed together3.015s after the wire timestamp. First replies took
+56.777s and58.779s; the remaining four took162.367s,163.422s,207.860s
+and255.582s. The all-reply/peer-
+acknowledgement one-minute acceptance fails. Native records show model verdicts
+and short answers typically taking4–9s, separated by much longer admission,
+preparation and publication gaps. Mendel524 owns the complete cross-owner
+admission/coordination source pass and fix, using these actual original records.
 
-Core516 and510 are now merged, with paired Toad315 also merged. The qualified
-next package is Corec601 / Toadc7f5 / Text2382 / Native5184; it is not the default
-yet. Arendt's existing launch owner replaces duplicate config/auth/settings
-readers (70 production lines deleted). Mendel's current-source historical carry
-passed against installed Native6 readers, preserving639 inputs/bindings, four
-original source proofs, three native commit/publication links and394 UNKNOWN.
-Parent owns the fresh stopped publication; Arendt/Mendel prepare the existing
-operator inputs without another build or provider repeat.
+Architecture-memory and three audit agents have canonical StoppedDrain
+CompactionJournalError records. Arendt owns summary reservation/recovery across
+all consumers: original refused reservation371c6e50 is proven NotSent with
+unchanged native/proof source and no commit intent; three manual reservations
+must be classified at the same original owner. Preserve uncertainty; do not
+replay old inputs or clear a blocked goal to conceal failure.
 
-Einstein520 owns the genuinely unimplemented S1 task-aware timing, extending
-existing authored task/source and native policy owners. Hard budget admission
-remains independent; task completion is not inferred from assistant stop or goal
-status. Singer515 is merged and Sch518 shares its installed candidate: actual joined
-manifest callbacks/CLI and idle-owner failure/recovery passed; final existing
-fixture checks and ready receipts are finishing. These are not yet live.
+Heisenberg311 owns rendered body performance. Three concrete defects are now
+fixed in the coherent source: optional scene-cache membership blocked native
+subtree capture; warm admission kept offscreen bodies Live; frame observation
+attached before the driver mounted. Kepler23 supplied the shared native capture
+correction. Actual changed-source/default-Native6 recording3643183 is active.
+Rendered bodies and real writer deliveries are now present; during-run inspected
+scrolling is still visibly stepwise. Initial saved-history wait27.076s is still
+bad. No smoothness or overall speedup acceptance is claimed.
 
-Heisenberg311 owns Live/Rendered/Measured body state and every readiness/
-interaction consumer; Kepler23 delivered complete-subtree strips on disjoint
-Textual source. Restored history must paint its existing lines, not rebuild
-widgets. Actual frame delivery/motion inspection correlated with profiling is
-final acceptance, not screenshot/readability or capture FPS.
-His all-three-body source/style/resize/retirement/reentry/disposal checks passed;
-the public-workload motion/profile recording is now running and being inspected
-during execution. No final fluidity acceptance is claimed yet.
+### Independent next delivery
 
-The full original goal remains active. Historical checkpoint notes below
-record earlier states and do not override this section.
+Core515 and518 are merged; paired Toad316 is qualified/READY, not default.
+Its original c601 owner failure/recovery and target ABI journey passed. Schrodinger
+prepares the existing preserve-Native6 publisher independently; active user
+channel/native work will not be stopped for a cutover.
+
+Einstein520 implements S1 task-aware timing through original authored-task and
+compaction-policy owners; hard/manual backstops remain independent. Schrodinger522
+has delivered the exact native producer package. Singer521 implements remaining
+S2/S5 inspection through original wire/journal/context owners and joins the next
+unfrozen receiving candidate for one installed inspection. S3/S4 and the complete
+original goal remain active.
+
+Historical checkpoint sections below retain earlier states and evidence; they do
+not override this section.
 
 ## Working checkpoints merged; publication and runtime work continue — 2026-10-02
 
