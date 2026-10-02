@@ -80,4 +80,50 @@ does not add a replay/recovery permission. Parent owns their explicit dispositio
 Order: existing-owner and complete caller reasoning, coherent implementation,
 then batched validation and the actual installed many-owner pure-channel journey.
 That journey must take bounded TRIAGE then FULL with no human DM or mention
-forcing FULL. Current checkpoint is source only, not installed/live acceptance.
+forcing FULL. The initial source checkpoint did not claim installed/live acceptance.
+
+## Installed receiving qualification
+
+Production frozen at 5c74f0ec700e4d83886e2f6fdaea4e1e19ad0d77. Kepler's normal
+69-package receiving cohort includes that exact Core, Toad 7df5e61, Textual
+68a0d1c, diff8fa7, SDK0.12.1 and unchanged trusted native5184. No package overlay,
+native rebuild or public/default activation by this owner.
+
+The installed configured PURECHANNEL02 journey passed in 21.120126 seconds.
+Three owned forks retained 127,926,416 bytes of original saved histories and
+each original model/thinking/project/tags/task selection (OFF/HIGH/HIGH).
+One new human #openhcs question, without a mention or DM forcing FULL, produced
+three proved FULL TRIAGE inputs, three FULL executions and native contexts,
+three actual channel answers and matching PublicationReceipts, per-original
+TRIAGE/FULL historical proofs and covering current cursors. Actual dispatched
+native work overlapped; original native RequestProgress confirms all three real
+provider websocket streams overlapped for 1,611ms in TRIAGE and 2,276ms in FULL.
+ACP recorded 25 facts. All private workers are stopped,
+source sessions/configuration hashes unchanged, public inputs and seq326 replays
+zero. Canonical public activation and its many-owner wave remain parent-owned.
+
+The first installed gate reached the same three FULL executions/native answers
+but obstructed publication: its observer held a SQLite read snapshot across
+registry and bus calls, reversing the publisher lock order. Original activity
+recorded three database-is-locked errors. Only the fixture changed: its SQLite
+snapshot now ends before any registry/bus/history read. The first run's six
+recorded native contexts, partial publications and uncertain dispositions remain
+intact; no timeout became a terminal native verdict and no input was replayed.
+
+End source sanity is recorded honestly: 54 passed and 50 failed in 69.71 seconds.
+Existing fixture contracts still expect old plaintext reply/singular assignment
+and frame/retained representations; this is not a source-suite pass. The actual
+installed configured journey above supplies affected native/ACP acceptance.
+
+Final cleanup raced ordinary agent-reply triage: the private ROOT retains nine
+durable inputs, six recorded contexts and three additional unproven TRIAGE
+reservations (one admission recorded, two unrecorded). Two reply cohorts produced
+four additional selected claims grouped into reservations of sizes 1,2,1. Those
+original rows remain retained without reclassification or replay. The primary
+pure-channel journey passed; this does not eliminate reply-audience amplification
+or establish only six provider calls total. Parent and Kepler receive the exact
+follow-up census; no competing policy patch or further provider run is started.
+
+Receipts: ready-installed-purechannel02.json, installed-purechannel02-receipt.json
+and installed-purechannel02-native-overlap-timeline.json in the existing evidence
+directory. Original failed-run and source-validation evidence remains beside them.
