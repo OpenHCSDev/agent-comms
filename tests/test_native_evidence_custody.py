@@ -2,6 +2,9 @@
 
 import json
 import os
+import asyncio
+import sqlite3
+import threading
 from pathlib import Path
 
 import pytest
@@ -195,3 +198,56 @@ def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
         time.sleep(.04)
     with _store_lock(tmp_path / "second", blocking=False, contention=resource):
         assert resource.remaining == .025
+
+
+@pytest.mark.asyncio
+async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_cancelled_join(tmp_path):
+    """Cancellation cannot retire borrowed source before its SQL worker closes."""
+    from agent_comms.coordinator import Coordination
+
+    session = _evidence(tmp_path)
+    before = session.read_bytes(), Path(str(session) + '.input-proof').read_bytes()
+    path = tmp_path / 'coordination.sqlite3'
+    with Coordination(str(path), clock_ms=lambda: 1234) as original:
+        original.install_private_runtime()
+        original.participants.register('original', 'owner', 'owner', committed=True)
+        original_connection = original.session._connection
+        entered, release = threading.Event(), threading.Event()
+        worker_connections = []
+        with NativeEntry.open_evidence(session) as evidence:
+            def observe(store):
+                assert store.session._connection is not original_connection
+                assert store.session.now() == original.session.now()
+                worker_connections.append(store.session._connection)
+                with store.session.read():
+                    assert store.participants.get('original').owner_thread == 'owner'
+                    NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
+                    entered.set()
+                    assert release.wait(2), 'bounded fixture release missing'
+                    assert not evidence.source.stream.closed
+                    NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
+
+            pending = asyncio.create_task(Coordination.run_async(path, observe,
+                clock_ms=original.session.now))
+            try:
+                assert await asyncio.to_thread(entered.wait, 1)
+                for _ in range(2):
+                    pending.cancel()
+                    await asyncio.sleep(0)
+                    assert not pending.done()
+                    assert not evidence.source.stream.closed
+                release.set()
+                with pytest.raises(asyncio.CancelledError):
+                    await pending
+                assert len(worker_connections) == 1
+                with pytest.raises(sqlite3.ProgrammingError, match='closed'):
+                    _ = worker_connections[0].in_transaction
+                with original.session.read():
+                    assert original.participants.get('original').owner_thread == 'owner'
+            finally:
+                release.set()
+                if not pending.done():
+                    pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+    assert evidence.source.stream.closed
+    assert (session.read_bytes(), Path(str(session) + '.input-proof').read_bytes()) == before

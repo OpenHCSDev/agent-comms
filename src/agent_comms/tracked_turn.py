@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -35,6 +36,7 @@ from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission
 from .diagnostics import PublicationMeasurements
 from .child_process import ProcessIdentity
+from .coordinator import Coordination
 from .request_progress import RequestProgress
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
@@ -261,7 +263,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                                     await self.observe_event(update)
                             if not self.finished and self.observe_event is not None:
                                 await self.observe_event(event)
-                        return self.result()
+                        return await self.result()
                     except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
                         raise NativePiUnavailable(
                             f"Native Pi operation failed: {type(error).__name__}: {error}"
@@ -441,23 +443,25 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     def fail_terminal(self, text: str):
         self.terminal = self.terminal.fail(text)
 
-    def context_proof(self) -> NativeContextProof:
+    async def context_proof(self) -> NativeContextProof:
         if not self.admission.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-        return _verify_context(
+        # The original event consumer serializes observations. Cancellation
+        # joins this read before the acquired evidence/custody can close.
+        return await Coordination.run_worker(partial(_verify_context,
             self.active_session_file,
             self.command.input_id,
             self.native.attestation.identity.session_id,
             self.input_commit.require(),
             self.context_commit.require(),
             evidence=self.evidence,
-        )
+        ))
 
     @handles(pi.ToolExecutionStart)
     async def tool_started(self, event: pi.ToolExecutionStart) -> None:
         if self.tool_socket is None:
             raise NativePiUnavailable("Native Pi tool preceded tracked context proof")
-        self.context_proof()
+        await self.context_proof()
         self.tool_socket.tool_started(event)
 
     @handles(pi.ToolExecutionEnd)
@@ -471,16 +475,16 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         with self.startup.measurements.operation("native_agent_settled"):
             self.finished = True
 
-    def result(self) -> NativeTurnResult:
+    async def result(self) -> NativeTurnResult:
         with self.startup.measurements.operation("native_terminal_result"):
             with self.startup.measurements.operation("native_terminal_proof"):
-                proof = self.context_proof()
+                proof = await self.context_proof()
             self.terminal.raise_failure(proof, self.provider, self.model)
             if self.tool_socket is not None:
                 self.tool_socket.assert_complete()
             response = self.terminal.require_response(self.text_parts)
             if self.selected_tool_mode is not None:
-                self.selected_tool_mode.finish()
+                await self.selected_tool_mode.finish()
             return NativeTurnResult(
                 response.strip(),
                 proof,

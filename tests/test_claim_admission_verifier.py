@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import asyncio
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -124,6 +125,14 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 attempt_ordinal=1,
             )
             verify_selected_wake(comms, store, admission, owner.name)
+            from agent_comms.channel_coding_tools import CodingToolOwner, CodingToolMode
+
+            coding = CodingToolOwner(comms, store, admission, owner.name,
+                                     root, 'a' * 32)
+            # Empty completion must not even open another coordinator. The
+            # original exclusive SQLite scope would refuse that worker read.
+            with store.session.irreversible_admission():
+                asyncio.run(CodingToolMode(coding).finish())
             # A turn with no acquired coding resources has no release to
             # serialize behind another wire writer. Use the same real selected
             # owner; the worker must not borrow this caller's SQL connection.
