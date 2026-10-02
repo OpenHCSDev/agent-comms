@@ -1,0 +1,70 @@
+{
+  "scope": "Only native context observation publication lifetime; ownership/type/schema/provenance unchanged",
+  "base": "328dd9bfdb1f2da119c2b62880f3ff1d6297be28",
+  "tool": "existing NRA SourceModule/AstParentIndex/AstExpressionProjection",
+  "declared_roots": [
+    "src",
+    "tests",
+    "tools",
+    "extensions"
+  ],
+  "parsed_modules": 718,
+  "parse_omissions": [
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "error": "invalid syntax (tracked_turn.py, line 45)"
+    }
+  ],
+  "declarations": [
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 11,
+      "bases": [
+        "PiResponseData"
+      ],
+      "members": [
+        "for_turn",
+        "record"
+      ]
+    }
+  ],
+  "consumers_and_forwarder": [
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 25,
+      "owner": "NativeContextManifestData.record",
+      "call": "log.record_context",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 74,
+      "owner": "SelectedParticipant.record_context",
+      "call": "event.context.record",
+      "awaited": false
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 94,
+      "owner": "TurnProgress.observe_context",
+      "call": "event.context.record",
+      "awaited": false
+    }
+  ],
+  "source_semantics": "Two original event types carry same NativeContextManifestData. Selected forwarding helper uses existing worker; ordinary callback invokes synchronous writer. Existing Coordination.run_worker joins owned operation/cancellation; WireLog.record_context owns actual store locks/append. Move scheduling into existing data.record, both callers await, delete selected helper. for_turn is pure and stays synchronous.",
+  "ambiguity": "Syntactic dotted references do not prove dynamic resolution. Read concrete event field annotations/MRO/consumer attributes. SDK/native bodies unchanged boundary; historical package tools keep original APIs. No new type or registry.",
+  "parser_supplement": {
+    "path": "src/agent_comms/tracked_turn.py",
+    "tool": "preserved candidate Python3.14 standard ast",
+    "parsed": true,
+    "direct_record_candidates": [],
+    "semantics": "TrackedTurnSession applies original PiEvent via MroDispatch then invokes observe_event; selected callback is one of the two mapped consumers. No direct record consumer here."
+  },
+  "partial_forwarder": {
+    "path": "src/agent_comms/selected_participant.py",
+    "owner": "SelectedParticipant.observe_context",
+    "source": "await Coordination.run_worker(partial(self.record_context, event))",
+    "meaning": "Bound method is passed as data to existing scheduling capability, not a direct ast.Call of record_context; source-read and mapped explicitly."
+  },
+  "remaining_python_parse_omissions": []
+}

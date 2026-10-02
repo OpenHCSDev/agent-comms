@@ -1,0 +1,18 @@
+{
+  "head": "65a28ad2eff9285e3812953a7366af44c63c3a25",
+  "python": "/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-stage/runtime/bin/python",
+  "module": "/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-stage/runtime/lib/python3.14/site-packages/agent_comms",
+  "git_source_files": 339,
+  "unequal_git_sources": [],
+  "unequal_wheel_files": [],
+  "wheel_files": 341,
+  "wheel_sha256": "f224243914d92f449423e826f5a7808ef258bfdd85fdf7870135e2bab6c74ea7",
+  "source_inventory_sha256": "b6c71ccbe3463b14e5133f21b89b1a8ca0fcafa626062f9019a0fde2e4372b99",
+  "native_package": "/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23/node_modules/@earendil-works/pi-coding-agent",
+  "native_full_trust": true,
+  "source_overlay": false,
+  "source_freeze_before_checks": true,
+  "preparation_preimage_wheel": "/home/ts/wt/comms-stopped-cutover-failure-custody-20261002/.artifacts/stopped-failure-stage/wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "dependencies": "normal declared wheel dependency resolution; SDK0.12.1 plus pytest/pytest-asyncio for bounded control",
+  "scope": "Core owned local process/cutover and original manifest callbacks; not a Toad/public release cohort"
+}
