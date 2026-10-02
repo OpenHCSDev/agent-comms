@@ -1,3 +1,42 @@
+## Working checkpoints merged; publication and runtime work continue — 2026-10-02
+
+Toad305 is merged9d2afceb after its actual114.794s public saved-history journey:
+16 warm checks,7 input checks,22 rendered body identities retained. It moves
+pure sidebar/tab preparation into the existing process renderer and removes
+unrelated tab invalidation. It does not establish an overall CPU speedup.
+Heisenberg opened308 before continuing the remaining performance work.
+
+Toad307 is also reviewed and merged after the installed native queue/click
+journey. It deletes63 production lines and the copied prompt readiness/queue
+fields; existing declared actions own both keyboard and button permission.
+Schrodinger is staging the combined305/307 frontend with existingCoread7,
+Text2382 and Native5184. Parent alone publishes the default installation.
+
+The existing305 publisher now passes source/activation review. Its idle check
+found one genuinely active owner, compaction499-live-architecture-memory,
+PID3085449 with live native child3276808. Other18 owners were idle. No package,
+root, default link or owner mutation occurred. Einstein is checking the original
+turn without replay; the cutover will preserve that active work.
+
+Arendt509 pushed39265465: durable UNKNOWN/admission commit now finishes before
+the raw pipe write, releasing root locks before yielding. Kepler's complete
+selection/lease worker closure and Singer's selected-context assembler are
+normally integrated. Kepler owns one paired stage after Arendt's source freeze;
+Arendt owns its final busy native/ACP journey. This work proceeds independently
+of the Native6 compaction carry.
+
+Mendel's certified original wire read found23 historical InputProvenance values
+without the proposed digest and zero retained pins. Global mandatory digest
+would break actual ContextManifest readers. Einstein/Arendt are using the
+existing retained InputTaskFact.source/StoredInput.digest owner instead of
+introducing a second content authority; Mendel preserves original proof bytes.
+No Native6 readiness or carry completion is claimed.
+
+Standing OpenHCS lessons and short reminders are committed in432; all seven
+workers received the plain-language/owner/deletion direction. The full original
+goal and remaining S1/S3/S4, workspace/resource, scrolling and lifecycle scope
+are preserved below. These checkpoints do not close the whole goal.
+
 ## Installed concurrency source pass — 2026-10-02
 
 User now reports delivery reliable but still unacceptably slow. Parent read the
