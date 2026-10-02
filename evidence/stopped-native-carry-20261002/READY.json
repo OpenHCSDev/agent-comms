@@ -1,0 +1,15 @@
+{
+  "state": "READY outside-src stopped-installation closure; qualified private installed control; parent public acceptance pending",
+  "source": "435b8c57564f9cdb3d5dc10f6f6932bd8c317d5b",
+  "native_package_unchanged": true,
+  "src_stack_package_delta": false,
+  "new_stop_implementation": false,
+  "new_state_store": false,
+  "new_environment": false,
+  "provider_calls": 0,
+  "public_mutations": 0,
+  "raw_control_receipt": "evidence/stopped-native-carry-20261002/receipt.json",
+  "raw_control_sha256": "05a89c3d30072c0d4f23bb02559821776ecd74318b00117e7762eb05ac234993",
+  "proof_sha256": "92520efc413b52e860c287e7140de57c46a3a5e296cbe8842199aa223c5ad4f0",
+  "next": "Receiving334 freezes merged corrected operators and serializes original/source interpreter/candidate recipe only; parent existing publisher derives exact matched plan inside stopped custody."
+}
