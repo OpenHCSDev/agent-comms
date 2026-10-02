@@ -1,10 +1,10 @@
 # Ready: existing native journal declaration carry
 
-Source ca471a60 (Core tools only), current branch fix/native-fork-declaration-carry-20261002, PR538. **14 lines deleted,88 added** in2existing tools. No src/stack/package change.
+Source de60e38e (Core tools only), current branch fix/native-fork-declaration-carry-20261002, PR538. **18 lines deleted,101 added** in2existing tools. No src/stack/package change.
 
-NativeSchemaDeclaration now owns both existing Native5→6 conversion and additive same-Native6 journal membership. Same-release conversion requires original native/coordinator/prompt-binding declarations unchanged, and every original journal declaration/column retained exactly. Declared new members start empty. Existing NativeSchemaCarryPlan/prepare plus both installed control callers use that owner. Original5→6 path remains and was not regated.
+NativeSchemaDeclaration now owns both existing Native5→6 conversion and additive same-Native6 journal membership. Same-release conversion requires original native/coordinator/prompt-binding declarations unchanged, and every original journal declaration/column retained exactly. Declared new members start empty. Existing NativeSchemaCarryPlan/prepare plus both installed control callers use that owner. The same declared additions owner now supplies both original5→6 conversion and additive6→6. The changed old5→6+new-member branch was checked against an authentic retained Native5 journal, as described below.
 
-AST existing NRA Package.load: src311/tests357/tools53, zero omissions; before57/after69 references/declarations. Python syntax does not prove dynamic dispatch or externalSQLite/JS resolution. No AST framework introduced.
+AST existing NRA Package.load: src311/tests357/tools53, zero omissions; before57/after70 references/declarations at source de60e38e. Python syntax does not prove dynamic dispatch or externalSQLite/JS resolution. No AST framework introduced.
 
 ## One copied-original installed operator journey
 
@@ -19,3 +19,7 @@ All5original table facts, rowids, source_json bytes/native commit linkage/enroll
 Scratch owner Mendel: /home/ts/.cache/agent-scratch/mendel-native-fork-carry538-20261002 contains small copied-original root, matched candidate and retained preimages. Native source/proof files stay at original102 paths. Provider/native inputs/owner signals/public mutations0. This qualifies the private installed operator only; parent owns fresh public stopped custody/publication. 201 remains unqualified; no retrospective grant. No environment/native build was created.
 
 Patterns BOUND-2/MEMB-2/IMPL-13. Next: parent review/merge existing tools; paired520 publisher derives source/target declarations and installs fresh exact-preimage matched plan under original stopped-owner lifetime.
+
+## Changed Native5 → current Native6 declaration control
+
+Existing run_journal_inventory used authentic installed runtime-native5-goal513-514 source declarations and its retained original journal, then the installed520 target interpreter. This is private running-source inventory qualification, not stopped public custody. All original rows/rowids retained: operations3, selected attempts4, publications3, private raw inputs394, enrollments0. Original source_json bytes and native commitment linkage preserved; four current typed requests decoded through existing original conversion. NativeForkCreation is derived from target JournalTable membership and created empty. Actual installed CompactionJournal/TypedTable reopened every declared member with those counts. See native5-addition-receipt.json and native5-addition-installed-read.json. No provider/native input/signals/public mutations.
