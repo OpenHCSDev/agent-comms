@@ -1,0 +1,16 @@
+src/agent_comms/channel_input_batch.py:19:class InputBatch(ABC):
+src/agent_comms/channel_input_batch.py:57:class SingleInputBatch(InputBatch):
+src/agent_comms/channel_input_batch.py:64:class ChannelInputBatch(InputBatch):
+src/agent_comms/input_attempt.py:121:class StoredInput(InputAttempt):
+src/agent_comms/compaction_source.py:19:class CompactionSource:
+src/agent_comms/compaction_progress.py:7:class CompactionSourceProgress:
+src/agent_comms/selected_source.py:161:class SelectedAdmissionSource(SelectedSource):
+src/agent_comms/selected_session.py:51:    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
+src/agent_comms/selected_session.py:185:    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
+src/agent_comms/selected_session.py:247:    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
+src/agent_comms/tracked_turn.py:256:    async def resume_prepared(self, resources: AsyncExitStack) -> None:
+src/agent_comms/private_send_admission.py:136:    async def prepare_context(self, turn: TrackedTurnSession) -> None:
+src/agent_comms/input_disposition.py:71:    def originals(self, keys: tuple[str, ...]) -> tuple[StoredInput, ...]:
+src/agent_comms/input_disposition.py:240:    def bind_originals(
+src/agent_comms/backend.py:481:    def native_acquisition(self):
+src/agent_comms/backend.py:510:    async def resume_prepared(self, resources: AsyncExitStack) -> None:

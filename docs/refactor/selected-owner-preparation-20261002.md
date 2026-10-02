@@ -28,6 +28,8 @@ SelectedCommitReference.require_source compares TextDigest.of(the exact Selected
 
 Integrated Arendt #489 a87a7065 source normally; its Native6 producer is not an accepted installed artifact. Existing saved failures /home/ts/wt/a489s01 remain original and nonreplayed. This source checkpoint corrects aff7f27f's extra cold-process preparation and closes the original plural source family. It is not Ready.
 
-Remaining: migrate affected fixtures of deleted interfaces, one batched sanity check, then one source-qualified immutable installed saved-owner/native/ACP journey including genuine plural original admission, triggered journaled compaction, exactly-once input and cleanup. Confirm same PID on skip and strict reopen after committed source write. Actual configured model only, no public input/default changes/retry. Release carry and accepted integrated native artifact are explicit dependencies.
+Focused source sanity completed: 12 checks in 0.94 seconds. Receipt: evidence/selected-owner-preparation-20261002/source-and-sanity.json. Fixtures of removed settings reader were deleted; original-source and reservation fixtures use current receipt ownership. Production delta from integrated a87a7065: 450 deleted / 511 added in 30 files.
+
+Remaining: complete stale native fixture caller migration, then one source-qualified immutable installed saved-owner/native/ACP journey including genuine plural original admission, triggered journaled compaction, exactly-once input and cleanup. Confirm same PID on skip and strict reopen after committed source write. Actual configured model only, no public input/default changes/retry. Release carry and accepted integrated native artifact are explicit dependencies.
 
 Patterns: IDEN-5 (split original identity/rosters), TIME-9 (old internal scalar shape beneath plural wrapper), BOUND-8 (original source family across reservation/recovery/commit), IMPL-12 (duplicate provider/preparation orchestration).

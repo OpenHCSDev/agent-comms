@@ -5,6 +5,7 @@ import os
 from dataclasses import replace
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.input_attempt import ReservedInput
 from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_compaction_settings import PiCompactionSettings
@@ -79,11 +80,13 @@ def admission_identity(
             incarnation=incarnation or ThreadIncarnation(owner, 1.0),
             owner=ProcessIdentity.capture(os.getpid()),
             turn=TurnId(turn),
-            ingress_key=key,
+            originals=(ReservedInput(
+                key=key, sequence=None, owner=owner, admission=admission,
+                target=owner, source_text=text if original_text is None else original_text,
+            ),),
             admission_generation=admission,
             correction_witness=f"{admission}:{digest.value}",
             input_digest=digest,
-            original_digest=TextDigest.of(text if original_text is None else original_text),
             reserved_revision=SessionRevision.observe(str(session)).require_available(),
         ),
         session_revision=SessionRevision.observe(str(session)).require_available(),
