@@ -315,3 +315,32 @@ the proportionate affected producer check, not a Native6/cutover qualification.
 The final installed Native6/control requires the coherent corrected source
 checkpoint and parent's stopped-custody grant. No provider call, owner restart,
 public source rewrite or input replay occurred.
+
+## Shared Native5 goal carry integration
+
+Normal main merge `de76ba793eec7c13b1d9bf68308b52db5ae08dfd` includes merged
+#513/#514 and their unchanged source/row-preservation receipts. Native5's frozen
+`9ccc04c8` operator tools and plan remain protected in the separate #514 worktree;
+this future Native6 integration does not change that operator or public state.
+
+The existing carried-store family now publishes goal and native files through
+one retained-preimage/staging lifetime. NativeReleaseStore owns the release
+transformation contract used by the three native stores; GoalNativeStore uses
+the inherited physical publisher. Native acquisition derives only release
+members, because the preserving publisher already synchronizes the goal ledger
+before native carry. No filename switch, nullable binding parameters, separate
+publication loop or competing row authority remains. The constraint-only goal
+rebuild and immutable compaction source_json/request conversion are unchanged.
+
+The actual immutable Core0e50 Native6 interpreter captured target declarations:
+release9/3/3/6, six goal schema objects and seven compaction objects. Its modules
+were used directly, without a source overlay. This is declaration capture and
+joined tool import qualification, **not historical stopped-copy acceptance**.
+No provider/carry control was repeated. AST mapping uses the existing Package
+parser over all50 cutover modules, zero parse omissions; lexical/MRO limits are
+explicit in `shared-goal-native-family-ast.json`. The complete operator hashes
+and actual target declaration are beside this receipt in evidence.
+
+Remaining dependency: parent supplies the actual stopped original copy/custody
+for historical Native5->6 carry qualification. Einstein's independent fresh
+Native6 saved-fork journey can proceed; it does not substitute for that relation.
