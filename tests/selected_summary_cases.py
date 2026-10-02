@@ -128,6 +128,6 @@ def native_intent(session, *, owner="owner", selected=None, retained=RetainedTas
     )
     source = CompactionSource(
         witness, str(session.parent), owner, 1, "turn", None, None,
-        "fixture-bus-revision", "fixture-input-revision", retained, (),
+        "fixture-input-revision", retained, (),
     )
     return intent, attestation, source, selected

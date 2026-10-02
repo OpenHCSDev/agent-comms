@@ -20,8 +20,9 @@ class RetainedSegment(ContextSegment):
     boundary: WireExportBoundary
 
     @classmethod
-    def capture(cls, retained: RetainedTaskFacts, source: OwnerProvenance,
-                owner, registry, boundary: WireExportBoundary) -> "RetainedSegment":
+    def capture(cls, retained: RetainedTaskFacts, owner, registry,
+                boundary: WireExportBoundary) -> "RetainedSegment":
+        source = OwnerProvenance(owner.incarnation, retained.source_digest.value)
         sources = {message.reference: message for fact in retained.facts
                    for message in fact.wire_sources()}
         wording_sources = tuple(message.task.original_wording_context_source(

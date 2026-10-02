@@ -20,6 +20,7 @@ from .messages import Message
 from .message_reference import MessageReference
 from .thread_identity import ThreadRole
 from .native_file_artifact import NativeFileArtifact
+from .text_digest import TextDigest
 from .turn_context import JournalProvenance
 
 if TYPE_CHECKING:
@@ -117,6 +118,19 @@ class ConstraintTaskFact(AuthoredTaskFact, declared_name="historical_constraint"
 @dataclass(frozen=True)
 class CurrentConstraintTaskFact(ConstraintTaskFact, declared_name="current_constraint"):
     """Original wording and captured applicability, never a rewritten restriction."""
+
+
+@dataclass(frozen=True)
+class SubtaskTaskFact(AuthoredTaskFact):
+    """Keep the original observation; its declaration derives applicability."""
+    def __post_init__(self):
+        self.source.task.require_subtask()
+
+    def current_fact(self):
+        return self
+
+    def historical_fact(self):
+        return self
 
 
 @dataclass(frozen=True)
@@ -224,6 +238,11 @@ class RetainedTaskFacts:
 
     journal_control_bytes: ClassVar[int] = 65536
 
+    @property
+    def source_digest(self) -> TextDigest:
+        """Describe this exact captured payload, never unrelated bus activity."""
+        return TextDigest.of(self.canonical_journal_bytes(FieldCodec.encode(self)).decode())
+
     def original_input_facts(self, inputs: InputDocument) -> tuple[ExactTaskFact, ...]:
         """Resolve pins through their original declarations and input owner.
 
@@ -306,7 +325,7 @@ class RetainedTaskFacts:
             raise RelationViolationError("Authored source is outside this captured read")
         return message.task.original_text_source(message, originals)
 
-    def current_authored_sources(self, owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
+    def current_authored_lineages(self, owner: Thread, registry: RegistrySnapshot) -> tuple[tuple[Message, Message], ...]:
         """Resolve explicit original-reference lineage, never equal text or time.
 
         These local maps live only for this read and have no update lifecycle.
@@ -322,9 +341,28 @@ class RetainedTaskFacts:
                     _, previous = effective.get(lineage, (root, root))
                     if message.task.revises_after(previous):
                         effective[lineage] = (root, message)
-        return tuple(selected for root, message in effective.values()
-                     if root.task.require_scoped_task().applies(owner, registry)
+        return tuple((root, message) for root, message in effective.values()
+                     if root.task.require_scoped_task().applies(owner, registry))
+
+    def current_authored_sources(self, owner: Thread, registry: RegistrySnapshot) -> tuple[Message, ...]:
+        return tuple(selected for _, message in self.current_authored_lineages(owner, registry)
                      for selected in message.task.selected_sources(message))
+
+    def optional_boundary(self, owner: Thread, registry: RegistrySnapshot) -> tuple[MessageReference, ...]:
+        """Latest scoped observation wins, including unfinished or human drop.
+
+        Original wire sequence orders events; correction lineage and owner scope
+        come from the same projection used by every retained-source consumer.
+        """
+        observations = tuple(message for root, message in self.current_authored_lineages(owner, registry)
+                             if root.task.observes_subtask)
+        if not observations:
+            return ()
+        latest = max(observations, key=lambda message: message.seq)
+        return latest.task.optional_boundary(latest)
+
+    def contains_source(self, reference: MessageReference) -> bool:
+        return any(source.reference == reference for fact in self.facts for source in fact.wire_sources())
 
     def for_owner(self, owner: Thread, registry: RegistrySnapshot) -> RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""

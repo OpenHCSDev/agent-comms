@@ -7,8 +7,9 @@ from acp.exceptions import RequestError
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, encode_updates
-from .agent_events import ManualCompactionEnd
+from .agent_events import ManualCompactionEnd, CompactionSkipped
 from .declared_family import DeclaredFamily
+from .owner_compaction_provider import OwnerSummaryOutcome
 
 
 class CompactionResult(DeclaredFamily, affix="CompactionResult"):
@@ -62,8 +63,18 @@ class CommittedCompactionResult(CompactionResult):
 
 
 @dataclass(frozen=True)
-class RefusedCompactionResult(CompactionResult):
+class RefusedCompactionResult(CompactionResult, OwnerSummaryOutcome):
     error: str
+
+    async def commit_with(self, writer):
+        return None
+
+    @property
+    def completion_event(self):
+        return CompactionSkipped(reason="adaptive", explanation=self.error)
+
+    def compaction_result(self, operation):
+        return self
 
     def adaptive_result(self) -> bool:
         return False

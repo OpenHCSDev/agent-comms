@@ -12,13 +12,15 @@ from agent_comms import owner_compaction_runtime
 from agent_comms.owner_compaction_prepare import NativePreparation, NativeWitness
 from agent_comms.owner_compaction_provider import NativeSummary
 from agent_comms.owner_compaction_runtime import compact_owner_once
-from agent_comms.owner_compaction_settings import PiCompactionSettings
+from agent_comms.owner_compaction_settings import PiCompactionDecision
+from agent_comms.pi_vocabulary import OverflowCompactionReason
+from agent_comms.private_path import FileRevision
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("shutdown", ["owner", "inner_wrapper", "all_tasks"])
 async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
-    monkeypatch, shutdown
+    monkeypatch, shutdown, tmp_path
 ):
     entered = threading.Event()
     release = threading.Event()
@@ -35,25 +37,29 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
 
     monkeypatch.setattr(owner_compaction_runtime.asyncio, "wrap_future", retained_wrapper)
 
+    saved = tmp_path / 'saved.jsonl'
+    saved.write_text('Original worker lifetime fixture\n')
+    witness = NativeWitness("session-id", str(saved), "leaf", "kept", FileRevision.from_stat(saved.stat()))
     prepared = NativePreparation(
-        NativeWitness("session-id", "/tmp/fake-saved", "leaf", "kept", "1:2:3:4:5"),
+        witness,
         1, False,
     )
     monkeypatch.setattr(owner_compaction_runtime, "prepare_native_source", lambda *_a, **_kw: prepared)
 
     class Bridge:
         native = SimpleNamespace(package_dir="test-owned-package")
+        registry = SimpleNamespace(snapshot=lambda: None)
         def require_source_current(self, *_args):
             pass
 
         def prepare_source(self, *_args, **_kwargs):
             return (
                 NativePreparation(
-                    NativeWitness("session-id", "/tmp/fake-saved", "leaf", "kept", "1:2:3:4:5"),
+                    witness,
                     1,
                     False,
                 ),
-                object(),
+                SimpleNamespace(retained=None),
             )
 
         def commit(self, *_args, **_kwargs):
@@ -73,11 +79,11 @@ async def test_owner_lock_joins_underlying_worker_not_cancelled_asyncio_wrapper(
         async with turn_lock:
             await compact_owner_once(
                 Bridge(),
-                SimpleNamespace(require_saved_session=lambda: "/tmp/fake-saved"),
+                SimpleNamespace(require_saved_session=lambda: str(saved)),
                 1,
                 Persistent(),
                 synthetic_summary,
-                settings=PiCompactionSettings(16384, 20000),
+                settings=PiCompactionDecision(16384, 20000, True, False, OverflowCompactionReason, ()),
                 context_window=128000,
             )
 

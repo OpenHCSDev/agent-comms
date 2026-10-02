@@ -35,7 +35,7 @@ def test_witness_has_one_owner_and_preserves_external_source_json():
         witness.leaf_id = "changed"
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
-    source = CompactionSource(witness, "/wire:1:2", "owner", 3, "turn", None, None, "bus", "inputs", RetainedTaskFacts(()))
+    source = CompactionSource(witness, "/wire:1:2", "owner", 3, "turn", None, None, "inputs", RetainedTaskFacts(()), ())
     encoded = FieldCodec.project(source, "journal")
     assert "native" not in encoded
     assert encoded["native_json"] == json.dumps(
@@ -49,10 +49,9 @@ def test_witness_has_one_owner_and_preserves_external_source_json():
         "turn_id",
         "goal_id",
         "goal_revision",
-        "bus_revision",
         "input_revision",
         "retained",
-        "pending_input_key",
+        "pending_inputs",
         "settings_paths",
         "settings_revision",
     }

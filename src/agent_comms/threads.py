@@ -351,6 +351,21 @@ class Thread(ThreadProvenance):
         lease = self.turn_lease
         return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 
+    def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        """Bind a certified authored row to this preparation's original turn cut.
+
+        Beginning a lease clears last_finished_turn_id. The preceding allocation
+        is still derived from the original monotonic turn owner, not copied into
+        a timing register. Its row supplied the original admitted ID/generation.
+        Neither allocation nor finishing supplies subtask completion.
+        """
+        if identity.incarnation != self.incarnation:
+            return False
+        lease = self.turn_lease
+        if lease is not None:
+            return self.has_authored_turn(identity, turn) or identity.generation == lease.identity.generation - 1
+        return identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value
+
     def observed_turn(self, admission: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
         turn_id = self.active_turn.id if self.active_turn is not None else self.last_finished_turn_id

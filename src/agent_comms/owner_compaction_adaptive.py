@@ -62,6 +62,7 @@ async def maybe_compact_owner_turn(
     settings = await read_selected_compaction_decision(
         persistent, session_file=session_file,
         expected_package=package, selected=selected,
+        registry=registry, thread_name=owner.name,
     )
     # Native source budget owns mandatory readiness even when autonomous Pi
     # compaction is disabled. Do not reinterpret its decision in Python.

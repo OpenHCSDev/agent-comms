@@ -71,7 +71,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     def captured(name):
         current = comms.registry.require(name)
         with comms.bus.log.locked():
-            _, facts = comms.bus.log.compaction_messages_unlocked(current.incarnation)
+            facts = comms.bus.log.retained_task_facts_unlocked(current.incarnation)
         return RetainedTaskFacts(facts).for_owner(current, comms.registry.snapshot())
 
     retained = captured(owner.name)
@@ -142,7 +142,7 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
     retained = RetainedTaskFacts(facts)
     current_owner = comms.registry.require(owner.name)
     assert retained.current_authored_sources(current_owner, comms.registry.snapshot()) == ()
@@ -187,7 +187,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         "change": {"kind": "correction", "original": result["reference"]}})
     rows = comms.bus.log.full_history()
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (rows[1],)
     assert next(f.source for f in retained.facts if isinstance(f, CurrentConstraintTaskFact)) == rows[1]
@@ -201,7 +201,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         "text": "A later peer cannot overwrite the human supersession.", "to": "#team",
         "change": {"kind": "correction", "original": corrected["reference"]}})
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(owner.incarnation)
+        facts = comms.bus.log.retained_task_facts_unlocked(owner.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (human,)
     retained.require_summary(retained.text + "\n\nOptional narrative")
@@ -236,7 +236,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
     with comms.bus.log.locked():
-        revision, facts = comms.bus.log.compaction_messages_unlocked(
+        facts = comms.bus.log.retained_task_facts_unlocked(
             alpha.incarnation
         )
     retained = RetainedTaskFacts(facts)
@@ -300,7 +300,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     })
     snapshot = comms.registry.snapshot()
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(
+        facts = comms.bus.log.retained_task_facts_unlocked(
             renamed.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(renamed, snapshot)
     rows = comms.bus.log.full_history()
@@ -389,7 +389,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     })
     snapshot = comms.registry.snapshot()
     with comms.bus.log.locked():
-        _, facts = comms.bus.log.compaction_messages_unlocked(
+        facts = comms.bus.log.retained_task_facts_unlocked(
             owner.incarnation)
     retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
     assert len(retained.facts) == 3
@@ -431,7 +431,7 @@ def test_original_goal_input_and_user_sources_share_compaction_fence(comms, monk
 
     class FutureQueue(FutureInputQueue):
         # A declared source-control receipt; no native/UI/queue acceptance claim.
-        def future_inputs(self, owner, pending_input_key):
+        def future_inputs(self, owner, pending_input_keys):
             return {"acp:future": document.rows["acp:future"]}
 
     witness = source_witness(saved)
@@ -491,7 +491,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     inputs = InputDispositions(comms.root / InputDispositions.filename)
 
     class EmptyFutureQueue(FutureInputQueue):
-        def future_inputs(self, owner, pending_input_key):
+        def future_inputs(self, owner, pending_input_keys):
             return {}
 
     boundary = CompactionBoundary(comms.registry, inputs, EmptyFutureQueue())
@@ -521,3 +521,100 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     with pytest.raises(RelationViolationError, match="lacks its original"):
         RetainedTaskFacts((DecisionTaskFact(later),)).current_authored_sources(
             comms.registry.require("alpha"), snapshot)
+
+
+def test_explicit_subtask_observation_correction_drop_and_turn_continuity(comms, monkeypatch):
+    from agent_comms.retained_task_facts import RetainedTaskFacts
+    from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
+
+    comms.messaging.initialize_private_initial_protocol()
+    owner = admit(comms, "alpha")
+    monkeypatch.setenv("PI_AGENT_ID", owner.name)
+
+    def boundary():
+        snapshot = comms.registry.snapshot()
+        current = snapshot.require(owner.name)
+        with comms.bus.log.locked():
+            _, facts = comms.bus.log.compaction_messages_unlocked(current.incarnation)
+        retained = RetainedTaskFacts(facts)
+        assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
+        return retained.optional_boundary(current, snapshot)
+
+    assert boundary() == ()
+    request = {"text": "Original independent subtask", "completed": True, "to": "#team"}
+    first = invoke_tool(comms, "comms_subtask", request)
+    original = comms.bus.log.full_history()[0]
+    assert boundary() == (original.reference,)
+    assert original.body == request["text"]
+    assert original.task.source_turn == owner.turn_identity
+    unfinished = invoke_tool(comms, "comms_subtask", {
+        **request, "completed": False,
+        "change": {"kind": "correction", "original": first["reference"]}})
+    assert boundary() == ()
+    completed = invoke_tool(comms, "comms_subtask", {
+        **request, "change": {"kind": "correction", "original": unfinished["reference"]}})
+    last = comms.bus.log.full_history()[-1]
+    assert boundary() == (last.reference,)
+    comms.messaging.send_user_message("#team", "Withdraw that completed observation.",
+        worktree=owner.worktree, task=UserTaskDrop(CorrectionTaskChange(last.reference)))
+    assert boundary() == ()  # Never fall back to an older completed observation.
+    latest = invoke_tool(comms, "comms_subtask", request)
+    latest_ref = comms.bus.log.full_history()[-1].reference
+    comms.registry.release_turn(owner.turn_lease)
+    assert boundary() == (latest_ref,)  # Finished turn is identity, not completion.
+    current, admission = comms.registry.live_owner_with_admission(owner.name)
+    next_owner, _ = comms.registry.lease_live_turn_with_admission(
+        current, "next-original-turn", expected_generation=admission)
+    assert boundary() == (latest_ref,)
+    comms.registry.release_turn(next_owner.turn_lease)
+    assert boundary() == ()  # The observation belongs to a different finished turn.
+    assert comms.bus.log.full_history()[0] == original
+    assert "comms_subtask" in {entry["name"] for entry in tool_catalog()}
+
+
+def test_same_native_cut_policy_keeps_hard_preparation_independent(tmp_path):
+    from agent_comms.owner_compaction_prepare import NativePreparation, SkipPreparationResult
+    from agent_comms.owner_compaction_settings import PiCompactionDecision
+    from agent_comms.pi_vocabulary import OverflowCompactionReason, TaskBoundaryCompactionReason
+    from agent_comms.compaction_result import RefusedCompactionResult
+
+    session = tmp_path / 'source.jsonl'
+    saved_source(session)
+    preparation = NativePreparation(source_witness(session), 8000, True)
+    hard = PiCompactionDecision(2048, 1000, False, True, OverflowCompactionReason, ())
+    optional = PiCompactionDecision(2048, 1000, True, True, TaskBoundaryCompactionReason, ())
+    assert hard.prepare(preparation) is preparation
+    assert isinstance(optional.prepare(preparation), SkipPreparationResult)
+    assert hard.trigger and optional.trigger
+    assert FieldCodec.decode(PiCompactionDecision, FieldCodec.encode(hard)) == hard
+    refusal = RefusedCompactionResult('No complete optional cut')
+    optional.require_prepared(refusal)
+    with pytest.raises(ValueError, match='No complete optional cut'):
+        hard.require_prepared(refusal)
+
+
+@pytest.mark.asyncio
+async def test_optional_clean_decline_has_no_write_or_input_grant():
+    from types import SimpleNamespace
+    from agent_comms.pi_summary_payloads import SummaryDeclinedData
+    from agent_comms.pi_vocabulary import TaskBoundaryCompactionReason, ManualCompactionReason
+
+    data = SummaryDeclinedData(version=1, operation_id='original-optional',
+                               status='declined', reason='split_turn')
+    settled = []
+    refused = []
+    journal = SimpleNamespace(summaries=SimpleNamespace(
+        refuse=lambda operation, reason: refused.append((operation, reason))))
+    result = data.manual_summary(journal, TaskBoundaryCompactionReason, settled.append)
+    assert settled == [data] and not refused
+    assert await result.commit_with(lambda _: pytest.fail('Optional decline wrote native history')) is None
+    assert result.admit_original(None, None, None, None, None) is None
+    assert result.compaction_result(None) is result and not result.adaptive_result()
+    with pytest.raises(ValueError, match='declined manual summary'):
+        data.manual_summary(journal, ManualCompactionReason, settled.append)
+    assert refused == [(data.operation_id, data.reason)]
+    unsafe = SummaryDeclinedData(version=1, operation_id='required-context',
+                                 status='declined', reason='context_requires_compaction')
+    with pytest.raises(ValueError, match='original remains unbound'):
+        unsafe.manual_summary(journal, TaskBoundaryCompactionReason, settled.append)
+    assert settled == [data]
