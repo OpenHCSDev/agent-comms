@@ -1,5 +1,24 @@
 # Selected native compaction budget — owned source closure
 
+## Final configured native qualification, fresh original501
+
+The final installed Core29248/Toad2f4/Textual559547/native5184 package
+completed the sole fresh canonical application-fork input. Typed original
+attemptbc86 is LINKED, commitc6c11 is COMMITTED, inputacp7b910 is started
+with unresolvedFalse, and active_turn is absent. Native entry1a251fa0 contains
+47,157 summary UTF8 bytes; original user1dd3b365 is followed by assistant4332fd6f
+with stop and the exact requested acknowledgement. Evidence is
+`evidence/selected-native-compaction-budget-20261001/fresh501-typed-terminal.json`
+and `fresh501-configured-native-qualified.json` beside it.
+
+This qualifies the native budget policy and updated Python result API through
+the configured real provider and application canonical fork. It does not
+qualify UI readiness: the physical A return crashed before the answer painted.
+Separate main-based Toad293 owns that source-publication lifetime closure.
+The fork retained848B task facts, not the parent's147KB task scope. Original
+failed inputs and the previous95fe attempt were never replayed. No second
+message, compaction, cancellation or recovery was needed for this qualification.
+
 Owner: Schrodinger. Integration scope: the existing native CompactionPolicy,
 selected-summary packing, catalog/source budget declarations and all consumers.
 Arendt retains the complete #489 saved-session custody and admitted-source work.

@@ -1,0 +1,94 @@
+{
+  "observed_utc": "2026-10-02T00:24:07.202886+00:00",
+  "child": "compaction501-live-architecture-memory",
+  "pid": 2644125,
+  "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-02T00-14-09-575Z_01a0f9f6-16a7-7101-ac0f-6cb7639f1949.jsonl",
+  "session_revision": {
+    "kind": "session_revision",
+    "native": {
+      "identity": {
+        "device": 2084,
+        "inode": 7912515
+      },
+      "size": 42129070,
+      "mtime_ns": 1790900519778471944,
+      "ctime_ns": 1790900519778471944
+    },
+    "input_proof": {
+      "kind": "present_input",
+      "revision": {
+        "identity": {
+          "device": 2084,
+          "inode": 7912859
+        },
+        "size": 16384,
+        "mtime_ns": 1790900516635411898,
+        "ctime_ns": 1790900516635411898
+      }
+    }
+  },
+  "incarnation": {
+    "name": "compaction501-live-architecture-memory",
+    "created_at": 1790900050.675298
+  },
+  "owner": {
+    "incarnation": {
+      "name": "compaction501-live-architecture-memory",
+      "created_at": 1790900050.675298
+    },
+    "generation": 1458
+  },
+  "active_turn": null,
+  "selected_summary_attempts": [
+    {
+      "operation_id": "bc86b8f7f27f452da0e72a3019d71fd3",
+      "state": "linked",
+      "source_kind": "selected_admission",
+      "original_input_key": "acp:7b910b60abc7413ea2309e6b85593e5e",
+      "source_sha256": "9016e62b46db2d6e282dc4f5bfc63636083ff6734e533043228c03ff4c69a6f9",
+      "retained_text_bytes": 848,
+      "source_revision": {
+        "kind": "session_revision",
+        "native": {
+          "identity": {
+            "device": 2084,
+            "inode": 7912515
+          },
+          "size": 42044813,
+          "mtime_ns": 1790900050106485519,
+          "ctime_ns": 1790900050106485519
+        },
+        "input_proof": {
+          "kind": "missing_input"
+        }
+      }
+    }
+  ],
+  "native_commits": [
+    {
+      "commit_id": "c6c11dda844d427aa03a54a862e1ca08",
+      "state": "committed",
+      "intent_sha256": "395161b101d8a94e776fceb7fa645e733ba7b78dd29a72d082255caee8fb97c8",
+      "outcome": {
+        "status": "committed",
+        "entryId": "1a251fa0",
+        "revision": "2084:7912515:42120950:1790900507712241428:1790900507712241428",
+        "leafId": "1a251fa0",
+        "metadataDigest": "f2650852ecb31bcb06b63a659bd44048983b8c799a7eebb1c6ccaf0cc37e3a16"
+      }
+    }
+  ],
+  "compaction_outcomes": 0,
+  "input_rows": [
+    {
+      "key": "acp:7b910b60abc7413ea2309e6b85593e5e",
+      "kind": "started",
+      "public_status": "started",
+      "unresolved": false
+    }
+  ],
+  "read_only": true,
+  "sent_input": false,
+  "provider_call": false,
+  "recovered_or_mutated": false
+}
