@@ -117,6 +117,20 @@ class UnreportedStopReason(PiStopReason):
 
 
 class CompactionReason(DeclaredFamily, affix="CompactionReason"):
+    triggers = True
+
+    @classmethod
+    def prepare(cls, preparation):
+        return preparation
+
+    @classmethod
+    def require_prepared(cls, result):
+        result.require_prepared()
+
+    @classmethod
+    def boundary_current(cls, retained, boundary, owner, registry):
+        return True
+
     @classmethod
     def from_external(cls, value):
         from .field_codec import FieldCodec
@@ -141,7 +155,27 @@ class ThresholdCompactionReason(CompactionReason):
 
 
 class UnknownCompactionReason(CompactionReason):
-    pass
+    triggers = False
+
+
+class UnneededCompactionReason(CompactionReason):
+    triggers = False
+
+
+class TaskBoundaryCompactionReason(CompactionReason):
+    @classmethod
+    def boundary_current(cls, retained, boundary, owner, registry):
+        return bool(boundary) and retained.optional_boundary(owner, registry) == boundary
+
+    @classmethod
+    def prepare(cls, preparation):
+        return preparation.at_complete_boundary()
+
+    @classmethod
+    def require_prepared(cls, result):
+        # A clean optional refusal keeps original context. UNKNOWN/transport
+        # failures raise before a result and never become permission to retry.
+        pass
 
 
 class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):

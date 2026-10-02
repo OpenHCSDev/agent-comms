@@ -20,6 +20,7 @@ from .owner_compaction_commit import OwnerCompactionCommit
 from .owner_compaction_provider import NativeSummary
 from .pi_payloads import StateData
 from .selected_pi_route import read_selected_compaction_decision
+from .pi_vocabulary import ManualCompactionReason
 from .selected_source import ManualSource, SessionRevision
 from .thread_identity import TurnId
 
@@ -85,6 +86,7 @@ async def compact_manual_owner(
     settings = await read_selected_compaction_decision(
         persistent, session_file=session_file,
         expected_package=Path(package), selected=selected,
+        registry=bridge.registry, thread_name=owner.name, purpose=ManualCompactionReason,
     )
     source = ManualSource(
         incarnation=owner.incarnation,
@@ -103,4 +105,5 @@ async def compact_manual_owner(
         pending_input_keys=pending_input_keys, before_summary=retire_refusals,
         on_event=lambda event: runner.effects._emit_event(session_id, event),
         reason="manual",
+        purpose=ManualCompactionReason,
     )

@@ -10,8 +10,12 @@ const acNativeSummaryResult = AssistantMessageEventStream.prototype.result;
 // migrations and in-memory overrides. No detached reader guesses that state.
 function acValidCompactionSettingsRequest(command) {
     const text = value => typeof value === "string" && value.length > 0 && value.length <= 4096;
-    return acExactObject(command, ["id", "type", "version", "sessionId", "sessionFile", "selected"]) &&
-        command.type === "agent_comms_compaction_settings" && command.version === 1 && text(command.id) &&
+    return acExactObject(command, ["id", "type", "version", "sessionId", "sessionFile", "selected", "purpose", "boundary"]) &&
+        command.type === "agent_comms_compaction_settings" && command.version === 2 && text(command.id) &&
+        ["threshold", "manual"].includes(command.purpose) && Array.isArray(command.boundary) &&
+        command.boundary.length <= 1 && command.boundary.every(ref =>
+            acExactObject(ref, ["seq", "message_id"]) && Number.isSafeInteger(ref.seq) &&
+            ref.seq > 0 && text(ref.message_id)) &&
         text(command.sessionId) && text(command.sessionFile) &&
         acExactObject(command.selected, ["provider", "modelId", "contextWindow"]) &&
         text(command.selected.provider) && text(command.selected.modelId) &&
@@ -32,11 +36,13 @@ function acSelectedCompactionSettings(command, session, conflict) {
         settings.reserveTokens < 0 || settings.reserveTokens > 10000000 ||
         !Number.isSafeInteger(settings.keepRecentTokens) || settings.keepRecentTokens <= 0 ||
         settings.keepRecentTokens > 10000000) throw Error("Invalid effective compaction settings");
-    return {version: 1, sessionId: session.sessionId, sessionFile: session.sessionFile,
+    const policy = CompactionPolicy.fromEnvironment();
+    return {version: 2, sessionId: session.sessionId, sessionFile: session.sessionFile,
         selected: command.selected,
         decision: {enabled: settings.enabled, reserveTokens: settings.reserveTokens,
             keepRecentTokens: settings.keepRecentTokens,
-            trigger: session.storedContext.compactionRequired(session, settings)}};
+            taskAware: policy.taskAware, boundary: command.boundary,
+            reason: policy.decision(session, settings, command.purpose, command.boundary)}};
 }
 function acValidSummaryRequest(value) {
     const fields = ["id", "type", "version", "operationId", "witness", "selected", "settings", "retainedText"];

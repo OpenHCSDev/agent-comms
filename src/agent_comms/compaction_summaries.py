@@ -208,6 +208,15 @@ class SelectedSummaries(JournalRole):
                 )
             )
 
+    def attempted_boundary(self, session_file: str, boundary) -> bool:
+        """Original reservations own cadence; no separate seen-source ledger.
+
+        Inspect typed requests, never the historical native-proof byte string.
+        A declined or uncertain attempt also consumes this optional boundary.
+        """
+        return any(attempt.request.retained.contains_source(reference)
+                   for attempt in self.history(session_file) for reference in boundary)
+
     def mark_unknown(self, operation_id: str) -> None:
         """Record transport uncertainty; never erase or retry the reservation."""
         with self.journal.transaction() as db:

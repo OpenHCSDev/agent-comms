@@ -90,6 +90,7 @@ export class CompactionPolicy {
         sourceBudgetRatio: Object.freeze({ default: 0.7, min: 0.25, max: 0.8 }),
         summaryMaxTokens: Object.freeze({ default: 4096, integer: true, min: 256, max: 32768 }),
         summaryOutputRatio: Object.freeze({ default: 1 / 12, min: 0.01, max: 0.5 }),
+        taskAware: Object.freeze({ default: false, choices: [false, true] }),
     });
     constructor(configuration = {}) {
         if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration))
@@ -114,6 +115,13 @@ export class CompactionPolicy {
     }
     plan(segments) {
         return Object.freeze(strategies[this.strategy].plan(segments, this));
+    }
+    decision(session, settings, purpose, boundary) {
+        // Explicit manual intent and mandatory native capacity do not depend
+        // on task evidence. Optional timing never recomputes a context limit.
+        if (purpose === 'manual') return 'manual';
+        if (session.storedContext.compactionRequired(session, settings)) return 'overflow';
+        return this.taskAware && settings.enabled && boundary.length ? 'task_boundary' : 'unneeded';
     }
     inputTokens(model, reserveTokens) {
         if (!(model.contextWindow > 0)) throw new Error('Compaction model context is unavailable');

@@ -28,7 +28,7 @@ from .goal_actions import (
 from .goal_states import ActiveGoal
 from .messages import MessageType
 from .task_sources import (
-    CurrentTaskScopeSelection, Constraint, Decision, TaskChange,
+    CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
 from .thread_identity import TurnId
@@ -720,6 +720,26 @@ class CommsConstraintTool(CommsAuthoredTaskTool):
     def original_body(self, declaration):
         if not self.text.strip():
             raise ValueError("An authored constraint requires exact nonempty wording")
+        return self.text
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSubtaskTool(CommsAuthoredTaskTool):
+    label = "Record Subtask"
+    description = (
+        "Explicitly record whether a described subtask is completed or unfinished. "
+        "This is not assistant-turn termination or goal completion. Original author, "
+        "turn, scope and correction reference use the existing admitted task owner. "
+        "A completed observation may permit optional compaction when enabled.")
+    text: str = tool_field("Exact description of the observed subtask")
+    completed: bool = tool_field("Your explicit observation: completed or unfinished")
+
+    def declaration(self, owner):
+        if not self.text.strip():
+            raise ValueError("A subtask observation requires its exact description")
+        return Subtask.from_admission(owner, self.scope, self.change, completed=self.completed)
+
+    def original_body(self, declaration):
         return self.text
 
 

@@ -32,6 +32,7 @@ from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSumma
 from .text_digest import TextDigest
 from .thread_identity import TurnId
 from .threads import Thread
+from .pi_vocabulary import CompactionReason, ThresholdCompactionReason
 
 
 class OwnerCompactionCommit:
@@ -47,6 +48,7 @@ class OwnerCompactionCommit:
         self, owner: Thread, owner_generation: int, persistent: PersistentPiSession,
         source: SelectedSource,
         selected: SelectedModel, settings: PiCompactionDecision, *,
+        purpose: type[CompactionReason] = ThresholdCompactionReason,
         instructions: str | None = None,
         pending_input_keys: tuple[str, ...] = (),
         before_summary: Callable[[], None] | None = None,
@@ -61,7 +63,7 @@ class OwnerCompactionCommit:
         """
         from .compaction_records import SelectedSummarySource
         from .owner_compaction_runtime import compact_owner_once
-        from .selected_pi_route import read_selected_compaction_decision
+        from .selected_pi_route import observe_selected_compaction_decision
         from .selected_pi_summary_rpc import SelectedSummarySlot
 
         package = self.native.package_dir
@@ -70,14 +72,16 @@ class OwnerCompactionCommit:
         settings_paths = launch.configuration.settings_paths(launch.cwd)
 
         async def decision():
-            return await read_selected_compaction_decision(
+            return await observe_selected_compaction_decision(
                 persistent, session_file=session_file,
                 expected_package=package, selected=selected,
+                purpose=purpose, boundary=settings.boundary,
             )
 
         async def summarize(prepared: NativePreparation, captured: CompactionSource):
             attestation = owner.compaction_attestation(owner_generation, prepared.witness)
             attestation.require_registry(self.registry, owner)
+            self.require_source_current(owner, owner_generation, captured)
             settings.require_current(await decision())
             if before_summary is not None:
                 before_summary()
@@ -97,6 +101,7 @@ class OwnerCompactionCommit:
             )
             outcome = source.summary_outcome(result, self.journal)
             attestation.require_registry(self.registry, owner)
+            self.require_source_current(owner, owner_generation, captured)
             settings.require_current(await decision())
             return outcome
 

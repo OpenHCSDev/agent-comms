@@ -299,7 +299,7 @@ class CompactionSettingsData(PiResponseData):
     from .owner_compaction_settings import PiCompactionDecision
 
     strict_fields = True
-    version: Literal[1]
+    version: Literal[2]
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_file: str = field(metadata={"wire_name": "sessionFile"})
     selected: SelectedModel
@@ -312,4 +312,6 @@ class CompactionSettingsData(PiResponseData):
         observed = NativeSessionIdentity(self.session_id, self.session_file)
         if observed != original or self.selected != request.selected:
             raise ValueError("Selected settings source changed")
+        if self.decision.boundary != request.boundary:
+            raise ValueError("Selected timing source changed")
         return self.decision

@@ -351,6 +351,15 @@ class Thread(ThreadProvenance):
         lease = self.turn_lease
         return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 
+    def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+        """Bind authored evidence to the current or last finished original turn.
+
+        Finishing a turn supplies identity continuity only, never task completion.
+        """
+        return identity.incarnation == self.incarnation and (
+            self.has_authored_turn(identity, turn) or self.last_finished_turn_id == turn.value
+        )
+
     def observed_turn(self, admission: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
         turn_id = self.active_turn.id if self.active_turn is not None else self.last_finished_turn_id

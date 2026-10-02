@@ -7,6 +7,8 @@ settings and decision; Python does not recompute a detached trigger.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from .message_reference import MessageReference
+from .pi_vocabulary import CompactionReason
 
 
 
@@ -38,7 +40,22 @@ class PiCompactionDecision(PiCompactionSettings):
     """
 
     enabled: bool = field(metadata={"settings_exclude": True})
-    trigger: bool = field(metadata={"settings_exclude": True})
+    task_aware: bool = field(metadata={"wire_name": "taskAware", "settings_exclude": True})
+    reason: type[CompactionReason] = field(metadata={"settings_exclude": True})
+    boundary: tuple[MessageReference, ...] = field(metadata={"settings_exclude": True})
+
+    @property
+    def trigger(self) -> bool:
+        return self.reason.triggers
+
+    def prepare(self, preparation):
+        return self.reason.prepare(preparation)
+
+    def require_prepared(self, result):
+        self.reason.require_prepared(result)
+
+    def boundary_current(self, retained, owner, registry):
+        return self.reason.boundary_current(retained, self.boundary, owner, registry)
 
     def summary_settings(self) -> PiCompactionSettings:
         """Project this original decision into the existing native request type."""
