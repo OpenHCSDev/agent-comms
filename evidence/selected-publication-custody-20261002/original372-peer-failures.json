@@ -1,0 +1,44 @@
+[
+  {
+    "diagnostic": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/0884315c2eb20a75054e8a49d98a19f1.json",
+    "sha256": "51b36b00a4dd01a8addecc16c57ccc920debf8ef09efb765a79555f58e26d9a1",
+    "thread": "openhcs-audit-merged-models",
+    "sequences": [
+      382
+    ],
+    "native": {
+      "stderr": "",
+      "input_disposition": "not_sent",
+      "initialization": {
+        "control_command": {
+          "id": "agent-comms-preflight-06f4de4e7fbdf9f0bd377cc63a03c32b",
+          "type": "get_state"
+        }
+      }
+    },
+    "outcome": "failed; inputs must not be replayed automatically",
+    "phase": "await_get_state",
+    "input_started": false
+  },
+  {
+    "diagnostic": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/087471776b85cd8040b9e94bf2db0d25.json",
+    "sha256": "c2de03a64a0f9bcfd0f4ede6bd56bc446d5392232c06d51ef2e750008a6de696",
+    "thread": "openhcs-audit-merged-boundaries",
+    "sequences": [
+      382
+    ],
+    "native": {
+      "stderr": "",
+      "input_disposition": "not_sent",
+      "initialization": {
+        "control_command": {
+          "id": "agent-comms-preflight-affb84e09e0d0a49e3608f1f1a5b2558",
+          "type": "get_state"
+        }
+      }
+    },
+    "outcome": "failed; inputs must not be replayed automatically",
+    "phase": "await_get_state",
+    "input_started": false
+  }
+]

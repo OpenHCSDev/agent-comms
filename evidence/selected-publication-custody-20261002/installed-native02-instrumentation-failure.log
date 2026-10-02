@@ -1,0 +1,22 @@
+{"installed_python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/bin/python", "core_module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/native_package.py", "source_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14", "source_bytes": 42924939, "private_root": "/home/ts/.cache/agent-scratch/mendel530/native-sxx9o0tl/wire", "paid_calls": 0, "public_inputs": 0, "complete": false, "clock": "One Python process perf_counter_ns. Nested/overlapping spans are not additive.", "error": {"type": "AttributeError", "detail": "render"}, "duration_ms": 359.788826, "provider_posts": 0, "original_unchanged": true, "owned_native_children": 0, "owned_native_cleanup_complete": true}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 186, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 151, in main
+    for name in names:instrument(resources,target,name)
+                      ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 45, in instrument
+    descriptor=inspect.getattr_static(target,name)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/inspect.py", line 1771, in getattr_static
+    raise AttributeError(attr)
+AttributeError: render

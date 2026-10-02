@@ -1,0 +1,32 @@
+{
+  "scope": "READ-ONLY running original372 source/proof, not a stopped snapshot or native replay",
+  "original_wire_seq": 372,
+  "original": {
+    "input_id": "1066c8f644aa1908257c4b70116aa3f6",
+    "stage": "full",
+    "session_entry_id": "3db75b75",
+    "session_file": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-50-46-206Z_01a0f860-273f-749b-b07a-3c8b4cf6290e.jsonl",
+    "request_generation": 7
+  },
+  "input_started_here": false,
+  "provider_calls": 0,
+  "source_writes": 0,
+  "proof_equal": true,
+  "acquired_resources_closed": true,
+  "reads": [
+    {
+      "mode": "original_full",
+      "duration_seconds": 2.176731092,
+      "decoded_entries": 9542,
+      "verified_source_bytes": 42032359,
+      "verified_sha256": "3685e16336380ec212b2ba5a182ec7833dc4a26b585248cca97047947c07b780"
+    },
+    {
+      "mode": "input_projection",
+      "duration_seconds": 0.354804605,
+      "decoded_entries": 191,
+      "verified_source_bytes": 42032359,
+      "verified_sha256": "3685e16336380ec212b2ba5a182ec7833dc4a26b585248cca97047947c07b780"
+    }
+  ]
+}

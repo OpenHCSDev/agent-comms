@@ -1,0 +1,2916 @@
+{
+  "revision": "ce8df6c6dac0347753a1b82db30427ab01acbf82",
+  "parser": "audit.findings.Package.load",
+  "roots": [
+    "src/agent_comms",
+    "tests",
+    "tools"
+  ],
+  "parse_failures": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 178,
+      "kind": "FunctionDef",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 501,
+      "kind": "AsyncFunctionDef",
+      "name": "acquire_native"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 517,
+      "kind": "AsyncFunctionDef",
+      "name": "resume_prepared"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 172,
+      "kind": "FunctionDef",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 234,
+      "kind": "ClassDef",
+      "name": "LiveResponseOwner",
+      "bases": [
+        "RegistryOwner"
+      ]
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 249,
+      "kind": "AsyncFunctionDef",
+      "name": "publish_responses"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 25,
+      "kind": "ClassDef",
+      "name": "NativeSessionPreparation",
+      "bases": [
+        "backend.TurnSession"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 57,
+      "kind": "ClassDef",
+      "name": "NativeStartupAdmission",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 124,
+      "kind": "ClassDef",
+      "name": "SelectedNativeStartupAdmission",
+      "bases": [
+        "NativeStartupAdmission"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 115,
+      "kind": "FunctionDef",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 151,
+      "kind": "FunctionDef",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 12,
+      "kind": "ClassDef",
+      "name": "NativeContextManifestData",
+      "bases": [
+        "PiResponseData"
+      ]
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 135,
+      "kind": "AsyncFunctionDef",
+      "name": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 31,
+      "kind": "ClassDef",
+      "name": "Registration",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 49,
+      "kind": "FunctionDef",
+      "name": "attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 197,
+      "kind": "FunctionDef",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 25,
+      "kind": "ClassDef",
+      "name": "RegistrationChange",
+      "bases": [
+        "ABC"
+      ]
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 81,
+      "kind": "ClassDef",
+      "name": "UpdatedRegistration",
+      "bases": [
+        "RegistrationChange"
+      ]
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 34,
+      "kind": "ClassDef",
+      "name": "RegistryDocument",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 333,
+      "kind": "FunctionDef",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 26,
+      "kind": "ClassDef",
+      "name": "RegistryEdit",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 35,
+      "kind": "ClassDef",
+      "name": "SelectedParticipant",
+      "bases": [
+        "MroDispatch"
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 83,
+      "kind": "AsyncFunctionDef",
+      "name": "observe_context"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 89,
+      "kind": "AsyncFunctionDef",
+      "name": "native_phase"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 171,
+      "kind": "ClassDef",
+      "name": "SavedSelectedSession",
+      "bases": [
+        "SelectedSession"
+      ]
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 53,
+      "kind": "AsyncFunctionDef",
+      "name": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 87,
+      "kind": "FunctionDef",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 188,
+      "kind": "AsyncFunctionDef",
+      "name": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 236,
+      "kind": "FunctionDef",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 252,
+      "kind": "AsyncFunctionDef",
+      "name": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 143,
+      "kind": "ClassDef",
+      "name": "SelectedAttempt",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 281,
+      "kind": "ClassDef",
+      "name": "SelectedConsideration",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 139,
+      "kind": "ClassDef",
+      "name": "TrackedTurnSession",
+      "bases": [
+        "TurnSession",
+        "MroDispatch"
+      ]
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 268,
+      "kind": "AsyncFunctionDef",
+      "name": "resume_prepared"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 333,
+      "kind": "AsyncFunctionDef",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 50,
+      "kind": "ClassDef",
+      "name": "TurnProgress",
+      "bases": [
+        "events.AgentEventConsumer"
+      ]
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 94,
+      "kind": "AsyncFunctionDef",
+      "name": "observe_context"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 241,
+      "kind": "AsyncFunctionDef",
+      "name": "native_phase"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 152,
+      "kind": "AsyncFunctionDef",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 119,
+      "kind": "FunctionDef",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 55,
+      "kind": "FunctionDef",
+      "name": "attest"
+    }
+  ],
+  "references": [
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 99,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 180,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 172,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 59,
+      "kind": "Name",
+      "name": "NativeContextManifestData"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 292,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 315,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 530,
+      "kind": "Attribute",
+      "name": "acquire_native"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 169,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "line": 43,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/collaboration_ledger.py",
+      "line": 14,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/comms.py",
+      "line": 29,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "line": 29,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 95,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 89,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 105,
+      "kind": "Name",
+      "name": "SelectedConsideration"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 370,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 389,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 470,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 497,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 582,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 596,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 113,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 119,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 129,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 146,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 172,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 34,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 253,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 355,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 60,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/manual_compaction_bridge.py",
+      "line": 44,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 39,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "line": 32,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/native_custody.py",
+      "line": 129,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/native_input_owner.py",
+      "line": 114,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 34,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 124,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/native_startup.py",
+      "line": 73,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/native_turn_context.py",
+      "line": 28,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 517,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 281,
+      "kind": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 390,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 452,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 28,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "line": 41,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_gate.py",
+      "line": 74,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 138,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 323,
+      "kind": "Name",
+      "name": "NativeContextManifestData"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 66,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 84,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 131,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 148,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 176,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 210,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 50,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 93,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 135,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 137,
+      "kind": "Attribute",
+      "name": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 156,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 65,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 143,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 238,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 90,
+      "kind": "Name",
+      "name": "RegistryEdit"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 101,
+      "kind": "Name",
+      "name": "RegistryEdit"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 101,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 199,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 67,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 81,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 152,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 173,
+      "kind": "Name",
+      "name": "UpdatedRegistration"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 50,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 76,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 85,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 143,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 165,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registration_change.py",
+      "line": 56,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 42,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 66,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 95,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 103,
+      "kind": "Name",
+      "name": "RegistrationChange"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 112,
+      "kind": "Name",
+      "name": "UpdatedRegistration"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 22,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 28,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 29,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 38,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 46,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 49,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 67,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 44,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 43,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 71,
+      "kind": "Name",
+      "name": "RegistryEdit"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 22,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 47,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 64,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 76,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "src/agent_comms/registry_store.py",
+      "line": 74,
+      "kind": "Name",
+      "name": "RegistryEdit"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 376,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 68,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 69,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 75,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 59,
+      "kind": "Attribute",
+      "name": "attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "line": 18,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 249,
+      "kind": "Name",
+      "name": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 53,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 53,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 93,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 96,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 100,
+      "kind": "Name",
+      "name": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 108,
+      "kind": "Name",
+      "name": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 114,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 188,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 188,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 252,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 252,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 264,
+      "kind": "Name",
+      "name": "SelectedNativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 60,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 164,
+      "kind": "Name",
+      "name": "SavedSelectedSession"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 230,
+      "kind": "Attribute",
+      "name": "resume_prepared"
+    },
+    {
+      "path": "src/agent_comms/selected_triage.py",
+      "line": 104,
+      "kind": "Name",
+      "name": "SelectedAttempt"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 44,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 98,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 121,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 146,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 153,
+      "kind": "Name",
+      "name": "SelectedAttempt"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 282,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 152,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 267,
+      "kind": "Attribute",
+      "name": "publish_responses"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 293,
+      "kind": "Name",
+      "name": "SelectedAttempt"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 92,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 152,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 348,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 351,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 269,
+      "kind": "Attribute",
+      "name": "resume_prepared"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 273,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 240,
+      "kind": "Attribute",
+      "name": "acquire_native"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 249,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 251,
+      "kind": "Attribute",
+      "name": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 223,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 235,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 214,
+      "kind": "Attribute",
+      "name": "attach_native_session"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 156,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 75,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 177,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 331,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "src/agent_comms/wire_record.py",
+      "line": 40,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 18,
+      "kind": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 24,
+      "kind": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "kind": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 120,
+      "kind": "Name",
+      "name": "SelectedAttempt"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 120,
+      "kind": "Name",
+      "name": "SelectedConsideration"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 122,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 123,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 125,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/native_initialization_installed_pilot.py",
+      "line": 37,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 67,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 122,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 28,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 82,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 126,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 169,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 34,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 37,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 41,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 128,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 168,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 192,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 211,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 272,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 404,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 452,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 503,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 583,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 626,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 661,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 698,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 740,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 770,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 793,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 208,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2408,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_backend_native_output.py",
+      "line": 37,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 165,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 209,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 376,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 416,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 768,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 33,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tests/test_compaction_outcome_read.py",
+      "line": 131,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tests/test_compaction_publication.py",
+      "line": 394,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 486,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 547,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 604,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 634,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 682,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 708,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 804,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 840,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1388,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1389,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1395,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1420,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1421,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1434,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1514,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1543,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1578,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1621,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1678,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1780,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1921,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1937,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1970,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2001,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2026,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2060,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2105,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 781,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1710,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 66,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 151,
+      "kind": "Name",
+      "name": "LiveResponseOwner"
+    },
+    {
+      "path": "tests/test_coordination_response.py",
+      "line": 283,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 95,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 127,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 211,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 218,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 223,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 236,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 253,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 265,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 274,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 294,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 307,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 329,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 404,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 528,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 552,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 568,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 580,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 588,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 600,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 612,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 619,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 486,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 517,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 269,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 445,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 134,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 259,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_declarations.py",
+      "line": 438,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_input_documents.py",
+      "line": 83,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_irc.py",
+      "line": 143,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_irc.py",
+      "line": 148,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_irc.py",
+      "line": 158,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_irc.py",
+      "line": 164,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_irc.py",
+      "line": 167,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 68,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_maintenance_barrier.py",
+      "line": 110,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 65,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 604,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 526,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 200,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 268,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 304,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 353,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 357,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 436,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 440,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 466,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 490,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 681,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 709,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 837,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 896,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1341,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1195,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1241,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1300,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1219,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1260,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 105,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 133,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 284,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 323,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 331,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 364,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 409,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 431,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 457,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 510,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 529,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 645,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 712,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 215,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 242,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_proof_recovery.py",
+      "line": 332,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 180,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 185,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 88,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 118,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 148,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 176,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 42,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 107,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 143,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 162,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 180,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 246,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 283,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 45,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 64,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 65,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 147,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup.py",
+      "line": 131,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 26,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 154,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 201,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 65,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 129,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 209,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 208,
+      "kind": "Name",
+      "name": "NativeStartupAdmission"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 47,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 141,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 299,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 316,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 78,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 250,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 510,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 74,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_owner_compaction_authority.py",
+      "line": 25,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_commit.py",
+      "line": 65,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 33,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 32,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 47,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 56,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 75,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 90,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 91,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 98,
+      "kind": "Attribute",
+      "name": "transition_turn"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 102,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 118,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 143,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 157,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 160,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 166,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 175,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_gate.py",
+      "line": 184,
+      "kind": "Name",
+      "name": "attest"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 98,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 586,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 631,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 678,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 831,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_owner_compaction_prepare.py",
+      "line": 503,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 85,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 119,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 131,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 153,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 105,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 27,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 45,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 59,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 84,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 143,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registration_components.py",
+      "line": 68,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registration_process_identity.py",
+      "line": 31,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 18,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 66,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registration_transitions.py",
+      "line": 84,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 21,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 59,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 78,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 84,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 32,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 71,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_current_format.py",
+      "line": 67,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_revision.py",
+      "line": 16,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_revision.py",
+      "line": 18,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_registry_revision.py",
+      "line": 39,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 109,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 147,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 148,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 149,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 110,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 110,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_route_observation.py",
+      "line": 48,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_route_observation.py",
+      "line": 49,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tests/test_runtime_collaboration_documents.py",
+      "line": 32,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 169,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 166,
+      "kind": "Name",
+      "name": "SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 198,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 72,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 138,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 263,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 498,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 51,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 250,
+      "kind": "Name",
+      "name": "SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 125,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 113,
+      "kind": "Name",
+      "name": "SavedSelectedSession"
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 117,
+      "kind": "Name",
+      "name": "NativeSessionPreparation"
+    },
+    {
+      "path": "tests/test_selected_tool_native_fake.py",
+      "line": 105,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 140,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 168,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 203,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 264,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 302,
+      "kind": "Name",
+      "name": "TrackedTurnSession"
+    },
+    {
+      "path": "tests/test_thread_identity.py",
+      "line": 21,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 44,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 70,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 93,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_thread_status.py",
+      "line": 113,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 66,
+      "kind": "Name",
+      "name": "NativeContextManifestData"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 77,
+      "kind": "Name",
+      "name": "TurnProgress"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 176,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 191,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 217,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 218,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 225,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 227,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 135,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 299,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 305,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 291,
+      "kind": "Attribute",
+      "name": "record_context"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture.py",
+      "line": 27,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/original_owner_capture_installed_pilot.py",
+      "line": 51,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/owner_read_projection.py",
+      "line": 17,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/owner_read_projection.py",
+      "line": 23,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/owner_read_projection.py",
+      "line": 29,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/read_original_owner.py",
+      "line": 24,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tools/cutover/seed_original_owner_capture.py",
+      "line": 17,
+      "kind": "Name",
+      "name": "Registration"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 70,
+      "kind": "Name",
+      "name": "SelectedParticipant"
+    },
+    {
+      "path": "tools/cutover/task_envelope_promotion.py",
+      "line": 69,
+      "kind": "Attribute",
+      "name": "attest"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 56,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 74,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    },
+    {
+      "path": "tools/cutover/validate_thread_retirement.py",
+      "line": 12,
+      "kind": "Name",
+      "name": "RegistryDocument"
+    }
+  ],
+  "limits": [
+    "Python spellings not dynamic dispatch proof. Native JS manually inspected separately; Python AST does not parse native dependency. No complete native AST claim."
+  ]
+}

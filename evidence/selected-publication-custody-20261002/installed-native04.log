@@ -1,0 +1,101 @@
+{"installed_python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/bin/python", "core_module": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/native_package.py", "source_sha256": "f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14", "source_bytes": 42924939, "private_root": "/home/ts/.cache/agent-scratch/mendel530/native-xqpmq5c5/wire", "paid_calls": 0, "public_inputs": 0, "complete": false, "clock": "One Python process perf_counter_ns. Nested/overlapping spans are not additive.", "error": {"type": "NativePiInputNotSent", "detail": "Native Pi failed before prompt admission; input not sent: Native resource acquisition failed: OSError: AF_UNIX path too long"}, "duration_ms": 8939.482006, "provider_posts": 1, "original_unchanged": true, "owned_native_children": 1, "owned_native_cleanup_complete": true}
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/backend.py", line 491, in native_acquisition
+    yield
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/backend.py", line 506, in acquire_native
+    await self.open_transport(resources)
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 281, in open_transport
+    await self.tool_socket.start()
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_tool_broker.py", line 439, in start
+    self._server = await asyncio.start_unix_server(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        self._handle, path=str(self.path), limit=self.max_request + 1
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/streams.py", line 113, in start_unix_server
+    return await loop.create_unix_server(factory, path, **kwds)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/unix_events.py", line 310, in create_unix_server
+    sock.bind(path)
+    ~~~~~~~~~^^^^^^
+OSError: AF_UNIX path too long
+
+The above exception was the direct cause of the following exception:
+
+agent_comms.native_pi.NativePiUnavailable: Native resource acquisition failed: OSError: AF_UNIX path too long
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 185, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 153, in main
+    result=await SelectedExecution(root=root,wire_root_id=rid,owner_name='beta',
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                  native_package=PACKAGE,session_file=saved).run()
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/coordinated_runtime.py", line 105, in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 63, in wrapped
+    result=await method(*args,**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_turn.py", line 321, in run
+    return await outcome.continue_turn(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        participant, continued, request.admission.input_id, execution, settled
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_triage.py", line 135, in continue_turn
+    return await self.decision.continue_turn(participant, session, input_id, execution, settled)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_triage.py", line 105, in continue_turn
+    return await attempt.run(execution.native_package, session,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                             execution.action(session), execution.write_authority)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/tests/native_evidence_reader_installed_journey.py", line 63, in wrapped
+    result=await method(*args,**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/selected_turn.py", line 253, in run
+    result = await request.admission.execute(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/private_send_admission.py", line 156, in execute
+    result = await TrackedTurnSession.execute(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<22 lines>...
+    )
+    ^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 235, in execute
+    return await turn.complete()
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/tracked_turn.py", line 240, in complete
+    self.native = await self.acquire_native(custody, reuse=False)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/backend.py", line 504, in acquire_native
+    with self.native_acquisition():
+         ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py", line 162, in __exit__
+    self.gen.throw(value)
+    ~~~~~~~~~~~~~~^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/backend.py", line 497, in native_acquisition
+    self.admission.raise_native_failure(failure, self.launch.session.attestation())
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530/lib/python3.14/site-packages/agent_comms/turn_admission.py", line 65, in raise_native_failure
+    raise NativePiInputNotSent(error, attestation) from error
+agent_comms.native_pi.NativePiInputNotSent: Native Pi failed before prompt admission; input not sent: Native resource acquisition failed: OSError: AF_UNIX path too long
