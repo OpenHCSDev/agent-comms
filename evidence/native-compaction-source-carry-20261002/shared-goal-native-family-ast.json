@@ -1,0 +1,286 @@
+{
+  "head": "de76ba793eec7c13b1d9bf68308b52db5ae08dfd",
+  "parsed_modules": 50,
+  "unparsed": [],
+  "definitions": [
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 29,
+      "name": "NativeSchemaDeclaration",
+      "bases": [],
+      "methods": [
+        "observe",
+        "observe_goal",
+        "require_goal",
+        "synchronize_goal",
+        "release_versions",
+        "runtime_objects",
+        "require_coordination",
+        "require_runtime",
+        "require_binding",
+        "require_compaction"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 495,
+      "name": "CarriedNativeStore",
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "methods": [
+        "publisher"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 510,
+      "name": "NativeReleaseStore",
+      "bases": [
+        "CarriedNativeStore"
+      ],
+      "methods": [
+        "carry"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 518,
+      "name": "GoalNativeStore",
+      "bases": [
+        "CarriedNativeStore"
+      ],
+      "methods": []
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 522,
+      "name": "CoordinationNativeStore",
+      "bases": [
+        "NativeReleaseStore"
+      ],
+      "methods": [
+        "carry"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 530,
+      "name": "PromptBindingNativeStore",
+      "bases": [
+        "NativeReleaseStore"
+      ],
+      "methods": [
+        "carry",
+        "publisher"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 550,
+      "name": "CompactionNativeStore",
+      "bases": [
+        "NativeReleaseStore"
+      ],
+      "methods": [
+        "carry"
+      ]
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 559,
+      "name": "NativeSchemaCarryPlan",
+      "bases": [],
+      "methods": [
+        "require_candidate",
+        "install",
+        "install_prepared",
+        "publish_prepared"
+      ]
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 131,
+      "name": "RuntimeGoalFiles",
+      "bases": [
+        "RuntimeCompactionFiles"
+      ],
+      "methods": [
+        "paths",
+        "acquire"
+      ]
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 13,
+      "name": "RuntimeInstallation",
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "methods": [
+        "synchronize_goal",
+        "unchanged_protected",
+        "retain_protected",
+        "install"
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 383,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 642,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 677,
+      "call": "NativeSchemaCarryPlan"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 60,
+      "call": "cls.observe_goal"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 142,
+      "call": "GoalNativeStore"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 145,
+      "call": "NativeSchemaCarryPlan.install_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 569,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 590,
+      "call": "self.install_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 599,
+      "call": "NativeSchemaCarryPlan.publish_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 598,
+      "call": "item.publisher"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 659,
+      "call": "CarriedNativeStore.members_with"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 695,
+      "call": "NativeSchemaDeclaration.observe_goal"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 697,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 193,
+      "call": "CarriedNativeStore.members_with"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 68,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 202,
+      "call": "RuntimeGoalFiles(root).acquire"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 210,
+      "call": "installation.synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 221,
+      "call": "RuntimeGoalFiles(root).acquire"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 222,
+      "call": "installation.synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 204,
+      "call": "PreserveRuntimeInstallation(goal_schema={}).synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 202,
+      "call": "RuntimeGoalFiles"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 221,
+      "call": "RuntimeGoalFiles"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 276,
+      "call": "self.runtime_installation.synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 269,
+      "call": "RuntimeGoalFiles(ROOT).acquire"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 278,
+      "call": "RuntimeGoalFiles(ROOT).acquire"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 248,
+      "call": "RuntimeGoalFiles"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 269,
+      "call": "RuntimeGoalFiles"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 278,
+      "call": "RuntimeGoalFiles"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 19,
+      "call": "NativeSchemaDeclaration.observe().synchronize_goal"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 19,
+      "call": "NativeSchemaDeclaration.observe"
+    },
+    {
+      "path": "tools/cutover/seed_retained_index_fixture.py",
+      "line": 23,
+      "call": "service.bus.publisher.publish_initial_cohort"
+    }
+  ],
+  "limits": "Lexical AST only; dynamic dispatch checked by reading inherited publisher/carry behavior. No JS parsing; earlier full roots census retained."
+}

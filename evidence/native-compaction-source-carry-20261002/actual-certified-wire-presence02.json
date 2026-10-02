@@ -1,0 +1,85 @@
+{
+  "classification": "running-certified-source-inventory-not-stopped-carry",
+  "complete_at_recorded_prefix": false,
+  "counts": {},
+  "denied_writes": [],
+  "duration_seconds": 0.026883,
+  "error_frames": [
+    {
+      "file": "/home/ts/wt/comms-native-compaction-source-carry-20261002/evidence/native-compaction-source-carry-20261002/observe_certified_wire.py",
+      "function": "main",
+      "line": 87
+    },
+    {
+      "file": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py",
+      "function": "__enter__",
+      "line": 141
+    },
+    {
+      "file": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py",
+      "function": "certified_read",
+      "line": 66
+    },
+    {
+      "file": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py",
+      "function": "__enter__",
+      "line": 141
+    },
+    {
+      "file": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/lib/python3.14/site-packages/agent_comms/store_files.py",
+      "function": "_store_lock",
+      "line": 117
+    },
+    {
+      "file": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py",
+      "function": "__enter__",
+      "line": 141
+    },
+    {
+      "file": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/lib/python3.14/site-packages/agent_comms/wire_log.py",
+      "function": "verify_before_read_unlocked",
+      "line": 484
+    },
+    {
+      "file": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py",
+      "function": "__enter__",
+      "line": 141
+    },
+    {
+      "file": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py",
+      "function": "opened_claim_source_unlocked",
+      "line": 649
+    },
+    {
+      "file": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py",
+      "function": "enter_context",
+      "line": 530
+    },
+    {
+      "file": "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py",
+      "function": "__enter__",
+      "line": 141
+    },
+    {
+      "file": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/lib/python3.14/site-packages/agent_comms/private_bus_checkpoint.py",
+      "function": "opened_private_checkpoint_unlocked",
+      "line": 611
+    }
+  ],
+  "error_type": "RelationViolationError",
+  "input_replays": 0,
+  "installed_core": {
+    "url": "https://github.com/OpenHCSDev/agent-comms.git",
+    "vcs_info": {
+      "commit_id": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+      "requested_revision": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+      "vcs": "git"
+    }
+  },
+  "native_prompts": 0,
+  "observed_at": "2026-10-02T05:35:00.778704+00:00",
+  "owner_signals": 0,
+  "pins": [],
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "source_refusal": "Private bus checkpoint verification is unavailable."
+}

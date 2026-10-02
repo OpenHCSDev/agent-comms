@@ -1,0 +1,34 @@
+{
+  "classification": "installed-original-producer-control-not-installed-Native6-or-stopped-carry",
+  "installed_core": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+  "attempts": [
+    {
+      "operation_id": "e7c10918f0c14304801cc868829fc719",
+      "retained_original_encoding_unchanged": true,
+      "native_source_sha_unchanged": true,
+      "durable_reference_not_extended": true
+    },
+    {
+      "operation_id": "371c6e50b7f94e9f904b953b290ad6ee",
+      "retained_original_encoding_unchanged": true,
+      "native_source_sha_unchanged": true,
+      "durable_reference_not_extended": true
+    },
+    {
+      "operation_id": "95fe2ad984974791b588623061e799f1",
+      "retained_original_encoding_unchanged": true,
+      "native_source_sha_unchanged": true,
+      "durable_reference_not_extended": true
+    },
+    {
+      "operation_id": "bc86b8f7f27f452da0e72a3019d71fd3",
+      "retained_original_encoding_unchanged": true,
+      "native_source_sha_unchanged": true,
+      "durable_reference_not_extended": true
+    }
+  ],
+  "private_transfer_sha256": "2e5658c5a1a63e4e593879650a0fa2aac5f31ac4c933440e001a5366867e4f05",
+  "private_transfer_mode": "0o600",
+  "native_prompts": 0,
+  "input_replays": 0
+}

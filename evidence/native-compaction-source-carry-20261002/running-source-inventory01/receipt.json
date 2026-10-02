@@ -1,0 +1,257 @@
+{
+  "classification": "running-source-inventory-not-stopped-carry",
+  "source": "/var/tmp/agent-comms-live-20260927-wzjtqhza/compaction-commits.sqlite3",
+  "source_size": 446464,
+  "expected_prior_cutover_sha256": "296e6da164bd7e16fc086e83a9f509dccdf12c4e33876c1f854b26a78d9132b1",
+  "observed_file_before_sha256": "296e6da164bd7e16fc086e83a9f509dccdf12c4e33876c1f854b26a78d9132b1",
+  "source_stamp_before": [
+    2083,
+    3996791,
+    446464,
+    1790910154623581934,
+    1790910154623581934
+  ],
+  "source_stamp_after": [
+    2083,
+    3996791,
+    446464,
+    1790910154623581934,
+    1790910154623581934
+  ],
+  "schema": [
+    [
+      "index",
+      "operations_0_idx",
+      "CREATE UNIQUE INDEX \"operations_0_idx\" ON \"operations\" (\"session_file\") WHERE json_extract(state, '$.kind') IN ('intent','unknown')"
+    ],
+    [
+      "index",
+      "selected_summary_attempts_0_idx",
+      "CREATE UNIQUE INDEX \"selected_summary_attempts_0_idx\" ON \"selected_summary_attempts\" (\"session_file\") WHERE json_extract(state, '$.kind') IN ('reserved','unknown')"
+    ],
+    [
+      "table",
+      "enrolled_private_sessions",
+      "CREATE TABLE \"enrolled_private_sessions\" (\"session_file\" TEXT NOT NULL, \"session_id\" TEXT NOT NULL UNIQUE, \"device\" INTEGER NOT NULL, \"inode\" INTEGER NOT NULL, \"header_sha256\" TEXT NOT NULL, \"incarnation\" TEXT NOT NULL, \"owner_lookup\" TEXT NOT NULL, \"owner_generation\" INTEGER NOT NULL, \"admission_generation\" INTEGER NOT NULL, \"creator\" TEXT NOT NULL, PRIMARY KEY (\"session_file\")) STRICT"
+    ],
+    [
+      "table",
+      "operations",
+      "CREATE TABLE \"operations\" (\"commit_id\" TEXT NOT NULL, \"session_file\" TEXT NOT NULL, \"intent_json\" TEXT NOT NULL, \"state\" TEXT NOT NULL, \"evidence_json\" TEXT, PRIMARY KEY (\"commit_id\")) STRICT"
+    ],
+    [
+      "table",
+      "private_raw_inputs",
+      "CREATE TABLE \"private_raw_inputs\" (\"input_id\" TEXT NOT NULL, \"session_file\" TEXT NOT NULL, \"status\" TEXT NOT NULL CHECK (\"status\" IN ('unknown')), PRIMARY KEY (\"input_id\")) STRICT"
+    ],
+    [
+      "table",
+      "publications",
+      "CREATE TABLE \"publications\" (\"commit_id\" TEXT NOT NULL REFERENCES \"operations\" (\"commit_id\"), \"session_file\" TEXT NOT NULL, \"metadata_json\" TEXT NOT NULL, \"state\" TEXT NOT NULL, PRIMARY KEY (\"commit_id\")) STRICT"
+    ],
+    [
+      "table",
+      "selected_summary_attempts",
+      "CREATE TABLE \"selected_summary_attempts\" (\"operation_id\" TEXT NOT NULL, \"session_file\" TEXT NOT NULL, \"source_json\" TEXT NOT NULL, \"state\" TEXT NOT NULL, PRIMARY KEY (\"operation_id\")) STRICT"
+    ]
+  ],
+  "row_counts": {
+    "enrolled_private_sessions": 0,
+    "operations": 3,
+    "private_raw_inputs": 341,
+    "publications": 3,
+    "selected_summary_attempts": 4
+  },
+  "selected_summaries": [
+    {
+      "operation_id_sha256": "804ca81300b2c24faad978a86ba2943735a379bd6b23f9ec97b6d9180d2950e5",
+      "session_file_sha256": "03b547feae5f98089683c3121c017b5ac0353599db52c807b80fee81a1301f47",
+      "source_json_sha256": "842498cd819287b62de80c2cbb7142b222e11b6dacbfa629755d2aa85b6e12d9",
+      "source_json_bytes": 17848,
+      "envelope_keys": [
+        "retained",
+        "selected",
+        "settings",
+        "source"
+      ],
+      "source_kind": "selected_admission",
+      "source_keys": [
+        "admission_generation",
+        "correction_witness",
+        "incarnation",
+        "ingress_key",
+        "input_digest",
+        "kind",
+        "original_digest",
+        "owner",
+        "reserved_revision",
+        "turn"
+      ],
+      "reserved_revision_keys": [
+        "input_proof",
+        "kind",
+        "native"
+      ],
+      "state": "linked",
+      "native_commit_references": [
+        {
+          "commit_id_sha256": "e57dc6f1cc50026921ac9d5beb1b84ecb2f5db0d07f2de21f8be6f5aee3cf679",
+          "source_digest": "842498cd819287b62de80c2cbb7142b222e11b6dacbfa629755d2aa85b6e12d9",
+          "same_native_session_sha256": "03b547feae5f98089683c3121c017b5ac0353599db52c807b80fee81a1301f47",
+          "state": "committed",
+          "native_intent_keys": [
+            "metadataDigest",
+            "owner",
+            "payloadDigest",
+            "selectedSummaryOperationId",
+            "selectedSummarySourceDigest",
+            "source",
+            "witness"
+          ],
+          "native_evidence_present": true
+        }
+      ],
+      "all_present_digests_match": true
+    },
+    {
+      "operation_id_sha256": "8e9af26656a13c820e4c56776567b8eb6cbe28e561fbbd2f362ce567f00c43d9",
+      "session_file_sha256": "746d173eb192b903f5f6d3c3e41ba66636b2c48adf2537175b0a4479d8fe5d4e",
+      "source_json_sha256": "de1ee0557fac7888360928658edd5ad47dd0c55ed3b5c80c79ef08af6779992e",
+      "source_json_bytes": 147400,
+      "envelope_keys": [
+        "retained",
+        "selected",
+        "settings",
+        "source"
+      ],
+      "source_kind": "selected_admission",
+      "source_keys": [
+        "admission_generation",
+        "correction_witness",
+        "incarnation",
+        "ingress_key",
+        "input_digest",
+        "kind",
+        "original_digest",
+        "owner",
+        "reserved_revision",
+        "turn"
+      ],
+      "reserved_revision_keys": [
+        "input_proof",
+        "kind",
+        "native"
+      ],
+      "state": "refused",
+      "native_commit_references": [],
+      "all_present_digests_match": true
+    },
+    {
+      "operation_id_sha256": "44d7b3f43765090abf3be808970c3b5e3b56a23e16a3bb5e0f9a342be7f13c77",
+      "session_file_sha256": "a0d30e1142e6f738db2da41b5c836696934873532e6d49566865883aa4b5d9e3",
+      "source_json_sha256": "e62f161689056663e6dd21560d8eb552ad3274a813083f30f9a411b81e797925",
+      "source_json_bytes": 1738,
+      "envelope_keys": [
+        "retained",
+        "selected",
+        "settings",
+        "source"
+      ],
+      "source_kind": "selected_admission",
+      "source_keys": [
+        "admission_generation",
+        "correction_witness",
+        "incarnation",
+        "ingress_key",
+        "input_digest",
+        "kind",
+        "original_digest",
+        "owner",
+        "reserved_revision",
+        "turn"
+      ],
+      "reserved_revision_keys": [
+        "input_proof",
+        "kind",
+        "native"
+      ],
+      "state": "linked",
+      "native_commit_references": [
+        {
+          "commit_id_sha256": "701e601d3273cd675782c2c2717fb69fb1533b24904b41c0f11859479d8bcedc",
+          "source_digest": "e62f161689056663e6dd21560d8eb552ad3274a813083f30f9a411b81e797925",
+          "same_native_session_sha256": "a0d30e1142e6f738db2da41b5c836696934873532e6d49566865883aa4b5d9e3",
+          "state": "committed",
+          "native_intent_keys": [
+            "metadataDigest",
+            "owner",
+            "payloadDigest",
+            "selectedSummaryOperationId",
+            "selectedSummarySourceDigest",
+            "source",
+            "witness"
+          ],
+          "native_evidence_present": true
+        }
+      ],
+      "all_present_digests_match": true
+    },
+    {
+      "operation_id_sha256": "f4359770b92fff38fd5656b70d8a601e927bbf75c9580cf8f73b48fc5b0ff1bb",
+      "session_file_sha256": "1cab94d64c514c3eb4e8bdc415bd053fe8f5abd2f0b566c37dfdac20d6bca2a7",
+      "source_json_sha256": "9016e62b46db2d6e282dc4f5bfc63636083ff6734e533043228c03ff4c69a6f9",
+      "source_json_bytes": 1736,
+      "envelope_keys": [
+        "retained",
+        "selected",
+        "settings",
+        "source"
+      ],
+      "source_kind": "selected_admission",
+      "source_keys": [
+        "admission_generation",
+        "correction_witness",
+        "incarnation",
+        "ingress_key",
+        "input_digest",
+        "kind",
+        "original_digest",
+        "owner",
+        "reserved_revision",
+        "turn"
+      ],
+      "reserved_revision_keys": [
+        "input_proof",
+        "kind",
+        "native"
+      ],
+      "state": "linked",
+      "native_commit_references": [
+        {
+          "commit_id_sha256": "6141ba41398ebc032ae2c72859966815eb27909794e7fa41a107168ef3ffe76f",
+          "source_digest": "9016e62b46db2d6e282dc4f5bfc63636083ff6734e533043228c03ff4c69a6f9",
+          "same_native_session_sha256": "1cab94d64c514c3eb4e8bdc415bd053fe8f5abd2f0b566c37dfdac20d6bca2a7",
+          "state": "committed",
+          "native_intent_keys": [
+            "metadataDigest",
+            "owner",
+            "payloadDigest",
+            "selectedSummaryOperationId",
+            "selectedSummarySourceDigest",
+            "source",
+            "witness"
+          ],
+          "native_evidence_present": true
+        }
+      ],
+      "all_present_digests_match": true
+    }
+  ],
+  "backup": "/home/ts/.cache/agent-scratch/comms-native-compaction-source-carry-20261002/running-source-inventory01/compaction-commits.running-inventory.sqlite3",
+  "backup_sha256": "4d48c65ab94a77eeecc8c5aaf026b7184d632252736a3897025bbc3e6792dee4",
+  "backup_size": 446464,
+  "elapsed_seconds": 0.03855414496501908,
+  "public_writes": 0,
+  "provider_calls": 0,
+  "replayed_inputs": 0
+}
