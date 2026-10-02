@@ -213,7 +213,7 @@ class SelectedAttempt:
             input_id,
         )
 
-    async def prepare(self, session, action, write_authority):
+    async def prepare(self, package, session, action, write_authority):
         participant = self.participant
         try:
             action = BatchSelectedAction(tuple(
@@ -228,7 +228,9 @@ class SelectedAttempt:
             prompt = await SelectedPrompt(participant).full(
                 self.stage.assignments, self.obligations, action
             )
-            request = SelectedRequest.reserve(participant, session, self.stage, self.token, prompt)
+            request = SelectedRequest.reserve(
+                participant, session, self.stage, self.token, prompt
+            )
         except NativePiUnavailable:
             # The attempt exists even if preparation fails before a request can
             # own a reserved ID. Preserve the old dead-attempt UNKNOWN boundary;
@@ -243,7 +245,7 @@ class SelectedAttempt:
 
     async def run(self, package: Path, session: SelectedSession, action, write_authority):
         participant = self.participant
-        request, action = await self.prepare(session, action, write_authority)
+        request, action = await self.prepare(package, session, action, write_authority)
         self.stage.progress.input_id = request.admission.input_id
         with request.native_failures():
             tools = self.tool_owner(session, request.admission.input_id, action)
@@ -313,7 +315,7 @@ class SelectedConsideration:
             participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
             settled = outcome.settle(participant, stage, request.admission, result.context)
-            continued = session.continued(result.context.session_file)
+            continued = session.continued(result.context)
         # The FULL request owns its own failure boundary. Never report its
         # failure through the already-proved triage input's request custody.
         return await outcome.continue_turn(

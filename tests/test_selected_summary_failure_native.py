@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.selected_session import SavedSelectedSession
 
 import asyncio
 import json
@@ -246,7 +247,7 @@ async def native_failure_owner(tmp_path, status):
 def selected_owner(child, reader, package, session, preparation, errors):
     persistent = retained_native_host(
         child,
-        NativePiRpcLaunch(("node",), package, {}, session.parent, session, package, configuration=RestartEnvironment.inherit({})),
+        NativePiRpcLaunch(("node",), package, {}, SavedSelectedSession(session.parent, identity=NativeSessionIdentity(preparation.witness.session_id, str(session))), package, configuration=RestartEnvironment.inherit({})),
         NativeSessionIdentity(preparation.witness.session_id, str(session)),
         reader=reader,
         stderr_task=errors,

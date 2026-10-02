@@ -23,16 +23,11 @@ class SelectedRequest:
         return cls(
             participant,
             PrivateSendAdmission.reserve(
-                bus=participant.bus,
-                store=participant.store,
-                wire_root_id=participant.root_id,
-                owner=participant.owner,
-                participant=participant.identity,
+                selected=participant,
                 stage=stage,
                 token=token,
                 prompt=prompt,
-                expected_session=session.path,
-                fresh_selected=session.startup(),
+                session=session,
             ),
         )
 

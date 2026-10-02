@@ -83,7 +83,6 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
     from agent_comms.compaction_journal import CompactionJournal
-    from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.compaction_states import ManualCommittedSummary
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     started = time.monotonic()
@@ -303,7 +302,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                 (c_output / 'actual-committed-summary.svg').write_text(app.export_screenshot())
                 return attempts[0]
             attempt = await observer.run(compact_receiver())
-        captured = FieldCodec.decode(SelectedSummarySource, json.loads(attempt.source_json))
+        captured = attempt.request
         snapshot = owner._comms.registry.snapshot()
         assert captured.retained.current_authored_sources(snapshot.threads[receiver.name], snapshot) == ()
         assert {fact.source.reference for fact in captured.retained.facts} == {

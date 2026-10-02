@@ -1,6 +1,7 @@
 """Normal prepared bundle: selected RPC -> native commit -> one original bind."""
 
 from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.selected_session import SavedSelectedSession
 import asyncio
 import hashlib
 import json
@@ -162,7 +163,7 @@ async def owner_fixture(
         file = fixture["sessionFile"]
         persistent = retained_native_host(
             child,
-            NativePiRpcLaunch(("node",), tmp_path, {}, Path(file).parent, Path(file), package, configuration=RestartEnvironment.inherit({})),
+            NativePiRpcLaunch(("node",), tmp_path, {}, SavedSelectedSession(Path(file).parent, identity=NativeSessionIdentity(fixture["sessionId"], file)), package, configuration=RestartEnvironment.inherit({})),
             NativeSessionIdentity(fixture["sessionId"], file),
         )
         registry = Registration(tmp_path / "registry.json")
@@ -222,7 +223,6 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         launcher,
         info,
     ):
-        from agent_comms.compaction_records import SelectedSummarySource
         from agent_comms.field_codec import FieldCodec
         from agent_comms.retained_task_facts import CurrentDecisionTaskFact, UserSourceTaskFact
         from agent_comms.tools import invoke_tool
@@ -269,7 +269,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         rows = journal.summaries.blocking(file)
         assert len(rows) == 1 and rows[0].state.declared_name == "linked"
-        captured = FieldCodec.decode(SelectedSummarySource, json.loads(rows[0].source_json))
+        captured = rows[0].request
         assert tuple(fact.source for fact in captured.retained.facts
                      if isinstance(fact, UserSourceTaskFact)) == (user,)
         assert tuple(fact.source for fact in captured.retained.facts
@@ -367,7 +367,6 @@ async def acp_selected_summary_journey(
     )
     from agent_comms.comms import wire
     from agent_comms.compaction_identity import SelectedCommitReference
-    from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.errors import RelationViolationError
     from agent_comms.field_codec import FieldCodec
     from agent_comms.goal_attempts import GoalAttemptStore
@@ -412,12 +411,12 @@ async def acp_selected_summary_journey(
                             json.loads(operation.intent_json)
                         )
                         attempt = journal.summaries.get(reference.operation_id)
-                        source = FieldCodec.decode(
-                            SelectedSummarySource, json.loads(attempt.source_json)
-                        ).source
-                        assert source.pending_input_key is not None
-                        original = dispositions.read().lookup(source.pending_input_key)
-                        assert original.exists and not original.has_native_binding
+                        source = attempt.request.source
+                        assert source.pending_input_keys
+                        inputs = dispositions.read()
+                        for key in source.pending_input_keys:
+                            original = inputs.lookup(key)
+                            assert original.exists and not original.has_native_binding
                         publications.append(event.publication.commit_id)
 
         agent = CommsAgent(

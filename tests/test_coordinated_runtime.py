@@ -69,7 +69,7 @@ from agent_comms.wake_injection import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
 from agent_comms.wake_policy import PassiveWake
 from native_proof_cases import read_proof_rows, write_proof_rows
-from selected_summary_cases import manual_source
+from selected_summary_cases import manual_summary_record
 
 
 @pytest.fixture
@@ -932,18 +932,10 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
 def _reserved_private_selected_row(journal: CompactionJournal, session_file: Path) -> str:
     """An unresolved current reservation must block the raw writer."""
     operation_id = "a" * 32
-    source = json.dumps(
-        {
-            "source": manual_source(session_file, "beta"),
-            "selected": {"provider": "fake", "modelId": "test", "contextWindow": 200000},
-            "settings": {"keepRecentTokens": 2000, "reserveTokens": 1000},
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    request = manual_summary_record(session_file, "beta")
     with journal.transaction() as db:
         SelectedSummaryAttempt(
-            operation_id, str(session_file.resolve(strict=True)), source, ReservedSummary()
+            operation_id, str(session_file.resolve(strict=True)), request.journal_json(), request, ReservedSummary()
         ).insert(db)
     return operation_id
 

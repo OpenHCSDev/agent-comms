@@ -103,9 +103,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def request_observations(self) -> tuple[RequestProgress, ...]:
         return ()
 
-    def stalled(self, accepted: bool) -> tuple[str, str]:
-        phase = self if accepted else PromptAcceptancePhase()
-        return phase.stall_reason, phase.declared_name
+    def stalled(self, accepted: bool) -> TurnPhase:
+        return self if accepted else PromptAcceptancePhase()
 
 
 class Excursion(TurnPhase):
@@ -141,6 +140,18 @@ class CancellingPhase(TurnPhase):
 
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return self
+
+class ShutdownPhase(TurnPhase):
+    """Native shutdown cannot admit follow-ups or resume model activity."""
+
+    accepts_followup = False
+    can_cancel = False
+    activity_state = ActivityState.WORKING
+    label = "Stopping"
+
+    def observed(self, phase: TurnPhase) -> TurnPhase:
+        return self
+
 
 class PublishingPhase(TurnPhase):
     accepts_followup = False
@@ -297,5 +308,5 @@ class ToolRunningPhase(Excursion):
             return self.tool_ended(event.tool_call_id or event.tool_name or "tool")
         return super().on(event, active_tools)
 
-    def stalled(self, accepted: bool) -> tuple[str, str]:
+    def stalled(self, accepted: bool) -> TurnPhase:
         return ModelWaitPhase().stalled(accepted)

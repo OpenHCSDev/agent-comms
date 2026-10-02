@@ -1,0 +1,119 @@
+{
+  "inspection": "synthetic declaration encoding; no provider/native/store activity",
+  "selected_source": {
+    "kind": "selected_admission",
+    "owner": {
+      "pid": 1,
+      "start_time": 2
+    },
+    "incarnation": {
+      "name": "owner",
+      "created_at": 1.0
+    },
+    "turn": {
+      "value": "turn"
+    },
+    "reserved_revision": {
+      "kind": "session_revision",
+      "native": {
+        "identity": {
+          "device": 1,
+          "inode": 2
+        },
+        "size": 100,
+        "mtime_ns": 3,
+        "ctime_ns": 4
+      },
+      "input_proof": {
+        "kind": "missing_input"
+      }
+    },
+    "ingress_key": "acp:original",
+    "admission_generation": 1,
+    "correction_witness": "1:26e2a23981174adecde7c006e3dfe4a226bcf14080e8fa794b3c8cff31051313",
+    "input_digest": {
+      "value": "26e2a23981174adecde7c006e3dfe4a226bcf14080e8fa794b3c8cff31051313"
+    },
+    "original_digest": {
+      "value": "26e2a23981174adecde7c006e3dfe4a226bcf14080e8fa794b3c8cff31051313"
+    }
+  },
+  "compaction_source_wire": {
+    "native": {
+      "sessionId": "session",
+      "sessionFile": "/synthetic/session.jsonl",
+      "leafId": "leaf",
+      "firstKeptEntryId": "first",
+      "revision": "1:2:100:3:4"
+    },
+    "wire_root": "/synthetic:1:2",
+    "thread": "owner",
+    "owner_epoch": 1,
+    "turn_id": "turn",
+    "goal_id": null,
+    "goal_revision": null,
+    "bus_revision": "synthetic",
+    "input_revision": "synthetic",
+    "retained": {
+      "facts": [
+        {
+          "kind": "input",
+          "source": {
+            "kind": "reserved",
+            "key": "acp:original",
+            "sequence": null,
+            "owner": "owner",
+            "admission": 1,
+            "target": "owner",
+            "source_text": {
+              "omitted_synthetic_content_bytes": 70000,
+              "character": "X"
+            }
+          }
+        }
+      ]
+    },
+    "pending_input_key": "acp:original",
+    "settings_paths": null,
+    "settings_revision": null
+  },
+  "compaction_source_journal": {
+    "wire_root": "/synthetic:1:2",
+    "thread": "owner",
+    "owner_epoch": 1,
+    "turn_id": "turn",
+    "goal_id": null,
+    "goal_revision": null,
+    "bus_revision": "synthetic",
+    "input_revision": "synthetic",
+    "retained": {
+      "facts": [
+        {
+          "source": {
+            "key": "acp:original",
+            "sequence": null,
+            "owner": "owner",
+            "admission": 1,
+            "target": "owner",
+            "source_text": {
+              "omitted_synthetic_content_bytes": 70000,
+              "character": "X"
+            },
+            "origin": {},
+            "notice_dismissed": false,
+            "goal_reviews": {}
+          }
+        }
+      ]
+    },
+    "pending_input_key": "acp:original",
+    "settings_paths": null,
+    "settings_revision": null,
+    "native_json": "{\"firstKeptEntryId\":\"first\",\"leafId\":\"leaf\",\"revision\":\"1:2:100:3:4\",\"sessionFile\":\"/synthetic/session.jsonl\",\"sessionId\":\"session\"}"
+  },
+  "summary_source_bytes": 70948,
+  "retained_bytes": 70158,
+  "control_bytes": 794,
+  "control_limit": 65536,
+  "frame_result": "accepted"
+}

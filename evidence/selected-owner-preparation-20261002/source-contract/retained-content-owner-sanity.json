@@ -1,0 +1,36 @@
+{
+  "source": "34c5a666091ebd6cc8014b9cb507fb1c2f26075a",
+  "production_checkpoint": "2eac51df",
+  "existing_owners": {
+    "identity": "InputProvenance(key, origin)",
+    "frozen_content": "InputTaskFact.source / StoredInput.digest",
+    "current_request": "SelectedSummaryAttempt.request",
+    "original_proof": "SelectedSummaryAttempt.source_json"
+  },
+  "production_delta_from_511_integration": {
+    "base": "9e3fafa9",
+    "added": 80,
+    "deleted": 27,
+    "new_types": 0
+  },
+  "consumers": [
+    "SelectedSummaries.reserve",
+    "OwnerCompactionCommit.reconcile_interrupted_summaries",
+    "SelectedSummaryAttempt.original_has_started",
+    "SummaryState.blocks_input",
+    "SelectedSummaryAdmission.consume_bound_original",
+    "PrivateInputs.require_source_coverage",
+    "ContextManifest / SegmentManifest / NativeInputConstraintPin"
+  ],
+  "validation": {
+    "initial": "62 passed, 3 stale fixture failures in 5.30s",
+    "final": "66 passed in 5.35s",
+    "kind": "focused source overlay, not installed target acceptance",
+    "python": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/bin/python"
+  },
+  "original_proofs_reencoded": false,
+  "public_inputs_sent": false,
+  "native_or_provider_call": false,
+  "default_changes": false,
+  "remaining": "One coherent Native6 installed package plus authenticated carry, then actual saved configured fork compaction/native/ACP journey. Public installation remains paused."
+}

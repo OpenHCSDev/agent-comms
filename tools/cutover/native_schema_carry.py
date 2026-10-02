@@ -531,31 +531,31 @@ class NativeSchemaCarryPlan:
         fsync_directory(destination)
         fsync_directory(destination.parent)
         acquired.require_original()
-        # All preimages and both candidates exist before the first replace.
+        # All preimages and held candidates exist before the first replace.
         # Any exception leaves the existing stopped batch and this attempt
         # directory intact. No implicit rollback, launch or retry.
-        for item in stores:
-            staging = destination / (item.name + '.target')
-            retain_file(candidate / item.name, staging)
-            if digest(staging) != item.candidate_sha256:
-                raise ValueError('Staged candidate differs from reviewed carry')
-        acquired.require_original()
-        for item in stores:
-            staging = destination / (item.name + '.target')
-            if item.name == 'native_prompt_bindings.sqlite3':
-                # Reuse the original sidecar snapshot durability owner,
-                # including its UNKNOWN intent and no automatic recovery.
-                _publish(binding_directory, item.name, binding_snapshot[1], staging.read_bytes())
-                staging.unlink()
-            else:
-                staging.replace(root / item.name)
-                fsync_directory((root / item.name).parent)
-        if any(digest(root / item.name) != item.candidate_sha256 for item in stores):
-            raise ValueError('Installed native carry differs; remain stopped')
-        result = {'classification':classification, 'stores':FieldCodec.encode(stores),
-                  'original_preimages':str(destination), 'retired':[], 'reconstructed_proofs':0, 'input_replays':0}
-        write_original(destination / 'installed.json', (json.dumps(result,indent=2)+'\n').encode())
-        fsync_directory(destination)
+        originals = {original.path: original for original in acquired.originals}
+        with ExitStack() as staging_custody:
+            staged = [(item, staging_custody.enter_context(
+                originals[root / item.name].prepare_replacement(
+                    candidate / item.name, item.candidate_sha256))) for item in stores]
+            write_original(destination / 'publication-staging.json',
+                           (json.dumps([stage.evidence() for _, stage in staged], indent=2)+'\n').encode())
+            fsync_directory(destination)
+            acquired.require_original()
+            for item, stage in staged:
+                if item.name == 'native_prompt_bindings.sqlite3':
+                    # Reuse the original sidecar snapshot durability owner,
+                    # including its UNKNOWN intent and no automatic recovery.
+                    _publish(binding_directory, item.name, binding_snapshot[1], stage.path.read_bytes())
+                else:
+                    stage.replace_original(originals[root / item.name])
+            if any(digest(root / item.name) != item.candidate_sha256 for item in stores):
+                raise ValueError('Installed native carry differs; remain stopped')
+            result = {'classification':classification, 'stores':FieldCodec.encode(stores),
+                      'original_preimages':str(destination), 'retired':[], 'reconstructed_proofs':0, 'input_replays':0}
+            write_original(destination / 'installed.json', (json.dumps(result,indent=2)+'\n').encode())
+            fsync_directory(destination)
         return result
 
 

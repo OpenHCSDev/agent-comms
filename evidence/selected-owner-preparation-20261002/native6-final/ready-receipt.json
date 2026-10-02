@@ -1,0 +1,256 @@
+{
+  "state": "actual-installed-configured-saved-fork-compaction-cancel-continue-pass",
+  "elapsed_seconds": 198.51515252998797,
+  "terminal_exit": 0,
+  "core_product": "28401d70228237936d6489cba419271764edb905",
+  "driver": "efd8228c",
+  "toad": "c7290d5b7d23d0366812e2e3988aa3f80e1e0de0",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-native6-wire-source-20261002",
+  "configured_owner": "openhcs-architecture-memory",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "original_saved_bytes": 42044804,
+  "workflow": {
+    "ordinary_acp_selected_original_fork": true,
+    "explicit_selected_execution_override": false,
+    "selected_summary_states": [
+      "manual_committed"
+    ],
+    "summary_source_digests": [
+      "86ffdac151e08a9405d8a71cb94cb4275c2f6934a7c697fca9dcbaa8e49b5694"
+    ],
+    "naturally_triggered_compaction": true,
+    "configured_budget_changed": false,
+    "cancel_continue": {
+      "cancelled_original": {
+        "seq": 3,
+        "message_id": "ba98e42ca86d"
+      },
+      "continued_original": {
+        "seq": 4,
+        "message_id": "5eae5d875206"
+      },
+      "cancelled_admission_stages": [
+        "triage"
+      ],
+      "cancelled_native_inputs": [
+        {
+          "kind": "native_runtime_input",
+          "input_id": "5682d8c1a060fbc5e0ed6d39892701a3",
+          "stage": "triage",
+          "execution_id": null,
+          "attempt_ordinal": null,
+          "owner_lookup": "1fad034e83e1646a4607280595cac177",
+          "owner_thread": "purechannel-owner-0",
+          "owner_generation": 1,
+          "owner_token_digest": "d5cda9b91f35e7669e4dd84f476329c143ddb7f269bcf05054b754d903cb99dc",
+          "sent_owner_admission_generation": 3,
+          "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+          "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+          "session_entry_id": null,
+          "request_generation": null,
+          "llm_context_digest": null,
+          "verdict": null
+        }
+      ],
+      "cancelled_claims": [
+        {
+          "kind": "wake_claims",
+          "claim_id": "cohort-v1:98bdd5b322dd4fce1cd2c82a5516481506b03350f4358b6b5a6b29d35b203916",
+          "recipient": "purechannel-owner-0",
+          "recipient_lookup": "1fad034e83e1646a4607280595cac177",
+          "wire_seq": 3,
+          "message_id": "ba98e42ca86d",
+          "audience": "collective",
+          "lifecycle": {
+            "kind": "deferred",
+            "decision": {
+              "mode": {
+                "kind": "bounded_triage"
+              }
+            }
+          },
+          "accepted_at_ms": 1790925459808,
+          "updated_at_ms": 1790925461756,
+          "revision": 2,
+          "resolver_version": "resolver-v1",
+          "policy_version": "policy-v1"
+        }
+      ],
+      "cancelled_publications": [],
+      "continuation_native_inputs": [
+        {
+          "kind": "native_runtime_input",
+          "input_id": "11bc2538af9e888f9aece5229d16dc65",
+          "stage": "full",
+          "execution_id": "wirev18bbd914237b5da2ece4ba62781043c5ea80d440334131357b2ffe1af0383163f",
+          "attempt_ordinal": 1,
+          "owner_lookup": "1fad034e83e1646a4607280595cac177",
+          "owner_thread": "purechannel-owner-0",
+          "owner_generation": 1,
+          "owner_token_digest": "3f78cc386b74d79680b87b9767f7d2affcbc961845d4a3653c747ed9472b8e81",
+          "sent_owner_admission_generation": 3,
+          "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+          "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+          "session_entry_id": "c83b0b0f",
+          "request_generation": 5,
+          "llm_context_digest": "8b0a57f89b11ec3851b52f52623774a6f7e548a3bbe95c8d4a31a00e8a74c179",
+          "verdict": null
+        },
+        {
+          "kind": "native_runtime_input",
+          "input_id": "c5fe38787f758e6eafb3d9254c92d246",
+          "stage": "triage",
+          "execution_id": null,
+          "attempt_ordinal": null,
+          "owner_lookup": "1fad034e83e1646a4607280595cac177",
+          "owner_thread": "purechannel-owner-0",
+          "owner_generation": 1,
+          "owner_token_digest": "d95b788582847af7ac97ed9c962b322bcae4b10c8fc8c84f14f25a4a8338d780",
+          "sent_owner_admission_generation": 3,
+          "session_id": "01a0fb77-3de6-7632-82e7-5c53508b8162",
+          "session_file": "/home/ts/wt/a506n601/native-forks/sessions/--home-ts-code-projects-openhcs--/2026-10-02T07-14-50-982Z_01a0fb77-3de6-7632-82e7-5c53508b8162.jsonl",
+          "session_entry_id": "2d53f17d",
+          "request_generation": 4,
+          "llm_context_digest": "3e5179c9f42db956c4602899422553395e37f589f55bd1afde0ff3acf7a4b9b3",
+          "verdict": "full"
+        }
+      ],
+      "continuation_publications": [
+        {
+          "kind": "publication_receipts",
+          "execution_id": "wirev18bbd914237b5da2ece4ba62781043c5ea80d440334131357b2ffe1af0383163f",
+          "exact_target": "#openhcs",
+          "seq": 5,
+          "message_id": "8f71d9f7b908",
+          "received_at_ms": 1790925486099
+        }
+      ],
+      "joined_cancel_originals_retained": true,
+      "uncertain_original_replays": 0,
+      "new_original_completed_once": true
+    }
+  },
+  "first_native_triage_full_completed": true,
+  "ordinary_acp_saved_source": true,
+  "actual_current_coverage": true,
+  "no_explicit_selected_execution_override": true,
+  "unchanged_original_configuration_and_source": true,
+  "all_owned_workers_retired": true,
+  "public_inputs": 0,
+  "public_owner_restarts": 0,
+  "default_changes": 0,
+  "native_artifact_changed": false,
+  "additional_calls_after_terminal": 0,
+  "sanity": {
+    "passed": 12,
+    "failed": 12,
+    "failure_classification": "Stale test doubles: obsolete session_dir/fresh_selected signature and three raw-write probes missing existing measurements argument. Original logs retained. Not claimed green or product readiness proof."
+  },
+  "production_correction": {
+    "path": "src/agent_comms/selected_source_batch.py",
+    "added": 1,
+    "deleted": "Wrong ordinary StoredInput InputBatch inheritance plus unused admits_multiple capability; selected source membership remains on its original batch.",
+    "new_types": 0
+  },
+  "resource_observations": [
+    {
+      "file": "/home/ts/wt/a506n601/wire/diagnostics/1b76ab39ff5b48496af2a51eb4d84cd6.requests.jsonl",
+      "native_processes": [
+        {
+          "pid": 3440276,
+          "start_time": 40106121
+        },
+        {
+          "pid": 3440553,
+          "start_time": 40106974
+        }
+      ],
+      "acquisitions": [
+        {
+          "input_id": "43404ebdc1fe96c6f38b0a30a6aa84b9",
+          "native_spawn_count": 2
+        },
+        {
+          "input_id": "dc4899ebe2a295949d3bab4375f122eb",
+          "native_spawn_count": 1
+        }
+      ]
+    },
+    {
+      "file": "/home/ts/wt/a506n601/wire/diagnostics/db3e0abb448769571bfddb5e7a3a886f.requests.jsonl",
+      "native_processes": [
+        {
+          "pid": 3441451,
+          "start_time": 40110770
+        },
+        {
+          "pid": 3441734,
+          "start_time": 40111664
+        }
+      ],
+      "acquisitions": [
+        {
+          "input_id": "c5fe38787f758e6eafb3d9254c92d246",
+          "native_spawn_count": 1
+        },
+        {
+          "input_id": "11bc2538af9e888f9aece5229d16dc65",
+          "native_spawn_count": 1
+        }
+      ]
+    },
+    {
+      "file": "/home/ts/wt/a506n601/wire/diagnostics/e3788a534165ff102d5af480e6129606.requests.jsonl",
+      "native_processes": [],
+      "acquisitions": [
+        {
+          "input_id": "5682d8c1a060fbc5e0ed6d39892701a3",
+          "native_spawn_count": 1
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/home/ts/wt/a506n601/receipt.json",
+      "bytes": 13455,
+      "sha256": "76321cb2f3c60b35f23a5c71ea56799263ba34e65ac96b24170f3fcfb1b0c91f"
+    },
+    {
+      "path": "/home/ts/wt/a506n601/acp-observer.json",
+      "bytes": 39911,
+      "sha256": "37c347c6c57ccf8700d50c54516154ce7ba183c0681fef7fe84948d07a17c39b"
+    },
+    {
+      "path": "/home/ts/wt/a506n601/native-overlap-timeline.json",
+      "bytes": 2648,
+      "sha256": "579be807355125a595d1f0cc95d5b39428174ed4b40ad8b1a12f9148775a7d6f"
+    },
+    {
+      "path": "/home/ts/wt/a506n601/wire/diagnostics/1b76ab39ff5b48496af2a51eb4d84cd6.requests.jsonl",
+      "bytes": 32967,
+      "sha256": "b767ed5fc70b531a65c5831b309c43d01e244672b4747d39dfd65a9c61160af4"
+    },
+    {
+      "path": "/home/ts/wt/a506n601/wire/diagnostics/db3e0abb448769571bfddb5e7a3a886f.requests.jsonl",
+      "bytes": 32989,
+      "sha256": "c1fa1a274f8d054a7af03f4f0aeebfe06fabc4d66eb2f4fd39718c18d0a9483e"
+    },
+    {
+      "path": "/home/ts/wt/a506n601/wire/diagnostics/e3788a534165ff102d5af480e6129606.requests.jsonl",
+      "bytes": 5159,
+      "sha256": "33e0d6a72531765585b9588e203e229e5d6bdd6e518e84a2c7821ae1278dd4d6"
+    }
+  ],
+  "remaining_release_dependency": "Mendel outside-src historical stopped-copy proof carry; parent sole publication owner. Fresh workflow does not qualify that historical operator.",
+  "claims_excluded": [
+    "physical Toad UI",
+    "FULL/tool cancellation",
+    "warm native process reuse",
+    "latency improvement",
+    "all parallel Native6 callers",
+    "public carry qualification",
+    "live release"
+  ]
+}

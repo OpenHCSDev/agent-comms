@@ -81,6 +81,21 @@ class Thread(ThreadProvenance):
     def turn_state(self) -> TurnState:
         return TurnState(self.active_turn, self.last_finished_turn_id)
 
+    def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
+        """Project this captured owner through the original native binding."""
+        from .runtime_requests import ProjectRuntimeRequest
+
+        project = ProjectRuntimeRequest.for_native(snapshot, self)
+        return {
+            "AGENT_COMMS_THREAD": self.name,
+            "PI_AGENT_ID": self.name,
+            "AGENT_COMMS_ROOT": str(root),
+            "PI_PARENT_ID": self.parent or "",
+            "AGENT_COMMS_MANAGED": "1",
+            "PI_WORKTREE": worktree,
+            **project.environment(root),
+        }
+
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
         object.__setattr__(self, "_generated_created_at", generated)

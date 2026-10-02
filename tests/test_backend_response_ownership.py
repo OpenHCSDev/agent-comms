@@ -1,6 +1,7 @@
 """Command extension and guards for the retired response/settlement replicas."""
 
 from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.selected_session import SelectedSession
 import ast
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,7 +28,7 @@ class InspectionFork(commands.MutatesSession, commands.PiCommand):
 @pytest.mark.parametrize("success", [True, False])
 def test_new_command_capabilities_guard_identity_without_backend_dispatch_edits(success):
     session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, Path.cwd(), None, Path.cwd(), configuration=RestartEnvironment.inherit({})), "unused"
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), configuration=RestartEnvironment.inherit({})), "unused"
     )
     session.native = SimpleNamespace(
         attestation=ObservedAttestation(

@@ -1,0 +1,528 @@
+{
+  "original_reference": {
+    "seq": 309,
+    "id": "92a0d629382c"
+  },
+  "source_sha256": {
+    "793bdc7e45cb303a77025fde569bb838.requests.jsonl": "9a21bc4e6ae00992d80e03a547c529d0ae0fbe6794c61c86fbf1847ebd6e4067",
+    "32a844d97ff62c0bf73da48ac16222ef.requests.jsonl": "7af30b0803341b5ca5a943ae9931ed3ade8cb46ff4d64f27e88fc9ac5bf3a035",
+    "fdffef46cfdc77656f9460fcb92c9446.requests.jsonl": "c5c30db923bd335469762a47d55dea4820b00c1c2a18f235f31990830af2be8a",
+    "3abec110b6c6b0682e6799eeda0956bc.requests.jsonl": "5bd478403b515c6efe6725e541bac4881404f92e4687cfe2bc76717b32279121",
+    "b36ce9752b7ebc8717c29ead9cceced2.requests.jsonl": "300294016bd4fff18f2267e07bfe730f6b34b40dc0cd9de124d9985b52c441e1",
+    "02256abc9a96a92905b7919d1058a58b.requests.jsonl": "c73fba038905a86e7d7ec38e6cf5931bd18ad69156934e05ab0b6853c24adbfe",
+    "04b9d553a79902eb73f0968ebd366764.requests.jsonl": "61214e3af8b0ee94beb1e4b7a07cb599841e72f7c492a30b99b7938fa6647434",
+    "a851b54fdbbed558e5a429d875d9932f.requests.jsonl": "fc39b2ffc0c6b41a6c85cf7b714a5e7ae2ccd231581042af410462b2df49f6b6"
+  },
+  "joined_replies": [
+    {
+      "owner": "openhcs-audit-merged-boundaries",
+      "assignment_id": "cohort-v1:e7264f2737438a2a2a1bf0ea5a3c0d9e9e8a1d8d03d15343884954e2fa699b96",
+      "execution_id": "wirev1e9ee0884ef868e9e0b9355af7607beb9922aefdf6c02d87b12d68fe123d2406b",
+      "accepted_after_send_s": 2.406193,
+      "full_execution_created_after_send_s": 24.255193,
+      "reply_reference": {
+        "seq": 310,
+        "id": "dcca57ea17b0"
+      },
+      "reply_after_send_s": 38.344264,
+      "native_requests": [
+        {
+          "request_id": "ef51bf7e-6242-45d5-a8b8-f156472af80f",
+          "stage": "triage",
+          "input_id": "6f2363fcbe369aa3815d4dca80cf6320",
+          "session_id": "01a0f8c4-6744-77a6-9c00-6dfd1ac57fcf",
+          "native_process": {
+            "pid": 1995275,
+            "start_time": 35565447
+          },
+          "started_after_send_s": 16.573194,
+          "stages_ms": {
+            "preparing": 0.046578,
+            "connecting": 71.482086,
+            "connected": 480.223489,
+            "dispatch": 480.315102,
+            "first_event": 716.326929,
+            "first_delta_consumed": 3636.608881,
+            "stream_end": 3860.520987,
+            "finished": 3863.540181
+          },
+          "callback_total_ms": 4.15616,
+          "callback_max_ms": 2.28361,
+          "core_record_span_ms": 6181.108128,
+          "publication_measurements_available": false
+        },
+        {
+          "request_id": "02ebd64d-3861-434b-8dd2-02c2e85ca90b",
+          "stage": "full",
+          "input_id": "112b081d7693dec1b41c54a20f4b98fc",
+          "session_id": "01a0f8c4-6744-77a6-9c00-6dfd1ac57fcf",
+          "native_process": {
+            "pid": 1996093,
+            "start_time": 35567206
+          },
+          "started_after_send_s": 28.861193,
+          "stages_ms": {
+            "preparing": 0.067428,
+            "connecting": 37.831136,
+            "connected": 423.272572,
+            "dispatch": 423.321425,
+            "first_event": 1115.065795,
+            "first_delta_consumed": 2734.567512,
+            "stream_end": 3193.923286,
+            "finished": 3197.198656
+          },
+          "callback_total_ms": 4.549075,
+          "callback_max_ms": 2.820558,
+          "core_record_span_ms": 7283.532271,
+          "publication_measurements_available": false
+        }
+      ],
+      "execution_creation_to_full_native_request_s": 4.606
+    },
+    {
+      "owner": "openhcs-audit-open-prs",
+      "assignment_id": "cohort-v1:d63a16ef73001086a925d929606ec063f3bd679568b660571e13c8e55263d945",
+      "execution_id": "wirev147af2ba90496e249e32729b847780f0dc5696d484f35b7070ee1534e029cf73c",
+      "accepted_after_send_s": 2.406193,
+      "full_execution_created_after_send_s": 88.283194,
+      "reply_reference": {
+        "seq": 314,
+        "id": "4b4eba40929a"
+      },
+      "reply_after_send_s": 103.253599,
+      "native_requests": [
+        {
+          "request_id": "71cfb36b-b13d-4066-9758-fa93d4b017de",
+          "stage": "triage",
+          "input_id": "287e50a7332eefad934dde1a8f96a8fc",
+          "session_id": "01a0f8c4-652d-73af-bf76-e84335a42e5e",
+          "native_process": {
+            "pid": 1995240,
+            "start_time": 35565386
+          },
+          "started_after_send_s": 80.787194,
+          "stages_ms": {
+            "preparing": 0.071405,
+            "connecting": 40.51823,
+            "connected": 579.334371,
+            "dispatch": 579.400046,
+            "first_event": 1037.125364,
+            "first_delta_consumed": 4032.668054,
+            "stream_end": 4105.483718,
+            "finished": 4109.775285
+          },
+          "callback_total_ms": 4.723937,
+          "callback_max_ms": 3.365381,
+          "core_record_span_ms": 6010.161756,
+          "publication_measurements_available": false
+        },
+        {
+          "request_id": "41bc6d8e-4ef6-4df2-bf24-61d6d7d30ef9",
+          "stage": "full",
+          "input_id": "c60e1e23286605b87ede4b3d4a70b2cb",
+          "session_id": "01a0f8c4-652d-73af-bf76-e84335a42e5e",
+          "native_process": {
+            "pid": 1998232,
+            "start_time": 35573688
+          },
+          "started_after_send_s": 92.291193,
+          "stages_ms": {
+            "preparing": 0.055205,
+            "connecting": 41.402317,
+            "connected": 468.446475,
+            "dispatch": 468.515155,
+            "first_event": 837.772363,
+            "first_delta_consumed": 3522.872328,
+            "stream_end": 4361.372779,
+            "finished": 4364.033344
+          },
+          "callback_total_ms": 4.314779,
+          "callback_max_ms": 2.14124,
+          "core_record_span_ms": 7490.940604,
+          "publication_measurements_available": false
+        }
+      ],
+      "execution_creation_to_full_native_request_s": 4.008
+    },
+    {
+      "owner": "openhcs-audit-merged-runtime",
+      "assignment_id": "cohort-v1:76ab46efe1be5fbed5a712171d1b1d1d3366f40d9658dc188b8bc08349453b7b",
+      "execution_id": "wirev1e3598cd7aef3dcc729d238e4b63558b4e8f87fd82fc967c0f9c66c146c163bd7",
+      "accepted_after_send_s": 2.406193,
+      "full_execution_created_after_send_s": 59.030194,
+      "reply_reference": {
+        "seq": 313,
+        "id": "d3b69f7e2a11"
+      },
+      "reply_after_send_s": 80.013423,
+      "native_requests": [
+        {
+          "request_id": "0abfce85-8e36-4782-8b14-9ba857b63f4c",
+          "stage": "triage",
+          "input_id": "e304fc1a5b9bfb0ef297d2b129d3894c",
+          "session_id": "01a0f8c4-691c-730b-9b5c-223d1c84f9dd",
+          "native_process": {
+            "pid": 1995363,
+            "start_time": 35565495
+          },
+          "started_after_send_s": 52.238194,
+          "stages_ms": {
+            "preparing": 0.057509,
+            "connecting": 57.224003,
+            "connected": 406.131702,
+            "dispatch": 406.19948,
+            "first_event": 665.118245,
+            "first_delta_consumed": 2425.698513,
+            "stream_end": 2483.305503,
+            "finished": 2491.344404
+          },
+          "callback_total_ms": 8.588044,
+          "callback_max_ms": 7.314057,
+          "core_record_span_ms": 5814.564014,
+          "publication_measurements_available": false
+        },
+        {
+          "request_id": "3acb2e75-6c71-484b-ad04-3c450c3c9310",
+          "stage": "full",
+          "input_id": "31a98a8ab55a9c46a0fd09567b3e45bf",
+          "session_id": "01a0f8c4-691c-730b-9b5c-223d1c84f9dd",
+          "native_process": {
+            "pid": 1997252,
+            "start_time": 35570706
+          },
+          "started_after_send_s": 72.240194,
+          "stages_ms": {
+            "preparing": 0.072908,
+            "connecting": 35.597531,
+            "connected": 359.429396,
+            "dispatch": 359.497866,
+            "first_event": 609.878001,
+            "first_delta_consumed": 2909.313158,
+            "stream_end": 3397.292597,
+            "finished": 3400.499087
+          },
+          "callback_total_ms": 3.937143,
+          "callback_max_ms": 2.408837,
+          "core_record_span_ms": 5306.709092,
+          "publication_measurements_available": false
+        }
+      ],
+      "execution_creation_to_full_native_request_s": 13.21
+    },
+    {
+      "owner": "openhcs-architecture-memory",
+      "assignment_id": "cohort-v1:60ce3b0d87171993df4b0008edcff2f8413f4646c2a047367708a5fb1396ed2f",
+      "execution_id": "wirev11df6dfa9e556aaf597cf93575712a284e32c38b9e6288e3f58dfb72c46d436df",
+      "accepted_after_send_s": 2.406193,
+      "full_execution_created_after_send_s": 513.034194,
+      "reply_reference": {
+        "seq": 316,
+        "id": "730bff02b395"
+      },
+      "reply_after_send_s": 524.683459,
+      "native_requests": [
+        {
+          "request_id": "bcf4aa1b-c5e5-44a6-9acc-d019f099d89e",
+          "stage": "triage",
+          "input_id": "1755eb2f65a7dfbcb8d3ed03a33fbeaa",
+          "session_id": "01a0f8cb-f389-7368-93d0-fc6bd4df646b",
+          "native_process": {
+            "pid": 2010042,
+            "start_time": 35614923
+          },
+          "started_after_send_s": 504.186193,
+          "stages_ms": {
+            "preparing": 0.107363,
+            "connecting": 63.530084,
+            "connected": 493.372279,
+            "dispatch": 493.426502,
+            "first_event": 784.392435,
+            "first_delta_consumed": 3254.984854,
+            "stream_end": 3525.211618,
+            "finished": 3528.942982
+          },
+          "callback_total_ms": 3.873796,
+          "callback_max_ms": 2.687055,
+          "core_record_span_ms": 6888.051659,
+          "publication_measurements_available": false
+        },
+        {
+          "request_id": "1f109c19-6f24-4ef8-a365-6b63010ade7c",
+          "stage": "full",
+          "input_id": "438882ec123162df66c24f5845d78d52",
+          "session_id": "01a0f8cb-f389-7368-93d0-fc6bd4df646b",
+          "native_process": {
+            "pid": 2010395,
+            "start_time": 35616167
+          },
+          "started_after_send_s": 516.399194,
+          "stages_ms": {
+            "preparing": 0.054373,
+            "connecting": 35.468263,
+            "connected": 453.840341,
+            "dispatch": 453.885347,
+            "first_event": 791.459282,
+            "first_delta_consumed": 2929.943583,
+            "stream_end": 3495.872048,
+            "finished": 3498.474171
+          },
+          "callback_total_ms": 3.359923,
+          "callback_max_ms": 2.080454,
+          "core_record_span_ms": 5968.481284,
+          "publication_measurements_available": false
+        }
+      ],
+      "execution_creation_to_full_native_request_s": 3.365
+    },
+    {
+      "owner": "openhcs-audit-merged-models",
+      "assignment_id": "cohort-v1:9d2c068b73fdfc5334aa5253b324d4722467fda0c9248ed756ac431506187cb9",
+      "execution_id": "wirev1911390383e4b57650f61f88e925f1052bd4ca64906f5087da7f0782059ec8efa",
+      "accepted_after_send_s": 2.406193,
+      "full_execution_created_after_send_s": 15.119194,
+      "reply_reference": {
+        "seq": 312,
+        "id": "8c0c66e0a6ae"
+      },
+      "reply_after_send_s": 68.342895,
+      "native_requests": [
+        {
+          "request_id": "473185c5-9c78-4bae-870e-6a25edda6156",
+          "stage": "triage",
+          "input_id": "6cdd2f81c9535421471b6222aac418e2",
+          "session_id": "01a0f8c4-632f-74fd-b940-1f0551c560ba",
+          "native_process": {
+            "pid": 1995201,
+            "start_time": 35565342
+          },
+          "started_after_send_s": 8.307194,
+          "stages_ms": {
+            "preparing": 0.072176,
+            "connecting": 46.543083,
+            "connected": 805.804775,
+            "dispatch": 805.869477,
+            "first_event": 1088.828584,
+            "first_delta_consumed": 4895.565363,
+            "stream_end": 4977.658046,
+            "finished": 4981.267861
+          },
+          "callback_total_ms": 4.236184,
+          "callback_max_ms": 2.84297,
+          "core_record_span_ms": 5982.695196,
+          "publication_measurements_available": false
+        },
+        {
+          "request_id": "0000dde5-61aa-4431-ae40-04e3bc5ed2b0",
+          "stage": "full",
+          "input_id": "19dc4bd4fafdee4d8a84752a344a53d0",
+          "session_id": "01a0f8c4-632f-74fd-b940-1f0551c560ba",
+          "native_process": {
+            "pid": 1995724,
+            "start_time": 35566260
+          },
+          "started_after_send_s": 60.949193,
+          "stages_ms": {
+            "preparing": 0.06294,
+            "connecting": 42.730515,
+            "connected": 505.27414,
+            "dispatch": 505.32138,
+            "first_event": 1129.920933,
+            "first_delta_consumed": 4029.084945,
+            "stream_end": 4601.27336,
+            "finished": 4604.283396
+          },
+          "callback_total_ms": 5.855419,
+          "callback_max_ms": 2.393558,
+          "core_record_span_ms": 5212.905497,
+          "publication_measurements_available": false
+        }
+      ],
+      "execution_creation_to_full_native_request_s": 45.83
+    },
+    {
+      "owner": "openhcs-pr159-viewer-bind-owner",
+      "assignment_id": "cohort-v1:6c676b1f3920d8c1d0e8ef1069a43c285bea4f49f1bbe8f777b24c4329cbea6e",
+      "execution_id": "wirev19d8f3100ec1cf3af3ca062fa3bbc94c6ccd4c219136ef5489095deb1c87c1415",
+      "accepted_after_send_s": 2.406193,
+      "full_execution_created_after_send_s": 27.308193,
+      "reply_reference": {
+        "seq": 311,
+        "id": "dff8adcab254"
+      },
+      "reply_after_send_s": 51.31832,
+      "native_requests": [
+        {
+          "request_id": "ac1a528e-5e76-4c34-a102-76bf03bbdbe5",
+          "stage": "triage",
+          "input_id": "d626ade45febf2dd68964c218dcebca3",
+          "session_id": "01a0f8c4-64ed-76a7-bcca-7a8e98f39d10",
+          "native_process": {
+            "pid": 1995221,
+            "start_time": 35565379
+          },
+          "started_after_send_s": 20.078193,
+          "stages_ms": {
+            "preparing": 0.06878,
+            "connecting": 48.579604,
+            "connected": 416.244627,
+            "dispatch": 416.343655,
+            "first_event": 633.748914,
+            "first_delta_consumed": 4057.4286,
+            "stream_end": 5044.473675,
+            "finished": 5053.335687
+          },
+          "callback_total_ms": 17.65603,
+          "callback_max_ms": 8.230484,
+          "core_record_span_ms": 6569.887268,
+          "publication_measurements_available": false
+        },
+        {
+          "request_id": "1ae3a066-3c03-422c-ab6a-e8d494d61889",
+          "stage": "full",
+          "input_id": "8bea87551944b994fa81c7430612225d",
+          "session_id": "01a0f8c4-64ed-76a7-bcca-7a8e98f39d10",
+          "native_process": {
+            "pid": 1996129,
+            "start_time": 35567513
+          },
+          "started_after_send_s": 44.707193,
+          "stages_ms": {
+            "preparing": 0.080884,
+            "connecting": 40.442076,
+            "connected": 438.312095,
+            "dispatch": 438.401535,
+            "first_event": 709.34579,
+            "first_delta_consumed": 2518.389934,
+            "stream_end": 2874.712422,
+            "finished": 2878.069376
+          },
+          "callback_total_ms": 4.211346,
+          "callback_max_ms": 2.612322,
+          "core_record_span_ms": 4444.734443,
+          "publication_measurements_available": false
+        }
+      ],
+      "execution_creation_to_full_native_request_s": 17.399
+    },
+    {
+      "owner": "openhcs-helper",
+      "assignment_id": "cohort-v1:7bb9f3a652d680a202b71ede8acf6e0bd15c076071df05bf969505c3604a0096",
+      "execution_id": "wirev18a9f8a4e773070d8e69be047c3f9d8cec599eaa083fffd651b10d88848ad2a68",
+      "accepted_after_send_s": 2.406193,
+      "full_execution_created_after_send_s": 145.158194,
+      "reply_reference": {
+        "seq": 315,
+        "id": "8415e7394fe9"
+      },
+      "reply_after_send_s": 186.094119,
+      "native_requests": [
+        {
+          "request_id": "4d3b2b09-ea6b-45de-a6a7-218c55809cb2",
+          "stage": "triage",
+          "input_id": "986c1332643479602169c81a470b7964",
+          "session_id": "01a0f8c4-64f6-7143-ac12-22432710b416",
+          "native_process": {
+            "pid": 1995211,
+            "start_time": 35565377
+          },
+          "started_after_send_s": 139.620193,
+          "stages_ms": {
+            "preparing": 0.065464,
+            "connecting": 66.919004,
+            "connected": 496.025929,
+            "dispatch": 496.063891,
+            "first_event": 739.9862,
+            "first_delta_consumed": 2687.742374,
+            "stream_end": 2872.317895,
+            "finished": 2875.428934
+          },
+          "callback_total_ms": 3.889252,
+          "callback_max_ms": 2.491344,
+          "core_record_span_ms": 4514.958882,
+          "publication_measurements_available": false
+        },
+        {
+          "request_id": "86d32abf-ec14-4cce-b965-34dd5b783a81",
+          "stage": "full",
+          "input_id": "3d9e3bbc4b7f71e06975bafc3f75b681",
+          "session_id": "01a0f8c4-64f6-7143-ac12-22432710b416",
+          "native_process": {
+            "pid": 1999972,
+            "start_time": 35579305
+          },
+          "started_after_send_s": 176.845193,
+          "stages_ms": {
+            "preparing": 0.090772,
+            "connecting": 35.19648,
+            "connected": 391.990323,
+            "dispatch": 392.054314,
+            "first_event": 704.770339,
+            "first_delta_consumed": 2723.99558,
+            "stream_end": 3386.688203,
+            "finished": 3394.886556
+          },
+          "callback_total_ms": 9.34663,
+          "callback_max_ms": 7.546106,
+          "core_record_span_ms": 5126.97603,
+          "publication_measurements_available": false
+        }
+      ],
+      "execution_creation_to_full_native_request_s": 31.687
+    }
+  ],
+  "response_descendants": [
+    {
+      "seq": 310,
+      "id": "dcca57ea17b0",
+      "original_source_seq": 309,
+      "depth": 1,
+      "frozen_claims": 9
+    },
+    {
+      "seq": 311,
+      "id": "dff8adcab254",
+      "original_source_seq": 309,
+      "depth": 1,
+      "frozen_claims": 9
+    },
+    {
+      "seq": 312,
+      "id": "8c0c66e0a6ae",
+      "original_source_seq": 309,
+      "depth": 1,
+      "frozen_claims": 9
+    },
+    {
+      "seq": 313,
+      "id": "d3b69f7e2a11",
+      "original_source_seq": 309,
+      "depth": 1,
+      "frozen_claims": 9
+    },
+    {
+      "seq": 314,
+      "id": "4b4eba40929a",
+      "original_source_seq": 309,
+      "depth": 1,
+      "frozen_claims": 9
+    },
+    {
+      "seq": 315,
+      "id": "8415e7394fe9",
+      "original_source_seq": 309,
+      "depth": 1,
+      "frozen_claims": 9
+    },
+    {
+      "seq": 316,
+      "id": "730bff02b395",
+      "original_source_seq": 309,
+      "depth": 1,
+      "frozen_claims": 9
+    }
+  ],
+  "additional_frozen_claims": 63,
+  "maximum_observed_response_depth": 1,
+  "method": "Original frozen assignment -> native_runtime_input.input_id -> RequestProgress.inputId; execution -> publication_receipts -> response certificate. No body/time association. Native and Core monotonic spans independently reported; no absolute cross-clock latency subtraction. Wall-clock creation/start deltas are scheduling brackets, not pure preparation or lock duration.",
+  "limits": "No UI presentation timestamps or matched publication spans in these selected-participant records; no transport-capacity attribution, provider calls, replay, signals or mutations."
+}
