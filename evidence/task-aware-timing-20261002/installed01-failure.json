@@ -1,0 +1,32 @@
+{
+  "state": "FAILED original-source native reopen after successful mandatory compaction; preserved/no replay",
+  "receipt": "/home/ts/wt/a520s101/receipt.json",
+  "receipt_sha256": "b3cbce543b6b721598179cd4b7b4ce317cd780d56c9bc589a3d69a081468d227",
+  "elapsed_seconds": 145.58194583799923,
+  "source": {
+    "source_owner": "openhcs-architecture-memory",
+    "private_owner": "purechannel-owner-0",
+    "model": "openai-codex/gpt-6.1-sol",
+    "thinking": "high",
+    "worktree": "/home/ts/code/projects/openhcs",
+    "tags": [
+      "openhcs"
+    ],
+    "source_session_bytes": 42044804,
+    "source_session_sha256": "a46d4826d76cac0dfab481586e05cad9583170526155ffdf17b2c2e5a095acdb",
+    "owned_fork": "/home/ts/wt/a520s101/forks/2026-10-02T09-48-39-979Z_01a0fc04-10ab-75cf-9e0b-81e6f9bf79b1.jsonl",
+    "original_task_sha256": "079c2d9fcf2bc90817641ff295f5e0ce24b2c51af9cb8bdb91f3bea70a8a1500"
+  },
+  "first_original_sequences": [
+    1
+  ],
+  "provider_work_occurred": "Mandatory selected summary committed before first original native admission",
+  "compaction_attempt": "7c6262e22e5d41d38354ddc17ac5731e",
+  "commit": "b32f90d66422404a8f20762b4e6a9456",
+  "failure_chain": "SavedSelectedSession.prepare_context -> resume_prepared -> AgentSession constructor -> SessionContext.sourceBudget -> ContextBudget -> estimateMessageTokens; compactionSummary has no content before original convertToLlm",
+  "all_owned_workers_retired": true,
+  "configured_sources_unchanged": true,
+  "scope": "No subtask authored yet, no S1 timing acceptance; frozen native ea043/prefix0faf retained",
+  "public_defaults_changed": false,
+  "old_inputs_replayed": false
+}

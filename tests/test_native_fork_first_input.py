@@ -26,7 +26,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_commands import GetSessionStats, GetState
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.selected_pi_route import read_selected_compaction_decision
+from agent_comms.selected_pi_route import observe_selected_compaction_decision
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -159,7 +159,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     print("PHYSICAL_PARENT_STATS", repr(stats), flush=True)
     assert state.model.context_window == 32768
     print("PHYSICAL_PARENT_STATE", repr(state), flush=True)
-    decision = await read_selected_compaction_decision(
+    decision = await observe_selected_compaction_decision(
         native.persistent,
         session_file=str(native.session),
         expected_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),

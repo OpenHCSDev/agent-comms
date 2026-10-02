@@ -1,0 +1,92 @@
+{
+  "state": "FAILED fixture requested unsupported self-target; production mandatory compaction/reopen/first input succeeded",
+  "receipt": "/home/ts/wt/a520s102/receipt.json",
+  "receipt_sha256": "795a2b54dc1a5fb27f2cc50d6aaa96c5150e30305eced5a0c95b43539880060e",
+  "elapsed_seconds": 201.42646135797258,
+  "failure": "AssertionError: Configured owner did not author the requested explicit completed subtask",
+  "proof": {
+    "recipients": 1,
+    "pure_channel": true,
+    "pending_originals_per_owner": 1,
+    "complete_ordered_native_membership": true,
+    "all_original_sealed_receipts": true,
+    "original_claim_count": 1,
+    "dm_or_mention_forcing_full": false,
+    "triage_inputs": 1,
+    "full_inputs": 1,
+    "overlapping_dispatched_native_inputs": false,
+    "all_originals_completed": true,
+    "common_accepted_time": true,
+    "channel_receipts": [
+      {
+        "kind": "publication_receipts",
+        "execution_id": "wirev1b1aeec1c1051425c7b887316d86af07f939fed339daa9bcdf71b65ce1cbc288f",
+        "exact_target": "#openhcs",
+        "seq": 2,
+        "message_id": "1df79de02ea1",
+        "received_at_ms": 1790935632144
+      }
+    ],
+    "all_original_historical_proofs": true,
+    "all_current_cursors_cover_source": true,
+    "actual_coverage_cursor_envelopes": [
+      {
+        "scope": {
+          "session_id": "purechannel-owner-0",
+          "wire_root_id": "daf875ead04b4cb18059a8a2465213d6",
+          "admission": {
+            "incarnation": {
+              "name": "purechannel-owner-0",
+              "created_at": 1790935447.1840453
+            },
+            "admission_generation": 3
+          },
+          "owner_pid": 3737629
+        },
+        "revision": 7,
+        "observation": {
+          "kind": "verified",
+          "cursor": {
+            "kind": "current_native_cursor",
+            "wire_root_id": "daf875ead04b4cb18059a8a2465213d6",
+            "recipient_lookup": "4436f7d78a39513cba4290c6bc8ddff2",
+            "owner_thread": "purechannel-owner-0",
+            "owner_generation": 1,
+            "owner_admission_generation": 3,
+            "covered_seq": 2,
+            "injected_seq": 1,
+            "input_id": "a55248bd7261951510f26699c342ccf4",
+            "stage": "full",
+            "session_id": "01a0fc12-31fb-7183-99dc-e9c4b8b28618",
+            "request_generation": 6
+          }
+        }
+      }
+    ],
+    "actual_current_cursors": [
+      {
+        "kind": "current_native_cursor",
+        "wire_root_id": "daf875ead04b4cb18059a8a2465213d6",
+        "recipient_lookup": "4436f7d78a39513cba4290c6bc8ddff2",
+        "owner_thread": "purechannel-owner-0",
+        "owner_generation": 1,
+        "owner_admission_generation": 3,
+        "covered_seq": 2,
+        "injected_seq": 1,
+        "input_id": "a55248bd7261951510f26699c342ccf4",
+        "stage": "full",
+        "session_id": "01a0fc12-31fb-7183-99dc-e9c4b8b28618",
+        "request_generation": 6
+      }
+    ],
+    "current_original_owner_epochs_alive": true,
+    "refresh_native_input_replays": 0
+  },
+  "configured_sources_unchanged": true,
+  "all_owned_workers_retired": true,
+  "actual_native_tool_result": "Thread purechannel-owner-0 cannot message itself",
+  "source_contract": "CommsAuthoredTaskTool target is a receiving thread/channel; Message.validate_relation forbids sender == target. Existing authored source controls use #team. Fixture instruction corrected to normal CLI notice #openhcs; no production permission bypass.",
+  "meaningful_remaining_step": "Explicit original native author notice -> optional journaled attempt -> distinct new original answer, one corrected fresh fixture",
+  "public_defaults_changed": false,
+  "old_input_replays": 0
+}

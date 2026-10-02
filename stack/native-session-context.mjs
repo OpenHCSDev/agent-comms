@@ -1,6 +1,7 @@
 /** Session context admission: history stays in EntryStore until the native policy can load it. */
 import { ContextBudget } from '../../node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
+import { convertToLlm } from './messages.js';
 
 export class SessionContext {
     constructor(manager) {
@@ -23,8 +24,8 @@ export class SessionContext {
     static sourceBudget(session) {
         return new ContextBudget(session.model, {
             systemPrompt: session.systemPrompt,
-            messages: session.sessionManager.buildContextEntries()
-                .flatMap(sessionEntryToContextMessages).toArray(),
+            messages: convertToLlm(session.sessionManager.buildContextEntries()
+                .flatMap(sessionEntryToContextMessages).toArray()),
             tools: session.agent.state.tools,
         });
     }

@@ -1,0 +1,69 @@
+# Compaction source and preserved facts
+
+Owner: Arendt. Parent owns publication. Source base: Core155b0007.
+
+## Actual source findings
+
+The original #openhcs365 inputs join through the original acquisition records to four failed turns: open-prs b240, runtime5d816, models ca6, architecture2a94. All four native inputs remain unadmitted. None of those turns has a native commit intent. The later four successful manual commits belong to e079, c64b, 5659 and6eed; they do not establish recovery of365.
+
+Original selected-summary requests retain their typed task payload. Projecting those payloads through the same FieldCodec journal view gives exact equality with each later committed intent's retained payload (9,9,9,43 facts). The complete failed capture was not persisted before commit begin; no later intent is substituted for it.
+
+The actual certified wire prefix365 and its successor366 differ only by the new helper reply. For all four owners the current message-wide bus digest changes while the retained wire task facts remain exactly equal (8,8,8,13 facts). This demonstrates a competing question in source equality: addressed ordinary replies invalidate preservation although they add no preserved task fact. It does not recover the missing original failure capture or establish that no other field changed.
+
+## Ownership change
+
+Use the existing CompactionSource and RetainedTaskFacts. The held boundary remains the sole capture: original wire and input declarations, native branch artifacts, owner goal and applicability. Delete the separate message-wide bus digest from capture/equality and its original WireLog producer/callers. The source still fences native session/revision/leaf, root, owner epoch/turn, goal, original input projection and settings, and compares the full typed retained payload including original authors and references. Changed task facts must still refuse commit/admission.
+
+Preparation changes only the original cut allocation. Native commit changes only the witnessed native successor. Manual summaries link a commit without admitting an input; adaptive summaries still recheck the full original source under writer/owner/input custody. No field is refreshed to make equality pass. Source refusal reports only differing declaration names, never private text or a new grant.
+
+Normal integration of frozen521 (`d056981f`) preserves its certified `retained_sources` context-manager lifetime. It yields the original owner, registry snapshot, task facts, inputs and export boundary, without a second message-wide source digest. The existing `RetainedSegment.capture` derives provenance once from its final captured `RetainedTaskFacts.source_digest`; both `WireLog.retained_context` and `CompactionBoundary.inspect` use that constructor. The two old digest helpers and every caller are removed, with no alias. Relative to frozen521,529 changes five production files: 30 lines added,25 deleted. Held capture, native successor and all durable intent contracts remain as described below.
+
+## Delivery
+
+Source reasoning and complete caller migration precede validation. Original365 and every UNKNOWN remain untouched. This draft does not claim the installed application repaired.
+
+## Stored intent and recovery consumers
+
+Removing `bus_revision` changes the **future source audit projection** inside `NativeIntent.journal_json`. It is not a claim of identical persisted JSON shape. The source view is already a redacted projection: `native` is excluded and `native_json` is descriptive text. No product or cutover consumer decodes that view into `CompactionSource` or reconstructs an admission from it. Existing records keep their entire original audit view and bytes; this change performs no carry, rewrite, reset or legacy decoding.
+
+The existing readers consume the same declared contracts:
+
+| Producer or consumer | Original contract retained |
+| --- | --- |
+| `NativeOperations.begin` / `NativeIntent.journal_json` | Reserve once; store declared native request controls alongside the source audit view and optional selected-summary reference. Future audit views omit the removed field. |
+| `NativeIntent.read` | Decode only this declaration's witness, payload digest and metadata digest. Do not decode the containing source projection. |
+| `OwnerCompactionCommit.reconcile` | Compare the complete original `intent_json` byte string, then send only the declared reconciliation request under current native/owner custody. Never resummarize or retry an UNKNOWN provider attempt. |
+| `OwnerCompactionCommit.admit_selected_original` | Require the original intent witness, exact stored operation, committed native successor and freshly held source. Only the returned terminal transaction can mint the one-use admission. |
+| `SelectedCommitReference` / `CompactionOperation.require_summary_link` | Match the original operation/session identity and verify the digest of **original `SelectedSummaryAttempt.source_json`**, which is a separate unchanged request envelope. Never hash a reprojected `CompactionSource`. |
+| `SelectedSummaries.link_commit`, `CompactionOutcomeSnapshot.read`, `OperationState.represents_summary` | Verify the same original link and committed native outcome. Outcome display does not grant input admission. |
+| `SelectedSummaries.retire_unchanged` | Find original commits by their selected-summary operation ID; a matching native commit prevents no-write retirement. |
+| `SelectedAdmissionIdentity` / `SelectedSummaryAdmission` | Consume the current typed request source and original revision/input proof, followed by the process-local returned ACK. No audit JSON reconstruction. |
+| `tools/cutover/native_schema_carry.py` | Authenticate original selected request envelopes using the original producer, preserve their exact `source_json` bytes, then verify references from untouched intents against those bytes. Its request-envelope round-trip comparison is not a `CompactionSource` projection comparison. |
+
+Repository searches for `intent_json`, `NativeIntent.read`, `SelectedCommitReference`, `source_json` verification and `FieldCodec.decode(CompactionSource, ...)` close the Python product and outside-src cutover consumers. The latter has zero callers. AST enumeration covers all 311 product modules with no parse omissions; it supplies static reference evidence, not a claim about dynamic Python resolution or external tools. Native receives the separately encoded `NativeRequest`, not the journal source projection.
+
+The installed529 reader was also run read-only against the actual current journal. All **seven** original intents still contain `source.bus_revision`. All seven native request projections, committed outcomes, original summary links and original `source_json` digests verified. The journal file SHA stayed identical. No admission was minted and no original audit JSON was re-encoded. Evidence: `evidence/compaction-source-successor-20261002/old-intent-readers.json`.
+
+## Actual configured gate
+
+The distinct private fork used the original 42,924,939-byte saved state, configured Sol/HIGH settings and native5184, through the installed SDK/ACP/native path with automatic extensions. A real peer reply was published while its summary streamed. The provider then exceeded the plan's output budget: retained 5,534, reasoning 0, budget 4,096. The native guard refused it before commit; the original follow-up prompt was never issued. Source bytes stayed identical and children closed. The failed attempt remains preserved without replay at `/home/ts/wt/s52901`.
+
+This original gate **failed**. It is not acceptance of commit/admission or a physical UI test. The independent summary-budget owner received its exact request/state and accounting evidence. The failure and UNKNOWN remain preserved; the distinct qualifying operation below did not replay them.
+
+Focused final source checks:32 passed for original input, task decisions, recipient scope and native/source declarations. After the521 API integration,5 affected retained-inspection/export and recipient checks passed, covering the changed constructor and stream lifetime. Those results do not replace the failed configured gate.
+
+## Qualified coherent checkpoint
+
+Normally integrated frozen520 budget/native source `beb54a1a` into529, producing **Core761864c828b08eccd157445f1e5476276bcec0b3**. The source guard and existing `RetainedSegment` constructor are byte-identical to67b. Current source includes the ordinary main525/528 observer/transcript changes and521 certified-reader lifetime. It requires the coupled native **ad533a9f08581561d00d5524a576bda00f6368221cc4f74ba3c68513ede8fc04**, tree **adb2969a4d57cb8993a92d30b924b969ca76772de5dadb31cc7b2f294ee120e9**; the old5184 receipt does not qualify this artifact.
+
+Sch's single normal69 receiver verified all311 Core Python files and resources, direct URLs, paired Toad/Textual sources, SDK0.12.1, installed helper and full native manifest/tree trust. Exact prefix: `/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/runtime-summary-recovery529-installed-20261002`.
+
+The **new distinct** configured SDK/ACP/native journey completed with exit0 in **162.082 seconds**:
+
+- Original42,924,939-byte saved state forked with the current configured Sol/HIGH settings, auth and automatic extensions.
+- A real private peer reply was published during summary streaming. It did not invalidate the exact captured task facts.
+- The native summary committed as `66794184f1674babbe9845610979960b` and the manual request linked to that committed outcome. It admitted no original user input.
+- One new human input then started exactly once and produced its required marker answer; the owner returned idle and native children closed.
+- Original source SHA remained `f4384d6bfc38d40daeb725ca3952b6d4487021ba5f31313c72cb60c9d7904c14`. Original52901 UNKNOWN files also stayed hash-identical. No public input, replay, recovery grant or default change occurred.
+
+Evidence: `configured-installed02.json`, raw `configured-installed02.log`, `installed-source-proof.json` and `failed-original-preserved.json` under `evidence/compaction-source-successor-20261002`. This qualifies installed **configured saved-source compaction, peer publication and distinct input continuation**. It is not a physical TUI test, overall stability or provider-latency result. Parent owns any public pairing/activation.

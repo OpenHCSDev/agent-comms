@@ -30,7 +30,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_session_reopen import validate_native_reopen
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_settings import PiCompactionSettings
-from agent_comms.selected_pi_route import read_selected_compaction_decision
+from agent_comms.selected_pi_route import observe_selected_compaction_decision
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
 
@@ -205,7 +205,7 @@ async def test_actual_cold_retained_commit_and_reopen(tmp_path, monkeypatch, mod
             )
         else:
             assert persistent.available and persistent.custody.child.proc.returncode is None
-        decision = await read_selected_compaction_decision(
+        decision = await observe_selected_compaction_decision(
             persistent,
             session_file=str(session),
             expected_package=package,

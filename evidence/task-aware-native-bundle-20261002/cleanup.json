@@ -1,0 +1,16 @@
+{
+  "removed": [
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/task-aware-native-bundle-20261002/fresh-unverified",
+      "bytes": 138399815
+    },
+    {
+      "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/task-aware-native-bundle-20261002/mcp-cache-fill",
+      "bytes": 18716787
+    }
+  ],
+  "no_actual_process_borrowers": true,
+  "preserved_native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ea043387f66a6031/node_modules/@earendil-works/pi-coding-agent",
+  "capture_matches_canonical_tree": true,
+  "source_proofs_originals_preserved": true
+}
