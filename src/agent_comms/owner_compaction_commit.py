@@ -185,7 +185,7 @@ class OwnerCompactionCommit:
             for attempt in self.journal.summaries.history(witness.session_file):
                 if not attempt.state.reconcile_unchanged_source:
                     continue
-                source = attempt.source()
+                source = attempt.request.source
                 source.interrupted_check(
                     SessionRevision.observe(witness.session_file),
                     self.inputs._read_unlocked(),
@@ -222,7 +222,7 @@ class OwnerCompactionCommit:
                 selected_attempt.state.require_commit_reservation()
                 self.journal.summaries.require_current(selected_attempt, witness.session_file)
                 CommitReservationCheck(
-                    source=selected_attempt.source(),
+                    source=selected_attempt.request.source,
                     revision=SessionRevision.observe(witness.session_file),
                     incarnation=owner.incarnation,
                     owner=owner.process_identity,

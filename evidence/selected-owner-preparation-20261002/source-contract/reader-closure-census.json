@@ -1,0 +1,53 @@
+{
+  "immutable_proof_uses": {
+    "command": [
+      "rg",
+      "-n",
+      "source_json",
+      "src/agent_comms"
+    ],
+    "exit_code": 0,
+    "stdout": "src/agent_comms/compaction_records.py:133:            reference.require_source(attempt.source_json)\nsrc/agent_comms/compaction_records.py:164:    request is the current typed semantic source. source_json is the immutable\nsrc/agent_comms/compaction_records.py:173:    source_json: str\nsrc/agent_comms/owner_compaction_commit.py:233:                    selected_attempt.operation_id, TextDigest.of(selected_attempt.source_json).value,\nsrc/agent_comms/compaction_identity.py:54:    def require_source(self, source_json: str) -> None:\nsrc/agent_comms/compaction_identity.py:55:        if self.source_digest != TextDigest.of(source_json).value:\n"
+  },
+  "current_semantic_readers": {
+    "command": [
+      "rg",
+      "-n",
+      "attempt.request|selected_attempt.request",
+      "src/agent_comms"
+    ],
+    "exit_code": 0,
+    "stdout": "src/agent_comms/selected_summary_admission.py:107:            source = attempt.request\nsrc/agent_comms/compaction_outcomes.py:46:        return self.attempt.request.source.reserved_revision\nsrc/agent_comms/compaction_outcomes.py:82:            if attempt.request.source.incarnation.resolved(registry) != incarnation.resolved(registry):\nsrc/agent_comms/owner_compaction_commit.py:188:                source = attempt.request.source\nsrc/agent_comms/owner_compaction_commit.py:225:                    source=selected_attempt.request.source,\n"
+  },
+  "removed_reader_search": {
+    "command": [
+      "rg",
+      "-n",
+      "SelectedSummarySource.read|\\.envelope\\(|attempt\\.source\\(|selected_attempt\\.source\\(",
+      "src/agent_comms",
+      "tests"
+    ],
+    "exit_code": 1,
+    "stdout": ""
+  },
+  "single_provenance_constructor": {
+    "command": [
+      "rg",
+      "-n",
+      "InputProvenance\\(",
+      "src/agent_comms"
+    ],
+    "exit_code": 0,
+    "stdout": "src/agent_comms/input_attempt.py:130:        return InputProvenance(self.key, self.origin, self.digest)\nsrc/agent_comms/input_origin.py:45:class InputProvenance(Provenance):\n"
+  },
+  "single_attempt_declaration_and_producer": {
+    "command": [
+      "rg",
+      "-n",
+      "class SelectedSummaryAttempt|SelectedSummaryAttempt\\(",
+      "src/agent_comms"
+    ],
+    "exit_code": 0,
+    "stdout": "src/agent_comms/compaction_records.py:159:class SelectedSummaryAttempt(\nsrc/agent_comms/compaction_summaries.py:121:                    SelectedSummaryAttempt(\n"
+  }
+}

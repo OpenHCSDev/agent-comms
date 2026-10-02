@@ -112,7 +112,6 @@ def native_intent(session, *, owner="owner", selected=None, retained=RetainedTas
     from pathlib import Path
     from agent_comms.compaction_source import CompactionSource
     from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
-    from agent_comms.native_revision_text import NativeRevisionText
     from agent_comms.owner_compaction_gate import OwnerCompactionAttestation
     from agent_comms.owner_compaction_prepare import NativeWitness
     from agent_comms.private_path import FileRevision
@@ -120,7 +119,7 @@ def native_intent(session, *, owner="owner", selected=None, retained=RetainedTas
     session = Path(session).resolve(strict=True)
     witness = NativeWitness(
         "fixture-session", str(session), "fixture-leaf", "fixture-kept",
-        NativeRevisionText.encode(FileRevision.from_stat(session.stat())),
+        FileRevision.from_stat(session.stat()),
     )
     payload = NativeSummaryPayload(summary="private journal fixture summary", tokens_before=0)
     intent = NativeIntent(witness, payload.payload_digest(witness), payload.metadata_digest())
@@ -129,6 +128,6 @@ def native_intent(session, *, owner="owner", selected=None, retained=RetainedTas
     )
     source = CompactionSource(
         witness, str(session.parent), owner, 1, "turn", None, None,
-        "fixture-bus-revision", "fixture-input-revision", retained,
+        "fixture-bus-revision", "fixture-input-revision", retained, (),
     )
     return intent, attestation, source, selected

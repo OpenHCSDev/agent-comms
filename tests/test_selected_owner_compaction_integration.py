@@ -221,7 +221,6 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         launcher,
         info,
     ):
-        from agent_comms.compaction_records import SelectedSummarySource
         from agent_comms.field_codec import FieldCodec
         from agent_comms.retained_task_facts import CurrentDecisionTaskFact, UserSourceTaskFact
         from agent_comms.tools import invoke_tool
@@ -268,7 +267,7 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
         rows = journal.summaries.blocking(file)
         assert len(rows) == 1 and rows[0].state.declared_name == "linked"
-        captured = FieldCodec.decode(SelectedSummarySource, json.loads(rows[0].source_json))
+        captured = rows[0].request
         assert tuple(fact.source for fact in captured.retained.facts
                      if isinstance(fact, UserSourceTaskFact)) == (user,)
         assert tuple(fact.source for fact in captured.retained.facts
@@ -366,7 +365,6 @@ async def acp_selected_summary_journey(
     )
     from agent_comms.comms import wire
     from agent_comms.compaction_identity import SelectedCommitReference
-    from agent_comms.compaction_records import SelectedSummarySource
     from agent_comms.errors import RelationViolationError
     from agent_comms.field_codec import FieldCodec
     from agent_comms.goal_attempts import GoalAttemptStore
@@ -411,9 +409,7 @@ async def acp_selected_summary_journey(
                             json.loads(operation.intent_json)
                         )
                         attempt = journal.summaries.get(reference.operation_id)
-                        source = FieldCodec.decode(
-                            SelectedSummarySource, json.loads(attempt.source_json)
-                        ).source
+                        source = attempt.request.source
                         assert source.pending_input_key is not None
                         original = dispositions.read().lookup(source.pending_input_key)
                         assert original.exists and not original.has_native_binding
