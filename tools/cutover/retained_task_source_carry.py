@@ -20,6 +20,11 @@ class RetainedTaskSourceCarry(StoppedOwnerInstallation):
     wire_root_id: str
     receipt: Path
 
+    def failed(self, failure):
+        # Standalone task carry must preserve any committed target records.
+        # Enclosing publishers use their own complete-operation recovery proof.
+        self.leave_stopped(failure)
+
     def require_selection(self, snapshot, owners):
         live = {thread.incarnation for thread in snapshot.threads.values()
                 if thread.role.executable and thread.process_alive}

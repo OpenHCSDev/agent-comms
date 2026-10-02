@@ -6,9 +6,11 @@ RegistryDocument to reinterpret. Production readers keep one format.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from contextlib import ExitStack
+from dataclasses import dataclass, field
 import os
 import stat
+import sys
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
@@ -90,6 +92,25 @@ class OwnerRestartHandoff:
     agent_args: tuple[str, ...] | None
 
     def launch(self, lifecycle: OwnerLifecycle) -> tuple[OwnerRestartResult, ...]:
+        def target(thread, source):
+            return lifecycle._launch_owner_unlocked(
+                thread, self.agent_bin or lifecycle.restart_entrypoint(source.binary),
+                self.agent_args if self.agent_args is not None else source.arguments,
+                environment=self.runtime.apply_runtime(source.environment),
+            )
+
+        return self._launch(lifecycle, target)
+
+    def restore(self, lifecycle: OwnerLifecycle) -> tuple[OwnerRestartResult, ...]:
+        """Restore EACH acquired launch unchanged under its authentic decoder."""
+        if any(owner.launch.interpreter != sys.executable for owner in self.owners):
+            raise RelationViolationError('Original restoration requires the acquired source interpreter')
+
+        return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
+            thread, source.binary, source.arguments, environment=source.environment,
+        ))
+
+    def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:
         from .owner_lifecycle import OwnerRestartResult
 
         if str(lifecycle.root) != self.root:
@@ -99,11 +120,7 @@ class OwnerRestartHandoff:
         threads = tuple(owner.require_current(snapshot) for owner in self.owners)
         return tuple(OwnerRestartResult(
             thread.name, owner.launch.process.pid,
-            lifecycle._launch_owner_unlocked(
-                thread, self.agent_bin or lifecycle.restart_entrypoint(owner.launch.binary),
-                self.agent_args if self.agent_args is not None else owner.launch.arguments,
-                environment=self.runtime.apply_runtime(owner.launch.environment),
-            ).pid,
+            launch(thread, owner.launch).pid,
         ) for thread, owner in zip(threads, self.owners, strict=True))
 
 
@@ -114,6 +131,7 @@ class StoppedOwnerBatch:
     lifecycle: OwnerLifecycle
     wire: StoreLock
     handoff: OwnerRestartHandoff
+    custody: ExitStack = field(default_factory=ExitStack, repr=False, compare=False)
 
     @classmethod
     def accept(cls, lifecycle: OwnerLifecycle, descriptor: int, handoff: OwnerRestartHandoff):
@@ -134,6 +152,41 @@ class StoppedOwnerBatch:
     def launch(self) -> tuple[OwnerRestartResult, ...]:
         return self.handoff.launch(self.lifecycle)
 
+    def close(self) -> None:
+        """Explicitly release physical custody; never launch or retry inputs."""
+        self.custody.close()
+
+    def complete(self, operation: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
+        try:
+            results = operation.complete(self)
+        except BaseException as cause:
+            # Transfer the SAME batch and original opened wire resource. The
+            # caller owns disposition before exiting; credentials stay in RAM.
+            failure = StoppedOwnerFailure(self, operation)
+            failure.__cause__ = cause
+            operation.failed(failure)
+        self.close()
+        return results
+
+
+class StoppedOwnerFailure(Exception):
+    """A failed acquired operation, not an unsignalled restart refusal."""
+
+    def __init__(self, stopped: StoppedOwnerBatch, operation: OwnerCutover):
+        super().__init__('Cutover failed after retirement; stopped launch custody requires explicit disposition')
+        self.stopped = stopped
+        self.operation = operation
+
+    def recover(self) -> tuple[OwnerRestartResult, ...]:
+        """The original operation alone can certify recovery while RAM survives."""
+        results = self.operation.recover(self.stopped)
+        self.stopped.close()
+        return results
+
+    def abandon(self) -> None:
+        """Explicitly leave the original batch stopped and release its resource."""
+        self.stopped.close()
+
 
 @dataclass(frozen=True)
 class FencedOwnerBatch:
@@ -146,7 +199,8 @@ class FencedOwnerBatch:
     def complete(self, cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         for thread, generation in self.captured:
             self.lifecycle._stop_process(thread, generation)
-        with _store_lock(self.lifecycle.root / 'wire') as wire:
+        with ExitStack() as acquired:
+            wire = acquired.enter_context(_store_lock(self.lifecycle.root / 'wire'))
             for thread, generation in self.captured:
                 self.lifecycle._require_same_stop_owner(thread, generation)
                 if thread.process_alive:
@@ -157,7 +211,8 @@ class FencedOwnerBatch:
             ) for (thread, _), launch in zip(self.captured, self.launches, strict=True))
             handoff = OwnerRestartHandoff(str(self.lifecycle.root), owners, self.runtime,
                                          self.request.agent_bin, self.request.agent_args)
-            return cutover.complete(StoppedOwnerBatch(self.lifecycle, wire, handoff))
+            stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, acquired.pop_all())
+        return stopped.complete(cutover)
 
 
 @dataclass(frozen=True)

@@ -319,6 +319,83 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             assert not Path(f"/proc/{current.pid}/task/{current.pid}/children").read_text().strip()
         assert all(path.read_bytes() == content for path, content in source_files.items())
         assert not list(tmp_path.rglob("*.input-proof"))
+
+        # Same actual native owner batch, no new input/provider: an installation
+        # failure must retain its wire OFD and exact launches until disposition.
+        import errno
+        import hashlib
+        import subprocess
+        from agent_comms.owner_restart import StoppedOwnerFailure
+
+        tools = Path(__file__).parents[1] / 'tools' / 'cutover'
+        monkeypatch.syspath_prepend(str(tools))
+        from cutover_child import restore_stopped_batch
+        from publish_retained_summary import ReviewedArtifact
+
+        artifact = tmp_path / 'protected-original'
+        artifact.write_bytes(b'original retained content')
+        witness = ReviewedArtifact(artifact, hashlib.sha256(artifact.read_bytes()).hexdigest())
+        original_error = OSError(errno.EXDEV, 'Controlled stopped-install failure')
+
+        class FailedInstalledOperation(StoppedOwnerInstallation):
+            def require_selection(self, snapshot, owners):
+                cutover.require_selection(snapshot, owners)
+
+            def after_stopped(self, lifecycle):
+                raise original_error
+
+            def recover(self, stopped):
+                witness.require_original()
+                return restore_stopped_batch(stopped)
+
+        def wire_available():
+            # Another process/OFD, not recursive acquisition of our held FD.
+            probe = subprocess.run([sys.executable, '-c',
+                "import fcntl,sys; f=open(sys.argv[1],'a+b'); "
+                "fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)",
+                str(tmp_path / '.wire.lock')], capture_output=True)
+            return probe.returncode == 0
+
+        latest = tuple(comms.registry.require(name) for name in selected)
+        operation = FailedInstalledOperation()
+        with pytest.raises(StoppedOwnerFailure) as caught:
+            comms.owners.restart_owners(selected, cutover=operation)
+        failure = caught.value
+        assert failure.__cause__ is original_error
+        assert failure.operation is operation
+        assert all(not owner.process_alive for owner in latest)
+        assert not wire_available(), 'Failed operation lost original wire custody'
+        try:
+            restored = failure.recover()
+        finally:
+            failure.abandon()
+        assert wire_available()
+        for index, receipt in enumerate(restored):
+            current = comms.registry.require(receipt.thread)
+            ready(current)
+            launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
+            assert launch.binary == str(target_binary)
+            assert launch.arguments == settings[index][1]
+            assert launch.environment['BATCH_OWNER_CREDENTIAL'] == settings[index][2]
+            assert current.goal == original_goals[current.name]
+
+        # A changed original refuses restoration before any child/owner launch;
+        # the same failure still owns the wire until explicit stopped disposition.
+        current_batch = tuple(comms.registry.require(name) for name in selected)
+        with pytest.raises(StoppedOwnerFailure) as changed:
+            comms.owners.restart_owners(selected, cutover=operation)
+        artifact.write_bytes(b'committed target content')
+        try:
+            with pytest.raises(RuntimeError, match='Reviewed artifact changed'):
+                changed.value.recover()
+            assert not wire_available()
+            assert all(not owner.process_alive for owner in current_batch)
+            assert artifact.read_bytes() == b'committed target content'
+        finally:
+            changed.value.abandon()
+        assert wire_available()
+        assert all(path.read_bytes() == content for path, content in source_files.items())
+        assert not list(tmp_path.rglob('*.input-proof'))
     finally:
         for name in ("batch-a", "batch-renamed", "batch-b"):
             try:

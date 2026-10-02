@@ -25,6 +25,11 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
     writer_script: ClassVar[str] = 'retained_index_writer.py'
     installer_script: ClassVar[str] = 'install_retained_index.py'
 
+    def failed(self, failure):
+        # Reset/carry may have committed a new index. Routing inherits this
+        # same disposition; neither one-shot may reinterpret it as old format.
+        self.leave_stopped(failure)
+
     @property
     def operation_arguments(self) -> tuple[str, ...]:
         return ()

@@ -28,6 +28,11 @@ class ThreadRetirementCutover(OwnerCutover):
     target_route: dict
     receipt: Path
 
+    def failed(self, failure):
+        # The child may have committed target-format bytes. A source decoder
+        # cannot recover merely because target completion failed.
+        self.leave_stopped(failure)
+
     def validate(self, registry, releases):
         projected = {'registry': GoalReportMemberRetirement.threads(FieldCodec.encode(registry)),
                      'releases': GoalReportMemberRetirement.releases(FieldCodec.encode(releases))}

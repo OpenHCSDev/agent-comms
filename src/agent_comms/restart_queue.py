@@ -23,6 +23,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from .owner_restart import StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
 from pathlib import Path
 
@@ -259,6 +260,11 @@ def step(comms: Comms) -> None:
             )
         except RestartRefusal as refusal:
             record = record.transition(refusal.queue_state())
+        except StoppedOwnerFailure as exc:
+            # An attempted restart remains uncertain. This watcher cannot keep
+            # credentials or authorize installation/input replay in its queue.
+            exc.abandon()
+            record = record.transition(UncertainRestart(reason=f'{exc}: {exc.__cause__}'))
         except Exception as exc:
             record = record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))
         else:

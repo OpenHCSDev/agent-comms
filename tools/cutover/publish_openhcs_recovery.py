@@ -181,6 +181,12 @@ class PublishOpenhcsRecovery(StoppedOwnerInstallation):
     candidate: tuple[HistorySource, ...]
     carry_proof: dict
 
+    def failed(self, failure):
+        # This historical one-use member changes archived sources and has no
+        # certified original-unchanged recovery. Leave its committed effects and
+        # uncertainty intact; explicitly dispose before the one-shot exits.
+        self.leave_stopped(failure)
+
     def complete(self, stopped):
         # FencedOwnerBatch retains the ORIGINAL wire custody through this
         # method. Readback belongs here, before resumed owners may progress.

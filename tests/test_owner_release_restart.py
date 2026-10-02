@@ -2,6 +2,7 @@
 
 import os
 import signal
+import shlex
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -56,6 +57,10 @@ while True: time.sleep(0.01)
         "AGENT_COMMS_THREAD": "worker",
         "PI_AGENT_ID": "worker",
         "PI_WORKTREE": str(tmp_path),
+        # This real source process must declare the command it actually runs.
+        # Restart capture cannot infer extinct launch arguments from its PID.
+        "AGENT_COMMS_AGENT_BIN": sys.executable,
+        "AGENT_COMMS_AGENT_ARGS": shlex.join((str(script),)),
     }
     child = ParentedProcess.launch((sys.executable, str(script)), env=env)
     comms = Comms(root)
