@@ -1,0 +1,14 @@
+{
+  "owner": "Arendt",
+  "removed_path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/533-native-read01/global/session.jsonl",
+  "removed_file_bytes": 42924971,
+  "removed_sha256": "b190a927715c28e8a41aaf33c7adf58bdbb7eee5649b2eee700b41336f1d3d32",
+  "retained_identical_source": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002/.artifacts/532-native-read01/global/session.jsonl",
+  "borrowers": [],
+  "qualification_receipts_retained": true,
+  "native_child_retired": true,
+  "provider_prompts": 0,
+  "original_source_untouched": true,
+  "original_unknowns_untouched": true,
+  "scope": "Only the completed533 duplicate session JSONL. All raw receipts, original donor/inputproof,532 primary,529 failed/qualifying originals remain."
+}
