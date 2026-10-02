@@ -1,0 +1,1007 @@
+{
+  "revisions": [
+    {
+      "revision": "e61afcdfa7c91e1808e839281b3beb270f41deca",
+      "roots": [
+        {
+          "root": "src/agent_comms",
+          "parsed": 311,
+          "parse_failures": [],
+          "nominal_family": [
+            {
+              "path": "src/agent_comms/acp_request_consumer.py",
+              "line": 17,
+              "name": "AcpRequestConsumer",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "run",
+                "forward",
+                "prompt_request",
+                "compact",
+                "selected_write",
+                "clear",
+                "send_now"
+              ]
+            },
+            {
+              "path": "src/agent_comms/agent_event_updates.py",
+              "line": 40,
+              "name": "AcpEventConsumer",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "goal_changed",
+                "text",
+                "on_tool_start",
+                "on_tool_progress",
+                "on_tool_end",
+                "on_thinking",
+                "on_mcp_live_status",
+                "on_agent_info",
+                "on_compaction",
+                "on_error",
+                "on_cancelled",
+                "on_done"
+              ]
+            },
+            {
+              "path": "src/agent_comms/agent_events.py",
+              "line": 360,
+              "name": "AgentEventConsumer",
+              "bases": [
+                "MroDispatch",
+                "ABC"
+              ],
+              "methods": [
+                "comms",
+                "thread_name",
+                "before_agent_info",
+                "after_agent_info",
+                "record_agent_info"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 82,
+              "name": "DispatchCases",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "add",
+                "groups",
+                "read_function"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 108,
+              "name": "LiteralDispatchCases",
+              "bases": [
+                "DispatchCases"
+              ],
+              "methods": [
+                "literal",
+                "comparison",
+                "match_cases"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 135,
+              "name": "TypeDispatchCases",
+              "bases": [
+                "DispatchCases"
+              ],
+              "methods": [
+                "instance_check",
+                "exact_type",
+                "match_cases"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 360,
+              "name": "TypingImports",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "bind",
+                "modules",
+                "members",
+                "assignment",
+                "mutation",
+                "parameter",
+                "named_binding",
+                "exception_binding",
+                "of"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 434,
+              "name": "TypingReference",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "name",
+                "member",
+                "raw_access_count"
+              ]
+            },
+            {
+              "path": "src/agent_comms/delivery_failure.py",
+              "line": 8,
+              "name": "FailureDecoder",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "unknown",
+                "blocked",
+                "refused"
+              ]
+            },
+            {
+              "path": "src/agent_comms/durable_turn.py",
+              "line": 29,
+              "name": "DurableTurn",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "using_attempts",
+                "dispatch",
+                "observe_owned",
+                "current",
+                "model_started",
+                "advance",
+                "accepted",
+                "context",
+                "excursion",
+                "model",
+                "tool",
+                "compaction",
+                "finish",
+                "fail_unknown",
+                "fail_terminal"
+              ]
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 21,
+              "name": "MroDispatch",
+              "bases": [],
+              "methods": [
+                "handlers_for",
+                "dispatch",
+                "dispatch_sync"
+              ]
+            },
+            {
+              "path": "src/agent_comms/selected_participant.py",
+              "line": 35,
+              "name": "SelectedParticipant",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "native_source",
+                "require_current",
+                "response_owner",
+                "transition",
+                "consume_reply_wait",
+                "observe_context",
+                "native_phase",
+                "record_native_phase",
+                "select",
+                "prepare",
+                "configured_model",
+                "lease",
+                "sources"
+              ]
+            },
+            {
+              "path": "src/agent_comms/tracked_turn.py",
+              "line": 139,
+              "name": "TrackedTurnSession",
+              "bases": [
+                "TurnSession",
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "execute",
+                "complete",
+                "resume_prepared",
+                "open_transport",
+                "started_input",
+                "active_tools",
+                "apply_native_event",
+                "next_event",
+                "send",
+                "attest",
+                "write",
+                "prompt_boundary",
+                "admit_prompt",
+                "response",
+                "committed_input",
+                "committed_context",
+                "message_update",
+                "text_delta",
+                "message_end",
+                "accept_tool_round",
+                "accept_final_message",
+                "fail_terminal",
+                "context_proof",
+                "tool_started",
+                "tool_finished",
+                "settled",
+                "result"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 35,
+              "name": "VerifiedGoalSettlement",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "progress_witness",
+                "completion_witness",
+                "progress",
+                "completion"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 61,
+              "name": "OriginGoalSettlement",
+              "bases": [
+                "VerifiedGoalSettlement"
+              ],
+              "methods": [
+                "progress_witness",
+                "completion_witness"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 72,
+              "name": "FailedGoalOrigin",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "block"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_progress.py",
+              "line": 39,
+              "name": "TurnEventPublication",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "sync_goals"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_runner.py",
+              "line": 71,
+              "name": "CompactionObservation",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "publish",
+                "start",
+                "summary_progress",
+                "end"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_progress.py",
+              "line": 53,
+              "name": "TurnProgress",
+              "bases": [
+                "events.AgentEventConsumer"
+              ],
+              "methods": [
+                "__init__",
+                "origins",
+                "observe_context",
+                "reply_targets",
+                "comms",
+                "thread_name",
+                "report_failure",
+                "steering_interrupted",
+                "input_refused",
+                "provider_usage",
+                "invalidate_context",
+                "chunk",
+                "committed_progress",
+                "done",
+                "input_started",
+                "setting_result",
+                "before_agent_info",
+                "after_agent_info",
+                "tool_ended",
+                "transition",
+                "emit_turn_effects",
+                "native_phase",
+                "record_request_progress",
+                "stream_settled",
+                "consume",
+                "publish_success",
+                "publish_result"
+              ],
+              "resolved_qualified_base": "events.AgentEventConsumer -> agent_comms.agent_events.AgentEventConsumer -> MroDispatch (original import/source inspected)"
+            }
+          ],
+          "duplicate_names": {},
+          "calls": [
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 448,
+              "reference": "parent.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 104,
+              "reference": "self.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 427,
+              "reference": "imports.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 466,
+              "reference": "reference.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/delivery_failure.py",
+              "line": 28,
+              "reference": "decoder.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/durable_turn.py",
+              "line": 56,
+              "reference": "self.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/durable_turn.py",
+              "line": 93,
+              "reference": "self.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/durable_turn.py",
+              "line": 47,
+              "reference": "self.handlers_for"
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 40,
+              "reference": "self.handlers_for"
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 50,
+              "reference": "self.handlers_for"
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 207,
+              "reference": "result.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 242,
+              "reference": "result.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 258,
+              "reference": "FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync"
+            }
+          ]
+        },
+        {
+          "root": "tests",
+          "parsed": 357,
+          "parse_failures": [],
+          "nominal_family": [
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 32,
+              "name": "Consumer",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "left",
+                "right",
+                "root"
+              ]
+            },
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 45,
+              "name": "Override",
+              "bases": [
+                "Consumer"
+              ],
+              "methods": [
+                "left"
+              ]
+            }
+          ],
+          "duplicate_names": {},
+          "calls": [
+            {
+              "path": "tests/test_turn_goal_account.py",
+              "line": 41,
+              "reference": "result.dispatch_sync"
+            }
+          ]
+        },
+        {
+          "root": "tools",
+          "parsed": 53,
+          "parse_failures": [],
+          "nominal_family": [],
+          "duplicate_names": {},
+          "calls": []
+        }
+      ]
+    },
+    {
+      "revision": "bc27f626",
+      "roots": [
+        {
+          "root": "src/agent_comms",
+          "parsed": 311,
+          "parse_failures": [],
+          "nominal_family": [
+            {
+              "path": "src/agent_comms/acp_request_consumer.py",
+              "line": 17,
+              "name": "AcpRequestConsumer",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "run",
+                "forward",
+                "prompt_request",
+                "compact",
+                "selected_write",
+                "clear",
+                "send_now"
+              ]
+            },
+            {
+              "path": "src/agent_comms/agent_event_updates.py",
+              "line": 40,
+              "name": "AcpEventConsumer",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "goal_changed",
+                "text",
+                "on_tool_start",
+                "on_tool_progress",
+                "on_tool_end",
+                "on_thinking",
+                "on_mcp_live_status",
+                "on_agent_info",
+                "on_compaction",
+                "on_error",
+                "on_cancelled",
+                "on_done"
+              ]
+            },
+            {
+              "path": "src/agent_comms/agent_events.py",
+              "line": 360,
+              "name": "AgentEventConsumer",
+              "bases": [
+                "MroDispatch",
+                "ABC"
+              ],
+              "methods": [
+                "comms",
+                "thread_name",
+                "before_agent_info",
+                "after_agent_info",
+                "record_agent_info"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 82,
+              "name": "DispatchCases",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "add",
+                "groups",
+                "read_function"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 108,
+              "name": "LiteralDispatchCases",
+              "bases": [
+                "DispatchCases"
+              ],
+              "methods": [
+                "literal",
+                "comparison",
+                "match_cases"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 135,
+              "name": "TypeDispatchCases",
+              "bases": [
+                "DispatchCases"
+              ],
+              "methods": [
+                "instance_check",
+                "exact_type",
+                "match_cases"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 360,
+              "name": "TypingImports",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "bind",
+                "modules",
+                "members",
+                "assignment",
+                "mutation",
+                "parameter",
+                "named_binding",
+                "exception_binding",
+                "of"
+              ]
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 434,
+              "name": "TypingReference",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "name",
+                "member",
+                "raw_access_count"
+              ]
+            },
+            {
+              "path": "src/agent_comms/delivery_failure.py",
+              "line": 8,
+              "name": "FailureDecoder",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "unknown",
+                "blocked",
+                "refused"
+              ]
+            },
+            {
+              "path": "src/agent_comms/durable_turn.py",
+              "line": 29,
+              "name": "DurableTurn",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "using_attempts",
+                "consume_handlers",
+                "observe_owned",
+                "current",
+                "model_started",
+                "advance",
+                "accepted",
+                "context",
+                "excursion",
+                "model",
+                "tool",
+                "compaction",
+                "finish",
+                "fail_unknown",
+                "fail_terminal"
+              ]
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 21,
+              "name": "MroDispatch",
+              "bases": [],
+              "methods": [
+                "handlers_for",
+                "dispatch",
+                "consume_handlers",
+                "dispatch_sync",
+                "consume_handlers_sync",
+                "replace_value"
+              ]
+            },
+            {
+              "path": "src/agent_comms/selected_participant.py",
+              "line": 35,
+              "name": "SelectedParticipant",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "native_source",
+                "require_current",
+                "response_owner",
+                "transition",
+                "consume_reply_wait",
+                "observe_context",
+                "native_phase",
+                "record_native_phase",
+                "select",
+                "prepare",
+                "configured_model",
+                "lease",
+                "sources"
+              ]
+            },
+            {
+              "path": "src/agent_comms/tracked_turn.py",
+              "line": 139,
+              "name": "TrackedTurnSession",
+              "bases": [
+                "TurnSession",
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "execute",
+                "complete",
+                "resume_prepared",
+                "open_transport",
+                "started_input",
+                "active_tools",
+                "apply_native_event",
+                "next_event",
+                "send",
+                "attest",
+                "write",
+                "prompt_boundary",
+                "admit_prompt",
+                "response",
+                "committed_input",
+                "committed_context",
+                "message_update",
+                "text_delta",
+                "message_end",
+                "accept_tool_round",
+                "accept_final_message",
+                "fail_terminal",
+                "context_proof",
+                "tool_started",
+                "tool_finished",
+                "settled",
+                "result"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 35,
+              "name": "VerifiedGoalSettlement",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "progress_witness",
+                "completion_witness",
+                "progress",
+                "completion"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 61,
+              "name": "OriginGoalSettlement",
+              "bases": [
+                "VerifiedGoalSettlement"
+              ],
+              "methods": [
+                "progress_witness",
+                "completion_witness"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 72,
+              "name": "FailedGoalOrigin",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "block"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_progress.py",
+              "line": 39,
+              "name": "TurnEventPublication",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "sync_goals"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_runner.py",
+              "line": 71,
+              "name": "CompactionObservation",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "__init__",
+                "publish",
+                "start",
+                "summary_progress",
+                "end"
+              ]
+            },
+            {
+              "path": "src/agent_comms/turn_progress.py",
+              "line": 53,
+              "name": "TurnProgress",
+              "bases": [
+                "events.AgentEventConsumer"
+              ],
+              "methods": [
+                "__init__",
+                "origins",
+                "observe_context",
+                "reply_targets",
+                "comms",
+                "thread_name",
+                "report_failure",
+                "steering_interrupted",
+                "input_refused",
+                "provider_usage",
+                "invalidate_context",
+                "chunk",
+                "committed_progress",
+                "done",
+                "input_started",
+                "setting_result",
+                "before_agent_info",
+                "after_agent_info",
+                "tool_ended",
+                "transition",
+                "emit_turn_effects",
+                "native_phase",
+                "record_request_progress",
+                "stream_settled",
+                "consume",
+                "publish_success",
+                "publish_result"
+              ],
+              "resolved_qualified_base": "events.AgentEventConsumer -> agent_comms.agent_events.AgentEventConsumer -> MroDispatch (original import/source inspected)"
+            }
+          ],
+          "duplicate_names": {},
+          "calls": [
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 448,
+              "reference": "parent.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 104,
+              "reference": "self.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 427,
+              "reference": "imports.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/debt_ratchet.py",
+              "line": 466,
+              "reference": "reference.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/delivery_failure.py",
+              "line": 28,
+              "reference": "decoder.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/durable_turn.py",
+              "line": 54,
+              "reference": "self.consume_handlers_sync"
+            },
+            {
+              "path": "src/agent_comms/durable_turn.py",
+              "line": 91,
+              "reference": "self.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 53,
+              "reference": "self.consume_handlers_sync"
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 40,
+              "reference": "self.handlers_for"
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 43,
+              "reference": "self.consume_handlers"
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 48,
+              "reference": "self.replace_value"
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 53,
+              "reference": "self.handlers_for"
+            },
+            {
+              "path": "src/agent_comms/mro_dispatch.py",
+              "line": 57,
+              "reference": "self.replace_value"
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 207,
+              "reference": "result.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 242,
+              "reference": "result.dispatch_sync"
+            },
+            {
+              "path": "src/agent_comms/turn_goal_account.py",
+              "line": 258,
+              "reference": "FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync"
+            }
+          ]
+        },
+        {
+          "root": "tests",
+          "parsed": 357,
+          "parse_failures": [],
+          "nominal_family": [
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 32,
+              "name": "Consumer",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "left",
+                "right",
+                "root"
+              ]
+            },
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 45,
+              "name": "Override",
+              "bases": [
+                "Consumer"
+              ],
+              "methods": [
+                "left"
+              ]
+            },
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 64,
+              "name": "SyncConsumer",
+              "bases": [
+                "MroDispatch"
+              ],
+              "methods": [
+                "handlers_for",
+                "specific",
+                "shared"
+              ]
+            },
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 79,
+              "name": "AsyncConsumer",
+              "bases": [
+                "SyncConsumer"
+              ],
+              "methods": [
+                "specific",
+                "shared"
+              ]
+            }
+          ],
+          "duplicate_names": {},
+          "calls": [
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 90,
+              "reference": "consumer.dispatch_sync"
+            },
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 97,
+              "reference": "consumer.dispatch_sync"
+            },
+            {
+              "path": "tests/test_agent_events.py",
+              "line": 67,
+              "reference": "super().handlers_for"
+            },
+            {
+              "path": "tests/test_turn_goal_account.py",
+              "line": 41,
+              "reference": "result.dispatch_sync"
+            }
+          ]
+        },
+        {
+          "root": "tools",
+          "parsed": 53,
+          "parse_failures": [],
+          "nominal_family": [],
+          "duplicate_names": {},
+          "calls": []
+        }
+      ]
+    }
+  ],
+  "limits": "Existing NRA parser over entire declared roots. Nominal inheritance closure is a source lead, not dynamic resolution. Duplicate test-local names explicitly retained; production family names unique. Imports/aliases and inherited TurnProgress/OriginGoalSettlement semantically inspected. Runtime-generated classes/embedded code not resolved by this AST; no external native/SDK changes. No omitted Python files or parse failures."
+}

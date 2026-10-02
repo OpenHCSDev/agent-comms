@@ -1,0 +1,56 @@
+[
+  {
+    "path": "/home/ts/.cache/agent-scratch/mendel-owned-observation536-20261002/sanity/test_repeated_cancellation_joi0/tree.json",
+    "identities": [
+      {
+        "pid": 4168043,
+        "start_time": 42524585
+      },
+      {
+        "pid": 4168045,
+        "start_time": 42524631
+      }
+    ],
+    "sha256": "836bc4d95b2eabe94bd770484db51bbcbd5d66bfb470f73d8d8ea9246622d1c0",
+    "alive_after": [
+      false,
+      false
+    ]
+  },
+  {
+    "path": "/home/ts/.cache/agent-scratch/mendel-owned-observation536-20261002/sanity/test_repeated_cancellation_joi1/tree.json",
+    "identities": [
+      {
+        "pid": 4168063,
+        "start_time": 42524841
+      },
+      {
+        "pid": 4168066,
+        "start_time": 42524894
+      }
+    ],
+    "sha256": "e81c2cc5a294a2e06316b7345f05e4f3ec41fb3e4ef367e7e3882414afef861b",
+    "alive_after": [
+      false,
+      false
+    ]
+  },
+  {
+    "path": "/home/ts/.cache/agent-scratch/mendel-owned-observation536-20261002/sanity/test_attached_stop_retires_rea0/tree.json",
+    "identities": [
+      {
+        "pid": 4168027,
+        "start_time": 42524329
+      },
+      {
+        "pid": 4168030,
+        "start_time": 42524377
+      }
+    ],
+    "sha256": "e55eea70dcd04ef121b56282bc5441930cc1e2abab598de2f25b66a26ba7abf4",
+    "alive_after": [
+      false,
+      false
+    ]
+  }
+]
