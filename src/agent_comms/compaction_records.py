@@ -32,6 +32,7 @@ from .pi_summary_payloads import SelectedModel
 from .selected_source import SelectedSource
 from .retained_task_facts import RetainedTaskFacts
 from .thread_identity import ThreadIncarnation
+from .text_digest import TextDigest
 from .typed_table import Column, Index, TypedRow, TypedTable
 
 if TYPE_CHECKING:

@@ -99,7 +99,7 @@ def verify_continued_private_session(
                     raise ValueError("Continued private user differs from live-recorded context")
             elif native_id not in retained:
                 raise ValueError("Continued private user has no verified retained context")
-        if not observed or not raw_ids.issubset(observed & recorded.keys()):
+        if not (observed or covered) or not raw_ids.issubset(observed & recorded.keys()):
             raise ValueError("Continued private raw input remains UNKNOWN")
         if not source.reserved_revision.current(str(session)):
             raise ValueError("Continued private history changed during coverage check")
