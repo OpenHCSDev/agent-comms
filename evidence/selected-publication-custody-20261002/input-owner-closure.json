@@ -8536,15 +8536,39 @@
         },
         {
           "path": "tests/native_evidence_reader_installed_journey.py",
-          "line": 25,
+          "line": 23,
+          "kind": "ImportFrom",
+          "source": "from agent_comms.native_entries import NativeEntry"
+        },
+        {
+          "path": "tests/native_evidence_reader_installed_journey.py",
+          "line": 32,
           "kind": "ImportFrom",
           "source": "from agent_comms.tracked_turn import TrackedTurnSession"
         },
         {
           "path": "tests/native_evidence_reader_installed_journey.py",
-          "line": 123,
+          "line": 98,
+          "kind": "Attribute",
+          "source": "NativeEntry.open_input_evidence"
+        },
+        {
+          "path": "tests/native_evidence_reader_installed_journey.py",
+          "line": 98,
+          "kind": "Name",
+          "source": "NativeEntry"
+        },
+        {
+          "path": "tests/native_evidence_reader_installed_journey.py",
+          "line": 158,
           "kind": "Name",
           "source": "TrackedTurnSession"
+        },
+        {
+          "path": "tests/native_evidence_reader_installed_journey.py",
+          "line": 100,
+          "kind": "Name",
+          "source": "NativeEntry"
         },
         {
           "path": "tests/native_proof_cases.py",
@@ -9286,6 +9310,12 @@
         },
         {
           "path": "tests/test_native_evidence_boundary.py",
+          "line": 79,
+          "kind": "Attribute",
+          "source": "NativeEntry.wire_member(raw).input_evidence"
+        },
+        {
+          "path": "tests/test_native_evidence_boundary.py",
           "line": 27,
           "kind": "Attribute",
           "source": "NativeEntry.open_evidence"
@@ -9310,6 +9340,12 @@
         },
         {
           "path": "tests/test_native_evidence_boundary.py",
+          "line": 79,
+          "kind": "Name",
+          "source": "NativeEntry"
+        },
+        {
+          "path": "tests/test_native_evidence_boundary.py",
           "line": 27,
           "kind": "Name",
           "source": "NativeEntry"
@@ -9322,19 +9358,19 @@
         },
         {
           "path": "tests/test_native_evidence_boundary.py",
-          "line": 75,
+          "line": 155,
           "kind": "Name",
           "source": "NativeEntry"
         },
         {
           "path": "tests/test_native_evidence_boundary.py",
-          "line": 151,
+          "line": 79,
           "kind": "Name",
           "source": "NativeEntry"
         },
         {
           "path": "tests/test_native_evidence_boundary.py",
-          "line": 141,
+          "line": 145,
           "kind": "Name",
           "source": "NativeEntry"
         },
@@ -11249,7 +11285,7 @@
       ]
     }
   },
-  "after": "working production bytes in this checkpoint",
+  "after": "production297c3014 with current receiving test/receipt changes only",
   "production_files": [
     {
       "path": "src/agent_comms/agent_activity.py",

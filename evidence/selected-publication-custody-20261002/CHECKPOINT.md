@@ -58,7 +58,7 @@ No durable/runtime schema, new cache/index or admission/replay path is introduce
 stage/inputId, native user/assistant ancestry, request diagnostics and existing
 acquisition spans. All ten original replies completed; that is not full peer
 closure. `original372-peer-failures.json` retains hashes of the actual two
-failed peer diagnostics. Both failed before input bytes: startup slot wait zero,
+failed peer diagnostics. Both failed before input bytes: startup slot under0.1ms,
 spawn about20ms, get_state send about1ms, receive about18/20s without progress.
 No original failed input is replayed.
 
@@ -67,6 +67,13 @@ paths. They do **not** establish why those initial get_state responses stalled
 or prove that failure fixed. Native startup construction/context conversion and
 parent receive scheduling remain a separate unclosed relation. No deadline,
 startup slot limit or phase matcher changes.
+
+Exact failed acquisition streams are retained separately in
+`original372-peer-acquisition.json`. They are keyed by original lease turn IDs
+a02b021bd1549bc0c7f39e2cf1a8f7e7/f53393a2110b4b42dbe730bc8ce0bd3a;
+terminal diagnostic IDs0884315c/08747177 are the original input IDs. The successful
+20-input acquisition join is not evidence for these two failures. These failed
+acquisition streams contain no native process identity or native progress record.
 
 ## Source evidence / next check
 
