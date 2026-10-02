@@ -1,0 +1,78 @@
+{
+  "state": "original-goal-ledger-carry-passed",
+  "target_python": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002/bin/python",
+  "target_package": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/src/agent_comms/__init__.py",
+  "original_db": "/home/ts/.cache/agent-scratch/comms-goal-ledger-schema-carry-20261002/goal-attempts.running-inventory.sqlite3",
+  "original_copy_sha256": "64a891bc5ab10bdba92cf9cebde97de052a5fce02409ffc10c114e6dccba8ce5",
+  "source_declaration_sha256": "2d47d9c59afd870af997f53813b54c5a325446d13f3f33e17e1d932928ee1d7d",
+  "installation": {
+    "classification": "goal/declaration-preserve",
+    "stores": [
+      {
+        "name": "goal-private/goal_attempts.sqlite3",
+        "original_sha256": "64a891bc5ab10bdba92cf9cebde97de052a5fce02409ffc10c114e6dccba8ce5",
+        "candidate_sha256": "1f64ac7b4c3b44a1b88ecf3223a0f2ffac3ba091d590c578a017ff9f3e10b184",
+        "evidence": {
+          "original_ddl_sha256": "a0055e74db52658c59d99e78b36c834b73c1df939c6e11ab11e475d07edaa28e",
+          "target_ddl_sha256": "a8014ad0700cf3c63b97df96523ff9f1371054608939de9ee3dc8477d06a6840",
+          "original_rows": {
+            "failed_turn_evidence": 4,
+            "generation": 8,
+            "attempt_record": 36,
+            "goal_human_decision": 7,
+            "goal_provider_usage": 437,
+            "goal_attempt_schema": 1
+          },
+          "carried_rows": {
+            "failed_turn_evidence": 4,
+            "generation": 8,
+            "attempt_record": 36,
+            "goal_human_decision": 7,
+            "goal_provider_usage": 437,
+            "goal_attempt_schema": 1
+          },
+          "unchanged_rows_sha256": "0397e10ebb3da5082fe7ebabb0552083ab9651fc27d78e0617caa309779f32f5",
+          "row_identity_sha256": "2f1613f772bfd2926c47da75a4121ac2dbe666d8d40096a180fa267e1f414a19",
+          "changed_schema_objects": [
+            "failed_turn_evidence",
+            "goal_attempt_schema"
+          ],
+          "metadata_owner": "goal_attempt_schema"
+        }
+      }
+    ],
+    "original_preimages": "/home/ts/.cache/agent-scratch/comms-goal-ledger-schema-carry-20261002/source-goal-control01/originals",
+    "retired": [],
+    "reconstructed_proofs": 0,
+    "input_replays": 0
+  },
+  "unchanged_fact_rows": 492,
+  "unchanged_fact_rows_sha256": "0397e10ebb3da5082fe7ebabb0552083ab9651fc27d78e0617caa309779f32f5",
+  "matched_declaration_preserved": {
+    "classification": "goal/preserve",
+    "original_files": [
+      {
+        "path": "/home/ts/.cache/agent-scratch/comms-goal-ledger-schema-carry-20261002/source-goal-control01/root/goal-private/goal_attempts.sqlite3",
+        "sha256": "1f64ac7b4c3b44a1b88ecf3223a0f2ffac3ba091d590c578a017ff9f3e10b184",
+        "revision": {
+          "identity": {
+            "device": 2084,
+            "inode": 2917012
+          },
+          "size": 237568,
+          "mtime_ns": 1790923148314861427,
+          "ctime_ns": 1790923148335861839
+        }
+      }
+    ]
+  },
+  "refusals": [
+    "original-strict-schema",
+    "unauthenticated-declaration"
+  ],
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "public_mutations": 0,
+  "owner_stops": 0,
+  "strength": "copied running-source inventory; actual RuntimeInstallation and strict GoalAttemptStore; not stopped public carry or native/UI journey"
+}
