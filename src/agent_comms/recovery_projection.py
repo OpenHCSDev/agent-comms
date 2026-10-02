@@ -12,7 +12,6 @@ import os
 import sqlite3
 import stat
 import time
-from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -31,6 +30,8 @@ from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.coordination_tables.recovery import ACPClientConnectivity, OwnerConnectivity
 
 from .attempt_states import AttemptState
+from .coordination_database import CoordinationStore
+from .coordination_errors import CoordinationReadUnavailable
 from .coordination_errors import IntegrityViolationError
 from .execution_states import ExecutionState
 from .obligation_states import ResponseState
@@ -165,6 +166,150 @@ class RecoverySelection(TypedRow):
             if self.phase is None or self.backend_done is None or self.process_dead is None:
                 raise ValueError("selected attempt is incomplete")
 
+    @classmethod
+    def project(
+        cls, connection: sqlite3.Connection, owner_lookup: str, owner_thread: str
+    ) -> RecoveryProjection:
+        """Project this original connection's committed owner selection."""
+        versions = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
+        if versions != [SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)]:
+            return UnavailableRecoveryProjection("unsupported_schema")
+        meta = SchemaMeta.one(connection, singleton=1)
+        if meta != SchemaMeta(
+            singleton=1,
+            schema_version=COORDINATION_SCHEMA_VERSION,
+            snapshot_version=COORDINATION_SNAPSHOT_VERSION,
+        ):
+            return UnavailableRecoveryProjection("unsupported_schema")
+
+        # Canonical owner scoping remains distinct from gateway peer authentication.
+        owners = OwnerGenerations.read(
+            connection.execute(
+                "SELECT g.* FROM owner_generations g JOIN participants p "
+                "ON p.participant_lookup=g.owner_lookup "
+                "WHERE g.owner_lookup=? AND g.owner_thread=? AND p.committed=1",
+                (owner_lookup, owner_thread),
+            )
+        )
+        if not owners:
+            return UnavailableRecoveryProjection("unknown_owner")
+        pointer = CurrentExecutions.one(connection, owner_lookup=owner_lookup)
+        if pointer is None:
+            return UnavailableRecoveryProjection("invalid_store")
+        active = ExecutionRecord.read(
+            connection.execute(
+                "SELECT * FROM executions WHERE owner_lookup=? AND status='active' LIMIT 2",
+                (owner_lookup,),
+            )
+        )
+        if (pointer.execution_id is None and active) or (
+            pointer.execution_id is not None
+            and (
+                len(active) != 1
+                or (active[0].execution_id, active[0].current_attempt_ordinal)
+                != (pointer.execution_id, pointer.attempt_ordinal)
+            )
+        ):
+            return UnavailableRecoveryProjection("invalid_store")
+
+        # A current pointer wins. Otherwise display precisely the latest execution
+        # with a deterministic tie-break; no unbounded history or cross-owner rows.
+        rows = cls.read(
+            connection.execute(
+                "SELECT e.execution_id, e.origin, e.status, e.current_attempt_ordinal, "
+                "a.attempt_ordinal, a.phase, a.lease_expires_at_ms, a.backend_done, a.process_dead, "
+                "(SELECT authorized FROM retry_disposition_basis b "
+                "WHERE b.execution_id = e.execution_id) AS retry_authorized "
+                "FROM executions e "
+                "LEFT JOIN attempts a ON a.execution_id = e.execution_id "
+                "AND a.attempt_ordinal = e.current_attempt_ordinal AND a.owner_lookup = e.owner_lookup "
+                "WHERE e.owner_lookup = ? "
+                "ORDER BY (e.execution_id = ?) DESC, e.updated_at_ms DESC, e.execution_id ASC LIMIT 1",
+                (owner_lookup, pointer.execution_id),
+            )
+        )
+        selected = next(iter(rows), None)
+        projected: ProjectedExecution | None = None
+        last_recovery: ProjectedRecovery | None = None
+        connectivity: ProjectedConnectivity | None = None
+        if selected is not None:
+            execution_id = selected.execution_id
+            origin, status = selected.origin, selected.status
+            is_current = (
+                execution_id == pointer.execution_id
+                and selected.current_attempt_ordinal == pointer.attempt_ordinal
+            )
+            if (pointer.execution_id is not None and not is_current) or (
+                is_current and not status.active
+            ):
+                return UnavailableRecoveryProjection("invalid_store")
+            observed_attempt = (
+                selected.phase.load(selected.lease_expires_at_ms, selected.backend_done, selected.process_dead)
+                if selected.phase is not None else None
+            )
+            lifecycle = selected.status.load(selected.current_attempt_ordinal)
+            attempt = (
+                ProjectedAttempt(
+                    selected.attempt_ordinal,
+                    selected.phase,
+                    selected.backend_done,
+                    selected.process_dead,
+                )
+                if selected.attempt_ordinal is not None
+                else None
+            )
+            obligations = tuple(ResponseObligation.select(connection,
+                where="execution_id=?", parameters=(execution_id,), order_by=("exact_target",)))
+            receipts = tuple(PublicationReceipts.select(connection,
+                where="execution_id=?", parameters=(execution_id,), order_by=("exact_target",)))
+            if origin is ExecutionOrigin.WIRE:
+                if not obligations:
+                    return UnavailableRecoveryProjection("invalid_store")
+                for obligation in obligations:
+                    receipt = ResponseObligation.response_record(receipts, obligation.exact_target)
+                    try:
+                        obligation.lifecycle.validate_receipt(receipt)
+                    except IntegrityViolationError:
+                        return UnavailableRecoveryProjection("invalid_store")
+                if not {row.exact_target for row in receipts} <= {row.exact_target for row in obligations}:
+                    return UnavailableRecoveryProjection("invalid_store")
+            elif obligations or receipts:
+                return UnavailableRecoveryProjection("invalid_store")
+            publications = tuple(row.lifecycle.publication() for row in obligations)
+            projected = ProjectedExecution(
+                status,
+                origin,
+                is_current,
+                attempt,
+                lifecycle.can_retry(
+                    authorized=selected.retry_authorized,
+                    attempt=observed_attempt,
+                    is_current=is_current,
+                ),
+                publications,
+            )
+            audits = ProjectedRecovery.read(
+                connection.execute(
+                    "SELECT kind, attempt, elapsed_ms, observed_at_ms "
+                    "FROM recovery_audit WHERE execution_id=? ORDER BY audit_id DESC LIMIT 1",
+                    (execution_id,),
+                )
+            )
+            last_recovery = next(iter(audits), None)
+            facets = ProjectedConnectivity.read(
+                connection.execute(
+                    "SELECT owner, acp_client, observed_at_ms "
+                    "FROM connectivity WHERE execution_id=?",
+                    (execution_id,),
+                )
+            )
+            connectivity = next(iter(facets), None)
+        elif pointer.execution_id is not None:
+            return UnavailableRecoveryProjection("invalid_store")
+        return AvailableRecoveryProjection(
+            owner_thread, int(time.time() * 1000), projected, last_recovery, connectivity
+        )
+
 
 def _preflight(path: Path) -> ProjectionFailure | None:
     """Never let a read-only SQLite open create a WAL shared-memory sidecar.
@@ -191,149 +336,6 @@ def _preflight(path: Path) -> ProjectionFailure | None:
     return None
 
 
-def _read_in_transaction(
-    connection: sqlite3.Connection, owner_lookup: str, owner_thread: str
-) -> RecoveryProjection:
-    versions = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
-    if versions != [SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)]:
-        return UnavailableRecoveryProjection("unsupported_schema")
-    meta = SchemaMeta.one(connection, singleton=1)
-    if meta != SchemaMeta(
-        singleton=1,
-        schema_version=COORDINATION_SCHEMA_VERSION,
-        snapshot_version=COORDINATION_SNAPSHOT_VERSION,
-    ):
-        return UnavailableRecoveryProjection("unsupported_schema")
-
-    # Canonical owner scoping remains distinct from gateway peer authentication.
-    owners = OwnerGenerations.read(
-        connection.execute(
-            "SELECT g.* FROM owner_generations g JOIN participants p "
-            "ON p.participant_lookup=g.owner_lookup "
-            "WHERE g.owner_lookup=? AND g.owner_thread=? AND p.committed=1",
-            (owner_lookup, owner_thread),
-        )
-    )
-    if not owners:
-        return UnavailableRecoveryProjection("unknown_owner")
-    pointer = CurrentExecutions.one(connection, owner_lookup=owner_lookup)
-    if pointer is None:
-        return UnavailableRecoveryProjection("invalid_store")
-    active = ExecutionRecord.read(
-        connection.execute(
-            "SELECT * FROM executions WHERE owner_lookup=? AND status='active' LIMIT 2",
-            (owner_lookup,),
-        )
-    )
-    if (pointer.execution_id is None and active) or (
-        pointer.execution_id is not None
-        and (
-            len(active) != 1
-            or (active[0].execution_id, active[0].current_attempt_ordinal)
-            != (pointer.execution_id, pointer.attempt_ordinal)
-        )
-    ):
-        return UnavailableRecoveryProjection("invalid_store")
-
-    # A current pointer wins. Otherwise display precisely the latest execution
-    # with a deterministic tie-break; no unbounded history or cross-owner rows.
-    rows = RecoverySelection.read(
-        connection.execute(
-            "SELECT e.execution_id, e.origin, e.status, e.current_attempt_ordinal, "
-            "a.attempt_ordinal, a.phase, a.lease_expires_at_ms, a.backend_done, a.process_dead, "
-            "(SELECT authorized FROM retry_disposition_basis b "
-            "WHERE b.execution_id = e.execution_id) AS retry_authorized "
-            "FROM executions e "
-            "LEFT JOIN attempts a ON a.execution_id = e.execution_id "
-            "AND a.attempt_ordinal = e.current_attempt_ordinal AND a.owner_lookup = e.owner_lookup "
-            "WHERE e.owner_lookup = ? "
-            "ORDER BY (e.execution_id = ?) DESC, e.updated_at_ms DESC, e.execution_id ASC LIMIT 1",
-            (owner_lookup, pointer.execution_id),
-        )
-    )
-    selected = next(iter(rows), None)
-    projected: ProjectedExecution | None = None
-    last_recovery: ProjectedRecovery | None = None
-    connectivity: ProjectedConnectivity | None = None
-    if selected is not None:
-        execution_id = selected.execution_id
-        origin, status = selected.origin, selected.status
-        is_current = (
-            execution_id == pointer.execution_id
-            and selected.current_attempt_ordinal == pointer.attempt_ordinal
-        )
-        if (pointer.execution_id is not None and not is_current) or (
-            is_current and not status.active
-        ):
-            return UnavailableRecoveryProjection("invalid_store")
-        observed_attempt = (
-            selected.phase.load(selected.lease_expires_at_ms, selected.backend_done, selected.process_dead)
-            if selected.phase is not None else None
-        )
-        lifecycle = selected.status.load(selected.current_attempt_ordinal)
-        attempt = (
-            ProjectedAttempt(
-                selected.attempt_ordinal,
-                selected.phase,
-                selected.backend_done,
-                selected.process_dead,
-            )
-            if selected.attempt_ordinal is not None
-            else None
-        )
-        obligations = tuple(ResponseObligation.select(connection,
-            where="execution_id=?", parameters=(execution_id,), order_by=("exact_target",)))
-        receipts = tuple(PublicationReceipts.select(connection,
-            where="execution_id=?", parameters=(execution_id,), order_by=("exact_target",)))
-        if origin is ExecutionOrigin.WIRE:
-            if not obligations:
-                return UnavailableRecoveryProjection("invalid_store")
-            for obligation in obligations:
-                receipt = ResponseObligation.response_record(receipts, obligation.exact_target)
-                try:
-                    obligation.lifecycle.validate_receipt(receipt)
-                except IntegrityViolationError:
-                    return UnavailableRecoveryProjection("invalid_store")
-            if not {row.exact_target for row in receipts} <= {row.exact_target for row in obligations}:
-                return UnavailableRecoveryProjection("invalid_store")
-        elif obligations or receipts:
-            return UnavailableRecoveryProjection("invalid_store")
-        publications = tuple(row.lifecycle.publication() for row in obligations)
-        projected = ProjectedExecution(
-            status,
-            origin,
-            is_current,
-            attempt,
-            lifecycle.can_retry(
-                authorized=selected.retry_authorized,
-                attempt=observed_attempt,
-                is_current=is_current,
-            ),
-            publications,
-        )
-        audits = ProjectedRecovery.read(
-            connection.execute(
-                "SELECT kind, attempt, elapsed_ms, observed_at_ms "
-                "FROM recovery_audit WHERE execution_id=? ORDER BY audit_id DESC LIMIT 1",
-                (execution_id,),
-            )
-        )
-        last_recovery = next(iter(audits), None)
-        facets = ProjectedConnectivity.read(
-            connection.execute(
-                "SELECT owner, acp_client, observed_at_ms "
-                "FROM connectivity WHERE execution_id=?",
-                (execution_id,),
-            )
-        )
-        connectivity = next(iter(facets), None)
-    elif pointer.execution_id is not None:
-        return UnavailableRecoveryProjection("invalid_store")
-    return AvailableRecoveryProjection(
-        owner_thread, int(time.time() * 1000), projected, last_recovery, connectivity
-    )
-
-
 def read_recovery_projection(
     path: str | os.PathLike[str], *, owner_lookup: str, owner_thread: str
 ) -> RecoveryProjection:
@@ -349,29 +351,13 @@ def read_recovery_projection(
     try:
         # mode=ro, NOT immutable=1: SQLite must respect concurrent commits.
         # Refuse WAL before this open, so it cannot create a -shm sidecar.
-        with closing(
-            sqlite3.connect(
-                database.resolve().as_uri() + "?mode=ro",
-                uri=True,
-                isolation_level=None,
-                timeout=0.25,
-            )
-        ) as connection:
-            connection.execute("PRAGMA query_only = ON")
-            connection.execute("PRAGMA busy_timeout = 250")
+        with CoordinationStore.observing(database, lock_timeout=0.25) as connection:
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode")) != [
                 SQLiteJournalMode("delete")
             ]:
                 return UnavailableRecoveryProjection("invalid_store")
-            connection.execute("BEGIN")
-            try:
-                result = _read_in_transaction(connection, owner_lookup, owner_thread)
-            finally:
-                connection.execute("ROLLBACK")
-            return result
-    except sqlite3.OperationalError as error:
-        if "locked" in str(error).lower() or "busy" in str(error).lower():
-            return UnavailableRecoveryProjection("busy")
-        return UnavailableRecoveryProjection("invalid_store")
+            return RecoverySelection.project(connection, owner_lookup, owner_thread)
+    except CoordinationReadUnavailable:
+        return UnavailableRecoveryProjection("busy")
     except (sqlite3.DatabaseError, OSError, ValueError, TypeError):
         return UnavailableRecoveryProjection("invalid_store")

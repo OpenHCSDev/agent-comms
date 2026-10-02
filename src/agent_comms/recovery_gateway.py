@@ -37,7 +37,8 @@ from agent_comms.coordination_tables.participants import OwnerGenerations
 
 from .child_process import BoundedRun, ParentLifeline
 from .field_codec import FieldCodec
-from .recovery_projection import RecoveryRequest, read_recovery_projection
+from .coordination_database import CoordinationStore
+from .recovery_projection import RecoveryRequest, RecoverySelection
 from .typed_table import SQLiteJournalMode, SQLiteUserVersion
 
 _MAX_REQUEST = 1024
@@ -125,77 +126,65 @@ def _validate_paths(root: Path, database: Path) -> None:
 def _snapshot(root: Path, database: Path, requested: str) -> bytes:
     """Resolve identity under one read lock, then recheck it inside the frozen reader.
 
-    Holding the rollback-journal read transaction also prevents a concurrent
-    writer committing more owner executions between the bounded precheck and
-    the reader's separate atomic read transaction.
+    The SAME rollback-journal read transaction owns the bounded identity checks
+    and projection. No second connection can wait behind a writer attempting
+    COMMIT while this original reader still holds its snapshot.
     """
     _validate_paths(root, database)
-    with closing(
-        sqlite3.connect(
-            database.as_uri() + "?mode=ro", uri=True, isolation_level=None, timeout=0.25
-        )
-    ) as db:
-        db.execute("PRAGMA query_only=ON")
-        db.execute("PRAGMA busy_timeout=250")
+    with CoordinationStore.observing(database, lock_timeout=0.25) as db:
         if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
             SQLiteJournalMode("delete")
         ]:
             raise GatewayUnavailableError("unsupported coordinator journal")
-        db.execute("BEGIN")
-        try:
-            if SQLiteUserVersion.read(db.execute("PRAGMA user_version")) != [
-                SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
-            ]:
-                raise GatewayUnavailableError("unsupported coordinator schema")
-            if SchemaMeta.one(db, singleton=1) != SchemaMeta(
-                singleton=1,
-                schema_version=COORDINATION_SCHEMA_VERSION,
-                snapshot_version=COORDINATION_SNAPSHOT_VERSION,
-            ):
-                raise GatewayUnavailableError("unsupported coordinator snapshot")
-            # owner_thread has no index: cap the entire registered-owner
-            # cardinality before the exact-match join can scan it.
-            owners = OwnerGenerations.read(
-                db.execute(
-                    "SELECT * FROM owner_generations LIMIT ?",
-                    (_MAX_REGISTERED_OWNERS + 1,),
-                )
+        if SQLiteUserVersion.read(db.execute("PRAGMA user_version")) != [
+            SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
+        ]:
+            raise GatewayUnavailableError("unsupported coordinator schema")
+        if SchemaMeta.one(db, singleton=1) != SchemaMeta(
+            singleton=1,
+            schema_version=COORDINATION_SCHEMA_VERSION,
+            snapshot_version=COORDINATION_SNAPSHOT_VERSION,
+        ):
+            raise GatewayUnavailableError("unsupported coordinator snapshot")
+        # owner_thread has no index: cap the entire registered-owner
+        # cardinality before the exact-match join can scan it.
+        owners = OwnerGenerations.read(
+            db.execute(
+                "SELECT * FROM owner_generations LIMIT ?",
+                (_MAX_REGISTERED_OWNERS + 1,),
             )
-            if len(owners) > _MAX_REGISTERED_OWNERS:
-                raise GatewayUnavailableError("registered owner scan exceeds budget")
-            # Exact current canonical name only. Aliases, claims of lookup, and
-            # registration of a human participant are not accepted.
-            matches = OwnerGenerations.read(
-                db.execute(
-                    "SELECT g.* FROM owner_generations g "
-                    "JOIN participants p ON p.participant_lookup=g.owner_lookup "
-                    "WHERE g.owner_thread=? AND p.committed=1 LIMIT 2",
-                    (requested,),
-                )
+        )
+        if len(owners) > _MAX_REGISTERED_OWNERS:
+            raise GatewayUnavailableError("registered owner scan exceeds budget")
+        # Exact current canonical name only. Aliases, claims of lookup, and
+        # registration of a human participant are not accepted.
+        matches = OwnerGenerations.read(
+            db.execute(
+                "SELECT g.* FROM owner_generations g "
+                "JOIN participants p ON p.participant_lookup=g.owner_lookup "
+                "WHERE g.owner_thread=? AND p.committed=1 LIMIT 2",
+                (requested,),
             )
-            if len(matches) != 1:
-                raise GatewayUnavailableError("unknown or ambiguous owner")
-            owner = matches[0]
-            if owner.owner_thread != requested:
-                raise GatewayUnavailableError("invalid canonical owner")
-            # The declared owner/status index bounds the frozen reader's scan.
-            count = ExecutionRecord.read(
-                db.execute(
-                    "SELECT * FROM executions WHERE owner_lookup=? LIMIT ?",
-                    (owner.owner_lookup, _MAX_OWNER_EXECUTIONS + 1),
-                )
+        )
+        if len(matches) != 1:
+            raise GatewayUnavailableError("unknown or ambiguous owner")
+        owner = matches[0]
+        if owner.owner_thread != requested:
+            raise GatewayUnavailableError("invalid canonical owner")
+        # The declared owner/status index bounds the frozen reader's scan.
+        count = ExecutionRecord.read(
+            db.execute(
+                "SELECT * FROM executions WHERE owner_lookup=? LIMIT ?",
+                (owner.owner_lookup, _MAX_OWNER_EXECUTIONS + 1),
             )
-            if len(count) > _MAX_OWNER_EXECUTIONS:
-                raise GatewayUnavailableError("owner projection exceeds bounded scan")
-            result = read_recovery_projection(
-                database, owner_lookup=owner.owner_lookup, owner_thread=owner.owner_thread
-            )
-            encoded = (json.dumps(FieldCodec.encode(result), separators=(",", ":")) + "\n").encode()
-            if len(encoded) > _MAX_REPLY:
-                raise GatewayUnavailableError("projection exceeds bounded response")
-            return encoded
-        finally:
-            db.execute("ROLLBACK")
+        )
+        if len(count) > _MAX_OWNER_EXECUTIONS:
+            raise GatewayUnavailableError("owner projection exceeds bounded scan")
+        result = RecoverySelection.project(db, owner.owner_lookup, owner.owner_thread)
+        encoded = (json.dumps(FieldCodec.encode(result), separators=(",", ":")) + "\n").encode()
+        if len(encoded) > _MAX_REPLY:
+            raise GatewayUnavailableError("projection exceeds bounded response")
+        return encoded
 
 
 @dataclass(frozen=True)

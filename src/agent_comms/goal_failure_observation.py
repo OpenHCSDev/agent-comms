@@ -11,12 +11,13 @@ import json
 import math
 import re
 import sqlite3
-from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .diagnostics import FailureReason
+from .coordination_database import CoordinationStore
+from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
@@ -219,45 +220,38 @@ def read_failed_turn_projection(
     if failure := _preflight(path):
         return unavailable(failure)
     try:
-        with closing(
-            sqlite3.connect(
-                path.resolve().as_uri() + "?mode=ro", uri=True, isolation_level=None, timeout=0.25
+        with CoordinationStore.observing(path, lock_timeout=0.25) as conn:
+            from .goal_attempts import (
+                AttemptRecord,
+                Generation,
+                StorageUncertainError,
+                assert_goal_attempt_schema,
             )
-        ) as conn:
-            conn.execute("PRAGMA query_only=ON")
-            conn.execute("BEGIN")
-            try:
-                from .goal_attempts import (
-                    AttemptRecord,
-                    Generation,
-                    StorageUncertainError,
-                    assert_goal_attempt_schema,
-                )
 
-                try:
-                    assert_goal_attempt_schema(conn)
-                except StorageUncertainError:
-                    return unavailable("unsupported_schema")
-                generation = Generation.one(conn, goal_id=goal.id)
-                if generation is None:
-                    return unavailable("missing_binding")
-                expected = generation.failure_identity()
-                attempt = AttemptRecord.one(conn, attempt_id=expected.attempt_id)
-                if attempt is None:
-                    return unavailable("missing_binding")
-                attempt.phase.require_failure()
-                row = FailedTurnEvidence.one(conn, attempt_id=expected.attempt_id)
-                if row is None:
-                    return unavailable("missing_binding")
-                if row.identity != expected or attempt.reservation.identity != expected:
-                    return unavailable("missing_binding")
-                if not row.matches_owner(owner, admission):
-                    return unavailable("owner_or_goal_changed")
-                reason = row.reason.value
-            finally:
-                conn.execute("ROLLBACK")
+            try:
+                assert_goal_attempt_schema(conn)
+            except StorageUncertainError:
+                return unavailable("unsupported_schema")
+            generation = Generation.one(conn, goal_id=goal.id)
+            if generation is None:
+                return unavailable("missing_binding")
+            expected = generation.failure_identity()
+            attempt = AttemptRecord.one(conn, attempt_id=expected.attempt_id)
+            if attempt is None:
+                return unavailable("missing_binding")
+            attempt.phase.require_failure()
+            row = FailedTurnEvidence.one(conn, attempt_id=expected.attempt_id)
+            if row is None:
+                return unavailable("missing_binding")
+            if row.identity != expected or attempt.reservation.identity != expected:
+                return unavailable("missing_binding")
+            if not row.matches_owner(owner, admission):
+                return unavailable("owner_or_goal_changed")
+            reason = row.reason.value
     except FailureNotObserved as error:
         return unavailable(str(error))
+    except CoordinationReadUnavailable:
+        return unavailable("busy")
     except (sqlite3.Error, OSError, ValueError, TypeError):
         return unavailable("invalid_store")
     state, explanation = goal.state.failure_projection(reason)

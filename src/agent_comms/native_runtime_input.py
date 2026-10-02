@@ -7,7 +7,7 @@ send-admission and live-context authority. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
@@ -144,6 +144,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     @classmethod
     @contextmanager
     def _publication_read(cls, root):
+        from .coordination_database import CoordinationStore
         from .coordinated_runtime_schema import assert_native_runtime_schema
         from .coordination_response import _assert_response_schema
         from .errors import RelationViolationError
@@ -156,13 +157,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             return
         if failure:
             raise RelationViolationError("Native reply source has an invalid coordinator")
-        with closing(
-            sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.05)
-        ) as db:
-            db.row_factory = sqlite3.Row
-            db.execute("PRAGMA query_only=ON")
-            db.execute("PRAGMA foreign_keys=ON")
-            db.execute("BEGIN")
+        with CoordinationStore.observing(database, lock_timeout=0.05) as db:
             assert_native_runtime_schema(db)
             _assert_response_schema(db)
             yield db
