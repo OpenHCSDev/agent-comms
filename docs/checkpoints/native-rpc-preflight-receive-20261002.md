@@ -76,11 +76,32 @@ restoration, proof recovery and extension binding retain their separate work.
 Historical per-operation timing cannot be reconstructed from the retained
 artifacts. Mendel530 independently owns Python publication/proof costs.
 
-## Receiving requirement
+## Receiving result
 
-Draft source checkpoint only: the native manifest and a matching freshly built
-package must be received through Sch's existing builder before qualification.
-Final validation needs one affected native get-state read on representative
-retained history, count/selection agreement and revision refusal. No provider
-input, original attempt retry, deadline extension or public restart is needed.
-Completed529 resources and the two original372 receipts remain protected.
+Sch's existing normal builder produced native manifest
+`0b306dac5a8b9b603949cc245f0629a9cbfc01bc4534090f2c88ca2561c1f34e`,
+tree `1e27f3ff7d93232528b26693fe462052f067bbd4ec6efd30216eb1b6ddd0575e`.
+Exactly four compiled members differ from ad533: entry-store JS/declarations,
+session-context JS and RPC mode. Python production and all other native members
+are unchanged. The native proof/session formats and get-state wire shape do not
+change; each child still rebuilds its disposable selectors from original bytes.
+
+One real native RPC saved-history read, using the existing automatic-global
+extension fixture, returned **27 messages in 2.394 seconds** from a **42,924,971
+byte** native fork. All four globals loaded; network was kernel-denied, prompt
+count zero and child retired. The original 42,924,939-byte donor hash remained
+unchanged. A normal native fork has no child context journal before its first
+input: the fixture now copies an existing journal exactly and permits that
+legitimate absent child resource. It does not remove an existing journal.
+
+The same installed EntryStore/CompactionContext count matched body projection
+without reading a body. End controls covered memory/disk storage, empty branch
+summaries, a kept compaction suffix, another fork branch and refusal after source
+revision change. Initial direct script execution was correctly refused by the
+import fence; stdin execution uses the existing Pi-helper eval entry mechanism.
+That original refusal log remains preserved. No native get-state run repeated.
+
+This qualifies the count/resource change and actual saved-history RPC path;
+it does not establish original18/20s causality, whole concurrent startup latency,
+prompt delivery or physical UI. Completed529 resources and the original372
+NotSent receipts remain protected. Parent owns any paired publication.
