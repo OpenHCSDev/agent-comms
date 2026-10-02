@@ -344,3 +344,13 @@ and actual target declaration are beside this receipt in evidence.
 Remaining dependency: parent supplies the actual stopped original copy/custody
 for historical Native5->6 carry qualification. Einstein's independent fresh
 Native6 saved-fork journey can proceed; it does not substitute for that relation.
+
+## Current producer after successful Native5 publication
+
+#519 immutable membership is normally merged across the whole RuntimeInstallation family and publisher; no carry/provider gate was repeated. #517 destination-local held-file publication remains shared across goal and native/compaction stores.
+
+Parent completed the already-committed carry continuation and reports current default Core9ccc/Toadf07f/Text238/native5184 with 19 configured normal public starts. Read-only target goal qualification and exact row/rowid hashes are in #519 receipt. The current source declaration was captured through the unchanged installed9ccc interpreter, using the existing --declaration producer only (no root/journal/input was opened). Its release versions are 9/3/3/5; goal DDL is the newly installed declaration.
+
+Future stopped Native6 preparation must authenticate this CURRENT producer and fresh source bytes/custody, not the older 508 goal declaration or old frozen preimage. Existing historical inventories remain evidence of their named earlier observations, not a new stopped grant. Current goal state/generation belongs to its live owner: parent reports original aa78 legitimately Blocked revision2 after failed turn, generation absent, no replay. Nothing in this carry invents enrollment/generation or restores prior state.
+
+Current source declaration file: evidence/native-compaction-source-carry-20261002/current-native5-9ccc-source-declaration.json; SHA256 7fd29c451778b8b8e1aae06da8e485666fc215e6fa449bf60a60154606606206. #510 remains non-Ready until historical source carry is qualified under fresh stopped custody.
