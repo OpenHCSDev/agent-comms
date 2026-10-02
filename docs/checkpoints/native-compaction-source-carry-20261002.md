@@ -191,3 +191,17 @@ actual stopped Native5 root under its control directory; parent provides the
 stopped-custody grant. The running-source backup is never substituted for that
 release qualification. No duplicate package/native build, provider repeat or
 public cutover was performed to manufacture acceptance.
+
+
+Same-run bounded mechanical screen at code checkpoint `be5d72e2`, compared
+with `4cc620fb`, inspected only the four touched tools. No parse failure:
+StringDispatch -1 subject / -4 arms; TypeSwitch 0 subjects / 0 arms; codec
+subclasses 0; boolean-chain terms 0; attribute-by-name/default-getattr 0;
+None identity checks -12; broad exception delta 0. The three added class
+members belong to the existing carried-store operation owner. These syntax
+measures support the declared resource/source closure, not installed or
+stopped-custody acceptance. Exact results: `operator-bounded-ratchet.json`.
+
+Arendt normally integrated #506 `62719ea9` into #489 at `479a5222`; final
+Native6 source/resource closure and receiving installation are still his named
+prerequisite. No second target builder or source-overlay acceptance was started.
