@@ -5,8 +5,9 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 
-from .assignment_states import AssignmentState, CompletedAssignment, FailedAssignment, IgnoredAssignment
+from .assignment_states import AssignmentState
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from .coordination_tables.publications import PublicationReceipt
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession
@@ -18,49 +19,23 @@ from .wake import derive_exact_reply_target
 
 @dataclass(frozen=True, slots=True)
 class CoordinatedTurn:
-    assignment_id: str = field(metadata={"wire_name": "claim_id"})
+    assignment_ids: tuple[str, ...] = field(metadata={"wire_name": "claim_ids"})
     disposition: type[AssignmentState]
     input_id: str
-    response_message_id: str | None
-    exact_target: str | None
+    publications: tuple[PublicationReceipt, ...]
     cursor_status: str = "unavailable"
     fresh_session: FreshPrivateSession | None = None
 
     @classmethod
-    def failed(cls, participant, session, input_id):
+    def capture(
+        cls, participant, session, input_id, disposition: type[AssignmentState],
+        publications: tuple[PublicationReceipt, ...] = (),
+    ):
         return cls(
-            participant.assignment.assignment_id,
-            FailedAssignment,
+            participant.batch.assignment_ids,
+            disposition,
             input_id,
-            None,
-            None,
-            cls.cursor_status_for(participant, input_id),
-            session.creation,
-        )
-
-    @classmethod
-    def ignored(cls, participant, session, input_id):
-        return cls(
-            participant.assignment.assignment_id,
-            IgnoredAssignment,
-            input_id,
-            None,
-            None,
-            cls.cursor_status_for(participant, input_id),
-            session.creation,
-        )
-
-    @classmethod
-    def published(cls, participant, session, input_id, published):
-        receipt = published.publication_receipt
-        if receipt is None:
-            raise IdentityConflict("fenced response has no durable receipt")
-        return cls(
-            participant.assignment.assignment_id,
-            CompletedAssignment,
-            input_id,
-            receipt.message_id,
-            published.execution.exact_target,
+            publications,
             cls.cursor_status_for(participant, input_id),
             session.creation,
         )
@@ -103,17 +78,16 @@ def publish_native_failure(
         turn_id=input_id,
         thread=participant.owner.thread.name,
         event={},
-        sequences=(participant.initial.message.seq,),
+        sequences=tuple(source.delivery.message.seq for source in participant.batch.sources),
         native_response=native_response,
         source_error=source_error,
     )
-    target = derive_exact_reply_target(participant.initial.message)
-    assert target is not None
-    participant.comms.messaging.send(
-        participant.owner.thread.name,
-        target,
-        f"Message processing failed: {description} "
-        f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
-        MessageType.ALERT,
-        notice=True,
-    )
+    for target in participant.batch.targets:
+        participant.comms.messaging.send(
+            participant.owner.thread.name,
+            target,
+            f"Message processing failed: {description} "
+            f"No automatic retry. [Open diagnostic]({diagnostic.as_uri()})",
+            MessageType.ALERT,
+            notice=True,
+        )

@@ -162,7 +162,7 @@ async def maybe_compact_owner_turn(
         settings.require_current(await decision())
         return outcome
 
-    operation = await compact_owner_once(
+    result = await compact_owner_once(
         bridge,
         owner,
         owner_generation,
@@ -175,8 +175,4 @@ async def maybe_compact_owner_turn(
         on_admission=on_admission,
         on_event=on_event,
     )
-    if operation is None:
-        # Pi found no safe cut point. Do not disable the ordinary hard-context
-        # backstop or turn this into a request to summarize again.
-        return False
-    return True
+    return result.adaptive_result()

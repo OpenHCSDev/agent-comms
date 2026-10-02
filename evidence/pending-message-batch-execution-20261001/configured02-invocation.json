@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "/home/ts/wt/comms-pending-message-batch-execution-20261001/.artifacts/runtime-batch-candidate/bin/python",
+    "-B",
+    "tests/shared_bus_restart_native.py",
+    "--stage",
+    "/home/ts/wt/k490c02",
+    "--package",
+    "/home/ts/wt/comms-combined474-global491-native-20261001/stack/.pi-native-53b8c413d90aa6b1/node_modules/@earendil-works/pi-coding-agent",
+    "--owners",
+    "1",
+    "--collective",
+    "--configured-owner",
+    "nra-architecture"
+  ],
+  "fixture_owner": "Kepler490",
+  "purpose": "One ordinary configured-provider mixed-route batch; fresh private originals only",
+  "maximum_fixture_budget_bytes": 67108864,
+  "timestamp_ns": 1790899098077011340,
+  "runtime_source": "Core3725 paired Toad82/Text5fbf/SDK.12.1/native53b8",
+  "driver_head": "ccc52d26",
+  "public_restarts": false,
+  "original_replays": false,
+  "correction": "Late human uses ordinary HumanOrigin publisher; fresh run-named originals; no replay of01"
+}

@@ -65,22 +65,19 @@ class OwnerCompactionCommit:
         owner: Thread,
         owner_generation: int,
         *,
+        prepared: NativePreparation,
         settings: PiCompactionSettings,
         context_window: int,
         pending_input_key: str | None = None,
         settings_paths: tuple[str, ...] | None = None,
-    ) -> tuple[NativePreparation, CompactionSource] | None:
+    ) -> tuple[NativePreparation, CompactionSource]:
         """Read Pi's saved cut point, then capture owner/ingress source before summarizing.
 
         Preparation uses exact selected settings/window, never invokes a
         provider or mutates a session, and does not grant a
         commit: the writer must still CAS against the saved native witness.
         """
-        prepared = prepare_native_source(
-            self.native.package_dir, owner.require_saved_session(), settings=settings, context_window=context_window
-        )
-        if prepared is None:
-            return None
+        prepared.witness.require_session(owner.require_saved_session())
         self.reconcile_interrupted_summaries(owner, owner_generation, prepared.witness)
         source = self.capture_source(
             owner,
@@ -95,9 +92,7 @@ class OwnerCompactionCommit:
         allocated = prepare_native_source(
             self.native.package_dir, source.native.session_file,
             settings=settings, context_window=context_window, retained_text=source.retained.text,
-        )
-        if allocated is None:
-            raise CompactionJournalError("Captured compaction source lost its native preparation")
+        ).require_ready()
         source = source.at_prepared_cut(allocated.witness)
         self.require_source_current(owner, owner_generation, source)
         return allocated, source

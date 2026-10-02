@@ -170,6 +170,7 @@ class _OpenObligation(_GenerationProvenance):
         execution: ExecutionRecord,
         link: ExecutionAssignmentLink,
         generation: AwarenessClaimGenerations,
+        assignment: WakeAssignment,
     ) -> _OpenObligation:
         if execution.origin is not ExecutionOrigin.WIRE:
             raise ProjectionUnavailableError("open obligation has no wire origin")
@@ -183,7 +184,12 @@ class _OpenObligation(_GenerationProvenance):
             owner_thread=generation.canonical_thread,
             generation=generation.owner_generation,
         )
-        if captured != expected or link.assignment_id != generation.claim_id:
+        if (
+            captured != expected or link.assignment_id != generation.claim_id
+            or link.assignment_id != assignment.assignment_id
+            or link.execution_id != obligation.execution_id
+            or assignment.lifecycle.exact_target != obligation.exact_target
+        ):
             raise ProjectionUnavailableError("open obligation has no exact owner provenance")
         return cls(generation, obligation)
 
@@ -201,14 +207,14 @@ class OptionalAwarenessResult(ABC):
     complete = False
 
     @abstractmethod
-    def render(self, remaining_prompt_bytes: int) -> str: ...
+    def render(self, max_text_bytes: int) -> str: ...
 
 
 @dataclass(frozen=True)
 class OmittedAwareness(OptionalAwarenessResult):
     reason: str
 
-    def render(self, remaining_prompt_bytes: int) -> str:
+    def render(self, max_text_bytes: int) -> str:
         logging.getLogger(__name__).warning(
             "Optional awareness omitted; original delivered alone (%s)", self.reason
         )
@@ -232,12 +238,12 @@ class CompleteAwareness(OptionalAwarenessResult):
             "open_obligations": [row.context() for row in self.open_obligations],
         }
 
-    def require_context_budget(self, max_text_bytes: int) -> None:
+    def require_resource_budget(self, max_text_bytes: int) -> None:
         text = json.dumps(self.context(), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         if len(text.encode("utf-8")) > max_text_bytes:
             raise ProjectionUnavailableError("binding awareness exceeds the byte budget")
 
-    def render(self, remaining_prompt_bytes: int) -> str:
+    def render(self, max_text_bytes: int) -> str:
         # Quote untrusted identifiers, then the whole non-authoritative text.
         # Neither a candidate nor its presentation becomes an instruction.
         content = (
@@ -255,9 +261,9 @@ class CompleteAwareness(OptionalAwarenessResult):
             + json.dumps(content, ensure_ascii=False)
             + f"\nNonbinding rows omitted: {self.omitted_count}.\n"
         )
-        if len(text.encode("utf-8")) > remaining_prompt_bytes:
-            return OmittedAwareness("remaining prompt budget exceeded").render(
-                remaining_prompt_bytes
+        if len(text.encode("utf-8")) > max_text_bytes:
+            return OmittedAwareness("rendered awareness exceeds the resource budget").render(
+                max_text_bytes
             )
         return text
 
@@ -319,11 +325,10 @@ class OptionalAwarenessProjection:
         initial: CommittedDelivery,
         assignment: WakeAssignment,
         owner: Thread,
-        remaining_prompt_bytes: int,
     ) -> str:
         deadline = time.monotonic() + self.build_seconds
         if not self._build_slot.acquire(blocking=False):
-            return OmittedAwareness("builder busy").render(remaining_prompt_bytes)
+            return OmittedAwareness("builder busy").render(self.max_text_bytes)
         loop = asyncio.get_running_loop()
         finished: asyncio.Future[OptionalAwarenessResult] = loop.create_future()
         try:
@@ -338,12 +343,12 @@ class OptionalAwarenessProjection:
                 self._build_slot.release()
                 raise
             result = await asyncio.wait_for(finished, max(0.0, deadline - time.monotonic()))
-            text = result.render(remaining_prompt_bytes)
+            text = result.render(self.max_text_bytes)
             if time.monotonic() > deadline:
                 raise TimeoutError("optional awareness exceeded the build deadline")
             return text
         except Exception as error:
-            return OmittedAwareness(type(error).__name__).render(remaining_prompt_bytes)
+            return OmittedAwareness(type(error).__name__).render(self.max_text_bytes)
 
     def __post_init__(self) -> None:
         # These are typed internal snapshots. External rows are decoded by
@@ -363,7 +368,7 @@ class OptionalAwarenessProjection:
         """Return complete SQL-backed rows, or omit the entire supplement.
 
         No selected decision or open obligation is ranked away. A stale WAL,
-        unsealed candidate, different owner, excess row count, or prompt budget
+        unsealed candidate, different owner, excess row count, or resource budget
         exhausts the optional path without changing original delivery.
         """
         try:
@@ -462,7 +467,7 @@ class OptionalAwarenessProjection:
             tuple(current_obligations),
             historical_omitted,
         )
-        result.require_context_budget(self.max_text_bytes)
+        result.require_resource_budget(self.max_text_bytes)
         return result
 
     def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
@@ -600,8 +605,8 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("open obligations exceed the row budget")
         if not obligations:
             return []
-        executions = tuple(row.execution_id for row in obligations)
-        marks = ",".join("?" for _ in obligations)
+        executions = tuple(dict.fromkeys(row.execution_id for row in obligations))
+        marks = ",".join("?" for _ in executions)
         owners = {
             row.execution_id: row
             for row in ExecutionRecord.select(
@@ -612,14 +617,19 @@ class OptionalAwarenessProjection:
         }
         links = ExecutionAssignmentLink.select(
             db,
-            where=f"execution_id IN ({marks})",
-            parameters=executions,
+            where=f"execution_id IN ({marks}) ORDER BY execution_id,ordinal LIMIT ?",
+            parameters=(*executions, self.max_rows + 1),
         )
-        # A multi-claim execution is not a single exact source obligation.
-        if len({row.execution_id for row in links}) != len(links):
-            raise ProjectionUnavailableError("open obligation has multiple source claims")
-        by_execution = {row.execution_id: row for row in links}
+        if len(links) > self.max_rows:
+            raise ProjectionUnavailableError("open obligation sources exceed the row budget")
         claims = tuple(row.assignment_id for row in links)
+        if not claims:
+            raise ProjectionUnavailableError("open obligation has no original sources")
+        assignments = {
+            row.assignment_id: row for row in WakeAssignment.select(
+                db, where=f"assignment_id IN ({','.join('?' for _ in claims)})", parameters=claims,
+            )
+        }
         generations = {
             row.claim_id: row
             for row in AwarenessClaimGenerations.select(
@@ -632,8 +642,12 @@ class OptionalAwarenessProjection:
             _OpenObligation.capture(
                 row,
                 owners[row.execution_id],
-                by_execution[row.execution_id],
-                generations[by_execution[row.execution_id].assignment_id],
+                link,
+                generations[link.assignment_id],
+                assignments[link.assignment_id],
             )
             for row in obligations
+            for link in links
+            if link.execution_id == row.execution_id
+            and assignments[link.assignment_id].lifecycle.exact_target == row.exact_target
         ]

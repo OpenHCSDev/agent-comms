@@ -38,6 +38,174 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
+from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.bus_publication import stable_thread_lookup
+
+
+async def configured_mixed_routes(arguments):
+    """The same installed owner/ACP path, using the actual configured provider.
+
+    Only fresh private originals are submitted. The public owner supplies its
+    configured model/level, not a saved input or permission to restart it.
+    """
+    from agent_comms.comms import wire
+    from agent_comms.native_input_record import FullNativeExecution
+    from agent_comms.native_package import verify_native_package
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_entries import NativeEntry
+    from agent_comms.pi_payloads import ToolResultMessage
+    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
+    from agent_comms.store_files import _store_lock
+
+    assert arguments.owners == 1 and arguments.collective
+    assert not (arguments.saved_source or arguments.contention or arguments.cancel_before_grant)
+    configured = wire().registry.require(arguments.configured_owner)
+    assert configured.model, "Configured owner has no selected model"
+    verify_native_package(arguments.package)
+    stage = arguments.stage.absolute()
+    assert stage.is_relative_to('/home/ts/wt')
+    stage.mkdir(mode=0o700, parents=True, exist_ok=False)
+    project, profile = stage/'project', stage/'config'
+    project.mkdir(mode=0o700); profile.mkdir(mode=0o700)
+    source_profile = Path(os.environ.get('AGENT_COMMS_NATIVE_CONFIG_DIR') or
+                          os.environ.get('PI_CODING_AGENT_DIR') or '~/.pi/agent').expanduser()
+    source_hashes = {}
+    for filename in ('auth.json', 'models.json', 'settings.json'):
+        original = source_profile/filename
+        if original.exists():
+            assert original.stat().st_size < 1024 * 1024
+            data = original.read_bytes()
+            source_hashes[str(original)] = hashlib.sha256(data).hexdigest()
+            destination = profile/filename
+            destination.write_bytes(data); destination.chmod(0o600)
+    assert (profile/'auth.json').exists(), "Configured authentication is unavailable"
+    (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
+    service = Comms(stage/'wire', private_initial_writes=True)
+    root_id = service.messaging.initialize_private_initial_protocol()
+    service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
+    environment = {key: value for key, value in os.environ.items()
+                   if not key.startswith(('AGENT_COMMS_', 'PI_')) and key != 'PYTHONPATH'}
+    environment.update(AGENT_COMMS_ROOT=str(service.root),
+        AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
+        AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(arguments.package),
+        AGENT_COMMS_NATIVE_CONFIG_DIR=str(profile), PI_CODING_AGENT_DIR=str(profile),
+        AGENT_COMMS_AGENT_MODELS=configured.model,
+        AGENT_COMMS_AGENT_BIN='pi', AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
+        PATH=str(Path(sys.executable).parent)+os.pathsep+environment.get('PATH', ''))
+    os.environ.clear(); os.environ.update(environment)
+    name = 'batch-receiver'
+    service.registry.declare(Thread('human',frozenset(),str(project),role=ThreadRole.USER))
+    service.registry.declare(Thread(name,frozenset({'team'}),str(project),
+        model=configured.model,thinking_level=configured.thinking_level,
+        task='Answer each original route accurately once; do not expose direct-message content to a channel.'))
+    sender = service.registry.require('human')
+    with _store_lock(service._wire_lock_path):
+        originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
+            MessageType.INFO), _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+            for target, body in (
+                ('#team', f'{stage.name}: @{name} Read batch-values.txt with the normal read tool and report PUBLIC_VALUE.'),
+                ('#team', f'{stage.name}: @{name} Also compute 10+2. Combine this with the other channel request.'),
+                (name, f'{stage.name}: Direct/private only: compute 7+8 and include PRIVATE_ROUTE_490 in this direct reply only.'))]
+    packets = []
+    class Observation:
+        async def session_update(self, **kwargs):
+            packets.append(kwargs)
+    attachment = CommsClient(service,runtime_enabled=True,
+        private_nk_native_package=arguments.package,private_nk_wire_root_id=root_id)
+    attachment.on_connect(Observation())
+    begun = time.perf_counter()
+    failure, late = None, None
+    proof = {}
+    try:
+        await asyncio.to_thread(service.owners.start,name)
+        await attach(service,name)
+        await attachment.load_session(cwd=str(project),session_id=name)
+        async with asyncio.timeout(90):
+            while True:
+                diagnostics = list((service.root/'diagnostics').glob('*.json'))
+                if diagnostics:
+                    diagnostic = json.loads(diagnostics[0].read_text())
+                    raise AssertionError(diagnostic.get('source_error',diagnostic.get('reason')))
+                with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                    db = store.session._connection
+                    inputs = NativeRuntimeInput.select(db)
+                    if inputs and late is None:
+                        assert len(inputs) == 1 and inputs[0].reference_stage is FullNativeExecution
+                        membership = inputs[0].execution.source_assignment_ids(db,inputs[0].input_id)
+                        assert len(membership) == len(originals), "First native input did not capture the whole wave"
+                        with _store_lock(service._wire_lock_path):
+                            late = service.bus.publisher.publish_ordinary(Message(sender.name,name,
+                                f'{stage.name}: Separate late batch: compute 20+3; reply directly and once.',MessageType.INFO),
+                                _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                        print('ORIGINAL_WAVE_RESERVED_LATE_BATCH_PUBLISHED',flush=True)
+                    assignments = WakeAssignment.select(db,order_by=('wire_seq',))
+                    cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
+                    if late is not None and len(assignments) == len(originals)+1 and all(
+                            row.lifecycle.completed for row in assignments) and len(cursors) == 1 and (
+                            cursors[0].covered_seq >= late.seq) and service.registry.require(name).active_turn is None:
+                        assert len(inputs) == 2 and all(row.reference_stage is FullNativeExecution for row in inputs)
+                        links = ExecutionAssignmentLink.select(db,order_by=('execution_id','ordinal'))
+                        original_claims = {row.assignment_id for row in assignments if row.wire_seq != late.seq}
+                        execution_ids = {row.execution_id for row in links if row.assignment_id in original_claims}
+                        assert len(execution_ids) == 1
+                        first_execution = execution_ids.pop()
+                        receipts = PublicationReceipts.select(db,where='execution_id=?',parameters=(first_execution,))
+                        assert {row.exact_target for row in receipts} == {'#team','human'}
+                        replies = [service.bus.log.message_by_id(row.message_id) for row in receipts]
+                        channel = next(row for row in replies if row.target == '#team')
+                        direct = next(row for row in replies if row.target == 'human')
+                        assert '17' in channel.body and '12' in channel.body
+                        assert 'PRIVATE_ROUTE_490' not in channel.body
+                        assert '15' in direct.body and 'PRIVATE_ROUTE_490' in direct.body
+                        late_assignment = next(row for row in assignments if row.wire_seq == late.seq)
+                        late_receipts = PublicationReceipts.select(db,where='execution_id=?',
+                            parameters=(late_assignment.lifecycle.execution_id,))
+                        assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
+                        assert '23' in service.bus.log.message_by_id(late_receipts[0].message_id).body
+                        lookup = stable_thread_lookup(service.registry.require(name).created_at)
+                        for original in (*originals,late):
+                            history = read_historical_native_inputs(store,wire_root_id=root_id,
+                                recipient_lookup=lookup,source_seq=original.seq)
+                            assert len(history) == 1 and history[0].expected_prompt_equality_established
+                        assert len(cursors) == 1 and cursors[0].covered_seq >= late.seq
+                        proof = {'captured_originals':len(originals),'routes':['#team','human'],
+                            'original_wave_native_inputs':1,'late_wave_native_inputs':1,
+                            'per_original_historical_proof':True,'route_receipts':FieldCodec.encode(receipts),
+                            'private_route_not_leaked':True,'all_originals_completed':True,
+                            'late_answer_published_on_original_route':True,
+                            'original_cursor_covers_late':True}
+                        break
+                await asyncio.sleep(.03)
+        with Coordination(str(service.root/'coordination.sqlite3')) as store:
+            history = read_historical_native_inputs(store,wire_root_id=root_id,
+                recipient_lookup=lookup,source_seq=originals[0].seq)
+        with NativeEntry.open_evidence(history[0].context.session_file) as evidence:
+            _, entries = evidence.observe()
+        tool_results = [entry.message for entry in entries if entry.is_message and
+                        isinstance(entry.message,ToolResultMessage)]
+        assert any(result.tool_name == 'read' and not result.is_error for result in tool_results), 'No ordinary native read tool ran'
+        facts = [fact for packet in packets for fact in decode_updates(packet['update'].get('_meta'))]
+        assert facts, 'No actual ACP facts observed'
+        proof['ordinary_read_tool_result'] = True
+        proof['acp_fact_count'] = len(facts)
+    except BaseException as error:
+        failure = f'{type(error).__name__}: {error}'
+        raise
+    finally:
+        (stage/'acp-observer.json').write_text(json.dumps(packets,indent=2)+'\n')
+        await attachment.shutdown()
+        await asyncio.to_thread(service.owners.stop,name)
+        receipt = {'elapsed_seconds':time.perf_counter()-begun,'failure':failure,
+            'model':configured.model,'thinking':configured.thinking_level.declared_name,
+            'installed_interpreter':sys.executable,'original_sequences':[row.seq for row in originals],
+            'late_original_seq':late.seq if late else None,'proof':proof,'public_mutations':0,
+            'original_replays':0,'provider':'actual configured provider, no substitute',
+            'all_owned_workers_retired':not service.registry.require(name).process_alive,
+            'configured_source_files_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                for path,digest in source_hashes.items())}
+        (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+        print(json.dumps(receipt,indent=2),flush=True)
 
 
 async def retained_owner():
@@ -142,9 +310,10 @@ async def attach(service, name):
 
 
 class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
-    def __init__(self, service, names, *, collective=False, after_attachment=False):
+    def __init__(self, service, names, *, collective=False, after_attachment=False, wave_size=1):
         self.service, self.names, self.collective = service, names, collective
         self.after_attachment = after_attachment
+        self.wave_size = wave_size
         self.originals = []
 
     def require_selection(self, snapshot, owners):
@@ -162,8 +331,12 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
         if self.collective:
             sender = self.service.registry.require('human')
             self.originals = [self.service.bus.publisher.publish_ordinary(
-                Message(sender.name, '#team', 'New collective channel original: test',MessageType.INFO),
-                _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
+                Message(sender.name, '#team',
+                        f'Batch wave original {index}: compute 10+{index}.'
+                        if self.wave_size > 1 else 'New collective channel original: test',
+                        MessageType.INFO),
+                _human_origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
+                for index in range(self.wave_size)]
             return
         self.originals = [self.service.bus.publisher.publish_initial_cohort(Message(
             'fixture-sender', name, f'Unique new inbox input for {name}: reply ONCE.', MessageType.INFO))
@@ -184,6 +357,10 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
 
 
 async def run(arguments):
+    if arguments.configured_owner:
+        return await configured_mixed_routes(arguments)
+    if arguments.wave_size > 1:
+        assert arguments.collective and arguments.owners == 1 and not arguments.cancel_before_grant
     if arguments.cancel_before_grant:
         assert arguments.collective and arguments.contention and arguments.owners == 1
     if arguments.cursor_contention:
@@ -205,12 +382,28 @@ async def run(arguments):
             messages = self.requests[-1]['messages']
             latest = json.dumps(next(message for message in reversed(messages)
                                      if message['role']=='user'))
-            text = ('{"decision":"FULL"}' if 'bounded triage' in latest
+            text = ('{"decision":"FULL"}' if 'one key decision' in latest
                     else 'Unique controlled native reply.')
             yield {'content':text}, None
             yield {}, 'stop'
 
-    provider_type = ChannelReplyProvider if arguments.cancel_before_grant else LoopbackProvider
+    class BatchReplyProvider(LoopbackProvider):
+        def response_chunks(self):
+            latest = next(message for message in reversed(self.requests[-1]['messages'])
+                          if message['role'] == 'user')
+            text = json.dumps(latest)
+            if 'one key decision' in text:
+                answer = '{"decision":"FULL"}'
+            elif 'Batch wave late original' in text:
+                answer = 'Separate late-wave answer: 20+3=23.'
+            else:
+                answer = 'Combined wave answer: ' + '; '.join(
+                    f'10+{index}={10+index}' for index in range(arguments.wave_size)) + '.'
+            yield {'content':answer}, None
+            yield {}, 'stop'
+
+    provider_type = (BatchReplyProvider if arguments.wave_size > 1 else
+                     ChannelReplyProvider if arguments.cancel_before_grant else LoopbackProvider)
     provider = provider_type(status=200, text=(
         '{"decision":"IGNORE"}' if arguments.collective else 'Unique controlled native reply.'),
         response_timeout=60 if arguments.saved_source else 15)
@@ -286,6 +479,8 @@ async def run(arguments):
     contention_held = threading.Event()
     contention_observations = []
     cancel_observation = {}
+    late_original = None
+    batch_proof = {}
 
     def hold_original_reader():
         deadline = time.monotonic()+30
@@ -388,7 +583,7 @@ async def run(arguments):
         assert provider.posts == 0
         originals = [service.registry.require(name) for name in names]
         cutover = PublishOriginalsAtStoppedBatch(service,names,collective=arguments.collective,
-            after_attachment=arguments.cancel_before_grant)
+            after_attachment=arguments.cancel_before_grant, wave_size=arguments.wave_size)
         if arguments.contention or arguments.cursor_contention:
             contender = threading.Thread(
                 target=hold_cursor_publication if arguments.cursor_contention else hold_original_reader,
@@ -454,7 +649,24 @@ async def run(arguments):
                 if diagnostics:
                     observed = json.loads(diagnostics[0].read_text())
                     raise AssertionError(observed.get('source_error',observed.get('reason')))
-                expected_posts = 2 if arguments.cancel_before_grant else len(names)
+                expected_posts = (4 if arguments.wave_size > 1 else
+                                  2 if arguments.cancel_before_grant else len(names))
+                if arguments.wave_size > 1 and provider.posts == 1 and late_original is None:
+                    assert service.registry.require(names[0]).active_turn is not None
+                    # All original batch members were reserved before this late
+                    # arrival, while the real provider's first response is held.
+                    with closing(sqlite3.connect((service.root/'coordination.sqlite3').as_uri()+
+                                                 '?mode=ro',uri=True)) as db:
+                        reserved = NativeRuntimeInput.select(db)
+                        assert len(reserved) == 1
+                        members = reserved[0].execution.source_assignment_ids(db, reserved[0].input_id)
+                        assert len(members) == arguments.wave_size
+                    sender = service.registry.require('human')
+                    late_original = service.bus.publisher.publish_ordinary(Message(
+                        sender.name, '#team', 'Batch wave late original: compute 20+3.', MessageType.INFO),
+                        _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                    concurrent_native = True
+                    provider.response_gate.set()
                 if provider.posts == expected_posts:
                     if not provider.response_gate.is_set():
                         assert all(service.registry.require(name).active_turn is not None
@@ -472,6 +684,12 @@ async def run(arguments):
                                 rows = WakeAssignment.select(db,where='wire_seq=?',
                                     parameters=(cutover.originals[1].seq,))
                                 completed = len(rows)==1 and rows[0].lifecycle.declared_name=='completed'
+                            elif arguments.wave_size > 1:
+                                rows = WakeAssignment.select(db, where='wire_seq IN ('+
+                                    ','.join('?' for _ in (*cutover.originals, late_original))+')',
+                                    parameters=tuple(message.seq for message in (*cutover.originals, late_original)))
+                                completed = len(rows) == arguments.wave_size+1 and all(
+                                    row.lifecycle.completed for row in rows)
                             else:
                                 completed = len(rows)==len(names) and all(
                                     row.lifecycle.declared_name=='ignored' for row in rows)
@@ -498,10 +716,36 @@ async def run(arguments):
             assert any(reply.sender==names[0] and reply.body=='Unique controlled native reply.'
                        for reply in replies)
             assert provider.posts == 2
+        elif arguments.wave_size > 1:
+            replies = [message for message in service.bus.channel_history('#team')
+                       if message.sender == names[0]]
+            assert len(replies) == 2
+            assert replies[0].body == 'Combined wave answer: ' + '; '.join(
+                f'10+{index}={10+index}' for index in range(arguments.wave_size)) + '.'
+            assert replies[1].body == 'Separate late-wave answer: 20+3=23.'
+            assert provider.posts == 4
+            lookup = stable_thread_lookup(service.registry.require(names[0]).created_at)
+            with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                inputs = NativeRuntimeInput.select(store.session._connection)
+                assert len(inputs) == 4
+                memberships = [row.execution.source_assignment_ids(store.session._connection, row.input_id)
+                               for row in inputs]
+                assert sorted(len(members) for members in memberships) == [1,1,arguments.wave_size,arguments.wave_size]
+                for original in (*cutover.originals, late_original):
+                    evidence = read_historical_native_inputs(store, wire_root_id=root_id,
+                        recipient_lookup=lookup,source_seq=original.seq)
+                    assert len(evidence) == 2
+                    assert all(proof.expected_prompt_equality_established for proof in evidence)
+                    assert len({proof.assignment_id for proof in evidence}) == 1
+                batch_proof = {'captured_originals':arguments.wave_size,
+                    'native_workflows':2,'original_wave_provider_inputs':2,
+                    'late_wave_provider_inputs':2,'combined_original_wave_answers':1,
+                    'per_original_native_source_proof':True,
+                    'late_arrival_separate_batch':True}
         else:
             assert concurrent_native
             assert provider.posts==len(names),(provider.posts,len(names))
-        if arguments.collective and not arguments.cancel_before_grant:
+        if arguments.collective and not arguments.cancel_before_grant and arguments.wave_size == 1:
             assert replies == []
             with closing(sqlite3.connect((service.root/'coordination.sqlite3').as_uri()+
                                         '?mode=ro',uri=True)) as db:
@@ -513,7 +757,7 @@ async def run(arguments):
                 assert len(cursors) == len(names), "Settled triage lost an auxiliary cursor"
                 assert {row.input_id for row in cursors} == {row.input_id for row in inputs}
                 assert all(row.covered_seq >= cutover.originals[0].seq for row in cursors)
-        elif not arguments.cancel_before_grant:
+        elif not arguments.cancel_before_grant and arguments.wave_size == 1:
             assert {reply.sender for reply in replies}==set(names)
         facts = [fact for packet in packets
                  for fact in decode_updates(packet['update'].get('_meta'))]
@@ -553,19 +797,21 @@ async def run(arguments):
                     native_inputs.append({'session':str(path.relative_to(stage)),
                                           'entry_id':row['id']})
         if failure is None:
-            assert len(native_inputs) == (2 if arguments.cancel_before_grant else len(names)), native_inputs
+            assert len(native_inputs) == (4 if arguments.wave_size > 1 else
+                                         2 if arguments.cancel_before_grant else len(names)), native_inputs
         receipt={'elapsed_seconds':time.perf_counter()-started,'owners':len(names),
             'history_rows':arguments.history,'saved_original_hashes':source_hashes,
             'saved_source_bytes':arguments.saved_source.stat().st_size if arguments.saved_source else 0,
             'bus_bytes':(service.root/'bus.jsonl').stat().st_size,
             'localhost_provider_posts':provider.posts,'native_originals':native_inputs,
-            'simultaneous_triage_cursor_proofs':len(cursors) if arguments.collective and failure is None and not arguments.cancel_before_grant else None,
+            'simultaneous_triage_cursor_proofs':len(cursors) if arguments.collective and failure is None and not arguments.cancel_before_grant and arguments.wave_size == 1 else None,
             'failure':failure,'all_owned_workers_retired':all(
                 not service.registry.require(name).process_alive for name in names),
             'public_mutations':0,'paid_provider_calls':0,'original_replays':0,
             'installed_interpreter':sys.executable,
             'acp_notification_count':len(packets),'contention':contention_observations,
             'cancellation':cancel_observation,
+            'batch':batch_proof,
             'all_native_turns_active_before_provider_release':concurrent_native if failure is None else False,
             'acp_fact_counts':{kind:sum(type(fact).__name__ == kind for fact in facts)
                 for kind in sorted({type(fact).__name__ for fact in facts})} if failure is None else {}}
@@ -591,4 +837,6 @@ if __name__=='__main__':
     parser.add_argument('--contention-resource',default='wire',
                         choices=[kind.declared_name for kind in AdmissionContention.members_with(AdmissionContention)])
     parser.add_argument('--cancel-before-grant',action='store_true')
+    parser.add_argument('--wave-size',type=int,default=1)
+    parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
     asyncio.run(run(parser.parse_args()))

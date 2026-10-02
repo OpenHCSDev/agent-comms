@@ -68,6 +68,26 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def proves_full_source(self, proof) -> bool:
         return False
 
+    @classmethod
+    @abstractmethod
+    def source_membership_sql(cls) -> str:
+        """Project original input membership from this stage's canonical relation."""
+
+    def source_assignment_ids(self, db, input_id) -> tuple[str, ...]:
+        from .coordination_tables.assignments import WakeAssignment
+
+        columns = ",".join(f"c.{column}" for column in WakeAssignment.columns())
+        originals = WakeAssignment.read(db.execute(
+            f"SELECT {columns} FROM {WakeAssignment.declared_name} c "
+            f"JOIN ({self.source_membership_sql()}) m ON m.assignment_id=c.assignment_id "
+            "WHERE m.input_id=? ORDER BY m.ordinal", (input_id,),
+        ))
+        return tuple(original.assignment_id for original in originals)
+
+    @abstractmethod
+    def record_sources(self, db, input_id, assignments) -> None:
+        """Record only membership which is not already owned by execution claims."""
+
     @abstractmethod
     def historical_proof(self, record, *, lifecycle, **source):
         """Acquire the declared recorded-proof member from the original SQL row."""
@@ -88,6 +108,18 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
 @dataclass(frozen=True)
 class TriageNativeExecution(NativeInputExecution):
     proof_order: ClassVar[int] = 0
+
+    @classmethod
+    def source_membership_sql(cls) -> str:
+        from .triage_native_sources import TriageNativeSources
+
+        return (f"SELECT s.input_id, member.value AS assignment_id, CAST(member.key AS INTEGER) AS ordinal "
+                f"FROM {TriageNativeSources.declared_name} s, json_each(s.assignment_ids) member")
+
+    def record_sources(self, db, input_id, assignments) -> None:
+        from .triage_native_sources import TriageNativeSources
+
+        TriageNativeSources(input_id, tuple(row.assignment_id for row in assignments)).insert(db)
 
     @classmethod
     def from_columns(cls, execution_id, attempt_ordinal) -> TriageNativeExecution:
@@ -111,6 +143,20 @@ class FullNativeExecution(NativeInputExecution):
 
     execution_id: str
     attempt_ordinal: int
+
+    @classmethod
+    def source_membership_sql(cls) -> str:
+        from .coordination_tables.assignments import ExecutionAssignmentLink
+        from .native_runtime_input import NativeRuntimeInput
+
+        return (f"SELECT n.input_id, c.assignment_id, c.ordinal "
+                f"FROM {NativeRuntimeInput.declared_name} n "
+                f"JOIN {ExecutionAssignmentLink.declared_name} c ON c.execution_id=n.execution_id "
+                f"WHERE n.stage='{cls.declared_name}'")
+
+    def record_sources(self, db, input_id, assignments) -> None:
+        if self.source_assignment_ids(db, input_id) != tuple(row.assignment_id for row in assignments):
+            raise IdentityConflict("Full native input differs from its original execution membership")
 
     def __post_init__(self):
         validate_execution_id(self.execution_id)
@@ -154,7 +200,6 @@ class NativeInputIdentity:
     """Original reservation identity, independent of registry allocation domains."""
 
     input_id: str
-    assignment_id: str
     execution: NativeInputExecution
     owner: OwnerGenerations
 
@@ -176,7 +221,6 @@ class NativeInputReference(NativeContextReference):
     """A cursor's bounded reference to original recorded native context."""
 
     input_id: Annotated[str, NativeInputIdText]
-    assignment_id: str
     stage: type[NativeInputExecution]
     session_id: str
     request_generation: int
@@ -187,7 +231,6 @@ class NativeInputReference(NativeContextReference):
         try:
             result = cls(
                 input_id=row.input_id,
-                assignment_id=row.assignment_id,
                 stage=row.reference_stage,
                 session_id=row.session_id,
                 request_generation=row.request_generation,
@@ -195,7 +238,7 @@ class NativeInputReference(NativeContextReference):
             result = FieldCodec.decode(cls, FieldCodec.encode(result, cls))
             if not 0 < result.request_generation <= 2**53 - 1:
                 raise ValueError("Native reference generation is outside its native range")
-            if not result.assignment_id or not result.session_id:
+            if not result.session_id:
                 raise ValueError("Native reference lacks recorded identity")
             return result
         except (TypeError, ValueError) as error:
@@ -207,7 +250,6 @@ class NativeInputReference(NativeContextReference):
 
 class NativeInputRecord(ABC):
     input_id: str
-    assignment_id: str
     execution: NativeInputExecution
     owner_lookup: str
     owner_thread: str
@@ -237,7 +279,7 @@ class NativeInputRecord(ABC):
     @property
     def identity(self) -> NativeInputIdentity:
         return NativeInputIdentity(
-            self.input_id, self.assignment_id, self.execution, self.owner_identity,
+            self.input_id, self.execution, self.owner_identity,
         )
 
 
@@ -245,7 +287,6 @@ class NativeInputContext:
     """Decode the declared nullable SQL context group into its original state."""
 
     input_id: str | None
-    assignment_id: str | None
     stage: type[NativeInputExecution] | None
     session_id: str | None
     request_generation: int | None

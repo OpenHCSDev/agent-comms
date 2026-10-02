@@ -1,0 +1,19 @@
+{
+  "elapsed_seconds": 5.946457103011198,
+  "failure": "RelationViolationError: Initial sender must be a registered executable.",
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "off",
+  "installed_interpreter": "/home/ts/wt/comms-pending-message-batch-execution-20261001/.artifacts/runtime-batch-candidate/bin/python",
+  "original_sequences": [
+    1,
+    2,
+    3
+  ],
+  "late_original_seq": null,
+  "proof": {},
+  "public_mutations": 0,
+  "original_replays": 0,
+  "provider": "actual configured provider, no substitute",
+  "all_owned_workers_retired": true,
+  "configured_source_files_unchanged": true
+}
