@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 import time
 from dataclasses import replace
@@ -396,6 +397,101 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         assert wire_available()
         assert all(path.read_bytes() == content for path, content in source_files.items())
         assert not list(tmp_path.rglob('*.input-proof'))
+
+        # Exercise the actual one-shot publication member at the failure seam
+        # before its stopped .originals archive exists. Its inherited failed()
+        # must complete the existing RAM/OFD source handoff before unwinding.
+        import fcntl
+        from agent_comms.active_route import ActiveRoute, active_route_path
+        from agent_comms.field_codec import FieldCodec
+        from agent_comms.owner_cutover import PreserveOwnerRuntime
+        from agent_comms.owner_lifecycle import OwnerRestartSelection
+        import publish_retained_summary as publisher
+        from runtime_installation import PreserveRuntimeInstallation
+
+        home = tmp_path / 'publication-home'
+        home.mkdir(mode=0o700)
+        monkeypatch.setenv('HOME', str(home))
+        route = ActiveRoute(tmp_path, root_id, package)
+        route_file = active_route_path()
+        route_file.parent.mkdir(parents=True, mode=0o700)
+        route_file.write_text(json.dumps(FieldCodec.encode(route)))
+        route_file.chmod(0o600)
+        links = home / '.local/bin'
+        links.mkdir(parents=True)
+        prefix = Path(sys.prefix)
+        for command in publisher.COMMANDS:
+            (links / command).symlink_to(prefix / 'bin' / command)
+        monkeypatch.setattr(publisher, 'ROOT', tmp_path)
+        monkeypatch.setattr(publisher, 'LINKS', links)
+        original = tmp_path / 'goal_waits.json'
+        original.write_text('{}\n')
+        reviewed = publisher.ReviewedArtifact(original, publisher.digest(original))
+        cohort = publisher.ReviewedRetainedSummaryCohort(
+            prefix, Path(sys.executable), prefix, route, package,
+            reviewed, reviewed, (),
+        )
+
+        class EarlyFailedPublication(publisher.PublishRetainedSummary):
+            def require_selection(self, snapshot, owners):
+                cutover.require_selection(snapshot, owners)
+
+            def after_stopped(self, lifecycle):
+                assert not self.receipt.with_suffix('.originals').exists()
+                raise original_error
+
+        class ChangedFailedPublication(EarlyFailedPublication):
+            def after_stopped(self, lifecycle):
+                original.write_text('{"changed":true}\n')
+                super().after_stopped(lifecycle)
+
+        route_descriptor = os.open(route_file.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            fcntl.flock(route_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            for name in selected:
+                comms.owners.start(name)
+                ready(comms.registry.require(name))
+            before = comms.registry.snapshot()
+            captured = tuple(before.require_active(name) for name in selected)
+            audience = tuple(OwnerRestartSelection.capture(before, name) for name in selected)
+            receipt = tmp_path / 'early-publication.json'
+            receipt.write_text('{"phase":"preflight-complete"}\n')
+            operation = EarlyFailedPublication(
+                cohort, audience, captured, PreserveOwnerRuntime(),
+                PreserveRuntimeInstallation({}), route_descriptor, receipt,
+            )
+            with pytest.raises(StoppedOwnerFailure) as early:
+                comms.owners.restart_owners(selected, cutover=operation)
+            assert early.value.__cause__ is original_error
+            assert not receipt.with_suffix('.originals').exists()
+            assert json.loads(receipt.read_text())['phase'] == 'failed-install-original-runtime-restored'
+            assert wire_available(), 'Owned recovery did not retire its wire custody'
+            for prior in captured:
+                restored = comms.registry.require(prior.name)
+                ready(restored)
+                assert replace(restored, process_identity=prior.process_identity) == prior
+                assert restored.process_identity != prior.process_identity
+            assert original.read_text() == '{}\n'
+
+            before = comms.registry.snapshot()
+            captured = tuple(before.require_active(name) for name in selected)
+            audience = tuple(OwnerRestartSelection.capture(before, name) for name in selected)
+            refused_receipt = tmp_path / 'changed-publication.json'
+            refused_receipt.write_text('{"phase":"preflight-complete"}\n')
+            refused = ChangedFailedPublication(
+                cohort, audience, captured, PreserveOwnerRuntime(),
+                PreserveRuntimeInstallation({}), route_descriptor, refused_receipt,
+            )
+            with pytest.raises(StoppedOwnerFailure) as changed_publication:
+                comms.owners.restart_owners(selected, cutover=refused)
+            assert changed_publication.value.__cause__ is original_error
+            assert any('recovery refused' in note for note in changed_publication.value.__notes__)
+            assert all(not owner.process_alive for owner in captured)
+            assert original.read_text() == '{"changed":true}\n'
+            assert not refused_receipt.with_suffix('.originals').exists()
+            assert wire_available()
+        finally:
+            os.close(route_descriptor)
     finally:
         for name in ("batch-a", "batch-renamed", "batch-b"):
             try:

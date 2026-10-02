@@ -15,6 +15,14 @@ if (( $# > 1 )); then
     exit 2
 fi
 
+# Borrow the original publication resource before runtime/default selection.
+# The open descriptor survives exec and retires with this exact client.
+exec {route_lease}<"$HOME/.local/state/agent-comms"
+if ! flock --shared --nonblock "$route_lease"; then
+    printf 'Agent Comms publication is in progress; client not launched.\n' >&2
+    exit 1
+fi
+
 runtime="${AGENT_COMMS_RUNTIME_ROOT:-}"
 if [[ -z "$runtime" ]]; then
     acp_launcher="${AGENT_COMMS_ACP_LAUNCHER:-$(command -v agent-comms-acp || true)}"

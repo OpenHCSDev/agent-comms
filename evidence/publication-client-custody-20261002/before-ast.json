@@ -1,0 +1,1167 @@
+{
+  "coverage": [
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "root": "src/agent_comms",
+      "modules": 311,
+      "unparsed": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "root": "tools/cutover",
+      "modules": 51,
+      "unparsed": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "root": "src/toad",
+      "modules": 276,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/acp.py",
+      "line": 500,
+      "kind": "declaration",
+      "name": "CommsClient",
+      "bases": [
+        "CommsAgent"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/acp.py",
+      "line": 552,
+      "kind": "Load",
+      "reference": "CommsClient"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 32,
+      "kind": "declaration",
+      "name": "CommsRoute",
+      "bases": [
+        "ABC"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 46,
+      "kind": "declaration",
+      "name": "LocalRoute",
+      "bases": [
+        "CommsRoute"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 80,
+      "kind": "declaration",
+      "name": "ActiveRoute",
+      "bases": [
+        "CommsRoute"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 112,
+      "kind": "declaration",
+      "name": "resolve_comms_route",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 143,
+      "kind": "declaration",
+      "name": "read_active_route",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 189,
+      "kind": "declaration",
+      "name": "guard_default_route_write",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 46,
+      "kind": "Load",
+      "reference": "CommsRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 80,
+      "kind": "Load",
+      "reference": "CommsRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 112,
+      "kind": "Load",
+      "reference": "CommsRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 87,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 143,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 230,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 254,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 115,
+      "kind": "Load",
+      "reference": "LocalRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 117,
+      "kind": "Load",
+      "reference": "LocalRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 118,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 118,
+      "kind": "Load",
+      "reference": "LocalRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 185,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 217,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 258,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 275,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 133,
+      "kind": "Load",
+      "reference": "guard_default_route_write"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 105,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/active_route.py",
+      "line": 324,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/cli.py",
+      "line": 56,
+      "kind": "import",
+      "reference": "from .active_route import guard_default_route_write"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/cli.py",
+      "line": 58,
+      "kind": "Load",
+      "reference": "guard_default_route_write"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/comms.py",
+      "line": 62,
+      "kind": "import",
+      "reference": "from .active_route import resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/comms.py",
+      "line": 64,
+      "kind": "Load",
+      "reference": "resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 17,
+      "kind": "declaration",
+      "name": "OwnerCutover",
+      "bases": [
+        "ABC"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 75,
+      "kind": "declaration",
+      "name": "StoppedOwnerInstallation",
+      "bases": [
+        "OwnerCutover"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 13,
+      "kind": "import",
+      "reference": "from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 60,
+      "kind": "declaration",
+      "name": "restore_unchanged",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 75,
+      "kind": "Load",
+      "reference": "OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 87,
+      "kind": "Load",
+      "reference": "StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 36,
+      "kind": "Load",
+      "reference": "StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 40,
+      "kind": "Load",
+      "reference": "StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 78,
+      "kind": "Load",
+      "reference": "StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_cutover.py",
+      "line": 96,
+      "kind": "Load",
+      "reference": "StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 134,
+      "kind": "import",
+      "reference": "from .owner_cutover import OwnerCutover, PreserveOwnerRuntime"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "line": 252,
+      "kind": "Load",
+      "reference": "OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 128,
+      "kind": "declaration",
+      "name": "StoppedOwnerBatch",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 24,
+      "kind": "import",
+      "reference": "from .owner_cutover import OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 159,
+      "kind": "Load",
+      "reference": "OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 175,
+      "kind": "Load",
+      "reference": "StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 175,
+      "kind": "Load",
+      "reference": "OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 199,
+      "kind": "Load",
+      "reference": "OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 228,
+      "kind": "Load",
+      "reference": "OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/owner_restart.py",
+      "line": 214,
+      "kind": "Load",
+      "reference": "StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 69,
+      "kind": "import",
+      "reference": "from .active_route import read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/private_nk_entrypoint.py",
+      "line": 71,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/cutover_child.py",
+      "line": 14,
+      "kind": "declaration",
+      "name": "restore_stopped_batch",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 6,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import ActiveRoute, _publish_active_route_locked, read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 9,
+      "kind": "import",
+      "reference": "from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 17,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 18,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 21,
+      "kind": "Load",
+      "reference": "StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 28,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 21,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 28,
+      "kind": "import",
+      "reference": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 88,
+      "kind": "declaration",
+      "name": "require_no_clients",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 173,
+      "kind": "declaration",
+      "name": "PublishOpenhcsRecovery",
+      "bases": [
+        "StoppedOwnerInstallation"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 173,
+      "kind": "Load",
+      "reference": "StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 176,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 344,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 131,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 235,
+      "kind": "Load",
+      "reference": "require_no_clients"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 281,
+      "kind": "Load",
+      "reference": "require_no_clients"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 345,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 370,
+      "kind": "Load",
+      "reference": "PublishOpenhcsRecovery"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 322,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 19,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 24,
+      "kind": "import",
+      "reference": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 30,
+      "kind": "import",
+      "reference": "from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 33,
+      "kind": "import",
+      "reference": "from cutover_child import restore_stopped_batch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 37,
+      "kind": "declaration",
+      "name": "ReviewedArtifact",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 201,
+      "kind": "declaration",
+      "name": "PublishRetainedSummary",
+      "bases": [
+        "StoppedOwnerInstallation"
+      ]
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 201,
+      "kind": "Load",
+      "reference": "StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 137,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 139,
+      "kind": "Load",
+      "reference": "ReviewedArtifact"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 140,
+      "kind": "Load",
+      "reference": "ReviewedArtifact"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 205,
+      "kind": "Load",
+      "reference": "StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 337,
+      "kind": "Load",
+      "reference": "StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 141,
+      "kind": "Load",
+      "reference": "ReviewedArtifact"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 226,
+      "kind": "Load",
+      "reference": "require_no_clients"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 255,
+      "kind": "Load",
+      "reference": "require_no_clients"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 297,
+      "kind": "Load",
+      "reference": "self.restore_unchanged"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 318,
+      "kind": "Load",
+      "reference": "restore_stopped_batch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 360,
+      "kind": "Load",
+      "reference": "PublishRetainedSummary"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 172,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 196,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 314,
+      "kind": "Load",
+      "reference": "ReviewedArtifact"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 316,
+      "kind": "Load",
+      "reference": "ReviewedArtifact"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 312,
+      "kind": "Load",
+      "reference": "ReviewedArtifact"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 24,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 48,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/restore_stopped_owners.py",
+      "line": 19,
+      "kind": "import",
+      "reference": "from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/restore_stopped_owners.py",
+      "line": 23,
+      "kind": "Load",
+      "reference": "StoppedOwnerBatch"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 14,
+      "kind": "import",
+      "reference": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/retained_index_cutover.py",
+      "line": 21,
+      "kind": "Load",
+      "reference": "StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 13,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 16,
+      "kind": "import",
+      "reference": "from publish_retained_summary import ReviewedArtifact, ReviewedRetainedSummaryCohort"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 100,
+      "kind": "Load",
+      "reference": "ReviewedArtifact"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/retained_summary_reset_controls.py",
+      "line": 102,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "line": 13,
+      "kind": "import",
+      "reference": "from agent_comms.owner_cutover import StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/retained_task_source_carry.py",
+      "line": 17,
+      "kind": "Load",
+      "reference": "StoppedOwnerInstallation"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 12,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import ActiveRoute, publish_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 126,
+      "kind": "Load",
+      "reference": "ActiveRoute"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 15,
+      "kind": "import",
+      "reference": "from agent_comms.owner_cutover import OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/thread_retirement_cutover.py",
+      "line": 22,
+      "kind": "Load",
+      "reference": "OwnerCutover"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 14,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 155,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 8,
+      "kind": "import",
+      "reference": "from toad.acp.agent_process import AgentProcess"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/agent.py",
+      "line": 93,
+      "kind": "Load",
+      "reference": "AgentProcess"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/agent_process.py",
+      "line": 33,
+      "kind": "declaration",
+      "name": "AgentProcess",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/agent_process.py",
+      "line": 51,
+      "kind": "import",
+      "reference": "from toad.comms_root import RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/agent_process.py",
+      "line": 188,
+      "kind": "import",
+      "reference": "from .maintenance_ingress import admitted_spawn"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/agent_process.py",
+      "line": 56,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/agent_process.py",
+      "line": 190,
+      "kind": "Load",
+      "reference": "admitted_spawn"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/maintenance_ingress.py",
+      "line": 18,
+      "kind": "import",
+      "reference": "from toad.comms_root import RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/maintenance_ingress.py",
+      "line": 91,
+      "kind": "declaration",
+      "name": "admitted_spawn",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/maintenance_ingress.py",
+      "line": 95,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/maintenance_ingress.py",
+      "line": 110,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/maintenance_ingress.py",
+      "line": 147,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/acp/maintenance_ingress.py",
+      "line": 149,
+      "kind": "Load",
+      "reference": "read_active_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/app.py",
+      "line": 3,
+      "kind": "import",
+      "reference": "from toad.comms_root import CoordinationAccess, implicit_root, root_is_current, run_selected_write"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/app.py",
+      "line": 321,
+      "kind": "Load",
+      "reference": "CoordinationAccess"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 26,
+      "kind": "declaration",
+      "name": "RouteSelection",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 61,
+      "kind": "declaration",
+      "name": "CoordinationAccess",
+      "bases": []
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 18,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import CommsRoute"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 165,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 27,
+      "kind": "Load",
+      "reference": "CommsRoute"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 33,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 32,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 44,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 42,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 57,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 191,
+      "kind": "import",
+      "reference": "from agent_comms.active_route import guard_default_route_write"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 35,
+      "kind": "Load",
+      "reference": "resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 81,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 157,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 193,
+      "kind": "Load",
+      "reference": "guard_default_route_write"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 49,
+      "kind": "Load",
+      "reference": "resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 49,
+      "kind": "Load",
+      "reference": "resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 167,
+      "kind": "Load",
+      "reference": "resolve_comms_route"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 79,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 84,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/comms_root.py",
+      "line": 90,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/thread_actions.py",
+      "line": 26,
+      "kind": "import",
+      "reference": "from toad.comms_root import RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/thread_actions.py",
+      "line": 78,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/thread_actions.py",
+      "line": 56,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/thread_actions.py",
+      "line": 235,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/comms_transfer.py",
+      "line": 13,
+      "kind": "import",
+      "reference": "from toad.comms_root import RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/comms_transfer.py",
+      "line": 44,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/comms_transfer.py",
+      "line": 109,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/comms_transfer.py",
+      "line": 114,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    },
+    {
+      "repo": "/home/ts/wt/toad-prompt-action-owner-20261002",
+      "path": "src/toad/widgets/comms_transfer.py",
+      "line": 106,
+      "kind": "Load",
+      "reference": "RouteSelection"
+    }
+  ],
+  "resolution_limit": "AST syntax plus semantic reads; dynamic plugin imports and external old clients are not statically resolved."
+}
