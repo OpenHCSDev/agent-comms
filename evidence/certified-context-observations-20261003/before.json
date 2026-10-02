@@ -1,0 +1,2692 @@
+{
+  "scope": "original writer private retained bus before existing checkpoint reset",
+  "root": "/home/ts/.cache/agent-scratch/m549/wire",
+  "original_marker": {
+    "last_seq": 4,
+    "admission_after_seq": 0,
+    "access": {
+      "kind": "writable"
+    },
+    "writer_protocol_version": 1,
+    "wire_root_id": "7da48e8d5a004c89ae16a49b2ecb6b0f",
+    "claim_envelopes_version": 1,
+    "checkpoint_version": 1,
+    "checkpoint_seal": {
+      "state": "final",
+      "version": 1,
+      "db_revision": [
+        2084,
+        1977074,
+        32768,
+        1790982242238704131,
+        1790982242238704131
+      ],
+      "witness": {
+        "root_id": "7da48e8d5a004c89ae16a49b2ecb6b0f",
+        "revision": [
+          2084,
+          1976931,
+          71661,
+          1790982242228703927,
+          1790982242228703927
+        ],
+        "through_seq": 4,
+        "digest": "4608845bc3e68cc44a0955174b5a1a7b4b2993c7eb33c96092ce29605a221e86",
+        "tail": "879997e9cdd5d102dc919b33011518d6156be6a0f3fc7e4748529f423f30977f"
+      }
+    }
+  },
+  "original_manifests": [
+    {
+      "thread": {
+        "name": "terminal549-owner",
+        "created_at": 1790982225.3656502
+      },
+      "turn": {
+        "kind": "recorded",
+        "identity": {
+          "value": "17cfa2f2d567169001e0b2981803e981"
+        },
+        "occurrence": {
+          "incarnation": {
+            "name": "terminal549-owner",
+            "created_at": 1790982225.3656502
+          },
+          "generation": 1
+        }
+      },
+      "segments": [
+        {
+          "kind": "system_layer",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+              },
+              "request_generation": 1,
+              "context_digest": "d2ebf90aa12320fac9ee862a9380a249f42c6d92d81ae72cbf6b99429ade84d4"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+              "sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/_native/APPEND_SYSTEM.md",
+              "sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6"
+            }
+          ],
+          "sha256": "52a0acd9ace911b3f901446c7ee8b60643e2f98ac853b7147131a15e7637d4f2",
+          "utf8_bytes": 17415,
+          "tokens": 4330,
+          "contributors": []
+        },
+        {
+          "kind": "compaction_summary",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+              },
+              "request_generation": 1,
+              "context_digest": "d2ebf90aa12320fac9ee862a9380a249f42c6d92d81ae72cbf6b99429ade84d4"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8121c42e"
+              ]
+            }
+          ],
+          "sha256": "c963de174467147046387d5d73d8310f4a31fd5eac7f8fcf39933149e29d1233",
+          "utf8_bytes": 31322,
+          "tokens": 7684,
+          "contributors": []
+        },
+        {
+          "kind": "transcript",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+              },
+              "request_generation": 1,
+              "context_digest": "d2ebf90aa12320fac9ee862a9380a249f42c6d92d81ae72cbf6b99429ade84d4"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "f43746e2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "449757fe"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "4ff914be"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "50653bd1"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0de79a54"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "682bc0e3"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "f31c5212"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ace9d170"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0efc1b1d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "97931b4f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a7adafcc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "db912b0c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "4506a7fe"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9d59eb87"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "997af277"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "971430b6"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8ebabdb4"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "141795aa"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "f6d2a6fc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ce25eac2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a3e8527c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1dd306a5"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "301f9ff9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "79740b29"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c1fe7334"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9ffcd474"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0b5352b0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "3eacdfde"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0b2bf9f4"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "71223cf2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "e80181e9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2cbe113f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2397e5cd"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "e3018b3c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "dc75db9a"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "7eff5da6"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6dc05c2d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b72328a0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ba0f7738"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6549bddb"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ebbc16d2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b1598dfe"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c8f52858"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c5685eed"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8f216c51"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c3bfeaba"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "cb19585a"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ca1a40d0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "01e10f4d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9fcfed69"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c12dec31"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "73ba7712"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "adf6e2bf"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9782b034"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "85c17735"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "19c41c2c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "799861e2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1a6fa05b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a4c40e64"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8888cffe"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "aace91de"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a096bf52"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "15c13361"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "e0626283"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6f369e05"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "610ffd06"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "24d87b39"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "aebda325"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "410340e3"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "de20d882"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d8c36ea9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "e5a9e485"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "020f982f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a3af9da9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "262477bc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "00fb70d8"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "67da08d5"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "bbeb2c0c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "642c39eb"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "65a3f7b2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6e3f62e7"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "849c3d0b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a9f48702"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9f1a5a51"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a2fad91a"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "eab5dc54"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "7a0a7cf0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "18f58c5d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6b7b873d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1b7660cd"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6ab1fb73"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c5e3b206"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "574950a3"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9380eff9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "587c3f23"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1510de4b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b6b43ed2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6f0d01fb"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "132d0eee"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "29443914"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "fdcbb729"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "49f2db19"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0e65fee8"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1bf34408"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6d36506d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "cf3bb1cc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "92a6101d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2c4d6ef1"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ac1f8def"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "624e05ca"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "37056963"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d63dcb15"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "31088208"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a9866047"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "cfac393f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2a1cc97e"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "dfdff5b4"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b03a8699"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d61e574e"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2c032c26"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8fcaec6b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "211bc224"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "f4b47eb7"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b9b55d9d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c29b897e"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6ff6f570"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "840223e7"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "02b1955d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "7fee620b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "80fd738c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "5515bfb2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "5716c552"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c92151cf"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "5a51b2d8"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "faa2ff6b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "99a9da7c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "3d0b9036"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "bc277ff5"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "cbee927a"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "5f623d74"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d64e45af"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "227d71de"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "7ea6977f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c4183b69"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "51392acc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "32169f35"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d2f9ed8b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2e098071"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "02ed97fd"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "803e34f0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "666b7929"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ca4ba6cc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "11f2b984"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "be78f5ea"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "859404c6"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9a0baec6"
+              ]
+            }
+          ],
+          "sha256": "2e2bc5ca08b31fb8f6cdc27ac9f3d1bb9cdde4d854e5b2efbe82d4b80953a150",
+          "utf8_bytes": 589432,
+          "tokens": 80285,
+          "contributors": [
+            {
+              "kind": "selected_wake",
+              "provenance": [
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/selected-wake.md",
+                  "sha256": "c54e620c7bcf8e2369a5d5fd0d1a16c5408772b16a09228039f5ca753d27c24a"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/reply-relevance.md",
+                  "sha256": "3d06679ed0f4c856d05481209a377c0bdb6d1040b8ba2737e6fe119776a4c227"
+                },
+                {
+                  "kind": "owner",
+                  "owner": {
+                    "name": "terminal549-owner",
+                    "created_at": 1790982225.3656502
+                  },
+                  "revision": "ed2f199691d42779bd8367c86dc8fab2b536cdd45ea4f3d0935b30d4def235a9"
+                },
+                {
+                  "kind": "wire",
+                  "source": {
+                    "seq": 1,
+                    "message_id": "002ee824d90f"
+                  }
+                },
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                    "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+                  },
+                  "request_generation": 1,
+                  "context_digest": "d2ebf90aa12320fac9ee862a9380a249f42c6d92d81ae72cbf6b99429ade84d4"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+                  "entries": [
+                    "9a0baec6"
+                  ]
+                }
+              ],
+              "sha256": "ab04931ac965ad7bb24b6b0f813ccc2d77827ec1fb748ccc6176556e935e4478",
+              "utf8_bytes": 2279,
+              "tokens": 538,
+              "contributors": []
+            },
+            {
+              "kind": "complete_awareness",
+              "provenance": [
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/selected-awareness.md",
+                  "sha256": "c274e6b92ccfbec9fc4591335e802e349ad0b86c273b0014309a2079aa544981"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/selected-awareness-content.md",
+                  "sha256": "9ed3c5ab6f0879ea6d011ad3faa571c795f22d81b35c0a1b2bc542fbcee072cf"
+                },
+                {
+                  "kind": "resource",
+                  "path": "/home/ts/.cache/agent-scratch/m549/wire/coordination.sqlite3",
+                  "sha256": "fb30ac21875e194c0de5e4b3a2ef7a05c521ea9de682d521ffbae1711137f151",
+                  "representation": "captured typed optional awareness rows"
+                },
+                {
+                  "kind": "wire",
+                  "source": {
+                    "seq": 1,
+                    "message_id": "002ee824d90f"
+                  }
+                },
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                    "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+                  },
+                  "request_generation": 1,
+                  "context_digest": "d2ebf90aa12320fac9ee862a9380a249f42c6d92d81ae72cbf6b99429ade84d4"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+                  "entries": [
+                    "9a0baec6"
+                  ]
+                }
+              ],
+              "sha256": "ebb29f15da1fe34e6c25cca45eb8a849f2efa89afd94495f2815769efe569c22",
+              "utf8_bytes": 674,
+              "tokens": 144,
+              "contributors": []
+            },
+            {
+              "kind": "selected_work",
+              "provenance": [
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/selected-wake.md",
+                  "sha256": "c54e620c7bcf8e2369a5d5fd0d1a16c5408772b16a09228039f5ca753d27c24a"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/reply-relevance.md",
+                  "sha256": "3d06679ed0f4c856d05481209a377c0bdb6d1040b8ba2737e6fe119776a4c227"
+                },
+                {
+                  "kind": "owner",
+                  "owner": {
+                    "name": "terminal549-owner",
+                    "created_at": 1790982225.3656502
+                  },
+                  "revision": "ed2f199691d42779bd8367c86dc8fab2b536cdd45ea4f3d0935b30d4def235a9"
+                },
+                {
+                  "kind": "wire",
+                  "source": {
+                    "seq": 1,
+                    "message_id": "002ee824d90f"
+                  }
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/selected-work.md",
+                  "sha256": "119dcf22c777bf8bb1f0813800641006639a7fe3b62076998cd94a724fb9689c"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/selected-coding.md",
+                  "sha256": "8b92340769eca0bf76271550161d5127cb04ac4b12143c5633348884e0a664d7"
+                },
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                    "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+                  },
+                  "request_generation": 1,
+                  "context_digest": "d2ebf90aa12320fac9ee862a9380a249f42c6d92d81ae72cbf6b99429ade84d4"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+                  "entries": [
+                    "9a0baec6"
+                  ]
+                }
+              ],
+              "sha256": "5a43193e313ad5ef632d88f91a0a02d611aead94f45a96382782e3a20edf8555",
+              "utf8_bytes": 829,
+              "tokens": 201,
+              "contributors": []
+            },
+            {
+              "kind": "selected_response",
+              "provenance": [
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/selected-response.md",
+                  "sha256": "1cc378ed58ecd109030cdb2f8dfa776729068c30cb5dbeb5c455b4ca24cae873"
+                },
+                {
+                  "kind": "file",
+                  "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/instructions/selected-response-example.md",
+                  "sha256": "8f41199cf5f4e653508ffbd84db2ea7efd00491eb0eefcb3796b96c7061742c5"
+                },
+                {
+                  "kind": "wire",
+                  "source": {
+                    "seq": 1,
+                    "message_id": "002ee824d90f"
+                  }
+                },
+                {
+                  "kind": "native",
+                  "identity": {
+                    "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                    "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+                  },
+                  "request_generation": 1,
+                  "context_digest": "d2ebf90aa12320fac9ee862a9380a249f42c6d92d81ae72cbf6b99429ade84d4"
+                },
+                {
+                  "kind": "journal",
+                  "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+                  "entries": [
+                    "9a0baec6"
+                  ]
+                }
+              ],
+              "sha256": "43354b520c1507bdc4474ae0c9aaccb774571a1c96f3149c4d69a3f8a3ed4346",
+              "utf8_bytes": 628,
+              "tokens": 143,
+              "contributors": []
+            }
+          ]
+        },
+        {
+          "kind": "tool_catalog",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+              },
+              "request_generation": 1,
+              "context_digest": "d2ebf90aa12320fac9ee862a9380a249f42c6d92d81ae72cbf6b99429ade84d4"
+            }
+          ],
+          "sha256": "3466615b8ac17f0e87fcd39049296cdee6c737f83e409494063a0f5b5864bb4e",
+          "utf8_bytes": 2778,
+          "tokens": 695,
+          "contributors": []
+        }
+      ],
+      "counter": "pi.estimateTokens"
+    },
+    {
+      "thread": {
+        "name": "terminal549-owner",
+        "created_at": 1790982225.3656502
+      },
+      "turn": {
+        "kind": "recorded",
+        "identity": {
+          "value": "17cfa2f2d567169001e0b2981803e981"
+        },
+        "occurrence": {
+          "incarnation": {
+            "name": "terminal549-owner",
+            "created_at": 1790982225.3656502
+          },
+          "generation": 1
+        }
+      },
+      "segments": [
+        {
+          "kind": "system_layer",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "47978f5b7c87bae468bf928cd74fccbbd72d390f7501f8204222373a76c8a81b"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
+              "sha256": "4a57f022a27f2ae22d7d0c0d8f0ef4a63f869b878483699d4102055239bdea0a"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/toad-receiving-485-488-278-20261001/.artifacts/runtime-bundled-485-488-278-20261001/lib/python3.14/site-packages/agent_comms/_native/APPEND_SYSTEM.md",
+              "sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6"
+            }
+          ],
+          "sha256": "52a0acd9ace911b3f901446c7ee8b60643e2f98ac853b7147131a15e7637d4f2",
+          "utf8_bytes": 17415,
+          "tokens": 4330,
+          "contributors": []
+        },
+        {
+          "kind": "compaction_summary",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "47978f5b7c87bae468bf928cd74fccbbd72d390f7501f8204222373a76c8a81b"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8121c42e"
+              ]
+            }
+          ],
+          "sha256": "c963de174467147046387d5d73d8310f4a31fd5eac7f8fcf39933149e29d1233",
+          "utf8_bytes": 31322,
+          "tokens": 7684,
+          "contributors": []
+        },
+        {
+          "kind": "transcript",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "47978f5b7c87bae468bf928cd74fccbbd72d390f7501f8204222373a76c8a81b"
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "f43746e2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "449757fe"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "4ff914be"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "50653bd1"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0de79a54"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "682bc0e3"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "f31c5212"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ace9d170"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0efc1b1d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "97931b4f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a7adafcc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "db912b0c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "4506a7fe"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9d59eb87"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "997af277"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "971430b6"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8ebabdb4"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "141795aa"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "f6d2a6fc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ce25eac2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a3e8527c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1dd306a5"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "301f9ff9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "79740b29"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c1fe7334"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9ffcd474"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0b5352b0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "3eacdfde"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0b2bf9f4"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "71223cf2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "e80181e9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2cbe113f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2397e5cd"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "e3018b3c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "dc75db9a"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "7eff5da6"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6dc05c2d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b72328a0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ba0f7738"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6549bddb"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ebbc16d2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b1598dfe"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c8f52858"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c5685eed"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8f216c51"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c3bfeaba"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "cb19585a"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ca1a40d0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "01e10f4d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9fcfed69"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c12dec31"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "73ba7712"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "adf6e2bf"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9782b034"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "85c17735"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "19c41c2c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "799861e2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1a6fa05b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a4c40e64"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8888cffe"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "aace91de"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a096bf52"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "15c13361"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "e0626283"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6f369e05"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "610ffd06"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "24d87b39"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "aebda325"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "410340e3"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "de20d882"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d8c36ea9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "e5a9e485"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "020f982f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a3af9da9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "262477bc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "00fb70d8"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "67da08d5"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "bbeb2c0c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "642c39eb"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "65a3f7b2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6e3f62e7"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "849c3d0b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a9f48702"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9f1a5a51"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a2fad91a"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "eab5dc54"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "7a0a7cf0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "18f58c5d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6b7b873d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1b7660cd"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6ab1fb73"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c5e3b206"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "574950a3"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9380eff9"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "587c3f23"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1510de4b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b6b43ed2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6f0d01fb"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "132d0eee"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "29443914"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "fdcbb729"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "49f2db19"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "0e65fee8"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "1bf34408"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6d36506d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "cf3bb1cc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "92a6101d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2c4d6ef1"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ac1f8def"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "624e05ca"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "37056963"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d63dcb15"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "31088208"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "a9866047"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "cfac393f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2a1cc97e"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "dfdff5b4"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b03a8699"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d61e574e"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2c032c26"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "8fcaec6b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "211bc224"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "f4b47eb7"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b9b55d9d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c29b897e"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "6ff6f570"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "840223e7"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "02b1955d"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "7fee620b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "80fd738c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "5515bfb2"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "5716c552"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c92151cf"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "5a51b2d8"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "faa2ff6b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "99a9da7c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "3d0b9036"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "bc277ff5"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "cbee927a"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "5f623d74"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d64e45af"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "227d71de"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "7ea6977f"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "c4183b69"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "51392acc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "32169f35"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "d2f9ed8b"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "2e098071"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "02ed97fd"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "803e34f0"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "666b7929"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "ca4ba6cc"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "11f2b984"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "be78f5ea"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "859404c6"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "9a0baec6"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "b6f7432c"
+              ]
+            },
+            {
+              "kind": "journal",
+              "path": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl",
+              "entries": [
+                "98da42ef"
+              ]
+            }
+          ],
+          "sha256": "fcb64fcb5fbdc73cfd2e49aaaa5fc34e5b68c3d2828d922dff58747b800e45d3",
+          "utf8_bytes": 590767,
+          "tokens": 80340,
+          "contributors": []
+        },
+        {
+          "kind": "tool_catalog",
+          "provenance": [
+            {
+              "kind": "native",
+              "identity": {
+                "sessionId": "01a0fedb-efa7-71a3-8bb2-40907a55d91b",
+                "sessionFile": "/home/ts/.cache/agent-scratch/m549/native-forks/2026-10-02T23-03-41-735Z_01a0fedb-efa7-71a3-8bb2-40907a55d91b.jsonl"
+              },
+              "request_generation": 2,
+              "context_digest": "47978f5b7c87bae468bf928cd74fccbbd72d390f7501f8204222373a76c8a81b"
+            }
+          ],
+          "sha256": "3466615b8ac17f0e87fcd39049296cdee6c737f83e409494063a0f5b5864bb4e",
+          "utf8_bytes": 2778,
+          "tokens": 695,
+          "contributors": []
+        }
+      ],
+      "counter": "pi.estimateTokens"
+    }
+  ],
+  "protected_file_hashes": {
+    "/home/ts/.cache/agent-scratch/m549/wire/native_prompt_bindings.sqlite3": "9d2800cc06530c9b1e7f2cc2563d295fa9cf76b26bca42f16b1244b9d032985e",
+    "/home/ts/.cache/agent-scratch/m549/wire/wake_candidates.sqlite3-shm": "fd4c9fda9cd3f9ae7c962b0ddf37232294d55580e1aa165aa06129b8549389eb",
+    "/home/ts/.cache/agent-scratch/m549/wire/.bus_meta.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/catalog.json": "2857444e16674b00ac9d8806e248b2a5aefff3ac0b6cd71d465f0d8174665a22",
+    "/home/ts/.cache/agent-scratch/m549/wire/compaction-commits.sqlite3": "7ef1efab379eeb09ac084d5f183342ec5684886a2248098cc463fee875284ca7",
+    "/home/ts/.cache/agent-scratch/m549/wire/coordination.sqlite3": "1eec455658712e1027215c53c5d07dd0d8be62a5720b47ba6695170b8f2c5e54",
+    "/home/ts/.cache/agent-scratch/m549/wire/.input_dispositions.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/bus.jsonl": "ac0c71717fac73f2e4f79309db38a4f6d21b7481b258b68a44913d552baa8880",
+    "/home/ts/.cache/agent-scratch/m549/wire/activity.jsonl": "641c1e4c373fe9b675e2cc94cb1c8a0090575f5654859bbd4baaa6e7ed3f9c05",
+    "/home/ts/.cache/agent-scratch/m549/wire/wake_candidates.sqlite3": "9facc4b7915d05a07e0bc2b3c54840b6a515c39a793c45217a1d2fb8e738329f",
+    "/home/ts/.cache/agent-scratch/m549/wire/.activity.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/bus_page_index.sqlite3": "f3b21e6aa0383685ead463e5f19d4aa6a80e7e6b0bdd3ecaadce04fbe240841a",
+    "/home/ts/.cache/agent-scratch/m549/wire/wake_candidates.sqlite3-wal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/.catalog.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/.native_prompt_bindings.sqlite3.snapshot-lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/.registry.json.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/registry.json": "98f9750e5d57a932af9375d1bb0e3696b47ebe59e61abfdfa9a042b9563560c2",
+    "/home/ts/.cache/agent-scratch/m549/wire/.wire.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/.registry-owner-guard": "af3c7eaa64aefba76c93f2af6af3551122a0e537d7fbe177b173d36a12c79b77",
+    "/home/ts/.cache/agent-scratch/m549/wire/.bus.jsonl.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/ts/.cache/agent-scratch/m549/wire/diagnostics/17cfa2f2d567169001e0b2981803e981.requests.jsonl": "ca2c1bf366e61f355a2b18ca1fd81d1693c0852a34fcfd9dd170fcb21217ab0f",
+    "/home/ts/.cache/agent-scratch/m549/wire/native-sessions/971db3d964414b2bee7b572a1f0c2932/.native-pi-agent/settings.json": "b25410bb9ae164c9c5736066f70923cfb3233893afdeefd3b17c00e181531307",
+    "/home/ts/.cache/agent-scratch/m549/wire/native-sessions/971db3d964414b2bee7b572a1f0c2932/selected-tool-ledger/2c703f646637fe4273ff2cc7407f3b55": "91a10b5bf54c4e9d2b65b3b2cb7b7d6cd49e76c4ae2c3d8d49115ee29e0639e6",
+    "/home/ts/.cache/agent-scratch/m549/wire/native-sessions/971db3d964414b2bee7b572a1f0c2932/selected-tool-ledger/2c703f646637fe4273ff2cc7407f3b55.done": "91a10b5bf54c4e9d2b65b3b2cb7b7d6cd49e76c4ae2c3d8d49115ee29e0639e6",
+    "/home/ts/.cache/agent-scratch/m549/wire/runtime/native-startup/0.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "manifest_count": 2,
+  "python": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-scoped-input534/bin/python",
+  "derived_marker_path": "/home/ts/.cache/agent-scratch/m549/wire/bus_meta.json"
+}
