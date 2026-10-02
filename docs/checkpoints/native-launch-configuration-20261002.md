@@ -36,7 +36,7 @@ affected installed configured journey. This document does not claim readiness.
   owner’s configuration environment. This is the SDK’s optional resource operand,
   not an internal lifecycle state or a new configuration authority.
 
-Eight production files: 113 lines added, 113 deleted at this checkpoint. Source
+Eight production files: 117 lines added, 113 deleted at this checkpoint. Source
 AST evidence parsed every production module with zero omissions; external config
 names now occur only on their two owner field declarations. Eight direct
 synthetic launch constructors receive the same declared contract explicitly.
