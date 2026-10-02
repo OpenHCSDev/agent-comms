@@ -15,12 +15,12 @@ import sys
 from pathlib import Path
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import RuntimeConnection, socket_path
 from agent_comms.threads import Thread
-from delivery_owner_fixture import canonical_agent
 
 
 def digest(path):
@@ -39,8 +39,9 @@ async def main(args):
     root_id = comms.messaging.initialize_private_initial_protocol()
     os.environ.update({ROOT_ID_ENV: root_id, PACKAGE_ENV: str(args.package),
                        'AGENT_COMMS_ROOT': str(root)})
-    owner = canonical_agent(
+    owner = CommsAgent(
         comms, agent_bin='pi',
+        private_nk_native_package=args.package, private_nk_wire_root_id=root_id,
         agent_args=['--model', 'openai-codex/gpt-6.1-sol', '--thinking', 'off', '--offline'],
         auto_wake=False, runtime_enabled=True,
     )
