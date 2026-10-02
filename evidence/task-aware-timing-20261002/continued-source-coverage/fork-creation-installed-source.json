@@ -1,0 +1,71 @@
+{
+  "state": "READY compact normal Corewheel/SDK sourcequalified; Einstein actualS1 remains separate",
+  "prefix": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-fork-creation520-installed-20261002",
+  "python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-fork-creation520-installed-20261002/bin/python",
+  "core": "99c60fa7b1ac93500be2a04e7313b035e3e7a762",
+  "wheel_sha256": "84792a5921a77592995d3ec0becfa5331c73ee043b04ba19753c237b35141f44",
+  "core_direct_url": {
+    "url": "file:///home/ts/wt/comms-retained-human-main-20261001/.artifacts/fork-creation520-installed-20261002/wheels/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "source_resources_byte_equal": true,
+  "source_resource_count": 342,
+  "sdk": "0.12.1",
+  "packages": [
+    [
+      "agent-client-protocol",
+      "0.12.1"
+    ],
+    [
+      "agent-comms",
+      "0.1.0"
+    ],
+    [
+      "annotated-types",
+      "0.8.0"
+    ],
+    [
+      "metaclass-registry",
+      "0.2.1"
+    ],
+    [
+      "nominal-refactor-audit",
+      "0.1.0"
+    ],
+    [
+      "packaging",
+      "26.2"
+    ],
+    [
+      "pydantic",
+      "2.13.5"
+    ],
+    [
+      "pydantic_core",
+      "2.46.5"
+    ],
+    [
+      "typing-inspection",
+      "0.4.4"
+    ],
+    [
+      "typing_extensions",
+      "4.15.0"
+    ]
+  ],
+  "native": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-9f12ddf4e22d6d7a/node_modules/@earendil-works/pi-coding-agent",
+  "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-9f12ddf4e22d6d7a/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+  "manifest": "9f12ddf4e22d6d7a14074eb2ec22ba2f7ab376faa9a1f3b2320a0caf7d7ae3a2",
+  "tree": "d8ceeee18889e372ff72b4d068750fb06e2688762bcb95a098892761a5fd548a",
+  "native_full_trust": true,
+  "dependency_strategy": "Core production+SDK projection of existing frozen69 pins, normal wheel resolver; no Toad mismatch/override/no-deps",
+  "base_requirements_sha256": "1867c05e4ba779120ecaf2facccfdf86f43ec9288e27d744dce103499cce1771",
+  "requirements_sha256": "ce1a35a726fd59611a10bd123f40a97d4fc5b34d18b337001c46b5b3666b237a",
+  "public_writes": 0,
+  "provider_calls": 0,
+  "native_build": false,
+  "get_state_repeated": false,
+  "source_overlay": false,
+  "fixture_or_original_mutation": false,
+  "acceptance": "Installedsource/package only; Einstein owns configured optionalS1 on canonical SDKfork of preserved102 source, no repeatmanual529."
+}
