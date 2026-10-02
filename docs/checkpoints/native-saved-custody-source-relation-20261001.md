@@ -6,6 +6,26 @@ not Ready. The census fingerprints the working source, including the explicitly
 unfinished selection/admission edits; its hashes identify that source independently
 of the Git HEAD. No application, test, provider or public input was run.
 
+## Current live channel incident: seq326 (2026-10-02)
+
+[Read-only original custody/timing receipt](../../evidence/channel-seq326-native-timing-20261002/README.md)
+joins all twelve simultaneous claims to ten native triage proofs and their
+original request measurements. Nine decisions are FULL, but no full execution
+was created: the pre-triage captured claim disagrees with the revision changed
+by original triage reservation. Singer owns the complete SelectedSource/batch/
+ExecutionStore producer/consumer repair; this branch does not add a refresh-copy
+or duplicate that fix. All historical originals remain untouched.
+
+The large cross-owner delay precedes native user persistence/model preparation,
+not the measured 3.3–7.6 s model requests. The first two requests overlap. The
+deployed acquisition and raw-writer global lock scopes end before provider
+streaming; a held global provider lock has not been established. Physical lock
+wait/get_state acceptance/writer grant timestamps were not retained, so the
+specific operation causing the remaining interval is not yet identified.
+The receipt distinguishes this gap from the confirmed stale-claim defect and
+from the model's actual IGNORE response. This follow-up performed only read-only
+original joins and installed-codec profiles, not tests or new native inputs.
+
 ## Original tooling and complete source context
 
 [NRA census](../../evidence/runtime-lifecycle-semantic-pass-20261001/nra-custody-caller-census.json)
