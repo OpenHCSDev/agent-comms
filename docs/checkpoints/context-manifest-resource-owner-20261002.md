@@ -42,8 +42,28 @@ reflection and unchanged native JavaScript remain explicit semantic boundaries.
 
 #516's configured saved-fork journey had already completed before this source
 was integrated. Its frozen prefix and proof remain unchanged and do not qualify
-#515. The remaining check belongs in the next matching receiving environment:
-the installed original callbacks, canonical writer and manifest CLI. It detects
-event-loop blocking or an omitted await, duplicate/missing publication, and
-resource retirement before publication finishes. No new provider/native input
-or repeated #516 gate is needed for this resource change.
+#515. Schrodinger then normally joined #515 and #518 in candidate `65a28ad2`
+before its first checks. One installed wheel served both owners' journeys.
+Its 339 Git source files and 341 wheel files are byte-equal, with ordinary
+dependency resolution, SDK 0.12.1 and existing native5184 full trust. There is no
+source overlay or separate #515 environment.
+
+The [installed callback/CLI journey](../../evidence/context-manifest-resource-owner-20261002/installed-callback-cli-receipt.json)
+passed on that same prefix. Original native observations came from preserved
+`b509c01`; the isolated recording fixture uses real `CommsAgent` components,
+`TurnProgress`, `SelectedParticipant.select`, registry leases, coordination rows
+and the canonical `WireLog` lock. Both callbacks stayed responsive while the
+writer was held. The cancelled ordinary callback joined publication before
+returning cancellation. Each callback produced exactly one silent manifest;
+metadata and the ordinary lease identity matched their original values.
+
+The actual installed `agent-comms context Alice --turn 1` returned its original
+manifest with `text_recorded: false`. Message sequence and history stayed
+unchanged. The original source registry and bus hashes stayed unchanged. Zero
+provider calls, native inputs or public mutations. These are actual installed
+recording-owner/resource/CLI results, not a new provider/native producer claim.
+
+The initial pytest command refused the repository's optional xdist/coverage
+arguments before collecting a fixture. That refusal is retained. Direct asyncio
+execution then completed this single journey, using installed application
+source and existing test support only. No failed native input was retried.
