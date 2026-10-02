@@ -39,3 +39,9 @@ Current main95d7 and507777a normally integrated into productionad7bf20b. Five pr
 Installed303 original proof/admission relation passed with actual owner2 three-source FULL context/journal/binding and refusal controls. Original SQL/bus/registry/journal hash-identical; missing cursor stays missing. This is NOT live publication acceptance.
 
 Arendt confirms current Native5/native5184 is independent of unfinished Native6. User authorizes ONE fresh configured3-owner3-pending-source live journey, new originals only; Kepler runner, Arendt lifecycle, Singer cursor producer. Owners stay in current epoch through FULL and normal publication/refresh; actual typed ACP envelope must match exact original FULL/native membership, while later UNKNOWN remains preserved. No old input/epoch restart.
+
+## Fresh configured live qualification completed
+
+ONE normal installed configured gate PASS25.911seconds at `/home/ts/wt/b503507c01`. New private originals only; exact3-primary-FULL verified cursor envelopes carry original inputs, injected3, current live owner epochs/PIDs. All9original claim/history/membership/sealed receipts and3channelanswers passed,35ACPfacts. Final3SQL cursors advance legitimate reply TRIAGE; this does not change fanout/wake policy. Original settings/journals hash-identical, owned processes retired; oldgate01/UNKNOWNs preserved.
+
+Immediate primary selected_status=proven publications observed. Deferred refusal→idle-refresh→verified was not individually recorded and is not claimed; no repeat/synthetic provider gate. Installed original admission/empty-refresh controls separately passed. Useful scoped missing-row acceptance now qualified; whole lifecycle/performance remains open. Receiving303 has full69/all4source/native evidence.
