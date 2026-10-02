@@ -12,6 +12,7 @@ import threading
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,7 +20,7 @@ from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
-from .diagnostics import PublicationMeasurements, record_acquisition_progress
+from .diagnostics import PublicationMeasurements, record_acquisition_progress, record_request_progress
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
@@ -169,6 +170,10 @@ class PrivateSendAdmission:
                     maintenance_root=self.bus.log.path.parent,
                     selected_tool_mode=selected_tool_mode,
                     observe_event=observe_event,
+                    request_observer=partial(
+                        record_request_progress, self.bus.log.path.parent,
+                        self.owner.thread.require_turn_lease(),
+                    ),
                     prompt_send_boundary=self,
                     acquisition_measurements=self._measurements,
                 )

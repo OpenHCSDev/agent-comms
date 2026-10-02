@@ -84,6 +84,9 @@ class PiEvent(PiPayload, DeclaredFamily):
     def observed_phase(self, phase):
         return phase
 
+    def observe_request(self, session: TurnSession) -> None:
+        """A transport measurement is independent of turn-phase publication."""
+
     def require_request(self, request: PiCommand) -> PiResponseData:
         raise ValueError("Native event is not a request response")
 
@@ -143,8 +146,8 @@ class AgentStart(PiEvent):
 class ModelRequestProgress(PiEvent):
     progress: "RequestProgress"
 
-    def observed_phase(self, phase):
-        return phase.model_request(self.progress)
+    def observe_request(self, session: TurnSession) -> None:
+        session.record_request_progress(self.progress)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -34,6 +34,8 @@ from .native_prompt_send import PromptSendFailure, send_fenced_prompt
 from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission
 from .diagnostics import PublicationMeasurements
+from .child_process import ProcessIdentity
+from .request_progress import RequestProgress
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
@@ -150,12 +152,14 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         startup: NativeStartupAdmission,
         selected_tool_mode,
         observe_event,
+        request_observer,
     ):
         super().__init__(
             launch,
             command.message,
             model_wait_timeout=model_wait_timeout,
             startup=startup,
+            request_observer=request_observer,
         )
         self.command = command
         self.provider, self.model = provider, model
@@ -189,6 +193,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         selected_tool_mode: NativeToolMode | None = None,
         observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
         acquisition_measurements: PublicationMeasurements | None = None,
+        request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
@@ -225,6 +230,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                                              measurements=acquisition_measurements),
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
+            request_observer=request_observer,
         )
         return await turn.complete()
 

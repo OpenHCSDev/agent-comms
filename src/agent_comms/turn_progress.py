@@ -239,11 +239,12 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.NativePhaseChanged)
     async def native_phase(self, event: events.NativePhaseChanged) -> None:
-        for observation in event.phase.request_observations:
-            record_request_progress(self.comms.root, self.turn_lease, observation,
-                                    native_process=event.native_process,
-                                    publication=self.publication_measurements)
         await self.transition(self.phase.observed(event.phase))
+
+    def record_request_progress(self, progress, native_process) -> None:
+        record_request_progress(self.comms.root, self.turn_lease, progress,
+                                native_process=native_process,
+                                publication=self.publication_measurements)
 
     @handles(events.StreamSettled)
     async def stream_settled(self, event: events.StreamSettled) -> None:

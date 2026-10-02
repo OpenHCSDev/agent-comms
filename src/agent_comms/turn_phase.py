@@ -9,7 +9,6 @@ from typing import ClassVar, TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .activity import ActivityState
 from .compaction_progress import CompactionSourceProgress
-from .request_progress import RequestProgress
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -19,9 +18,6 @@ class StallExempt:
     """Model progress does not end this excursion; its own events do."""
 
     def model_progress(self) -> TurnPhase:
-        return self
-
-    def model_request(self, source: RequestProgress) -> TurnPhase:
         return self
 
 
@@ -96,13 +92,6 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
 
-    def model_request(self, source: RequestProgress) -> TurnPhase:
-        return ModelWaitPhase(source=source)
-
-    @property
-    def request_observations(self) -> tuple[RequestProgress, ...]:
-        return ()
-
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
 
@@ -162,20 +151,9 @@ class PublishingPhase(TurnPhase):
         return self
 
 
-@dataclass(frozen=True)
 class ModelWaitPhase(TurnPhase):
-    source: RequestProgress | None = None
-
-    @property
-    def summary(self) -> str:
-        return self.detail or (self.source.label if self.source is not None else self.label)
-
     def model_progress(self) -> TurnPhase:
         return self
-
-    @property
-    def request_observations(self) -> tuple[RequestProgress, ...]:
-        return (self.source,) if self.source is not None else ()
 
 
 class SettlingStatsPhase(TurnPhase):
