@@ -253,10 +253,15 @@ class CertifiedSourceRead:
         self.require_current()
         if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
             return None
-        # No new key-to-source store: resolve current original pointers, newest
-        # first. The canonical prefix already proves publication-key uniqueness.
+        # The original intent already owns its Message-derived identity. Use
+        # that exact pointer relation; never decode unrelated history while
+        # the publication transaction holds its current source fence. Message
+        # IDs are not assumed unique: the original receipt still proves key,
+        # execution and complete publication content for every candidate.
         cursor = self.connection.execute(
-            f"SELECT * FROM {DeliverySources.declared_name} ORDER BY seq DESC")
+            f"SELECT * FROM {DeliverySources.declared_name} WHERE message_id=? ORDER BY seq DESC",
+            (intent.expected_message_id,),
+        )
         for row in DeliverySources.iterate(cursor):
             original = row.delivery(self.stream, self.witness.root_id)
             receipt = original.receipt

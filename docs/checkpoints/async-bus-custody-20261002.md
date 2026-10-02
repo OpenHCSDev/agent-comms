@@ -213,3 +213,17 @@ once by DeliverySources, and an append can only extend the current seal while
 the selected original window stays bounded. Neither case needs a caller guard.
 Source syntax and replaced-reference searches are complete; batched behavioral
 and configured installed validation remain last, after remaining source closure.
+
+## Current publication source lookup
+
+The original PublicationIntents declaration already validates its expected
+message ID through Message authority. Keyed receipt lookup now uses that
+existing ID to select original DeliverySources pointers instead of decoding
+every unrelated history row in reverse under the publication transaction.
+The sealed ResponseKeys row still proves presence versus absence; the actual
+original receipt must still match key, execution and complete typed intent.
+Message ID uniqueness is not assumed, and a present key without a matching
+original source still refuses publication rather than returning absence or
+authorizing another append. SQL may still scan pointer rows: this is not a
+constant-time or new-index claim. No schema, seal, source format or write-fence
+change is needed, and every keyed-publication consumer keeps the same owner.
