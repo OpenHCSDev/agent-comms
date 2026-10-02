@@ -134,11 +134,12 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
         _, stderr = child.communicate(timeout=10)
         (root / "startup-stderr.txt").write_text(stderr)
     assert "Failed to load extension" not in stderr, stderr
+    model = reply["data"].get("model")
     print(json.dumps({"ok":True, "automatic_extensions":registered, "get_state":{
         "success":reply["success"], "messageCount":reply["data"]["messageCount"],
         "nativeInputProofCapability":reply["data"]["nativeInputProofCapability"],
-        "model":{key:reply["data"]["model"][key] for key in ("provider", "id")}
-            if reply["data"]["model"] else None,
+        "model_field_present":"model" in reply["data"],
+        "model":{key:model[key] for key in ("provider", "id")} if model else None,
         "thinkingLevel":reply["data"]["thinkingLevel"]},
         "saved_session_bytes":session.stat().st_size, "network":"kernel-denied",
         "saved_source_sha256_before":saved_source_sha256,
