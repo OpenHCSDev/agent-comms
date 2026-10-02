@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 if TYPE_CHECKING:
@@ -74,6 +75,10 @@ class OwnerCutover(ABC):
 
 class StoppedOwnerInstallation(OwnerCutover):
     """A same-format operation needs no cross-runtime completion transfer."""
+
+    def recovery_paths(self) -> frozenset[Path]:
+        """Original file destinations whose change forbids source restoration."""
+        return frozenset()
 
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         self.after_stopped(stopped.lifecycle)
