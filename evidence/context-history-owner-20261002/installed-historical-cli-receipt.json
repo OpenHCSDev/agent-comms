@@ -1,0 +1,677 @@
+{
+  "state": "INSTALLED_HISTORICAL_CLI_PASS",
+  "python": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/bin/python",
+  "core": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "original_records": [
+    {
+      "thread": {
+        "name": "history-original",
+        "created_at": 18002.0
+      },
+      "turn": {
+        "kind": "recorded",
+        "identity": {
+          "value": "original-history-1"
+        },
+        "occurrence": {
+          "incarnation": {
+            "name": "history-original",
+            "created_at": 18002.0
+          },
+          "generation": 1
+        }
+      },
+      "segments": [
+        {
+          "kind": "coordination",
+          "provenance": [
+            {
+              "kind": "owner",
+              "owner": {
+                "name": "history-original",
+                "created_at": 18002.0
+              },
+              "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+              "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+            }
+          ],
+          "sha256": "80432695adbb9c3a93406bfcd9ea09bee5aff1e9f3d589c0cc1673bca699e3ee",
+          "utf8_bytes": 942,
+          "tokens": 0,
+          "contributors": []
+        },
+        {
+          "kind": "user_input",
+          "provenance": [
+            {
+              "kind": "owner",
+              "owner": {
+                "name": "history-original",
+                "created_at": 18002.0
+              },
+              "revision": "original-history-1"
+            }
+          ],
+          "sha256": "8e89c06e115c03441b8ef9fad1f76e4262eb7fd4f2e7953ae4aed77bb2836158",
+          "utf8_bytes": 28,
+          "tokens": 0,
+          "contributors": []
+        }
+      ],
+      "counter": "fixture-original-estimate"
+    },
+    {
+      "thread": {
+        "name": "history-original",
+        "created_at": 18002.0
+      },
+      "turn": {
+        "kind": "recorded",
+        "identity": {
+          "value": "original-history-2"
+        },
+        "occurrence": {
+          "incarnation": {
+            "name": "history-original",
+            "created_at": 18002.0
+          },
+          "generation": 2
+        }
+      },
+      "segments": [
+        {
+          "kind": "coordination",
+          "provenance": [
+            {
+              "kind": "owner",
+              "owner": {
+                "name": "history-original",
+                "created_at": 18002.0
+              },
+              "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+              "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+            }
+          ],
+          "sha256": "80432695adbb9c3a93406bfcd9ea09bee5aff1e9f3d589c0cc1673bca699e3ee",
+          "utf8_bytes": 942,
+          "tokens": 0,
+          "contributors": []
+        },
+        {
+          "kind": "user_input",
+          "provenance": [
+            {
+              "kind": "owner",
+              "owner": {
+                "name": "history-original",
+                "created_at": 18002.0
+              },
+              "revision": "original-history-2"
+            }
+          ],
+          "sha256": "14fd8be812594a1b9a0affed3932dc8a81696a69d9c32e1ccee296ca8eeb339f",
+          "utf8_bytes": 28,
+          "tokens": 0,
+          "contributors": []
+        }
+      ],
+      "counter": "fixture-original-estimate"
+    },
+    {
+      "thread": {
+        "name": "history-renamed",
+        "created_at": 18002.0
+      },
+      "turn": {
+        "kind": "recorded",
+        "identity": {
+          "value": "original-history-2"
+        },
+        "occurrence": {
+          "incarnation": {
+            "name": "history-renamed",
+            "created_at": 18002.0
+          },
+          "generation": 2
+        }
+      },
+      "segments": [
+        {
+          "kind": "coordination",
+          "provenance": [
+            {
+              "kind": "owner",
+              "owner": {
+                "name": "history-original",
+                "created_at": 18002.0
+              },
+              "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+              "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+            }
+          ],
+          "sha256": "80432695adbb9c3a93406bfcd9ea09bee5aff1e9f3d589c0cc1673bca699e3ee",
+          "utf8_bytes": 942,
+          "tokens": 0,
+          "contributors": []
+        },
+        {
+          "kind": "user_input",
+          "provenance": [
+            {
+              "kind": "owner",
+              "owner": {
+                "name": "history-original",
+                "created_at": 18002.0
+              },
+              "revision": "original-history-2"
+            }
+          ],
+          "sha256": "14fd8be812594a1b9a0affed3932dc8a81696a69d9c32e1ccee296ca8eeb339f",
+          "utf8_bytes": 28,
+          "tokens": 0,
+          "contributors": []
+        }
+      ],
+      "counter": "fixture-original-estimate"
+    },
+    {
+      "thread": {
+        "name": "history-renamed",
+        "created_at": 18002.0
+      },
+      "turn": {
+        "kind": "recorded",
+        "identity": {
+          "value": "original-history-3"
+        },
+        "occurrence": {
+          "incarnation": {
+            "name": "history-renamed",
+            "created_at": 18002.0
+          },
+          "generation": 3
+        }
+      },
+      "segments": [
+        {
+          "kind": "coordination",
+          "provenance": [
+            {
+              "kind": "owner",
+              "owner": {
+                "name": "history-renamed",
+                "created_at": 18002.0
+              },
+              "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+            },
+            {
+              "kind": "file",
+              "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+              "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+            }
+          ],
+          "sha256": "2ff794e2ff32f03e8a6c234e05bbf874b1bb520c36fbb5962af344c7696d3a37",
+          "utf8_bytes": 941,
+          "tokens": 0,
+          "contributors": []
+        },
+        {
+          "kind": "user_input",
+          "provenance": [
+            {
+              "kind": "owner",
+              "owner": {
+                "name": "history-renamed",
+                "created_at": 18002.0
+              },
+              "revision": "original-history-3"
+            }
+          ],
+          "sha256": "b6fdefa633bd08f39344eecf3e1747c4be82755073e987db61f9ecf198a90b66",
+          "utf8_bytes": 29,
+          "tokens": 0,
+          "contributors": []
+        }
+      ],
+      "counter": "fixture-original-estimate"
+    }
+  ],
+  "queries": [
+    {
+      "name": "history-renamed",
+      "arguments": [
+        "--turn",
+        "1"
+      ],
+      "result": {
+        "manifests": [
+          {
+            "thread": {
+              "name": "history-original",
+              "created_at": 18002.0
+            },
+            "turn": {
+              "kind": "recorded",
+              "identity": {
+                "value": "original-history-1"
+              },
+              "occurrence": {
+                "incarnation": {
+                  "name": "history-original",
+                  "created_at": 18002.0
+                },
+                "generation": 1
+              }
+            },
+            "segments": [
+              {
+                "kind": "coordination",
+                "provenance": [
+                  {
+                    "kind": "owner",
+                    "owner": {
+                      "name": "history-original",
+                      "created_at": 18002.0
+                    },
+                    "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+                  },
+                  {
+                    "kind": "file",
+                    "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+                    "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+                  }
+                ],
+                "sha256": "80432695adbb9c3a93406bfcd9ea09bee5aff1e9f3d589c0cc1673bca699e3ee",
+                "utf8_bytes": 942,
+                "tokens": 0,
+                "contributors": []
+              },
+              {
+                "kind": "user_input",
+                "provenance": [
+                  {
+                    "kind": "owner",
+                    "owner": {
+                      "name": "history-original",
+                      "created_at": 18002.0
+                    },
+                    "revision": "original-history-1"
+                  }
+                ],
+                "sha256": "8e89c06e115c03441b8ef9fad1f76e4262eb7fd4f2e7953ae4aed77bb2836158",
+                "utf8_bytes": 28,
+                "tokens": 0,
+                "contributors": []
+              }
+            ],
+            "counter": "fixture-original-estimate"
+          }
+        ],
+        "text_recorded": false
+      }
+    },
+    {
+      "name": "history-original",
+      "arguments": [
+        "--turn",
+        "2"
+      ],
+      "result": {
+        "manifests": [
+          {
+            "thread": {
+              "name": "history-original",
+              "created_at": 18002.0
+            },
+            "turn": {
+              "kind": "recorded",
+              "identity": {
+                "value": "original-history-2"
+              },
+              "occurrence": {
+                "incarnation": {
+                  "name": "history-original",
+                  "created_at": 18002.0
+                },
+                "generation": 2
+              }
+            },
+            "segments": [
+              {
+                "kind": "coordination",
+                "provenance": [
+                  {
+                    "kind": "owner",
+                    "owner": {
+                      "name": "history-original",
+                      "created_at": 18002.0
+                    },
+                    "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+                  },
+                  {
+                    "kind": "file",
+                    "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+                    "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+                  }
+                ],
+                "sha256": "80432695adbb9c3a93406bfcd9ea09bee5aff1e9f3d589c0cc1673bca699e3ee",
+                "utf8_bytes": 942,
+                "tokens": 0,
+                "contributors": []
+              },
+              {
+                "kind": "user_input",
+                "provenance": [
+                  {
+                    "kind": "owner",
+                    "owner": {
+                      "name": "history-original",
+                      "created_at": 18002.0
+                    },
+                    "revision": "original-history-2"
+                  }
+                ],
+                "sha256": "14fd8be812594a1b9a0affed3932dc8a81696a69d9c32e1ccee296ca8eeb339f",
+                "utf8_bytes": 28,
+                "tokens": 0,
+                "contributors": []
+              }
+            ],
+            "counter": "fixture-original-estimate"
+          },
+          {
+            "thread": {
+              "name": "history-renamed",
+              "created_at": 18002.0
+            },
+            "turn": {
+              "kind": "recorded",
+              "identity": {
+                "value": "original-history-2"
+              },
+              "occurrence": {
+                "incarnation": {
+                  "name": "history-renamed",
+                  "created_at": 18002.0
+                },
+                "generation": 2
+              }
+            },
+            "segments": [
+              {
+                "kind": "coordination",
+                "provenance": [
+                  {
+                    "kind": "owner",
+                    "owner": {
+                      "name": "history-original",
+                      "created_at": 18002.0
+                    },
+                    "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+                  },
+                  {
+                    "kind": "file",
+                    "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+                    "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+                  }
+                ],
+                "sha256": "80432695adbb9c3a93406bfcd9ea09bee5aff1e9f3d589c0cc1673bca699e3ee",
+                "utf8_bytes": 942,
+                "tokens": 0,
+                "contributors": []
+              },
+              {
+                "kind": "user_input",
+                "provenance": [
+                  {
+                    "kind": "owner",
+                    "owner": {
+                      "name": "history-original",
+                      "created_at": 18002.0
+                    },
+                    "revision": "original-history-2"
+                  }
+                ],
+                "sha256": "14fd8be812594a1b9a0affed3932dc8a81696a69d9c32e1ccee296ca8eeb339f",
+                "utf8_bytes": 28,
+                "tokens": 0,
+                "contributors": []
+              }
+            ],
+            "counter": "fixture-original-estimate"
+          }
+        ],
+        "text_recorded": false
+      }
+    },
+    {
+      "name": "history-renamed",
+      "arguments": [
+        "--turn",
+        "2",
+        "--diff"
+      ],
+      "result": {
+        "previous_turn": {
+          "kind": "recorded",
+          "identity": {
+            "value": "original-history-1"
+          },
+          "occurrence": {
+            "incarnation": {
+              "name": "history-original",
+              "created_at": 18002.0
+            },
+            "generation": 1
+          }
+        },
+        "turn": {
+          "kind": "recorded",
+          "identity": {
+            "value": "original-history-2"
+          },
+          "occurrence": {
+            "incarnation": {
+              "name": "history-renamed",
+              "created_at": 18002.0
+            },
+            "generation": 2
+          }
+        },
+        "removed": [
+          {
+            "kind": "user_input",
+            "provenance": [
+              {
+                "kind": "owner",
+                "owner": {
+                  "name": "history-original",
+                  "created_at": 18002.0
+                },
+                "revision": "original-history-1"
+              }
+            ],
+            "sha256": "8e89c06e115c03441b8ef9fad1f76e4262eb7fd4f2e7953ae4aed77bb2836158",
+            "utf8_bytes": 28,
+            "tokens": 0,
+            "contributors": []
+          }
+        ],
+        "added": [
+          {
+            "kind": "user_input",
+            "provenance": [
+              {
+                "kind": "owner",
+                "owner": {
+                  "name": "history-original",
+                  "created_at": 18002.0
+                },
+                "revision": "original-history-2"
+              }
+            ],
+            "sha256": "14fd8be812594a1b9a0affed3932dc8a81696a69d9c32e1ccee296ca8eeb339f",
+            "utf8_bytes": 28,
+            "tokens": 0,
+            "contributors": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "history-original",
+      "arguments": [
+        "--diff"
+      ],
+      "result": {
+        "previous_turn": {
+          "kind": "recorded",
+          "identity": {
+            "value": "original-history-2"
+          },
+          "occurrence": {
+            "incarnation": {
+              "name": "history-renamed",
+              "created_at": 18002.0
+            },
+            "generation": 2
+          }
+        },
+        "turn": {
+          "kind": "recorded",
+          "identity": {
+            "value": "original-history-3"
+          },
+          "occurrence": {
+            "incarnation": {
+              "name": "history-renamed",
+              "created_at": 18002.0
+            },
+            "generation": 3
+          }
+        },
+        "removed": [
+          {
+            "kind": "coordination",
+            "provenance": [
+              {
+                "kind": "owner",
+                "owner": {
+                  "name": "history-original",
+                  "created_at": 18002.0
+                },
+                "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+              },
+              {
+                "kind": "file",
+                "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+                "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+              }
+            ],
+            "sha256": "80432695adbb9c3a93406bfcd9ea09bee5aff1e9f3d589c0cc1673bca699e3ee",
+            "utf8_bytes": 942,
+            "tokens": 0,
+            "contributors": []
+          },
+          {
+            "kind": "user_input",
+            "provenance": [
+              {
+                "kind": "owner",
+                "owner": {
+                  "name": "history-original",
+                  "created_at": 18002.0
+                },
+                "revision": "original-history-2"
+              }
+            ],
+            "sha256": "14fd8be812594a1b9a0affed3932dc8a81696a69d9c32e1ccee296ca8eeb339f",
+            "utf8_bytes": 28,
+            "tokens": 0,
+            "contributors": []
+          }
+        ],
+        "added": [
+          {
+            "kind": "coordination",
+            "provenance": [
+              {
+                "kind": "owner",
+                "owner": {
+                  "name": "history-renamed",
+                  "created_at": 18002.0
+                },
+                "revision": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+              },
+              {
+                "kind": "file",
+                "path": "/home/ts/wt/comms-context-history-owner-20261002/.artifacts/runtime-context-history504/lib/python3.14/site-packages/agent_comms/instructions/coordination.md",
+                "sha256": "9afb397963c8bfd111b2115678774e3c2b8a3ea7cd3563625f7eaed17690b414"
+              }
+            ],
+            "sha256": "2ff794e2ff32f03e8a6c234e05bbf874b1bb520c36fbb5962af344c7696d3a37",
+            "utf8_bytes": 941,
+            "tokens": 0,
+            "contributors": []
+          },
+          {
+            "kind": "user_input",
+            "provenance": [
+              {
+                "kind": "owner",
+                "owner": {
+                  "name": "history-renamed",
+                  "created_at": 18002.0
+                },
+                "revision": "original-history-3"
+              }
+            ],
+            "sha256": "b6fdefa633bd08f39344eecf3e1747c4be82755073e987db61f9ecf198a90b66",
+            "utf8_bytes": 29,
+            "tokens": 0,
+            "contributors": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "history-renamed",
+      "arguments": [
+        "--turn",
+        "1",
+        "--diff"
+      ],
+      "result": {
+        "error": "No preceding recorded turn exists for comparison"
+      }
+    },
+    {
+      "name": "history-renamed",
+      "arguments": [
+        "--turn",
+        "1"
+      ],
+      "result": {
+        "error": "No original context manifest exists for the requested turn"
+      }
+    }
+  ],
+  "wire_sha256": "d3888873e4a367013a81fd59679979e4e6e7a6e936c5f4ea96ffe87840f73f58",
+  "original_wire_unchanged": true,
+  "native_prompts": 0,
+  "provider_calls": 0,
+  "public_mutations": 0,
+  "original_input_replays": 0
+}

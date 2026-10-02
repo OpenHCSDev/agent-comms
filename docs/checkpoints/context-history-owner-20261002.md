@@ -12,14 +12,14 @@ aliases; ThreadIncarnation.resolved already owns that relation. A rename thus
 hides original context observations from the CLI without deleting their rows.
 The query must derive membership from that existing owner at one registry cut,
 preserving every recorded name, turn and provenance in its returned originals.
-This is IDEN-5: spelling cannot replace original identity.
+This is IDEN-6: query membership was keyed by spelling instead of original identity.
 
 `ContextCliCommand --turn OLD --diff` selects OLD but searches the entire history
 backwards for a different turn. With later turns present it selects a future
 turn. ContextManifest already owns `changed_since`; its historical comparison
 must use a predecessor from the sealed wire order before the selected manifest,
-not an independently supplied chronology. This is TIME-9/BOUND-2: the original
-record sequence owns ordering.
+not an independently supplied chronology. This is IMPL-5: comparison chronology belonged to the manifest, while the CLI
+independently chose a contradictory predecessor.
 
 Existing-owner search found ThreadIncarnation, RegistryDocument.rename,
 RegistryProvenance, WireLog, ContextManifest and ContextCliCommand. No new class,
@@ -43,4 +43,31 @@ mutation, default cutover or full S2 research claim.
 
 ## Checkpoint
 
-Draft scope publication; implementation and end validation pending.
+Production source `130fb5fc` replaces the stale identity equality and the CLI's
+independent predecessor decision across three production modules. No new class,
+store, alias or optional lifecycle state was introduced. All five direct fixture
+calls migrated; the existing installed journey now has a historical-only mode.
+
+Final batched sanity: four tests passed in 2.71 seconds, including original
+message/index behavior, renamed original manifests, same-turn continuation,
+chronological historical diff, first-turn refusal and replacement-birth isolation.
+
+Actual installed console journey: six `agent-comms context` subprocess queries
+passed with PYTHONPATH removed. Recorded turns survive rename and alias lookup;
+OLD-turn diff uses its earlier predecessor, same-turn renamed continuation is
+skipped, latest diff remains correct, first-turn comparison refuses, and a reused
+name with a different birth cannot inherit old manifests. A cold Comms reopen
+returns the exact originals. Sealed wire bytes remain unchanged:
+`d3888873e4a367013a81fd59679979e4e6e7a6e936c5f4ea96ffe87840f73f58`.
+This is installed historical CLI qualification; no native dispatch, provider,
+public store mutation, original input replay or default activation occurred.
+
+Owned artifacts: `.artifacts/runtime-context-history504` is the bounded ordinary
+15-package Core/ACP validation environment; `.artifacts/context-history-installed`
+contains the private sealed fixture and original receipt. Source and installed
+logs remain under `.artifacts/context-history-*-validation.log`. Durable small
+receipts are published in `evidence/context-history-owner-20261002/`.
+
+The parent owns integration and default cutover. Full S2 general constraints,
+non-selected native retention and repeated model-recall evaluation remain outside
+this historical-query closure, with their original determining owners.
