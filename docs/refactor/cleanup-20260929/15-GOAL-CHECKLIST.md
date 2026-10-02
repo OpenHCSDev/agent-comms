@@ -24,7 +24,10 @@ Evidence: original372 observations under parent432 `.release-private/live-openhc
 Earlier sections below are historical and do not override this update.
 
 
-A persistent delivery question was sent after actual ordinary-default display verification, as requested. Original372 errors remain visible in preserved history; no new public channel probe was sent. Singer531 has packaged canonical instructions and placed live/global file links; old originals backed up. Actual all-cwd native bootstrap qualification/merge remains separate. User replaced all previous AGENTS instructions with the canonical current guidance; source-first reasoning and tests-last ordering apply immediately.
+A persistent delivery question was sent after actual ordinary-default display verification, as requested. Original372 errors remain visible in preserved history; no new public channel probe was sent. Singer531 MERGED cf7aa2f4: canonical instructions are linked into live/global files with originals backed up. Two actual configured native startups (cwd APPEND present/absent) each loaded exactly one packaged canonical layer; private children retired, no provider/input. Native bootstrap code reaches all cwds in the next backend package; current324 remains unchanged. User replaced all previous AGENTS instructions with the canonical current guidance; source-first reasoning and tests-last ordering apply immediately.
+
+
+323/Text26 changed physical scroll/profile run preserved its200s deadline failure before B/A. Existing narrow retained-lifetime journey then passed12/12 actual Bclick/Areturn/editor/draft/Undo checks in~40s without repeating held scrolling. During held-scroll frames remain discrete; smoothness/CPU acceptance still unfinished. Owner closes exact scoped receipts and identifies observer-export overhead separately from product work.
 
 ---
 
