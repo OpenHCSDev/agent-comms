@@ -1,0 +1,16 @@
+src/agent_comms/wire_log.py:169:    def retained_sources(self, name: str, registry):
+src/agent_comms/wire_log.py:195:    def retained_context(self, name: str, registry):
+src/agent_comms/compaction_records.py:79:class JournalTable:
+src/agent_comms/compaction_records.py:83:    def for_session(cls, db: sqlite3.Connection, canonical: str):
+src/agent_comms/compaction_records.py:92:class SessionJournalHistory(JournalTable):
+src/agent_comms/retained_context.py:17:class RetainedSegment(ContextSegment):
+src/agent_comms/compaction_boundary.py:28:class CompactionBoundary:
+src/agent_comms/compaction_boundary.py:37:    def retained_history(self, owner: Thread, *, diff: bool = False):
+src/agent_comms/compaction_boundary.py:157:class HeldCompaction:
+src/agent_comms/retained_task_facts.py:32:class ExactTaskFact(DeclaredFamily, affix="TaskFact"):
+src/agent_comms/retained_task_facts.py:220:class RetainedTaskFacts:
+src/agent_comms/retained_task_facts.py:227:    def original_input_facts(self, inputs: InputDocument) -> tuple[ExactTaskFact, ...]:
+src/agent_comms/compaction_journal.py:26:class CompactionJournal:
+src/agent_comms/compaction_journal.py:43:    def observe_readonly(cls, path: Path, observe: Callable, *, absent):
+src/agent_comms/compaction_journal.py:89:    def retained_history(cls, path: Path, session_file: str) -> dict[str, object]:
+src/agent_comms/input_disposition.py:61:class InputDocument:

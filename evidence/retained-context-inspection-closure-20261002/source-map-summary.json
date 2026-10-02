@@ -1,0 +1,23 @@
+{
+  "before-final": {
+    "ref": "31b1f7d5",
+    "nra_parsed": 912,
+    "candidate_stdlib_supplements": 1,
+    "unparsed": [],
+    "declarations": 43,
+    "call_candidates": 1261,
+    "field_reference_candidates": 375,
+    "uncompressed_sha256": "3f820e33328708a689766385d5cc6e0feaf6257bb1a7d6e5a2687050bab0253e"
+  },
+  "after-final": {
+    "ref": "6369fe7a",
+    "nra_parsed": 913,
+    "candidate_stdlib_supplements": 1,
+    "unparsed": [],
+    "declarations": 43,
+    "call_candidates": 1309,
+    "field_reference_candidates": 391,
+    "uncompressed_sha256": "61f1b967eb5ca22c6fa57929f1e742c08aa492569d446fcea9d007fa6d0ee56d"
+  },
+  "boundary": "Core tracked Python roots; native SDK/JS helpers and external metaclass/SQLite APIs were read semantically, not parsed by NRA Python AST. Dotted/imported/bound candidates do not prove dynamic binding or runtime MRO."
+}

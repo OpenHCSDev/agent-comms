@@ -75,3 +75,62 @@ AST. No file is omitted from source mapping. Dotted/bound references remain
 candidates, with semantics and actual MRO read separately. No new type, store,
 queue, schema, native helper or environment was introduced. Final workflow
 sanity and installed inspection remain pending at this source checkpoint.
+
+## Published source and original evidence
+
+Final production source is `6369fe7a28eff15d0148eda71266b351dff9d2b8`,
+normal-main integrated through #518. The existing `JournalTable` base now owns
+`for_session`; all journal roles inherit the lookup. The former history-only
+copy and the inspection reader's repeated SQL are deleted. Against main #518,
+the complete production change is eight files, 216 added and 38 deleted lines.
+No new nominal class or schema declaration was introduced.
+
+The stored-cut control exercises goal/input/native artifact facts (including
+multiplicity), original refusals and UNKNOWN outcomes, immutable intent bytes,
+source diff, status and narrow atomic export together. Original source files,
+registry, input ledger and journal are hash-identical afterward. Representative
+artifact rows in that control exercise inspection, not native artifact production.
+Two existing producer controls initially refused their stale fixture constructor:
+they supplied encoded revision text to the current `FileRevision` field and
+`None` to plural pending keys. The existing helper/callers now use their actual
+typed declarations. Original failures are preserved; the final installed batch
+passes 19 checks. Each check covers exported-source isolation, captured-source
+fences or the shared read-only journal/inspection workflow; there is no broad
+suite or provider exercise.
+
+An actual configured `nra-architecture` SDK saved fork passed the installed
+`retained-context`, absent-cut diff contract, `compaction-status` and authored
+export journey. The captured launch configuration/model/worktree was inherited
+through the existing receiving fixture. The original session/profile files and
+private input/registry/native files remained unchanged. No native owner was
+launched, no input was supplied, and there were no provider calls or replays.
+That original saved-session path had zero compaction journal rows: this is not
+an observed full historical-cut or new native producer qualification. Its source
+proof describes the prejoin installation; it is not the joined S1 package proof.
+
+General native tool failures remain `ToolResultMessage` original journal and
+transcript evidence. `completed_artifacts` passes the recorded success bit to
+`NativeTool.result_artifacts`; failed operations cannot become successful
+`NativeArtifactTaskFact`s. Original stored input rows represent Core's logical
+text/disposition/provenance; native message parts, including images or transformed
+prompt content, remain native journal/context evidence rather than reconstructed
+input facts. These boundaries are not claims of full-context retention.
+
+Before mapping covers 913 tracked Python files; after #518 integration it covers
+914. NRA parses all but the same PEP695 file; candidate Python3.14 stdlib AST
+supplements that exact Git source. Annotation, field load/store and call output,
+actual declaration search, parser boundaries and dynamic ambiguity are published
+in `evidence/retained-context-inspection-closure-20261002`. JavaScript/SDK and
+external declaration machinery were read semantically, not counted as Python
+AST coverage.
+
+## One joined receiving package
+
+Schrodinger normally merged the frozen source into #522 `b736fb95` without
+changing native `ea043`. Einstein #520 owns the combined Python caller closure,
+one source freeze and one installed S1/inspection package. Singer grants that
+integration and will inspect the same completed configured fork/package; no
+second environment, provider journey, fork or uncertain-input replay is needed.
+Frozen #316/#65a/#c601 are independent and unchanged. Joined installed inspection
+is pending that candidate; #521 remains draft. Broader S2 repeated retention and
+S3/S4 research scope remain open under the original goal ledger.
