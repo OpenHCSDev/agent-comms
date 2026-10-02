@@ -92,7 +92,8 @@ class PrivateInputs(JournalRole):
 
             try:
                 verify_continued_private_session(
-                    self.journal.path.parent, session_file, source, raw_ids, inputs
+                    self.journal.path.parent, session_file, source, raw_ids, inputs,
+                    journal_db=db,
                 )
             except (OSError, ValueError, sqlite3.Error, RuntimeError) as error:
                 raise CompactionJournalError(

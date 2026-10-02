@@ -13,13 +13,15 @@ from agent_comms.native_input_record import TriageNativeExecution, FullNativeExe
 from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_journal import CompactionJournal
+from agent_comms.compaction_records import SelectedSummarySource
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.owner_compaction_settings import PiCompactionSettings
 from agent_comms.pi_summary_payloads import SelectedModel
 from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
-from selected_summary_cases import admission_identity, refresh_source, summary_source
+from agent_comms.selected_source import SessionRevision
+from selected_summary_cases import admission_identity
 
 
 @pytest.fixture
@@ -48,7 +50,7 @@ def continued(tmp_path):
     inputs.bind("acp:old", admission=1, turn_id="old-turn", native_id=native_id, text="old")
     inputs.started("acp:old", turn_id="old-turn", native_id=native_id, text="old")
     inputs.record("acp:new", seq=None, owner="owner", admission=2, target="owner", text="new")
-    source = summary_source(
+    source = SelectedSummarySource(
         admission_identity(
             session, text="new", key="acp:new", turn="new-turn", owner="owner", admission=2
         ).source,
@@ -122,7 +124,8 @@ def test_continued_private_uncertain_or_mismatched_history_never_reserves(contin
     inputs.path.write_text(json.dumps(saved))
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
     if damage != "revision":
-        refresh_source(source, session)
+        source = replace(source, source=replace(source.source,
+            reserved_revision=SessionRevision.observe(str(session)).require_available()))
     with pytest.raises((CompactionJournalError, ValueError)):
         journal.summaries.reserve(str(session), source)
     assert journal.summaries.unresolved(str(session)) == ()
@@ -187,7 +190,6 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
             NativeRuntimeInput(
                 input_id="a" * 32,
                 stage=TriageNativeExecution, execution_id=None, attempt_ordinal=None,
-                assignment_id="claim",
                 owner_lookup="f" * 32,
                 owner_thread="foreign" if damage == "foreign" else "owner",
                 owner_generation=1,
@@ -202,7 +204,9 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
                 ),
                 verdict=IgnoreSelectedTriage,
             ).insert(db)
-    refresh_source(source, session)
+            TriageNativeExecution().record_sources(db, "a" * 32, (store.assignments.get("claim"),))
+    source = replace(source, source=replace(source.source,
+        reserved_revision=SessionRevision.observe(str(session)).require_available()))
     if damage in {"context", "unsettled", "foreign"}:
         with pytest.raises(CompactionJournalError, match="coverage floor"):
             journal.summaries.reserve(str(session), source)
@@ -212,3 +216,64 @@ def test_live_recorded_raw_context_covers_marker_without_erasing_unknown(continu
         assert db.execute("SELECT input_id,status FROM private_raw_inputs").fetchall() == (
             [] if damage == "no-marker" else [("a" * 32, "unknown")]
         )
+
+
+@pytest.mark.parametrize("damage", [None, "missing-operation", "unknown-operation", "summary",
+    "cut", "parent", "foreign-file", "untracked-suffix", "raw-unknown"])
+def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
+    """A recorded original cut is distinct from file-only or copied coverage."""
+    from agent_comms.compaction_records import CompactionOperation
+    from agent_comms.compaction_states import CommittedNativeOutcome, CommittedOperation, UnknownOperation
+    from agent_comms.native_compaction_request import NativeIntent, NativeSummaryPayload
+    from agent_comms.owner_compaction_prepare import NativeWitness
+    from agent_comms.pi_summary_payloads import SummaryFiles
+    from agent_comms.private_path import FileRevision
+
+    journal, session, inputs, source = continued
+    entries = [json.loads(line) for line in session.read_text().splitlines()]
+    entries.insert(1, dict(type="message", id="public-user", parentId=None,
+        message=dict(role="user", content=[dict(type="text", text="inherited public source")])) )
+    entries[2]["parentId"] = "public-user"
+    session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+    witness = NativeWitness("session", str(session), "user", "user", FileRevision.from_stat(session.stat()))
+    payload = NativeSummaryPayload(summary="original summary", tokens_before=100, details=SummaryFiles((), ()))
+    intent = NativeIntent(witness, payload.payload_digest(witness), payload.metadata_digest())
+    commit = intent.identity("c" * 32)
+    entry = dict(type="compaction", id="cut", parentId="user", summary=payload.summary,
+        firstKeptEntryId="user", tokensBefore=100,
+        details=dict(readFiles=[], modifiedFiles=[], agentCommsCommit=FieldCodec.encode(commit)))
+    entries.append(entry)
+    session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+    outcome = CommittedNativeOutcome("cut", FileRevision.from_stat(session.stat()), "cut", intent.metadata_digest)
+    with journal.transaction() as db:
+        CompactionOperation(commit.commit_id, str(session), json.dumps(FieldCodec.encode(intent)),
+            UnknownOperation() if damage == "unknown-operation" else CommittedOperation(),
+            outcome.journal_json()).insert(db)
+        if damage == "missing-operation":
+            db.execute("DELETE FROM operations")
+    if damage == "summary":
+        entry["summary"] = "different"
+    if damage == "cut":
+        entry["firstKeptEntryId"] = "public-user"
+    if damage == "parent":
+        entry["parentId"] = "public-user"
+    if damage == "untracked-suffix":
+        entries.append(dict(type="message", id="untracked", parentId="cut",
+            message=dict(role="user", content=[dict(type="text", text="new untracked source")])) )
+    session.write_text("".join(json.dumps(row) + "\n" for row in entries))
+    if damage == "foreign-file":
+        foreign = session.with_name("copied.jsonl")
+        foreign.write_bytes(session.read_bytes()); foreign.chmod(0o600)
+        session = foreign
+    if damage == "raw-unknown":
+        journal.private_inputs.reserve(session, "a" * 32)
+    source = replace(source, source=replace(source.source,
+        reserved_revision=SessionRevision.observe(str(session)).require_available()))
+    originals = session.read_bytes(), inputs.path.read_bytes()
+    if damage is None:
+        journal.summaries.reserve(str(session), source)
+    else:
+        with pytest.raises(CompactionJournalError, match="coverage floor"):
+            journal.summaries.reserve(str(session), source)
+        assert journal.summaries.unresolved(str(session)) == ()
+    assert originals == (session.read_bytes(), inputs.path.read_bytes())

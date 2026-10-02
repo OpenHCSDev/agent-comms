@@ -29,6 +29,8 @@ def verify_continued_private_session(
     source: SelectedSource,
     raw_ids: frozenset[str],
     inputs: InputDocument,
+    *,
+    journal_db: sqlite3.Connection,
 ) -> None:
     """Reprove complete saved user history; never promote an unresolved attempt."""
     before = SessionRevision.observe(str(session))
@@ -40,6 +42,8 @@ def verify_continued_private_session(
             raise ValueError("Continued private session needs a strict native header")
         identity = NativeSessionIdentity(header.id, str(session))
         tracked = NativeEntry.tracked_users(entries)
+        covered = evidence.covered_prefix(entries, journal_db)
+        required = tuple(entry for entry in entries if entry.id not in covered)
         rows = inputs.rows
         # The locked document already excludes proven process-local future inputs.
         # Every other unresolved owner input except the exact original remains a stop.
@@ -63,8 +67,8 @@ def verify_continued_private_session(
             else {}
         )
         retained = (
-            NativeContextProof.read_history_evidence(session, header, entries)
-            if tracked.keys() - (started.keys() | recorded.keys())
+            NativeContextProof.read_history_evidence(session, header, required)
+            if NativeEntry.tracked_users(required).keys() - (started.keys() | recorded.keys())
             else {}
         )
         observed = set()
@@ -72,6 +76,10 @@ def verify_continued_private_session(
             if not entry.is_message or not entry.message.user:
                 continue
             native_id = entry.input_id
+            # A verified original summary covers replaced source, never raw
+            # UNKNOWN markers: those still need their own live context below.
+            if entry.id in covered and native_id not in raw_ids:
+                continue
             if native_id is None or native_id not in tracked:
                 raise ValueError("Continued private user history lacks unique tracked input")
             message = entry.message

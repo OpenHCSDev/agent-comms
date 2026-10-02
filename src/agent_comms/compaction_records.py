@@ -159,6 +159,43 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
 
         return NativeOutcome.read(self.evidence_json).require_committed()
 
+    def covered_prefix(self, entry, payload, evidence, branch) -> frozenset[str]:
+        """A corroborated original cut covers only its replaced source prefix.
+
+        This observes a completed native write. It grants no input admission,
+        recovery, enrollment or coverage for an unresolved private raw input.
+        """
+        from .native_compaction_request import NativeIntent
+
+        outcome = self.committed_outcome()
+        intent = NativeIntent.read(self)
+        witness = intent.witness
+        witness.require_session(str(evidence.source.path))
+        if (
+            self.session_file != str(evidence.source.path)
+            or evidence.entries[0].id != witness.session_id
+            or evidence.source.identity != witness.revision.identity
+            or evidence.source.identity != outcome.revision.identity
+            or evidence.source.size < outcome.revision.size
+            or entry.id != outcome.entry_id
+            or entry.parent_id != witness.leaf_id
+            or entry.first_kept_entry_id != witness.first_kept_entry_id
+            or payload.details.agent_comms_commit != intent.identity(self.commit_id)
+        ):
+            raise CompactionJournalError("Original committed source cut differs")
+        if (
+            payload.payload_digest(witness) != intent.payload_digest
+            or payload.metadata_digest() != intent.metadata_digest
+            or outcome.metadata_digest != intent.metadata_digest
+        ):
+            raise CompactionJournalError("Original committed source payload differs")
+        ids = tuple(item.require_entry_id() for item in branch)
+        cut = ids.index(entry.id)
+        kept = ids.index(witness.first_kept_entry_id)
+        if kept >= cut:
+            raise CompactionJournalError("Original committed cut does not precede continuation")
+        return frozenset(ids[:kept])
+
     def represents_summary(self, attempt: SelectedSummaryAttempt) -> bool:
         """Read-only original linkage, never an input-admission capability."""
         return self.state.represents_summary(self, attempt)
