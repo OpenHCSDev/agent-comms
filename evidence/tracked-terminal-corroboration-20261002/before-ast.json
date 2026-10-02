@@ -1,0 +1,1016 @@
+{
+  "head": "71e15bbabf8a2b720d4e34fc33f9f35c8916b34d",
+  "modules": 311,
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 74,
+      "class": "CodingToolOwner",
+      "bases": [],
+      "methods": [
+        {
+          "name": "for_original",
+          "line": 83,
+          "async": false
+        },
+        {
+          "name": "admit",
+          "line": 102,
+          "async": false
+        },
+        {
+          "name": "finish",
+          "line": 121,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 129,
+      "class": "CodingToolMode",
+      "bases": [
+        "NativeToolMode"
+      ],
+      "methods": [
+        {
+          "name": "launch_arguments",
+          "line": 132,
+          "async": false
+        },
+        {
+          "name": "socket",
+          "line": 139,
+          "async": false
+        },
+        {
+          "name": "finish",
+          "line": 142,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 23,
+      "class": "Coordination",
+      "bases": [],
+      "methods": [
+        {
+          "name": "run_worker",
+          "line": 25,
+          "async": true
+        },
+        {
+          "name": "run_async",
+          "line": 36,
+          "async": true
+        },
+        {
+          "name": "_run_owned",
+          "line": 52,
+          "async": false
+        },
+        {
+          "name": "__init__",
+          "line": 59,
+          "async": false
+        },
+        {
+          "name": "install_private_runtime",
+          "line": 71,
+          "async": false
+        },
+        {
+          "name": "close",
+          "line": 81,
+          "async": false
+        },
+        {
+          "name": "__enter__",
+          "line": 84,
+          "async": false
+        },
+        {
+          "name": "__exit__",
+          "line": 87,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 198,
+      "class": "NativeEvidenceRead",
+      "bases": [],
+      "methods": [
+        {
+          "name": "__init__",
+          "line": 205,
+          "async": false
+        },
+        {
+          "name": "require_path",
+          "line": 209,
+          "async": false
+        },
+        {
+          "name": "open",
+          "line": 217,
+          "async": false
+        },
+        {
+          "name": "borrow",
+          "line": 231,
+          "async": false
+        },
+        {
+          "name": "close",
+          "line": 250,
+          "async": false
+        },
+        {
+          "name": "observe",
+          "line": 254,
+          "async": false
+        },
+        {
+          "name": "decode_rows",
+          "line": 274,
+          "async": false
+        },
+        {
+          "name": "retained_task_facts",
+          "line": 277,
+          "async": false
+        },
+        {
+          "name": "entry_index",
+          "line": 303,
+          "async": false
+        },
+        {
+          "name": "branch",
+          "line": 313,
+          "async": false
+        },
+        {
+          "name": "recorded_source_prefix",
+          "line": 327,
+          "async": false
+        },
+        {
+          "name": "covered_prefix",
+          "line": 352,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 362,
+      "class": "NativeInputEvidenceRead",
+      "bases": [
+        "NativeEvidenceRead"
+      ],
+      "methods": [
+        {
+          "name": "decode_rows",
+          "line": 369,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 378,
+      "class": "NativeEvidenceScope",
+      "bases": [
+        "ExitStack"
+      ],
+      "methods": [
+        {
+          "name": "__init__",
+          "line": 386,
+          "async": false
+        },
+        {
+          "name": "borrow",
+          "line": 392,
+          "async": false
+        },
+        {
+          "name": "for_source",
+          "line": 404,
+          "async": false
+        },
+        {
+          "name": "close",
+          "line": 411,
+          "async": false
+        },
+        {
+          "name": "__exit__",
+          "line": 417,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 302,
+      "class": "NativeContextProof",
+      "bases": [
+        "NativeContextRecord"
+      ],
+      "methods": [
+        {
+          "name": "corroborates_input",
+          "line": 305,
+          "async": false
+        },
+        {
+          "name": "read_evidence",
+          "line": 318,
+          "async": false
+        },
+        {
+          "name": "read_history_evidence",
+          "line": 339,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/native_tool_call.py",
+      "line": 103,
+      "class": "NativeToolCall",
+      "bases": [
+        "ABC"
+      ],
+      "methods": [
+        {
+          "name": "name",
+          "line": 118,
+          "async": false
+        },
+        {
+          "name": "correlate",
+          "line": 120,
+          "async": false
+        },
+        {
+          "name": "announce",
+          "line": 124,
+          "async": false
+        },
+        {
+          "name": "start",
+          "line": 127,
+          "async": false
+        },
+        {
+          "name": "authorize",
+          "line": 130,
+          "async": true
+        },
+        {
+          "name": "finish",
+          "line": 142,
+          "async": false
+        },
+        {
+          "name": "assert_complete",
+          "line": 147,
+          "async": false
+        },
+        {
+          "name": "commit_terminal",
+          "line": 151,
+          "async": false
+        },
+        {
+          "name": "admission_failed",
+          "line": 154,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 78,
+      "class": "NativeToolMode",
+      "bases": [
+        "ABC"
+      ],
+      "methods": [
+        {
+          "name": "launch_arguments",
+          "line": 82,
+          "async": false
+        },
+        {
+          "name": "finish",
+          "line": 85,
+          "async": false
+        },
+        {
+          "name": "socket",
+          "line": 90,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 95,
+      "class": "SelectedToolMode",
+      "bases": [
+        "NativeToolMode"
+      ],
+      "methods": [
+        {
+          "name": "__post_init__",
+          "line": 100,
+          "async": false
+        },
+        {
+          "name": "launch_arguments",
+          "line": 104,
+          "async": false
+        },
+        {
+          "name": "socket",
+          "line": 113,
+          "async": false
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 349,
+      "class": "OwnerToolSocket",
+      "bases": [
+        "ABC",
+        "Generic[Call]"
+      ],
+      "methods": [
+        {
+          "name": "__init__",
+          "line": 354,
+          "async": false
+        },
+        {
+          "name": "decode_call",
+          "line": 370,
+          "async": false
+        },
+        {
+          "name": "decode_request",
+          "line": 373,
+          "async": false
+        },
+        {
+          "name": "admit",
+          "line": 376,
+          "async": false
+        },
+        {
+          "name": "call_for",
+          "line": 378,
+          "async": false
+        },
+        {
+          "name": "announce",
+          "line": 386,
+          "async": false
+        },
+        {
+          "name": "tool_started",
+          "line": 395,
+          "async": false
+        },
+        {
+          "name": "tool_finished",
+          "line": 403,
+          "async": false
+        },
+        {
+          "name": "assert_complete",
+          "line": 409,
+          "async": false
+        },
+        {
+          "name": "active_tools",
+          "line": 414,
+          "async": false
+        },
+        {
+          "name": "selected_call_id",
+          "line": 420,
+          "async": false
+        },
+        {
+          "name": "handle_request",
+          "line": 423,
+          "async": true
+        },
+        {
+          "name": "failure_response",
+          "line": 428,
+          "async": false
+        },
+        {
+          "name": "start",
+          "line": 431,
+          "async": true
+        },
+        {
+          "name": "close",
+          "line": 449,
+          "async": true
+        },
+        {
+          "name": "_handle",
+          "line": 466,
+          "async": true
+        }
+      ]
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 139,
+      "class": "TrackedTurnSession",
+      "bases": [
+        "TurnSession",
+        "MroDispatch"
+      ],
+      "methods": [
+        {
+          "name": "__init__",
+          "line": 142,
+          "async": false
+        },
+        {
+          "name": "execute",
+          "line": 177,
+          "async": true
+        },
+        {
+          "name": "complete",
+          "line": 237,
+          "async": true
+        },
+        {
+          "name": "resume_prepared",
+          "line": 276,
+          "async": true
+        },
+        {
+          "name": "open_transport",
+          "line": 283,
+          "async": true
+        },
+        {
+          "name": "started_input",
+          "line": 294,
+          "async": false
+        },
+        {
+          "name": "active_tools",
+          "line": 298,
+          "async": false
+        },
+        {
+          "name": "apply_native_event",
+          "line": 301,
+          "async": true
+        },
+        {
+          "name": "next_event",
+          "line": 306,
+          "async": true
+        },
+        {
+          "name": "send",
+          "line": 323,
+          "async": true
+        },
+        {
+          "name": "attest",
+          "line": 341,
+          "async": true
+        },
+        {
+          "name": "write",
+          "line": 364,
+          "async": false
+        },
+        {
+          "name": "prompt_boundary",
+          "line": 370,
+          "async": false
+        },
+        {
+          "name": "admit_prompt",
+          "line": 377,
+          "async": true
+        },
+        {
+          "name": "response",
+          "line": 390,
+          "async": true
+        },
+        {
+          "name": "committed_input",
+          "line": 402,
+          "async": true
+        },
+        {
+          "name": "committed_context",
+          "line": 411,
+          "async": true
+        },
+        {
+          "name": "message_update",
+          "line": 416,
+          "async": true
+        },
+        {
+          "name": "text_delta",
+          "line": 421,
+          "async": true
+        },
+        {
+          "name": "message_end",
+          "line": 425,
+          "async": true
+        },
+        {
+          "name": "accept_tool_round",
+          "line": 428,
+          "async": false
+        },
+        {
+          "name": "accept_final_message",
+          "line": 436,
+          "async": false
+        },
+        {
+          "name": "fail_terminal",
+          "line": 441,
+          "async": false
+        },
+        {
+          "name": "context_proof",
+          "line": 444,
+          "async": false
+        },
+        {
+          "name": "tool_started",
+          "line": 457,
+          "async": true
+        },
+        {
+          "name": "tool_finished",
+          "line": 464,
+          "async": true
+        },
+        {
+          "name": "settled",
+          "line": 470,
+          "async": true
+        },
+        {
+          "name": "result",
+          "line": 474,
+          "async": false
+        }
+      ]
+    }
+  ],
+  "conservative_candidates": [
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 235,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "src/agent_comms/attempt_recovery.py",
+      "line": 239,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 348,
+      "call": "self.watchdog.observe"
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 756,
+      "call": "self.native.proc.finish"
+    },
+    {
+      "file": "src/agent_comms/backend.py",
+      "line": 123,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/bus_display_index.py",
+      "line": 34,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/channel_coding_tools.py",
+      "line": 143,
+      "call": "self.owner.finish"
+    },
+    {
+      "file": "src/agent_comms/child_process.py",
+      "line": 822,
+      "call": "task.result"
+    },
+    {
+      "file": "src/agent_comms/compaction_private_inputs.py",
+      "line": 60,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/compaction_publication.py",
+      "line": 138,
+      "call": "journal.publications.observe"
+    },
+    {
+      "file": "src/agent_comms/compaction_summaries.py",
+      "line": 105,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 35,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/continued_private_session.py",
+      "line": 39,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/coordinator.py",
+      "line": 47,
+      "call": "cls.run_worker"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 119,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/cursor_publication.py",
+      "line": 128,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/durable_turn.py",
+      "line": 54,
+      "call": "self.consume_handlers_sync"
+    },
+    {
+      "file": "src/agent_comms/goal_history.py",
+      "line": 221,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/goal_history.py",
+      "line": 230,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/historical_native_inputs.py",
+      "line": 161,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "src/agent_comms/input_drain.py",
+      "line": 223,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 139,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 178,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 261,
+      "call": "self.traversal.result"
+    },
+    {
+      "file": "src/agent_comms/message_page.py",
+      "line": 176,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/mro_dispatch.py",
+      "line": 53,
+      "call": "self.consume_handlers_sync"
+    },
+    {
+      "file": "src/agent_comms/native_attestation.py",
+      "line": 106,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 287,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/native_entries.py",
+      "line": 114,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 832,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 852,
+      "call": "NativeContextProof.read_evidence"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 315,
+      "call": "self.read_evidence"
+    },
+    {
+      "file": "src/agent_comms/native_pi.py",
+      "line": 328,
+      "call": "evidence.observe"
+    },
+    {
+      "file": "src/agent_comms/native_prompt_send.py",
+      "line": 196,
+      "call": "done.result"
+    },
+    {
+      "file": "src/agent_comms/native_tool_call.py",
+      "line": 61,
+      "call": "call.admission.finish"
+    },
+    {
+      "file": "src/agent_comms/native_tool_call.py",
+      "line": 145,
+      "call": "self.observation.finish"
+    },
+    {
+      "file": "src/agent_comms/native_turn_context.py",
+      "line": 27,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 328,
+      "call": "self.progress.goals.finish"
+    },
+    {
+      "file": "src/agent_comms/owned_turn.py",
+      "line": 64,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 75,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 223,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 191,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 216,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_commit.py",
+      "line": 260,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_compaction_manual.py",
+      "line": 76,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 215,
+      "call": "stopped.complete"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 254,
+      "call": "fenced.complete"
+    },
+    {
+      "file": "src/agent_comms/owner_restart.py",
+      "line": 161,
+      "call": "operation.complete"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 215,
+      "call": "session.native.attestation.observe"
+    },
+    {
+      "file": "src/agent_comms/pi_commands.py",
+      "line": 278,
+      "call": "future.result"
+    },
+    {
+      "file": "src/agent_comms/pi_events.py",
+      "line": 406,
+      "call": "session.extension_ui.observe"
+    },
+    {
+      "file": "src/agent_comms/presentation.py",
+      "line": 359,
+      "call": "semantics.observe"
+    },
+    {
+      "file": "src/agent_comms/private_send_stage.py",
+      "line": 130,
+      "call": "context.corroborates_input"
+    },
+    {
+      "file": "src/agent_comms/runtime_requests.py",
+      "line": 76,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 65,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 97,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 114,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 117,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 134,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_participant.py",
+      "line": 141,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 167,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 218,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/selected_session.py",
+      "line": 224,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/selected_source.py",
+      "line": 93,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/selected_source.py",
+      "line": 101,
+      "call": "self.observe"
+    },
+    {
+      "file": "src/agent_comms/selected_summary_admission.py",
+      "line": 67,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 407,
+      "call": "call.finish"
+    },
+    {
+      "file": "src/agent_comms/selected_tool_broker.py",
+      "line": 425,
+      "call": "call.authorize"
+    },
+    {
+      "file": "src/agent_comms/selected_turn.py",
+      "line": 265,
+      "call": "self.stage.progress.finish"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 460,
+      "call": "self.context_proof"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 235,
+      "call": "turn.complete"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 315,
+      "call": "self.native.proc.finish"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 477,
+      "call": "self.context_proof"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 483,
+      "call": "self.selected_tool_mode.finish"
+    },
+    {
+      "file": "src/agent_comms/tracked_turn.py",
+      "line": 264,
+      "call": "self.result"
+    },
+    {
+      "file": "src/agent_comms/transcripts.py",
+      "line": 468,
+      "call": "traversal.finish"
+    },
+    {
+      "file": "src/agent_comms/turn_input_binding.py",
+      "line": 111,
+      "call": "SessionRevision.observe"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 240,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/turn_progress.py",
+      "line": 252,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/turn_runner.py",
+      "line": 155,
+      "call": "Coordination.run_worker"
+    },
+    {
+      "file": "src/agent_comms/turn_stats.py",
+      "line": 49,
+      "call": "future.result"
+    },
+    {
+      "file": "src/agent_comms/turn_stats.py",
+      "line": 33,
+      "call": "future.result"
+    },
+    {
+      "file": "src/agent_comms/turn_stats.py",
+      "line": 40,
+      "call": "future.result"
+    },
+    {
+      "file": "src/agent_comms/turn_watchdog.py",
+      "line": 152,
+      "call": "read_task.result"
+    }
+  ],
+  "ambiguity": "Attribute names are candidates, not dynamic receiver proof. All finish/result families must be read and nominal owners distinguished; native JS reviewed separately."
+}
