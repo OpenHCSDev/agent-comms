@@ -1,0 +1,30 @@
+{
+  "scope": "retained-source ancestry and native readonly preparation only; original admission remains refused",
+  "prior_admission_result": "Selected source requires reviewed raw-history coverage floor",
+  "provider_calls": 0,
+  "inputs": 0,
+  "reservations": 0,
+  "public_writes": 0,
+  "historical_paths_rewritten": false,
+  "recorded_context_count": 26,
+  "native_evidence_count": 44,
+  "recorded_source_prefix_entries": 9569,
+  "historical_users_in_recorded_prefix": 1045,
+  "untracked_historical_users_in_recorded_prefix": 834,
+  "untracked_historical_users_outside_recorded_prefix": 0,
+  "native_preparation": {
+    "status": "ready",
+    "witness": {
+      "sessionId": "01a0f860-8c7e-7129-8d3f-c358fe68ad60",
+      "sessionFile": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-10-01T16-51-12-126Z_01a0f860-8c7e-7129-8d3f-c358fe68ad60.jsonl",
+      "leafId": "a1978032",
+      "firstKeptEntryId": "3c488ef8",
+      "revision": "2084:7878902:41932752:1790961130852594454:1790961130852594454"
+    },
+    "tokensBefore": 255704,
+    "isSplitTurn": false
+  },
+  "original_revision_unchanged": true,
+  "status": "source/preparation passed; admission refused",
+  "elapsed_seconds": 8.547626151994336
+}
