@@ -1,0 +1,38 @@
+{
+  "source": "d523684331b89f332403d1ddc2c05ca68f4fd78e",
+  "manifest": "ad533a9f08581561d00d5524a576bda00f6368221cc4f74ba3c68513ede8fc04",
+  "tree": "adb2969a4d57cb8993a92d30b924b969ca76772de5dadb31cc7b2f294ee120e9",
+  "capture": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/summary-generation-policy520-20261002/corrected02/fresh-unverified/node_modules/@earendil-works/pi-coding-agent",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js",
+      "original_sha256": "b5d9f001e97bfafa8dfeef2e292f923c39f77fa8aef014132bf3530760f222e3",
+      "new_sha256": "31e6d4df83f2fc6d4f17287fe0fccb6cf1df429d34bd5315313fac12b1e44891"
+    },
+    {
+      "path": "dist/core/compaction/compaction.js",
+      "original_sha256": "2e507c23edf47391265f81db353b205d9f5e9b78b3025f0497e9415a6121d2de",
+      "new_sha256": "2c41563287283e83d899254aa7ff4a6d070c044835dc7fde95d90b987a480622"
+    },
+    {
+      "path": "dist/core/compaction/agent-comms-policy.js",
+      "original_sha256": "e3251ab83782ad79107419f8bbbb4d6269b3f65107b12fdceee0696b612f8e87",
+      "new_sha256": "17a89fe81359a9297fdb3785cd3f23850710467ba230c3947bd888429f91b7b1"
+    }
+  ],
+  "source_copy_bindings": [
+    [
+      "stack/native-compaction-policy.mjs",
+      "dist/core/compaction/agent-comms-policy.js"
+    ],
+    [
+      "stack/native-session-context.mjs",
+      "dist/core/session-context.js"
+    ]
+  ],
+  "import_inventory_unchanged": true,
+  "qualification": "Unpublished normal stock assembly; normal canonical prepare next",
+  "provider_calls": 0,
+  "public_changes": false
+}

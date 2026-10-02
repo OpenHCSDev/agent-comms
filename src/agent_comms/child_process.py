@@ -870,15 +870,21 @@ class ChildProcess(Sealed, ABC):
             yield 0.02
         return stage
 
-    async def _stop(self) -> ChildOutcome:
-        plan = self._stop_plan(nullcontext)
+    def _retire_group(self, guard):
+        """Run the same guarded physical plan for synchronous and async custody."""
+        plan = self._stop_plan(guard)
         while True:
             try:
                 delay = next(plan)
             except StopIteration as done:
-                stage = done.value
-                break
-            await asyncio.sleep(delay)
+                return done.value
+            time.sleep(delay)
+
+    async def _stop(self) -> ChildOutcome:
+        pending = asyncio.get_running_loop().run_in_executor(
+            None, self._retire_group, nullcontext
+        )
+        stage = await join_retirement(pending)
         self._release_retired_io()
         async with asyncio.timeout(STOP_GRACE_SECONDS):
             return stage(await self.wait())
@@ -1218,14 +1224,7 @@ class SynchronousProcess(ChildProcess):
 
     def stop_sync(self, *, guard=nullcontext) -> ChildOutcome:
         self.require_stop_authority()
-        plan = self._stop_plan(guard)
-        while True:
-            try:
-                delay = next(plan)
-            except StopIteration as done:
-                stage = done.value
-                break
-            time.sleep(delay)
+        stage = self._retire_group(guard)
         return stage(self.reap())
 
 

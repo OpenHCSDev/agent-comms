@@ -131,7 +131,7 @@ class SelectedSource(DeclaredFamily, affix="Source"):
         """A source without original input membership needs no input facts."""
 
     @abstractmethod
-    def summary_outcome(self, result, journal):
+    def summary_outcome(self, result, journal, reason, settle_refusal):
         """Bind the native result through this original source's admission contract."""
 
     @property
@@ -148,8 +148,8 @@ class SelectedSource(DeclaredFamily, affix="Source"):
 class ManualSource(SelectedSource):
     """Owner compaction without an InputDocument original-admission grant."""
 
-    def summary_outcome(self, result, journal):
-        return result.manual_summary(journal)
+    def summary_outcome(self, result, journal, reason, settle_refusal):
+        return result.manual_summary(journal, reason, settle_refusal)
 
     @property
     def pending_input_keys(self) -> tuple[str, ...]:
@@ -194,7 +194,7 @@ class SelectedAdmissionSource(SelectedSource):
         ):
             raise ValueError("Selected source requires its exact reserved input")
 
-    def summary_outcome(self, result, journal):
+    def summary_outcome(self, result, journal, reason, settle_refusal):
         from .selected_summary_admission import SelectedAdmissionIdentity
 
         return result.adaptive_summary(

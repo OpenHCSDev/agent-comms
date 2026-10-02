@@ -1,0 +1,378 @@
+{
+  "revision": "457b1047855752f4d069ee1d39b01e30603efa41",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "modules": 311,
+      "parse_failures": [],
+      "declarations": [
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 159,
+          "name": "Platform",
+          "bases": [
+            "DeclaredFamily"
+          ],
+          "methods": [
+            "current",
+            "try_store_lock",
+            "acquire_store_lock",
+            "release_store_lock",
+            "launch",
+            "terminate_group",
+            "force_group",
+            "identity",
+            "matches",
+            "require",
+            "send",
+            "group_members",
+            "signal_group"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 215,
+          "name": "PosixPlatform",
+          "bases": [
+            "ProcessGroups",
+            "Platform"
+          ],
+          "methods": [
+            "acquire_store_lock",
+            "try_store_lock",
+            "launch",
+            "terminate_group",
+            "force_group",
+            "group_members",
+            "members_of_group",
+            "send"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 258,
+          "name": "LinuxPlatform",
+          "bases": [
+            "NamespaceContainment",
+            "PidfdHandles",
+            "PosixPlatform"
+          ],
+          "methods": [
+            "_stat",
+            "identity",
+            "members_of_group",
+            "send"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 295,
+          "name": "DarwinPlatform",
+          "bases": [
+            "PosixPlatform"
+          ],
+          "methods": [
+            "__init__",
+            "identity",
+            "members_of_group"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 828,
+          "name": "ChildProcess",
+          "bases": [
+            "Sealed",
+            "ABC"
+          ],
+          "methods": [
+            "__init__",
+            "pid",
+            "alive",
+            "force",
+            "retired",
+            "wait",
+            "_stop_plan",
+            "_stop",
+            "_release_retired_io",
+            "stop"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 928,
+          "name": "AttachedChild",
+          "bases": [
+            "ChildProcess"
+          ],
+          "methods": [
+            "__init__",
+            "start",
+            "write",
+            "returncode",
+            "wait",
+            "_release_retired_io",
+            "discard_stderr",
+            "close_input",
+            "finish"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1201,
+          "name": "SynchronousProcess",
+          "bases": [
+            "ChildProcess"
+          ],
+          "methods": [
+            "require_stop_authority",
+            "force",
+            "stop",
+            "reap",
+            "stop_sync"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1232,
+          "name": "ObservedProcess",
+          "bases": [
+            "SynchronousProcess"
+          ],
+          "methods": [
+            "require_stop_authority",
+            "reap",
+            "wait"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1247,
+          "name": "ParentedProcess",
+          "bases": [
+            "SynchronousProcess"
+          ],
+          "methods": [
+            "__init__",
+            "launch",
+            "reap",
+            "wait",
+            "close_streams",
+            "close",
+            "__enter__",
+            "__exit__"
+          ]
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1319,
+          "name": "NamespacedChild",
+          "bases": [
+            "AttachedChild"
+          ],
+          "methods": [
+            "__init__",
+            "start",
+            "_stop"
+          ]
+        },
+        {
+          "path": "src/agent_comms/native_custody.py",
+          "line": 23,
+          "name": "PiSessionChild",
+          "bases": [],
+          "methods": [
+            "reply_ui",
+            "start",
+            "stderr_tail",
+            "close",
+            "failures"
+          ]
+        },
+        {
+          "path": "src/agent_comms/tracked_turn.py",
+          "line": 139,
+          "name": "TrackedTurnSession",
+          "bases": [
+            "TurnSession",
+            "MroDispatch"
+          ],
+          "methods": [
+            "__init__",
+            "execute",
+            "complete",
+            "resume_prepared",
+            "open_transport",
+            "started_input",
+            "active_tools",
+            "apply_native_event",
+            "next_event",
+            "send",
+            "attest",
+            "write",
+            "prompt_boundary",
+            "admit_prompt",
+            "response",
+            "committed_input",
+            "committed_context",
+            "message_update",
+            "text_delta",
+            "message_end",
+            "accept_tool_round",
+            "accept_final_message",
+            "fail_terminal",
+            "context_proof",
+            "tool_started",
+            "tool_finished",
+            "settled",
+            "result"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 210,
+          "reference": "self.group_members"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 860,
+          "reference": "self.platform.group_members"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 867,
+          "reference": "self.platform.group_members"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 874,
+          "reference": "self._stop_plan"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1221,
+          "reference": "self._stop_plan"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1069,
+          "reference": "self.child.stop_sync"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1299,
+          "reference": "self.stop_sync"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 850,
+          "reference": "self.platform.group_members"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 246,
+          "reference": "self.members_of_group"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1151,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "src/agent_comms/child_process.py",
+          "line": 1148,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "src/agent_comms/owner_lifecycle.py",
+          "line": 278,
+          "reference": "ObservedProcess(identity).stop_sync"
+        }
+      ]
+    },
+    {
+      "root": "tools",
+      "modules": 53,
+      "parse_failures": [],
+      "declarations": [],
+      "references": [
+        {
+          "path": "tools/cutover/thread_retirement_installed_pilot.py",
+          "line": 173,
+          "reference": "process.stop_sync"
+        }
+      ]
+    },
+    {
+      "root": "tests",
+      "modules": 357,
+      "parse_failures": [],
+      "declarations": [],
+      "references": [
+        {
+          "path": "tests/test_child_process.py",
+          "line": 291,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_child_process.py",
+          "line": 288,
+          "reference": "stale.stop_sync"
+        },
+        {
+          "path": "tests/test_child_process.py",
+          "line": 452,
+          "reference": "observed.stop_sync"
+        },
+        {
+          "path": "tests/test_input_drain.py",
+          "line": 237,
+          "reference": "foreign.stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 80,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 137,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 58,
+          "reference": "ObservedProcess(current.process_identity).stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 106,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_owner_process.py",
+          "line": 164,
+          "reference": "ObservedProcess(owner.process_identity).stop_sync"
+        },
+        {
+          "path": "tests/test_owner_release_restart.py",
+          "line": 81,
+          "reference": "ObservedProcess(current.process_identity).stop_sync"
+        },
+        {
+          "path": "tests/test_private_nk_entrypoint.py",
+          "line": 216,
+          "reference": "child.stop_sync"
+        },
+        {
+          "path": "tests/test_runtime.py",
+          "line": 40,
+          "reference": "child.stop_sync"
+        }
+      ]
+    }
+  ],
+  "limits": "Declaration inheritance and conservative dotted references; dynamic receiver ambiguity retained. External OS/platform interfaces honored, native JS unchanged. Child lead source read preceded edits; expanded AST preserves original revision census before source commit."
+}

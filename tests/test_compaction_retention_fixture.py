@@ -6,11 +6,21 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+import hashlib
+
+import pytest
+
+from agent_comms.field_codec import FieldCodec
+from agent_comms.native_entries import NativeEntry
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from retained_native_fixture import RecordedNativeProbe
+from test_backend_native_lifecycle import native_backend
 
 from compaction_retention_fixture import (
     Condition,
     Question,
     RecordedAnswers,
+    RecordedNativeProbes,
     coding_scenario,
     decode_answers,
 )
@@ -117,6 +127,70 @@ class RecallMeasurementTests(unittest.TestCase):
         for item in public["rounds"]:
             for question in item["questions"]:
                 self.assertEqual(set(question), {"id", "prompt"})
+
+    def test_held_out_probe_uses_public_questions_only(self):
+        for item in self.scenario.rounds:
+            questions = json.loads(item.probe_text().split("\n", 1)[1])
+            self.assertEqual(questions, {
+                "round": item.identity,
+                "questions": [question.public() for question in item.questions],
+            })
+
+
+async def test_recorded_native_recall_consumes_original_probe_and_preserves_source(native_backend):
+    """Controlled answers check plumbing, never model retention quality."""
+    owner = native_backend
+    scenario = coding_scenario()
+    first = scenario.rounds[0]
+    seeded = await owner.run("\n".join(first.history))
+    assert seeded[-1].ok
+    owner.provider.text = json.dumps({
+        first.identity: {question.identity: question.expected for question in first.questions}
+    })
+    completed = await owner.run(first.probe_text())
+    assert completed[-1].ok and owner.provider.posts == 2
+    header, entries = NativeEntry.read_evidence(owner.session)
+    original_user = NativeEntry.tracked_users(entries)[owner.starts[-1][1]]
+    answer, = (entry for entry in entries if entry.final_reply
+               and entry.parent_id == original_user.id)
+    reference = RecordedNativeProbes({first.identity: RecordedNativeProbe(
+        NativeSessionIdentity(header.id, str(owner.session)), owner.starts[-1][1], answer.id
+    )})
+    original = {
+        path: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in (owner.session, Path(str(owner.session) + ".input-proof"))
+    }
+    decoded = FieldCodec.decode(RecordedNativeProbes, FieldCodec.encode(reference))
+    result = scenario.score_native(Condition.FULL_CONTEXT, decoded)
+    assert (result["questions"], result["correct"], result["missing"]) == (21, 7, 14)
+    observed = result["native_probes"][first.identity]
+    assert observed["context"]["inputId"] == owner.starts[-1][1]
+    assert observed["answer"]["id"] == answer.id
+    assert observed["answer_text"] == owner.provider.text
+    assert result["provider_prompt_presence"] == "not measured; native user/context proof reported"
+    with pytest.raises(ValueError, match="frozen held-out"):
+        scenario.rounds[1].score_native(decoded.rounds[first.identity])
+    bad_answer = replace(decoded.rounds[first.identity], answer_entry_id=answer.parent_id)
+    with pytest.raises(ValueError, match="successful native terminal"):
+        bad_answer.observe()
+    assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in original} == original
+    assert owner.provider.posts == len(owner.starts) == 2
+
+    report = {
+        "scope": "controlled native recorded-result consumer; not S4 model-retention quality",
+        "ok": True,
+        "provider_posts": owner.provider.posts,
+        "recorded_rounds": 1,
+        "questions": result["questions"],
+        "controlled_correct": result["correct"],
+        "missing": result["missing"],
+        "original_source_sha256": original[owner.session],
+        "input_proof_sha256": original[Path(str(owner.session) + ".input-proof")],
+        "original_source_unchanged": True,
+        "question_mismatch_refused": True,
+        "nonterminal_answer_refused": True,
+    }
+    (owner.root.parent / "recorded-recall-receipt.json").write_text(json.dumps(report, indent=2))
 
 
 if __name__ == "__main__":

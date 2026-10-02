@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 
 from .routing import TurnRouting
@@ -56,6 +56,15 @@ class TurnState:
     @property
     def phase(self) -> TurnPhase:
         return self.active.phase if self.active is not None else IdlePhase()
+
+    def phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
+        """Emit only a changed active turn, retaining its original identity."""
+        if self.active is not None and phase != self.active.phase:
+            yield replace(self, active=replace(self.active, phase=phase))
+
+    def native_phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
+        """The existing phase owns precedence over a native observation."""
+        yield from self.phase_effects(self.phase.observed(phase))
 
     @property
     def report_turn(self) -> str:

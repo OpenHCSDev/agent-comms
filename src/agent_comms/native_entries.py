@@ -91,6 +91,11 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
         return entry
 
     @classmethod
+    def input_evidence(cls, raw: dict) -> NativeEntry | None:
+        """Non-input entries do not contribute a tracked input proof."""
+        return None
+
+    @classmethod
     def read_evidence(cls, session_file):
         """Decode once behind the existing strict private-file trust boundary."""
         with cls.open_evidence(session_file) as evidence:
@@ -100,15 +105,14 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     @contextmanager
     def open_evidence(cls, session_file):
         """Acquire a source reader, never input acceptance or replay authority."""
-        from .native_pi import PrivateEvidenceRead, _private_session_dir
+        with NativeEvidenceRead.open(session_file) as evidence:
+            yield evidence
 
-        _private_session_dir(session_file.parent)
-        with PrivateEvidenceRead.open(session_file) as source:
-            evidence = NativeEvidenceRead(source)
-            try:
-                yield evidence
-            finally:
-                evidence.close()
+    @classmethod
+    @contextmanager
+    def open_input_evidence(cls, session_file):
+        with NativeInputEvidenceRead.open(session_file) as evidence:
+            yield evidence
 
     @staticmethod
     def tracked_users(entries):
@@ -198,6 +202,20 @@ class NativeEvidenceRead:
 
     @classmethod
     @contextmanager
+    def open(cls, session_file):
+        """One original descriptor and byte-verification lifetime for every read."""
+        from .native_pi import PrivateEvidenceRead, _private_session_dir
+
+        _private_session_dir(session_file.parent)
+        with PrivateEvidenceRead.open(session_file) as source:
+            evidence = cls(source)
+            try:
+                yield evidence
+            finally:
+                evidence.close()
+
+    @classmethod
+    @contextmanager
     def borrow(cls, session_file: Path, reader: NativeEvidenceRead | None = None):
         """Own acquisition and refusal cleanup, without borrowing proof authority.
 
@@ -207,7 +225,7 @@ class NativeEvidenceRead:
         """
         session_file = Path(session_file).absolute()
         if reader is None:
-            with NativeEntry.open_evidence(session_file) as acquired:
+            with cls.open(session_file) as acquired:
                 yield acquired
         else:
             try:
@@ -226,7 +244,7 @@ class NativeEvidenceRead:
 
         try:
             _private_session_dir(self.source.path.parent)
-            appended = tuple(NativeEntry.from_evidence(row) for row in self.source.rows())
+            appended = tuple(self.decode_rows(self.source.rows()))
             entries = self.entries + appended
             if not entries or not isinstance(entries[0], SessionEntry):
                 raise ValueError("Native Pi session header is invalid")
@@ -240,6 +258,9 @@ class NativeEvidenceRead:
             raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
         self.entries = entries
         return entries[0], entries
+
+    def decode_rows(self, rows):
+        return (NativeEntry.from_evidence(row) for row in rows)
 
     def retained_task_facts(self, witness):
         """Project only the witnessed branch of this original acquired resource.
@@ -282,8 +303,24 @@ class NativeEvidenceRead:
         return tuple(facts)
 
 
+class NativeInputEvidenceRead(NativeEvidenceRead):
+    """Verify every source byte; decode only the header and original input records.
+
+    The inherited descriptor, append and refusal lifetime is unchanged. This is
+    an acquired input-proof projection, not a history index or another store.
+    """
+
+    def decode_rows(self, rows):
+        for index, row in enumerate(rows):
+            # The first physical record must remain the original session header.
+            entry = (NativeEntry.from_evidence(row) if index == 0 and not self.entries
+                     else NativeEntry.wire_member(row).input_evidence(row))
+            if entry is not None:
+                yield entry
+
+
 class NativeEvidenceScope(ExitStack):
-    """One acquired original source for a bounded corroboration operation.
+    """One acquired input-proof source for a bounded corroboration operation.
 
     Only the current descriptor and its decoded bytes are held. Switching
     journals closes the previous reader; no proof, receipt or disposition is
@@ -292,7 +329,7 @@ class NativeEvidenceScope(ExitStack):
 
     def __init__(self) -> None:
         super().__init__()
-        self.readers: dict[Path, NativeEvidenceRead] = {}
+        self.readers: dict[Path, NativeInputEvidenceRead] = {}
 
     @classmethod
     @contextmanager
@@ -308,11 +345,11 @@ class NativeEvidenceScope(ExitStack):
                 scope.close()
                 raise
 
-    def for_source(self, path: Path) -> NativeEvidenceRead:
+    def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()
         if path not in self.readers:
             self.close()
-            self.readers[path] = self.enter_context(NativeEntry.open_evidence(path))
+            self.readers[path] = self.enter_context(NativeInputEvidenceRead.open(path))
         return self.readers[path]
 
     def close(self) -> None:
@@ -350,6 +387,10 @@ class SessionEntry(NativeEntry):
         default=None, metadata={"wire_name": "agentCommsSelectedFresh"}
     )
 
+    @classmethod
+    def input_evidence(cls, raw: dict) -> NativeEntry:
+        return cls.from_evidence(raw)
+
     def require_header(self) -> None:
         if not self.id:
             raise ValueError("Native Pi session header is invalid")
@@ -357,6 +398,17 @@ class SessionEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
+    @classmethod
+    def input_evidence(cls, raw: dict) -> NativeEntry | None:
+        message = raw["message"]
+        if not isinstance(message, dict):
+            raise ValueError("Native message evidence requires an object")
+        if message.get("inputId") is not None:
+            # Same strict original user/content/digest decoding, including the
+            # rejection of tracked IDs hidden in another message role.
+            return cls.from_evidence(raw)
+        return None
+
     message: PiMessage
     is_message = True
 

@@ -205,6 +205,7 @@ class SavedSelectedSession(SelectedSession):
         settings = await read_selected_compaction_decision(
             persistent, session_file=self.session_file,
             expected_package=turn.launch.package, selected=selected,
+            registry=participant.comms.registry, thread_name=participant.owner.thread.name,
         )
         if settings.trigger:
             await Coordination.run_async(
@@ -226,8 +227,13 @@ class SavedSelectedSession(SelectedSession):
                 owner, generation, persistent, source, selected, settings,
                 on_event=participant.dispatch,
             )
-            result.require_prepared()
-        await turn.resume_prepared(turn.custody)
+            settings.require_prepared(result)
+            # A committed compaction retires/reopens the selected source. Only
+            # that crossing needs a new native acquisition and attestation.
+            # An unchanged original child remains under this turn's custody.
+            await turn.resume_prepared(turn.custody)
+        else:
+            persistent.custody.idle()
 
 
     def require_launch_header(self) -> None:

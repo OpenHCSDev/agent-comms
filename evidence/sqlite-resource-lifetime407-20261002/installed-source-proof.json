@@ -1,0 +1,12 @@
+{
+  "source_head": "cd150be078c07b9f4b2d1af83e4cd28f1f584597",
+  "source_equal_files": 311,
+  "mismatches": [],
+  "installed_package": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-owned-observation536/lib/python3.14/site-packages/agent_comms",
+  "wheel_sha256": "09c7077d81f015ca6f3941831b451ce79e39e3615e2f6cc195198d31494d3157",
+  "direct_url": {
+    "url": "file:///home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/wheels-sqlite537/agent_comms-0.1.0-py3-none-any.whl",
+    "archive_info": {}
+  },
+  "interpreter": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-owned-observation536/bin/python"
+}

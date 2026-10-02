@@ -7,8 +7,9 @@ send-admission and live-context authority. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
@@ -143,6 +144,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     @classmethod
     @contextmanager
     def _publication_read(cls, root):
+        from .coordination_database import CoordinationStore
         from .coordinated_runtime_schema import assert_native_runtime_schema
         from .coordination_response import _assert_response_schema
         from .errors import RelationViolationError
@@ -155,16 +157,48 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             return
         if failure:
             raise RelationViolationError("Native reply source has an invalid coordinator")
-        with closing(
-            sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.05)
-        ) as db:
-            db.row_factory = sqlite3.Row
-            db.execute("PRAGMA query_only=ON")
-            db.execute("PRAGMA foreign_keys=ON")
-            db.execute("BEGIN")
+        with CoordinationStore.observing(database, lock_timeout=0.05) as db:
             assert_native_runtime_schema(db)
             _assert_response_schema(db)
             yield db
+
+    @classmethod
+    def for_native_user(cls, db, reader, user):
+        """The original admitted native file/input owns stage and publication.
+
+        Viewer names and current registry owners cannot classify inherited or
+        saved native history. A recorded receipt additionally seals the exact
+        original user entry; a precommit admitted row still owns its stage.
+        """
+        rows = cls.select(
+            db, where="input_id=? AND session_file=? AND session_id=?",
+            parameters=(user.input_id, str(reader.path), reader.session_id),
+        )
+        for row in rows:
+            user.require_tracked_user()
+            if row.reference.recorded and row.session_entry_id != user.id:
+                raise IdentityConflict("Native transcript input conflicts with its original entry")
+        return rows
+
+    @classmethod
+    def transcript_projection(cls, db, reader, record, owner_lookup):
+        """Borrow original stage/replies; defer rendering until SQL closes.
+
+        No current lifecycle witness is retained. These original identities are
+        frozen; TranscriptRead's original publication revision fences appends.
+        """
+        entry = record.entry
+        user = entry if entry.input_boundary else reader.input_ancestor(record)
+        originals, publications = (), ()
+        if user is not None and user.input_id is not None and db is not None:
+            originals = cls.for_native_user(db, reader, user)
+            if entry.final_reply:
+                for original in originals:
+                    publications = original.published_replies(db, user, owner_lookup)
+        for original in originals:
+            return partial(original.execution.transcript_events, entry, user=user), publications
+        # Untracked/detached history is not classified by text or native role.
+        return entry.events, publications
 
     @classmethod
     def publication_revision(cls, root, reader, owner_lookup):
@@ -195,47 +229,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 )
             )[0]
 
-    @classmethod
-    def published_replies(cls, root, reader, user, owner_lookup):
-        """Join the original tracked input to its exact published execution.
-
-        This is a read-only projection of existing records. It never enrolls a
-        native input, installs a schema, advances a cursor, or authorizes retry.
-        The SQLite reader is closed before any wire read or presentation work.
-        """
-        from .coordination_tables.executions import ExecutionRecord
-        from .coordination_tables.responses import ResponseObligation
-        from .message_reference import MessageReference
-
-        session_id = reader.session_id
-        with cls._publication_read(root) as db:
-            if db is None:
-                return ()
-            rows = cls.select(db, where="input_id=? AND execution_id IS NOT NULL", parameters=(user.input_id,))
-            if not rows:
-                return ()
-            original = rows[0]
-            if (
-                original.owner_lookup,
-                original.session_file,
-                original.session_id,
-                original.session_entry_id,
-            ) != (owner_lookup, str(reader.path), session_id, user.id):
-                return ()
-            attempt = original.execution.require_attempt()
-            execution = ExecutionRecord.one(db, execution_id=attempt.execution_id)
-            if not attempt.matches_execution(execution, original.owner_lookup):
-                return ()
-            obligations = ResponseObligation.select(
-                db, where="execution_id=?", parameters=(attempt.execution_id,)
-            )
-            if not obligations or not all(row.lifecycle.published for row in obligations):
-                return ()
-            return tuple(sorted(
-                (MessageReference(row.lifecycle.receipt_seq, row.lifecycle.receipt_message_id)
-                 for row in obligations),
-                key=lambda reference: reference.seq,
-            ))
+    def published_replies(self, db, user, owner_lookup):
+        """Only this original receipt can lend its execution publication."""
+        if (self.owner_lookup, self.session_entry_id) != (owner_lookup, user.id):
+            return ()
+        return self.execution.published_replies(db, owner_lookup)
 
     input_id: str = field(
         metadata={

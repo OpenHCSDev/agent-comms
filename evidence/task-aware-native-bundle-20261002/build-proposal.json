@@ -1,0 +1,13 @@
+{
+  "source": "dd0d9f3b3402904d21d0daff1ee9c1898455d962",
+  "native_source": "459adb65ba5eb349f514c1529ccb2d2f73a1ea42",
+  "recipe": "Current stock builder assembly captured unpublished solely to derive new commitments; pristine canonical builder verifies/publishes after pin generation",
+  "scratch_allowance_gib": 0.6,
+  "normal_builder_sha256": "50dd8ead9b2cb356a65c0f697140ad15948700aed9b407c43305d6d921876e48",
+  "capture_recipe_sha256": "46bbbcb5b724a62950ba94b0b71c036a39ba03a7891a6aef7d1aabca96106d0f",
+  "npm_cache": "/home/ts/.cache/agent-scratch/comms428-native-bundle-20260930/npm-cache",
+  "donor5184": "read-only/protected",
+  "public_changes": false,
+  "provider_calls": 0,
+  "build_context_correction": "Existing zero-fuzz storage patch expects the actual compact/prepareCompaction import. shouldCompact has no selected RPC consumer after policy ownership. Stock hash/fuzz checks unchanged."
+}

@@ -61,6 +61,9 @@ class NativeWitness(NativeSessionIdentity):
 class NativePreparationResult(DeclaredFamily, affix="PreparationResult"):
     family_discriminator = "status"
 
+    def at_complete_boundary(self) -> NativePreparationResult:
+        return self
+
     @abstractmethod
     def checked(self, file: Path, revision: FileRevision) -> Self:
         """Bind an observed cutpoint to the already captured native revision."""
@@ -110,6 +113,11 @@ class NativePreparation(NativePreparationResult, declared_name="ready"):
         return self
 
     def require_ready(self) -> NativePreparation:
+        return self
+
+    def at_complete_boundary(self) -> NativePreparationResult:
+        if self.is_split_turn:
+            return SkipPreparationResult(self.witness.session_id)
         return self
 
     async def compact_owner(self, perform):

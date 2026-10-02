@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from .agent_events import CompactionEnd
-from .compaction_result import CompactionResult, CommittedCompactionResult
 from .pi_summary_payloads import SummaryFiles, SummaryUsage
 
 if TYPE_CHECKING:
+    from .compaction_result import CompactionResult, CommittedCompactionResult
     from .compaction_records import CompactionOperation
     from .compaction_source import CompactionSource
     from .owner_compaction_commit import OwnerCompactionCommit
@@ -62,6 +62,8 @@ class NativeSummary(OwnerSummaryOutcome):
         return operation
 
     def compaction_result(self, operation: CompactionOperation | None) -> CommittedCompactionResult:
+        from .compaction_result import CommittedCompactionResult
+
         assert operation is not None
         operation.state.require_committed(operation.commit_id)
         return CommittedCompactionResult(self.text, operation.commit_id)

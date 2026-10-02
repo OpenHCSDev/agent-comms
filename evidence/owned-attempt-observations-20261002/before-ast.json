@@ -1,0 +1,207 @@
+{
+  "revision": "457b1047855752f4d069ee1d39b01e30603efa41",
+  "roots": [
+    {
+      "root": "src/agent_comms",
+      "modules": 311,
+      "parse_failures": [],
+      "declarations": [
+        {
+          "path": "src/agent_comms/attempt_store.py",
+          "line": 49,
+          "name": "AttemptStore",
+          "bases": [],
+          "methods": [
+            "__init__",
+            "require_fence",
+            "start",
+            "_resume_retry",
+            "renew_lease",
+            "advance",
+            "observe_replay",
+            "fail_unknown",
+            "observe_connectivity",
+            "append_recovery_audit",
+            "settle_nonpublication"
+          ]
+        },
+        {
+          "path": "src/agent_comms/coordinator.py",
+          "line": 23,
+          "name": "Coordination",
+          "bases": [],
+          "methods": [
+            "run_worker",
+            "run_async",
+            "_run_owned",
+            "__init__",
+            "install_private_runtime",
+            "close",
+            "__enter__",
+            "__exit__"
+          ]
+        },
+        {
+          "path": "src/agent_comms/durable_turn.py",
+          "line": 25,
+          "name": "DurableTurn",
+          "bases": [
+            "MroDispatch"
+          ],
+          "methods": [
+            "__init__",
+            "current",
+            "model_started",
+            "advance",
+            "accepted",
+            "context",
+            "excursion",
+            "model",
+            "tool",
+            "compaction",
+            "finish",
+            "fail_unknown",
+            "fail_terminal"
+          ]
+        },
+        {
+          "path": "src/agent_comms/mro_dispatch.py",
+          "line": 21,
+          "name": "MroDispatch",
+          "bases": [],
+          "methods": [
+            "handlers_for",
+            "dispatch",
+            "dispatch_sync"
+          ]
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 311,
+          "name": "FullNativeSend",
+          "bases": [
+            "NativeSendStage"
+          ],
+          "methods": [
+            "fence",
+            "execution",
+            "fail_terminal",
+            "fail_unknown",
+            "reserve_claim",
+            "commit",
+            "require_phase"
+          ]
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 143,
+          "name": "SelectedAttempt",
+          "bases": [],
+          "methods": [
+            "engage",
+            "tool_owner",
+            "prepare",
+            "run",
+            "observe_event"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "path": "src/agent_comms/owned_turn.py",
+          "line": 427,
+          "reference": "self.progress.consume"
+        },
+        {
+          "path": "src/agent_comms/owned_turn.py",
+          "line": 448,
+          "reference": "self.progress.publish_result"
+        },
+        {
+          "path": "src/agent_comms/owned_turn.py",
+          "line": 464,
+          "reference": "self.progress.report_failure"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 312,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 325,
+          "reference": "self.progress.fail_terminal"
+        },
+        {
+          "path": "src/agent_comms/private_send_stage.py",
+          "line": 332,
+          "reference": "self.progress.fail_unknown"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 177,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 265,
+          "reference": "self.stage.progress.finish"
+        },
+        {
+          "path": "src/agent_comms/selected_turn.py",
+          "line": 276,
+          "reference": "self.stage.progress.dispatch"
+        }
+      ]
+    },
+    {
+      "root": "tests",
+      "modules": 357,
+      "parse_failures": [],
+      "declarations": [],
+      "references": [
+        {
+          "path": "tests/test_acp.py",
+          "line": 911,
+          "reference": "goal.progress.startswith"
+        },
+        {
+          "path": "tests/test_acp.py",
+          "line": 817,
+          "reference": "goal.progress.startswith"
+        },
+        {
+          "path": "tests/test_acp.py",
+          "line": 871,
+          "reference": "current.progress.startswith"
+        },
+        {
+          "path": "tests/test_coordination_nominal.py",
+          "line": 172,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "tests/test_goal_resume.py",
+          "line": 377,
+          "reference": "blocked.progress.startswith"
+        },
+        {
+          "path": "tests/test_native_pi.py",
+          "line": 978,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "tests/test_native_unknown_recovery.py",
+          "line": 266,
+          "reference": "DurableTurn"
+        },
+        {
+          "path": "tests/test_native_unknown_recovery.py",
+          "line": 275,
+          "reference": "DurableTurn"
+        }
+      ]
+    }
+  ],
+  "limits": "Nominal Python declarations/references; dynamic receiver resolution not proved. Native JavaScript and SDK roots outside this Python census, unchanged by this Python resource lifetime closure."
+}

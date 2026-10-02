@@ -1,0 +1,9 @@
+{
+  "state": "REFUSED before child spawn",
+  "cause": "Inspection driver passed the nominal ThinkingLevel class as a subprocess argument instead of the existing ThinkingLevel.optional_name projection",
+  "native_children": 0,
+  "native_inputs": 0,
+  "provider_calls": 0,
+  "public_mutations": [],
+  "original_directory": "launch-nra-architecture"
+}

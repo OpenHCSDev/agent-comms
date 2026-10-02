@@ -43,19 +43,21 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.bus_publication import stable_thread_lookup
 
 
-def configured_stage(arguments, configured, snapshot):
+def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
     """Share the original installed/configured private receiving preparation."""
     from agent_comms.native_package import verify_native_package
 
     verify_native_package(arguments.package)
     stage = arguments.stage.absolute()
     assert stage.is_relative_to('/home/ts/wt')
-    stage.mkdir(mode=0o700, parents=True, exist_ok=False)
+    if not continue_existing:
+        stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     from agent_comms.owner_launch import RetainedOwnerLaunch
     from agent_comms.native_pi import NativePiRpcLaunch
 
     project = stage/'project'
-    project.mkdir(mode=0o700)
+    if not continue_existing:
+        project.mkdir(mode=0o700)
     retained = RetainedOwnerLaunch.capture(configured, snapshot)
     # The original owner owns auth/settings/extension selection. Bootstrap is
     # its existing OS-environment decoder, not a second fixture configuration.
@@ -67,9 +69,14 @@ def configured_stage(arguments, configured, snapshot):
         original = source_profile/filename
         if original.exists():
             source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
-    (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
+    if not continue_existing:
+        (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
     service = Comms(stage/'wire', private_initial_writes=True)
-    root_id = service.messaging.initialize_private_initial_protocol()
+    if continue_existing:
+        with service.bus.log.locked():
+            root_id = service.bus.log._private_marker_unlocked().root_id
+    else:
+        root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
@@ -158,6 +165,11 @@ async def configured_pure_channel(arguments):
         private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
     originals, proof, failure = [], {}, None
+    if arguments.configured_task_timing:
+        assert arguments.owners == arguments.wave_size == 1
+        policy = json.loads(os.environ.get('AGENT_COMMS_COMPACTION_POLICY', '{}'))
+        policy['taskAware'] = True
+        os.environ['AGENT_COMMS_COMPACTION_POLICY'] = json.dumps(policy)
     begun = time.perf_counter()
     reading = asyncio.Event()
     read_spans = []
@@ -182,7 +194,15 @@ async def configured_pure_channel(arguments):
             originals = [service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
                 f'{stage.name} original {ordinal}: New isolated user channel question to all participants: '
                 'please answer here with the value of 10+2. This is a fresh question, '
-                'not continuation or retry of any previous input. No project edits are requested.',
+                'not continuation or retry of any previous input. No project edits are requested.' + (
+                    ' Before answering, publish one authored subtask notice through the ordinary '
+                    'CLI: agent-comms invoke --tool comms_subtask --arguments '
+                    '\'{"to":"#openhcs","text":"Verified 10 plus 2","completed":true}\'. '
+                    'Use those exact arguments once, without retry or another target. The existing '
+                    'wire forbids sending to yourself; this channel notice records only that small '
+                    'subtask, not a completed goal. Do not inspect or dump environment, auth or '
+                    'settings. Use no file-writing tools.'
+                    if arguments.configured_task_timing else ''),
                 MessageType.INFO),
                 _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                 for ordinal in range(arguments.wave_size)]
@@ -312,6 +332,10 @@ async def configured_pure_channel(arguments):
                     diagnostic = json.loads(diagnostics[0].read_text())
                     raise AssertionError(diagnostic.get('source_error',diagnostic.get('reason')))
                 await asyncio.sleep(.1)
+        if arguments.configured_task_timing:
+            proof['task_timing'] = await configured_task_timing(
+                arguments, service, attachment, names[0], sender, stage
+            )
         if arguments.configured_saved_preparation:
             from agent_comms.compaction_journal import CompactionJournal
             from agent_comms.compaction_records import SelectedSummarySource
@@ -364,6 +388,186 @@ async def configured_pure_channel(arguments):
                 'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
             (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
             print(json.dumps(receipt,indent=2),flush=True)
+
+
+async def configured_task_timing(arguments, service, attachment, name, sender, stage, *, addend=11):
+    """One new original after a real authored marker on the same saved owner.
+
+    Reuses the ordinary selected/native/ACP path and original captured provider
+    configuration. The sole fixture opt-in is the declared compaction policy.
+    """
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_entries import NativeEntry
+
+    snapshot = service.registry.snapshot()
+    owner = snapshot.require(name)
+    retained = service.bus.log.retained_context(name, service.registry).retained
+    boundary = retained.optional_boundary(owner, snapshot)
+    assert len(boundary) == 1, 'Configured owner did not author the requested explicit completed subtask'
+    journal = CompactionJournal(service.root/'compaction-commits.sqlite3')
+    before = journal.summaries.history(owner.session_file)
+    assert not journal.summaries.attempted_boundary(owner.session_file, boundary)
+    original = service.messaging.send_user_message('#openhcs',
+        f'New independent question: what is {addend} plus 2? Answer here. Do not record another '
+        'subtask, complete a goal, edit files, or retry any earlier question.',
+        worktree=sender.worktree)
+    async with asyncio.timeout(arguments.observation_seconds):
+        while True:
+            current = service.registry.require(name)
+            with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                claims = WakeAssignment.select(store.session._connection,
+                    where='wire_seq=?', parameters=(original.seq,))
+            if len(claims) == 1 and claims[0].lifecycle.completed and current.active_turn is None:
+                break
+            diagnostics = list((service.root/'diagnostics').glob('*.json'))
+            if diagnostics:
+                raise AssertionError(json.loads(diagnostics[0].read_text()).get('source_error'))
+            await asyncio.sleep(.1)
+    after = journal.summaries.history(owner.session_file)
+    attempts = tuple(attempt for attempt in after if attempt.operation_id not in
+                     {previous.operation_id for previous in before})
+    assert len(attempts) == 1, 'Explicit boundary did not cause exactly one journaled optional attempt'
+    attempt, = attempts
+    assert attempt.request.retained.contains_source(boundary[0])
+    assert attempt.state.commit_id
+    assert journal.operations.get(attempt.state.commit_id).state.committed
+    assert journal.summaries.attempted_boundary(owner.session_file, boundary)
+    replies = tuple(message for message in service.bus.log.full_history()
+                    if message.sender == name and message.target == '#openhcs' and message.seq > original.seq)
+    assert len(replies) == 1 and str(addend + 2) in replies[0].body
+    with NativeEntry.open_evidence(Path(owner.session_file)) as evidence:
+        _, entries = evidence.observe()
+    return {'explicit_authored_boundary': FieldCodec.encode(boundary),
+            'new_original_reference': FieldCodec.encode(original.reference),
+            'optional_attempt': attempt.operation_id, 'committed': True,
+            'same_saved_owner_continued': current.session_file == owner.session_file,
+            'once_channel_reply': replies[0].reference.message_id,
+            'native_saved_entries': len(entries), 'provider_configuration_copied': False,
+            'old_input_replays': 0, 'default_activation': False}
+
+
+async def configured_task_timing_continuation(arguments):
+    """Continue the preserved private owner with new inputs, never replay its failed task."""
+    from agent_comms.comms import wire
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.coordination_tables.publications import PublicationReceipts
+    from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
+    from agent_comms.native_input_record import FullNativeExecution
+
+    stage = arguments.stage.absolute()
+    original_receipt = stage/'receipt.json'
+    original_bytes = original_receipt.read_bytes()
+    previous = json.loads(original_bytes)
+    assert previous['all_owned_workers_retired'] and previous['proof']['all_originals_completed']
+    setting, = previous['settings']
+    assert setting['source_owner'] == arguments.configured_owner
+    existing = Comms(stage/'wire', private_initial_writes=True)
+    name = setting['private_owner']
+    owner = existing.registry.require(name)
+    assert not owner.process_alive and owner.active_turn is None
+    assert owner.session_file == setting['owned_fork']
+    with Coordination(str(existing.root/'coordination.sqlite3')) as store:
+        original_inputs = NativeRuntimeInput.select(store.session._connection)
+    original_journal = CompactionJournal(existing.root/'compaction-commits.sqlite3')
+    original_attempts = original_journal.summaries.history(owner.session_file)
+    original_summaries = FieldCodec.encode(original_attempts)
+    public_snapshot = wire().registry.snapshot()
+    configured = public_snapshot.require(arguments.configured_owner)
+    assert owner.model == configured.model and owner.thinking_level == configured.thinking_level
+    output = stage/'task-timing-continuation'
+    output.mkdir(mode=0o700, exist_ok=False)
+    stage, project, service, root_id, source_hashes = configured_stage(
+        arguments, configured, public_snapshot, continue_existing=True)
+    source = Path(configured.session_file)
+    source_hashes[str(source)] = hashlib.sha256(source.read_bytes()).hexdigest()
+    policy = json.loads(os.environ.get('AGENT_COMMS_COMPACTION_POLICY', '{}'))
+    policy['taskAware'] = True
+    os.environ['AGENT_COMMS_COMPACTION_POLICY'] = json.dumps(policy)
+    packets, proof, originals = [], {}, []
+    class Observation:
+        async def session_update(self, **kwargs):
+            packets.append(kwargs)
+    attachment = CommsClient(service, runtime_enabled=True,
+        private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
+    attachment.on_connect(Observation())
+    failure = None
+    begun = time.perf_counter()
+    try:
+        await asyncio.to_thread(service.owners.start, name)
+        await attach(service, name)
+        await attachment.load_session(cwd=owner.worktree, session_id=name)
+        sender = service.registry.require('human')
+        original = service.messaging.send_user_message('#openhcs',
+            'A distinct new isolated task: verify 20 plus 2 and answer here. This is not a retry '
+            'of the earlier 10 plus 2 request or its failed self-targeted notice. Before answering, '
+            'publish one completed subtask through the ordinary CLI: '
+            'agent-comms invoke --tool comms_subtask --arguments '
+            '\'{"to":"#openhcs","text":"Verified 20 plus 2","completed":true}\'. '
+            'Use those arguments once; do not retry tools or old inputs. This records only this '
+            'small subtask, not goal completion. Do not inspect or dump environment, auth or '
+            'settings; do not edit files. Then answer 20 plus 2 in this channel.',
+            worktree=sender.worktree)
+        originals.append(original.reference)
+        async with asyncio.timeout(arguments.observation_seconds):
+            while True:
+                with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                    db = store.session._connection
+                    claims = WakeAssignment.select(db, where='wire_seq=?', parameters=(original.seq,))
+                    executions = {link.execution_id for claim in claims for link in
+                        ExecutionAssignmentLink.select(db, where='assignment_id=?',
+                                                       parameters=(claim.assignment_id,))}
+                    receipts = tuple(receipt for execution in executions for receipt in
+                        PublicationReceipts.select(db, where='execution_id=?', parameters=(execution,)))
+                current = service.registry.require(name)
+                if len(claims) == 1 and claims[0].lifecycle.completed and current.active_turn is None:
+                    assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
+                    reply = service.bus.log.message_by_id(receipts[0].message_id)
+                    assert reply.sender == name and '22' in reply.body
+                    proof['new_authored_task_answer'] = FieldCodec.encode(reply.reference)
+                    proof['new_task_original'] = FieldCodec.encode(original.reference)
+                    break
+                diagnostics = list((service.root/'diagnostics').glob('*.json'))
+                if diagnostics:
+                    raise AssertionError(json.loads(diagnostics[0].read_text()).get('source_error'))
+                await asyncio.sleep(.1)
+        proof['task_timing'] = await configured_task_timing(
+            arguments, service, attachment, name, sender, stage, addend=21)
+        # The original shared effect records the second new reference in its receipt.
+    except BaseException as error:
+        failure = f'{type(error).__name__}: {error}'
+        raise
+    finally:
+        await attachment.shutdown()
+        await asyncio.to_thread(service.owners.stop, name)
+        with Coordination(str(service.root/'coordination.sqlite3')) as store:
+            final_inputs = NativeRuntimeInput.select(store.session._connection)
+        final_by_id = {row.input_id: row for row in final_inputs}
+        new_inputs = tuple(row for row in final_inputs if row.input_id not in
+                           {original.input_id for original in original_inputs})
+        (output/'acp-observer.json').write_text(json.dumps(packets, indent=2)+'\n')
+        receipt = {
+            'elapsed_seconds': time.perf_counter()-begun, 'failure': failure,
+            'installed_interpreter': sys.executable, 'continued_private_root': str(service.root),
+            'same_saved_session': service.registry.require(name).session_file == owner.session_file,
+            'original_receipt_sha256': hashlib.sha256(original_bytes).hexdigest(),
+            'original_receipt_unchanged': original_receipt.read_bytes() == original_bytes,
+            'original_native_inputs_unchanged': all(final_by_id[row.input_id] == row for row in original_inputs),
+            'original_summaries_unchanged': FieldCodec.encode(tuple(attempt for attempt in
+                original_journal.summaries.history(owner.session_file) if attempt.operation_id in
+                {entry.operation_id for entry in original_attempts})) == original_summaries,
+            'new_native_inputs': FieldCodec.encode(new_inputs),
+            'new_full_inputs_recorded': all(row.reference.recorded for row in new_inputs
+                                          if row.reference_stage is FullNativeExecution),
+            'new_originals': FieldCodec.encode(originals), 'proof': proof,
+            'all_owned_workers_retired': not service.registry.require(name).process_alive,
+            'configured_sources_unchanged': all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
+                                              for path,digest in source_hashes.items()),
+            'fresh_sdk_forks': 0, 'old_input_replays': 0, 'public_inputs': 0,
+        }
+        (output/'receipt.json').write_text(json.dumps(receipt, indent=2)+'\n')
+        print(json.dumps(receipt, indent=2), flush=True)
 
 
 async def configured_cancel_continue(arguments, service, attachment, name, sender, stage):
@@ -730,7 +934,9 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
 
 
 async def run(arguments):
-    if arguments.configured_pure_channel or arguments.configured_saved_preparation:
+    if arguments.continue_task_timing:
+        return await configured_task_timing_continuation(arguments)
+    if arguments.configured_pure_channel or arguments.configured_saved_preparation or arguments.configured_task_timing:
         return await configured_pure_channel(arguments)
     if arguments.configured_owner:
         return await configured_mixed_routes(arguments)
@@ -1215,6 +1421,10 @@ if __name__=='__main__':
     parser.add_argument('--wave-size',type=int,default=1)
     parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
     parser.add_argument('--configured-pure-channel',action='store_true')
+    parser.add_argument('--continue-task-timing', action='store_true',
+                        help='Two distinct new inputs on the existing stage owner; preserve its original receipt')
+    parser.add_argument('--configured-task-timing',action='store_true',
+                        help='One configured saved fork: explicit subtask then optional compaction and new original continuation')
     parser.add_argument('--configured-saved-preparation',action='store_true',
                         help='One saved configured fork: ordinary ACP admission, cancel, then a distinct new original')
     parser.add_argument('--busy-reader',action='store_true')

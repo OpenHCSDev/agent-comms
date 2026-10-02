@@ -6,12 +6,14 @@ import os
 import sqlite3
 import stat
 import tempfile
-from contextlib import suppress
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Self
 
-from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
+from agent_comms.coordination_errors import (
+    CoordinationReadUnavailable, IntegrityViolationError, SchemaVersionError,
+)
 from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
     coordinator_schema,
@@ -32,25 +34,60 @@ class _TableName(TypedRow):
 class CoordinationStore:
     """Open or initialize the private versioned coordination database."""
 
-    def __init__(self, path: str | os.PathLike[str], *, lock_timeout: float = 5.0) -> None:
+    @staticmethod
+    def _require_timeout(lock_timeout: float) -> None:
         if type(lock_timeout) not in (int, float) or not 0 <= lock_timeout <= 5:
             raise ValueError("coordination lock timeout must be bounded")
+
+    @staticmethod
+    @contextmanager
+    def observing(path: Path, *, lock_timeout: float):
+        """Own an existing committed read, never initialization or write admission.
+
+        The caller validates its declared tables and returns detached values.
+        Contention establishes neither missing rows nor a successful snapshot.
+        This same boundary closes partial acquisition and rolls back before
+        exporting an unavailable read to presentation or recovery consumers.
+        """
+        CoordinationStore._require_timeout(lock_timeout)
+        try:
+            with closing(sqlite3.connect(
+                path.resolve().as_uri() + "?mode=ro", uri=True,
+                isolation_level=None, timeout=lock_timeout,
+            )) as db:
+                db.row_factory = sqlite3.Row
+                db.execute("PRAGMA query_only=ON")
+                db.execute("PRAGMA foreign_keys=ON")
+                db.execute("BEGIN")
+                try:
+                    # BEGIN is lazy. Acquire this resource's committed snapshot
+                    # before a consumer's schema decoder can reclassify BUSY as
+                    # unsupported data. No metadata or row absence is exported.
+                    db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+                    yield db
+                finally:
+                    if db.in_transaction:
+                        db.execute("ROLLBACK")
+        except sqlite3.OperationalError as error:
+            CoordinationReadUnavailable.raise_from(error)
+
+    def __init__(self, path: str | os.PathLike[str], *, lock_timeout: float = 5.0) -> None:
+        self._require_timeout(lock_timeout)
         self.path = Path(path)
         self._prepare_private_file()
         self._connection = sqlite3.connect(self.path, isolation_level=None, timeout=lock_timeout)
-        self._connection.create_function(
-            "coordination_validate_publication_intent",
-            sum(field.init for field in fields(PublicationIntents)),
-            PublicationIntents.validate_sql,
-            deterministic=True,
-        )
-        self._connection.row_factory = sqlite3.Row
-        self._connection.execute("PRAGMA foreign_keys = ON")
-        self._connection.execute(f"PRAGMA busy_timeout = {int(lock_timeout * 1000)}")
         try:
-            self._initialize_schema()
+            self._connection.create_function(
+                "coordination_validate_publication_intent",
+                sum(field.init for field in fields(PublicationIntents)),
+                PublicationIntents.validate_sql,
+                deterministic=True,
+            )
+            self._connection.row_factory = sqlite3.Row
+            self._connection.execute("PRAGMA foreign_keys = ON")
             # Rollback journal avoids a post-schema WAL-mode race among fresh openers.
             self._connection.execute("PRAGMA synchronous = FULL")
+            self._initialize_schema()
             self._enforce_private_modes()
         except BaseException:
             self._connection.close()

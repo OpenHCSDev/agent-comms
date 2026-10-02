@@ -1,0 +1,53 @@
+{
+  "source": "f1a6daeca06f1388ef06ee0e917d354954a624b8",
+  "native_source": "459adb65ba5eb349f514c1529ccb2d2f73a1ea42",
+  "unpublished_capture": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/task-aware-native-bundle-20261002/fresh-unverified/node_modules/@earendil-works/pi-coding-agent",
+  "native_manifest_sha256": "ea043387f66a603182ffa43f4973f641e50a50de4a4bb08ccb70a8f0bf33d8f8",
+  "native_tree": "fcd6dde1f2fa999a434854327647d099868485f49399d39c19583031a107fadd",
+  "changed_diagnostic_members": [
+    {
+      "path": "dist/modes/rpc/rpc-mode.js",
+      "original_sha256": "9fc253340fd231c5bdb40a584e1980101f36b25222502979a02f1797a03a2f7c",
+      "new_sha256": "900c83eb422ebc89a2a015bae30f0ec4b8c5f7a3f0292053248bb8d8fc1956b2"
+    },
+    {
+      "path": "dist/core/compaction/agent-comms-policy.js",
+      "original_sha256": "5c605269587f6bb19d06852a032ff3f90aec983c2461dbec428938e1a3053440",
+      "new_sha256": "e55258e54cc195989af049abd72281b59f735bcf8c55fe98de1eb9ee351fbef8"
+    },
+    {
+      "path": "dist/core/session-context.js",
+      "original_sha256": "98156e826bb8ebc13329a003ed5f4c349fee59d2d1bf77a669001f20198ea1c5",
+      "new_sha256": "311e85beb52afe7e0bdb85a32fd5ab4f32483a311d85dab1628c1664f1a4d154"
+    },
+    {
+      "path": "node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js",
+      "original_sha256": "f9224adad46d6bc83e7ebe6fe1daeb8b1f79dde278dab11ee705574ff10e8c45",
+      "new_sha256": "5966a1dad3c0a8344c0b2707f2e23939a99cd1a806e4b992dcc07e3b25c52347"
+    }
+  ],
+  "stock_recipe": "Unmodified canonical prepare follows new pins; current capture is not a trusted/published package",
+  "provider_calls": 0,
+  "public_changes": false,
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ea043387f66a6031/node_modules/@earendil-works/pi-coding-agent",
+  "canonical_prepare": "PASS pristine stack/bin/prepare-pi-native",
+  "full_tree_and_file_commitment": "PASS",
+  "source_copy_bindings": [
+    [
+      "stack/native-compaction-policy.mjs",
+      "dist/core/compaction/agent-comms-policy.js"
+    ],
+    [
+      "stack/native-session-context.mjs",
+      "dist/core/session-context.js"
+    ],
+    [
+      "stack/native-context-budget.mjs",
+      "node_modules/@earendil-works/pi-ai/dist/api/agent-comms-context-budget.js"
+    ]
+  ],
+  "regular_files_nlink1": 19190,
+  "package_bytes": 138399815,
+  "matching_installed_trust": "Einstein receiving source wheel still required; source/native full-tree verifier passed",
+  "qualification": "Artifact assembly/source commitment only, not actual S1 configured-native workflow"
+}

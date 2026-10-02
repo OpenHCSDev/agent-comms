@@ -1,0 +1,18 @@
+F....................                                                    [100%]
+=================================== FAILURES ===================================
+_ test_non_user_tracked_identity_cannot_disappear_into_display_fallback[assistant] _
+
+role = 'assistant'
+
+    @pytest.mark.parametrize("role", ["assistant", "toolResult", "extension"])
+    def test_non_user_tracked_identity_cannot_disappear_into_display_fallback(role):
+>       with pytest.raises(ValueError, match="must belong to a user"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'must belong to a user'
+E         Actual message: 'Missing required fields for AssistantMessage'
+
+tests/test_native_evidence_boundary.py:74: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_evidence_boundary.py::test_non_user_tracked_identity_cannot_disappear_into_display_fallback[assistant]
+1 failed, 20 passed in 0.33s

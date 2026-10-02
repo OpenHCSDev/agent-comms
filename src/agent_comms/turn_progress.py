@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass, replace
+from functools import partial
 from typing import TYPE_CHECKING
 
 from acp.schema import (
@@ -17,6 +18,7 @@ from .acp_extension import QueueScope, TranscriptChangedUpdate, encode_updates
 from .thread_identity import AdmissionIdentity
 from .channel_targets import is_channel_target
 from .comms import Comms
+from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
 from .messages import MessageType
 from .message_reference import MessageReference
@@ -24,6 +26,7 @@ from .mro_dispatch import MroDispatch, handles
 from .native_input_owner import RegistryOwner
 from .turn_phase import PublishingPhase
 from .transcript_updates import TurnTranscriptUpdate
+from .turn_lease import TurnState
 
 if TYPE_CHECKING:
     from .session_lifecycle import SessionLifecycle
@@ -210,12 +213,14 @@ class TurnProgress(events.AgentEventConsumer):
 
     async def before_agent_info(self, event: events.AgentInfo) -> None:
         session_file = event.session_file
-        if session_file and self.thread.session_file != session_file:
-            self.thread = self.comms.registry.attach_native_session(
+        if session_file:
+            owner = await Coordination.run_worker(partial(
+                self.comms.registry.attach_native_session,
                 RegistryOwner(thread=self.thread,
                               admission_generation=self.turn_lease.admission_generation),
                 str(session_file),
-            ).thread
+            ))
+            self.thread = owner.thread
 
     async def after_agent_info(self, event: events.AgentInfo) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
@@ -225,25 +230,28 @@ class TurnProgress(events.AgentEventConsumer):
         await self.sessions.sync_identity(self.session_id)
         self.goals.tool_ended(event)
 
-    @property
-    def phase(self):
-        return self.comms.registry.require(self.thread_name).turn_state.phase
-
     async def transition(self, phase) -> None:
-        if self.phase == phase:
-            return
-        if self.comms.agents.transition_turn(self.turn_lease, phase):
-            state = self.comms.registry.require(self.thread_name).turn_state
+        states = await Coordination.run_worker(partial(
+            self.comms.agents.transition_turn, self.turn_lease, phase
+        ))
+        await self.emit_turn_effects(states)
+
+    async def emit_turn_effects(self, states: Iterable[TurnState]) -> None:
+        for state in states:
             with self.publication_measurements.measuring():
                 await self.effects._emit_event(self.session_id, TurnTranscriptUpdate(state=state))
 
     @handles(events.NativePhaseChanged)
     async def native_phase(self, event: events.NativePhaseChanged) -> None:
-        for observation in event.phase.request_observations:
-            record_request_progress(self.comms.root, self.turn_lease, observation,
-                                    native_process=event.native_process,
-                                    publication=self.publication_measurements)
-        await self.transition(self.phase.observed(event.phase))
+        states = await Coordination.run_worker(partial(
+            self.comms.agents.observe_native_phase, self.turn_lease, event.phase
+        ))
+        await self.emit_turn_effects(states)
+
+    def record_request_progress(self, progress, native_process) -> None:
+        record_request_progress(self.comms.root, self.turn_lease, progress,
+                                native_process=native_process,
+                                publication=self.publication_measurements)
 
     @handles(events.StreamSettled)
     async def stream_settled(self, event: events.StreamSettled) -> None:
