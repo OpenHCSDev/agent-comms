@@ -1,0 +1,150 @@
+.................FF                                                      [100%]
+=================================== FAILURES ===================================
+_______ test_original_goal_input_and_user_sources_share_compaction_fence _______
+
+comms = <agent_comms.comms.Comms object at 0x7f5b54bc5e50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5b54e8a7b0>
+
+    def test_original_goal_input_and_user_sources_share_compaction_fence(comms, monkeypatch):
+        from agent_comms.compaction_boundary import CompactionBoundary
+        from agent_comms.input_attempt import NotSentInput
+        from agent_comms.input_disposition import FutureInputQueue, InputDispositions
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.retained_task_facts import CurrentDecisionTaskFact, GoalTaskFact, InputTaskFact, UserSourceTaskFact
+    
+        comms.messaging.initialize_private_initial_protocol()
+        owner = admit(comms, "alpha")
+        saved = comms.root / "source-only.jsonl"
+        saved_source(saved)
+        owner = replace(owner, session_file=str(saved), goal=Goal("Keep exact /artifacts/root", "original-goal"))
+        comms.registry.register(owner)
+        user = comms.messaging.send_user_message("alpha", "Never replay UNKNOWN", worktree=str(comms.root))
+        monkeypatch.setenv("PI_AGENT_ID", "alpha")
+        choice = invoke_tool(comms, "comms_decision", {
+            "chosen": "/artifacts/exact", "rejected": ["/scratch/guess"], "to": "#team",
+        })
+        inputs = InputDispositions(comms.root / InputDispositions.filename)
+        historical = NotSentInput("acp:failed", None, "alpha", 1, "alpha", "original failed input")
+        inputs.update(lambda document: replace(document, rows={historical.key: historical}))
+        assert inputs.record("acp:future", seq=None, owner="alpha", admission=owner.active_turn.admission_generation,
+                             target="alpha", text="queued later, not compacted earlier")
+        document = inputs.read()
+    
+        class FutureQueue(FutureInputQueue):
+            # A declared source-control receipt; no native/UI/queue acceptance claim.
+            def future_inputs(self, owner, pending_input_key):
+                return {"acp:future": document.rows["acp:future"]}
+    
+        witness = source_witness(saved)
+        boundary = CompactionBoundary(comms.registry, inputs, FutureQueue())
+        _, generation = comms.registry.live_owner_with_generation("alpha")
+        before = (saved.read_bytes(), inputs.path.read_bytes())
+>       with boundary.hold(owner, generation, witness) as held:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_task_decisions.py:442: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/compaction_boundary.py:102: in hold
+    native_facts = witness.retained_task_facts()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:58: in retained_task_facts
+    return evidence.retained_task_facts(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/native_entries.py:253: in retained_task_facts
+    witness.require_current_file(self.source.path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='source-only', session_file='/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/...onl', leaf_id='kept', first_kept_entry_id='kept', revision='2084:18220003:336:1790932102091657356:1790932102091657356')
+file = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/sanity/test_original_goal_input_and_u0/comms/source-only.jsonl')
+
+    def require_current_file(self, file: Path) -> None:
+        self.require_session(str(file))
+        if self.revision != FileRevision.from_stat(file.stat()):
+>           raise ValueError("Native retained source changed since preparation")
+E           ValueError: Native retained source changed since preparation
+
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:52: ValueError
+_____ test_cross_audience_corrections_capture_only_eligible_owned_lineage ______
+
+comms = <agent_comms.comms.Comms object at 0x7f5b5492e690>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5b5493b020>
+
+    def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, monkeypatch):
+        from agent_comms.compaction_boundary import CompactionBoundary
+        from agent_comms.input_disposition import FutureInputQueue, InputDispositions
+        from agent_comms.owner_compaction_prepare import NativeWitness
+        from agent_comms.retained_task_facts import (
+            CurrentDecisionTaskFact, CurrentUserTaskCorrectionFact,
+            DecisionTaskFact, RetainedTaskFacts,
+        )
+        from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
+    
+        comms.messaging.initialize_private_initial_protocol()
+        for name in ("alpha", "beta", "gamma"):
+            owner = admit(comms, name)
+            saved = comms.root / f"{name}-source.jsonl"
+            saved_source(saved)
+            comms.registry.register(replace(owner, session_file=str(saved)))
+        owner = comms.registry.require("alpha")
+        monkeypatch.setenv("PI_AGENT_ID", "alpha")
+        request = {"chosen": "PRIVATE_ORIGINAL_CHOICE", "rejected": ["PRIVATE_ALTERNATIVE"], "to": "beta"}
+        first = invoke_tool(comms, "comms_decision", request)
+        original = comms.bus.log.full_history()[0]
+        supersession = comms.messaging.send_user_message(
+            "#team", "Retract that declared choice, without revealing its private text.",
+            worktree=owner.worktree,
+            task=UserTaskSupersession(CorrectionTaskChange(original.reference)),
+        )
+        invoke_tool(comms, "comms_decision", {
+            **request, "chosen": "PUBLIC_LATER_CHOICE", "rejected": ["PUBLIC_ALTERNATIVE"],
+            "to": "#team", "change": {"kind": "correction", "original": first["reference"]},
+        })
+        later = comms.bus.log.full_history()[-1]
+        wire_before = (comms.root / "bus.jsonl").read_bytes()
+        inputs = InputDispositions(comms.root / InputDispositions.filename)
+    
+        class EmptyFutureQueue(FutureInputQueue):
+            def future_inputs(self, owner, pending_input_key):
+                return {}
+    
+        boundary = CompactionBoundary(comms.registry, inputs, EmptyFutureQueue())
+        captured = {}
+        for name in ("alpha", "beta", "gamma"):
+            current = comms.registry.require(name)
+            _, generation = comms.registry.live_owner_with_generation(name)
+            witness = source_witness(Path(current.session_file))
+>           with boundary.hold(current, generation, witness) as held:
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_task_decisions.py:504: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/compaction_boundary.py:102: in hold
+    native_facts = witness.retained_task_facts()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:58: in retained_task_facts
+    return evidence.retained_task_facts(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/native_entries.py:253: in retained_task_facts
+    witness.require_current_file(self.source.path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeWitness(session_id='source-only', session_file='/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/...onl', leaf_id='kept', first_kept_entry_id='kept', revision='2084:18220026:336:1790932102378524458:1790932102378524458')
+file = PosixPath('/home/ts/wt/comms-context-manifest-resource-20261002/.artifacts/retained-inspection521/sanity/test_cross_audience_correction0/comms/alpha-source.jsonl')
+
+    def require_current_file(self, file: Path) -> None:
+        self.require_session(str(file))
+        if self.revision != FileRevision.from_stat(file.stat()):
+>           raise ValueError("Native retained source changed since preparation")
+E           ValueError: Native retained source changed since preparation
+
+.artifacts/retained-inspection521/install/runtime/lib/python3.14/site-packages/agent_comms/owner_compaction_prepare.py:52: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_task_decisions.py::test_original_goal_input_and_user_sources_share_compaction_fence
+FAILED tests/test_task_decisions.py::test_cross_audience_corrections_capture_only_eligible_owned_lineage
+2 failed, 17 passed in 7.77s
