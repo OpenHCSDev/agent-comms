@@ -1,0 +1,87 @@
+{
+  "production": "ad7bf20bc5a30ee7728d4b6f22794ae1cbf49a94",
+  "base": "95d7c03a99126741c444793e5eae55dbc418184d",
+  "cursor_source": "777a27c588f1bae7bc1dcf77e7a16e2635b9f7bd",
+  "production_added": 71,
+  "production_deleted": 29,
+  "production_changed_files": 5,
+  "deleted_competing_decisions": [
+    "per-original source reacquisition/acceptance writes",
+    "transient completed-ID requirement over immutable original sent admission",
+    "independent pre-scan cursor witness"
+  ],
+  "owners": {
+    "membership": "NativeInputExecution/SelectedSourceBatch",
+    "proof": "NativeRuntimeInput/PromptBinding/historical native evidence",
+    "coverage": "SourceCoverage/ProvenSourceCoverage.source_witness",
+    "admission": "CursorOwner",
+    "monotonic_writer": "NativeSourceCursor._publish",
+    "refresh": "CursorPublication.refresh/InputDrain",
+    "wire": "CursorEnvelope/CursorScope/CursorObservation",
+    "view": "CommsSessionUpdateHandler/ProjectionAttachment/Conversation.on_private_native_cursor_update"
+  },
+  "searches": {
+    "declarations": {
+      "argv": [
+        "rg",
+        "-n",
+        "class CursorOwner|class NativeSourceCursor|class CursorPublication|class EmptyCursorObservation",
+        "src/agent_comms"
+      ],
+      "exit_code": 0,
+      "stdout": "src/agent_comms/cursor_owner.py:22:class CursorOwner(RegistryOwner):\nsrc/agent_comms/cursor_publication.py:57:class CursorPublication:\nsrc/agent_comms/native_source_cursor.py:30:class NativeSourceCursor:\nsrc/agent_comms/acp_extension.py:213:class EmptyCursorObservation(CursorObservation):\n",
+      "stderr": ""
+    },
+    "consumers": {
+      "argv": [
+        "rg",
+        "-n",
+        "NativeSourceCursor|cursors.refresh|cursor_status_for|needs_refresh",
+        "src/agent_comms/cursor_publication.py",
+        "src/agent_comms/input_drain.py",
+        "src/agent_comms/selected_result.py",
+        "src/agent_comms/acp.py",
+        "src/agent_comms/acp_extension.py"
+      ],
+      "exit_code": 0,
+      "stdout": "src/agent_comms/acp_extension.py:197:    def needs_refresh(self) -> bool:\nsrc/agent_comms/acp_extension.py:204:    def needs_refresh(self) -> bool:\nsrc/agent_comms/acp_extension.py:215:    def needs_refresh(self) -> bool:\nsrc/agent_comms/selected_result.py:15:from .native_source_cursor import NativeSourceCursor\nsrc/agent_comms/selected_result.py:39:            cls.cursor_status_for(participant, input_id),\nsrc/agent_comms/selected_result.py:44:    def cursor_status_for(participant, input_id) -> str:\nsrc/agent_comms/selected_result.py:48:            cursor = NativeSourceCursor(\nsrc/agent_comms/input_drain.py:295:            await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))\nsrc/agent_comms/acp.py:48:from agent_comms.native_source_cursor import NativeSourceCursor\nsrc/agent_comms/acp.py:440:                    cursor = NativeSourceCursor(bus, store, wire_root_id=wire_root_id).advance(\nsrc/agent_comms/cursor_publication.py:4:the durable cursor. Every observation reads NativeSourceCursor's original proof.\nsrc/agent_comms/cursor_publication.py:29:from .native_source_cursor import NativeSourceCursor\nsrc/agent_comms/cursor_publication.py:53:    def needs_refresh(self) -> bool:\nsrc/agent_comms/cursor_publication.py:54:        return self.published is None or self.published.observation.needs_refresh\nsrc/agent_comms/cursor_publication.py:100:                cursor = NativeSourceCursor(bus, store, wire_root_id=self.root_id).read(\nsrc/agent_comms/cursor_publication.py:155:        if self.delivery(session_id).needs_refresh:\nsrc/agent_comms/cursor_publication.py:167:                    NativeSourceCursor(bus, store, wire_root_id=self.root_id).advance(\n",
+      "stderr": ""
+    },
+    "removedscalar": {
+      "argv": [
+        "rg",
+        "-n",
+        "SelectedParticipant.source\\b|cls.source\\(",
+        "src",
+        "tests",
+        "tools"
+      ],
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  "installed_original_relation": {
+    "state": "ORIGINAL_ADMISSION_RELATION_PASS",
+    "module": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-pending503-cursor507-candidate-20261002/lib/python3.14/site-packages/agent_comms/cursor_owner.py",
+    "original_input": "d4eece9aee310bf4b9733ba3888e7008",
+    "source_members": 3,
+    "controls": [
+      "same_admission_without_transient_id",
+      "explicit_original_id",
+      "wrong_explicit_id_refused",
+      "new_admission_refused",
+      "empty_observation_requests_refresh"
+    ],
+    "original_sql_bus_registry_journal_unchanged": true,
+    "original_cursor_still_missing": true,
+    "native_inputs": 0,
+    "provider_calls": 0,
+    "product_mutations": 0,
+    "live_gate_qualification": false
+  },
+  "original_assertions_active": true,
+  "original_missing_cursor_preserved": true,
+  "remaining": "fresh configured3-owner3-source FULL/currentepoch/idle refresh/ACP actual publication qualification pending; ONErunner Kepler after Arendt Native5 ABI confirmed",
+  "schema_native_policy_changes": false
+}

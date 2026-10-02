@@ -31,3 +31,11 @@ WHOLE gate01 exited1 after21.077s: only two current cursor rows existed, despite
 Changed production: SelectedParticipant only,29 added/18 deleted lines. Existing shared validator/source certificate reused; zero new types or stores. Source search finds one plural assembly owner and no replaced scalar source calls. Evidence is in evidence/pending-source503-20261002; raw private fixture /home/ts/wt/b503c01 is protected. Authoritative audit archive reread ef0367d878cc57565f2b257a8e6647a234d4ba4298f61391709d9c3c82bec9f7; BOUND-1 source preparation reuse and existing typed receipt ownership guide the change.
 
 Receiving296 normal main integration ce788178 retains merged295 viewport_body work. Same normal69 shadow prefix refreshed; all four source inventories, assets, directURLs and native5184 trust pass, old502 prefix2,839 files unchanged. Original native gate used Toad03f851c4 before this disjoint viewport-only main merge; Core4701/native/SDK stayed identical. No unchanged native/provider run repeated. Approved295 visual acceptance belongs its owner; no whole product performance claim is made here.
+
+## Coherent507 integration and final qualification
+
+Current main95d7 and507777a normally integrated into productionad7bf20b. Five production files71+/29−; no schema, native ABI, public API, channel audience/wake/relevance policy change. Existing immutable proof/admission, coverage witness, sole monotonic cursor writer and all refresh/ACP/Toad consumers are mapped with actual searches in cursor-integration-receipt.json.
+
+Installed303 original proof/admission relation passed with actual owner2 three-source FULL context/journal/binding and refusal controls. Original SQL/bus/registry/journal hash-identical; missing cursor stays missing. This is NOT live publication acceptance.
+
+Arendt confirms current Native5/native5184 is independent of unfinished Native6. User authorizes ONE fresh configured3-owner3-pending-source live journey, new originals only; Kepler runner, Arendt lifecycle, Singer cursor producer. Owners stay in current epoch through FULL and normal publication/refresh; actual typed ACP envelope must match exact original FULL/native membership, while later UNKNOWN remains preserved. No old input/epoch restart.
