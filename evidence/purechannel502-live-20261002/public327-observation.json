@@ -1,0 +1,189 @@
+{
+  "observed_at": 1790910023.8310864,
+  "original": {
+    "seq": 327,
+    "id": "017fc0e520e7"
+  },
+  "results": [
+    {
+      "recipient": "openhcs-audit-merged-boundaries",
+      "state": "Responded",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev12e783d536ffed2fee66c6c2bf48083e0402c864919851683adc7e0b1e6f1f2bf",
+          "exact_target": "#openhcs"
+        }
+      },
+      "since_accepted_s": 149.328,
+      "execution_created_after_s": 52.154,
+      "receipts": [
+        {
+          "seq": 332,
+          "id": "b558d7c6f75a"
+        }
+      ]
+    },
+    {
+      "recipient": "openhcs-audit-open-prs",
+      "state": "Checked \u2014 no response",
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "since_accepted_s": 76.071
+    },
+    {
+      "recipient": "openhcs-audit-merged-runtime",
+      "state": "Checked \u2014 no response",
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "since_accepted_s": 21.02
+    },
+    {
+      "recipient": "openhcs-helper2",
+      "state": "Responded",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev185509e28b9d0619b65f5cea08cbcce9f7dd88359dde6c833f6009c5b91097192",
+          "exact_target": "#openhcs"
+        }
+      },
+      "since_accepted_s": 128.527,
+      "execution_created_after_s": 13.431,
+      "receipts": [
+        {
+          "seq": 331,
+          "id": "cd2ea0c53daf"
+        }
+      ]
+    },
+    {
+      "recipient": "openhcs-architecture-memory",
+      "state": "Responded",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev127b9424712d6ce17a23c72cf3b4452dfe0c4faebb5a5bf80dc14661af312cd67",
+          "exact_target": "#openhcs"
+        }
+      },
+      "since_accepted_s": 115.243,
+      "execution_created_after_s": 89.614,
+      "receipts": [
+        {
+          "seq": 330,
+          "id": "4ab2050295a7"
+        }
+      ]
+    },
+    {
+      "recipient": "compaction499-live-architecture-memory",
+      "state": "Responded",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev1bb357b85c24ebc3d32a2ea201d0dfbe4ee3f730ef6f9262e8c87b0683b541007",
+          "exact_target": "#openhcs"
+        }
+      },
+      "since_accepted_s": 246.509,
+      "execution_created_after_s": 166.974,
+      "receipts": [
+        {
+          "seq": 334,
+          "id": "d4247531738a"
+        }
+      ]
+    },
+    {
+      "recipient": "openhcs-audit-merged-models",
+      "state": "Checked \u2014 no response",
+      "lifecycle": {
+        "kind": "ignored"
+      },
+      "since_accepted_s": 22.794
+    },
+    {
+      "recipient": "openhcs-headless-bootstrap-worker",
+      "state": "Pending",
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "since_accepted_s": 0.0
+    },
+    {
+      "recipient": "openhcs-pr159-viewer-bind-owner",
+      "state": "Responded",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev19f0324642dfdd0cc90236c62e298bc4d543fbd33cf159fba9b9d852507d7a043",
+          "exact_target": "#openhcs"
+        }
+      },
+      "since_accepted_s": 62.455,
+      "execution_created_after_s": 43.842,
+      "receipts": [
+        {
+          "seq": 328,
+          "id": "abae810b45db"
+        }
+      ]
+    },
+    {
+      "recipient": "openhcs-helper",
+      "state": "Responded",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev1fcc093e7c15f8ee99afa5bd787d59fc80eaefa9fb5080f742ec7f2a4e1ce4ea2",
+          "exact_target": "#openhcs"
+        }
+      },
+      "since_accepted_s": 92.053,
+      "execution_created_after_s": 35.112,
+      "receipts": [
+        {
+          "seq": 329,
+          "id": "c95114b625de"
+        }
+      ]
+    },
+    {
+      "recipient": "compaction501-live-architecture-memory",
+      "state": "Responded",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "bounded_triage",
+          "execution_id": "wirev12ed7c937365822916bc9f17a88803a6e9f5e4c9927dad05a47259bd49751e350",
+          "exact_target": "#openhcs"
+        }
+      },
+      "since_accepted_s": 153.8,
+      "execution_created_after_s": 102.291,
+      "receipts": [
+        {
+          "seq": 333,
+          "id": "14b82e94aa8e"
+        }
+      ]
+    },
+    {
+      "recipient": "Linnaeus",
+      "state": "Pending",
+      "lifecycle": {
+        "kind": "triage_pending"
+      },
+      "since_accepted_s": 0.0
+    }
+  ]
+}
