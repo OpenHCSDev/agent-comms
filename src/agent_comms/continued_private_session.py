@@ -46,7 +46,7 @@ def verify_continued_private_session(
         # Do not use admission rollover to hide uncertain history.
         if any(
             row.matches_owner(source.incarnation) and row.unresolved
-            and key != source.pending_input_key
+            and key not in source.pending_input_keys
             for key, row in rows.items()
         ):
             raise ValueError("Continued private history contains unresolved owner input")

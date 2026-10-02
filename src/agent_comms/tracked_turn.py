@@ -8,9 +8,10 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager, AsyncExitStack, contextmanager
+from contextlib import AsyncExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import pi_commands as commands
 from . import pi_events as pi
@@ -39,6 +40,10 @@ from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .selected_session import SelectedSession
 from .store_files import _store_lock
+
+
+if TYPE_CHECKING:
+    from .private_send_admission import PrivateSendAdmission
 
 
 class NativeCommitObservation[T](ABC):
@@ -178,7 +183,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
-        prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
+        prompt_send_boundary: PrivateSendAdmission | None = None,
         maintenance_root: Path | None = None,
         selected_tool_mode: NativeToolMode | None = None,
         observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
@@ -230,6 +235,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             try:
                 try:
                     await self.attest()
+                    if self.prompt_send_boundary is not None:
+                        await self.prompt_send_boundary.prepare_context(self)
                     await self.admit_prompt()
                     while not self.finished:
                         event = await self.next_event()
@@ -245,6 +252,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     ) from error
             except NativePiUnavailable as error:
                 self.admission.raise_native_failure(error, self.native.attestation)
+
+    async def resume_prepared(self, resources: AsyncExitStack) -> None:
+        await super().resume_prepared(resources)
+        if self.tool_socket is not None:
+            self.tool_socket.expected_pid = self.native.proc.pid
+        self.watchdog.reading()
+        await self.attest()
 
     async def open_transport(self, custody: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:

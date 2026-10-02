@@ -254,7 +254,6 @@ class OwnedTurn:
         else:
             source_type = RoutedOriginalInput
         self.original = source_type(
-            keys=self.original_keys,
             accepted_id=self.accepted_input_id,
             goal_permission=permission,
             prompt=self.context.render().text,
@@ -342,8 +341,8 @@ class OwnedTurn:
         await self.runner.effects.publish_pending_compaction(self.session_id, self.thread_name)
         for segment in self.runner.comms.bus.awareness_segments(self.thread):
             self.context = self.context.append(segment)
-        pending_key = self.original.compaction_key(self.thread.session_file)
-        if self.runner.adaptive_compaction_enabled and pending_key is not None:
+        pending_keys = self.original.compaction_keys(self.thread.session_file)
+        if pending_keys:
             from .owner_compaction_adaptive import maybe_compact_owner_turn
 
             def admit_original(admission: SelectedSummaryAdmission) -> None:
@@ -353,15 +352,13 @@ class OwnedTurn:
                 prepared = await self.runner.prepare_selected_session(self.session_id, self.thread)
                 self.committed = await maybe_compact_owner_turn(
                     self.runner.comms.registry,
-                    self.runner.agent_bin,
                     self.thread_name,
                     self.turn_id,
                     prepared,
-                    pending_key,
+                    pending_keys,
                     self.runner.persistent_backends.setdefault(
                         self.session_id, backend.PersistentPiSession()
                     ),
-                    summary_strategy=self.runner.adaptive_summary_strategy,
                     input_text=self.context.render().text,
                     on_admission=admit_original,
                     future_queue=self.runner.inputs,

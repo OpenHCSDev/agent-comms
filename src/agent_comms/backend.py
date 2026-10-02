@@ -477,22 +477,11 @@ class TurnSession:
     async def open_transport(self, resources: AsyncExitStack) -> None:
         """Leaf-owned launch resources enter the original turn's custody."""
 
-    async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
-        """One acquisition seam before the original prompt's irreversible writer.
-
-        Ordinary, preparation and tracked turns share source attestation,
-        startup admission and failure disposition. Transport leaves acquire
-        their resources here; no missing child is rediscovered at failure.
-        """
-        resources.callback(self.startup.release)
+    @contextmanager
+    def native_acquisition(self):
+        """The original acquisition failures preserve their source disposition."""
         try:
-            with self.startup.measurements.operation("open_transport"):
-                await self.open_transport(resources)
-            with self.startup.measurements.operation("native_open"):
-                return await self.native_session.open(
-                    self.launch, reuse=reuse, require_input_id=self.require_input_id,
-                    startup=self.startup, finish_event=self.finish_event, watchdog=self.watchdog,
-                )
+            yield
         except (OSError, TimeoutError, SelectedToolDenied, SavedSessionReopenError) as error:
             failure = NativePiUnavailable(
                 f"Native resource acquisition failed: {type(error).__name__}: {error}"
@@ -501,6 +490,29 @@ class TurnSession:
             self.admission.raise_native_failure(failure, self.launch.session.attestation())
         except NativePiUnavailable as error:
             self.admission.raise_native_failure(error, self.launch.session.attestation())
+
+    async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
+        """Acquire leaf transport once in the original turn's resource lifetime."""
+        resources.callback(self.startup.release)
+        with self.native_acquisition():
+            with self.startup.measurements.operation("open_transport"):
+                await self.open_transport(resources)
+            return await self.open_native(reuse=reuse)
+
+    async def open_native(self, *, reuse: bool) -> PiSessionChild:
+        """Initial acquisition and prepared continuation share the same custody."""
+        with self.startup.measurements.operation("native_open"):
+            return await self.native_session.open(
+                self.launch, reuse=reuse, require_input_id=self.require_input_id,
+                startup=self.startup, finish_event=self.finish_event, watchdog=self.watchdog,
+            )
+
+    async def resume_prepared(self, resources: AsyncExitStack) -> None:
+        """Borrow the prepared source through the existing transport and turn."""
+        with self.native_acquisition():
+            self.native = await self.open_native(reuse=True)
+        await resources.enter_async_context(self.native.failures())
+        resources.callback(self.native.reader.pending.cancel_all)
 
     async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
         self.finished = self.skip = False

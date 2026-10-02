@@ -21,6 +21,7 @@ from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAct
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
+    from .tracked_turn import TrackedTurnSession
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,9 @@ class SelectedSession:
         from .native_attestation import PendingAttestation
 
         return PendingAttestation()
+
+    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
+        """A new unbound native source has no saved context to compact."""
 
     def startup_admission(self, launch, root, boundary, *,
                           measurements: PublicationMeasurements | None = None):
@@ -178,6 +182,49 @@ class SavedSelectedSession(SelectedSession):
 
         return PendingAttestation(self.identity)
 
+    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
+        """Prepare through the original acquired child before its raw prompt writer."""
+        from .owner_compaction_commit import OwnerCompactionCommit
+        from .selected_pi_route import read_selected_compaction_decision
+        from .selected_source import ManualSource, SessionRevision
+        from .thread_identity import TurnId
+
+        persistent = turn.native_session
+        observed = turn.native.attestation
+        self.identity.require_same_session(observed.require_identity())
+        selected = observed.state.model.for_compaction(
+            f"{participant.provider}/{participant.model}"
+        )
+        # This same child/custody lends its idle RPC reader to the preparation
+        # operation. A journal writer retires it through existing strict reopen.
+        if not persistent.retain(turn.native, self.identity):
+            raise NativePiUnavailable("Selected context preparation lost its native child")
+        settings = await read_selected_compaction_decision(
+            persistent, session_file=self.session_file,
+            expected_package=turn.launch.package, selected=selected,
+        )
+        if settings.trigger:
+            participant.require_current()
+            owner = participant.owner.thread
+            self.identity.require_session(owner.require_saved_session())
+            snapshot = participant.comms.registry.snapshot()
+            generation = snapshot.owner_generations[owner.name]
+            bridge = await asyncio.to_thread(
+                OwnerCompactionCommit, participant.comms.registry.store.path, turn.launch.package
+            )
+            source = ManualSource(
+                incarnation=owner.incarnation, owner=owner.process_identity,
+                turn=TurnId(participant.owner.require_active_turn().id),
+                reserved_revision=SessionRevision.observe(self.session_file).require_available(),
+            )
+            result = await bridge.compact_selected(
+                owner, generation, persistent, source, selected, settings,
+                on_event=participant.dispatch,
+            )
+            result.require_prepared()
+        await turn.resume_prepared(turn.custody)
+
+
     def require_launch_header(self) -> None:
         FreshPrivateSession.require_launch_header(self.path, None)
 
@@ -196,6 +243,11 @@ class SavedSelectedSession(SelectedSession):
 @dataclass(frozen=True)
 class FirstSelectedSession(SavedSelectedSession):
     creation: FreshPrivateSession = field(kw_only=True)
+
+    async def prepare_context(self, participant: SelectedParticipant, turn: TrackedTurnSession) -> None:
+        # The existing mint/startup capability attests its pristine header.
+        # It cannot be opened as an ordinary owner or consume its first-start grant.
+        self.creation.verify_selected_startup()
 
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()

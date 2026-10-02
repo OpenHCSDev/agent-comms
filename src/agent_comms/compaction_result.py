@@ -22,6 +22,10 @@ class CompactionResult(DeclaredFamily, affix="CompactionResult"):
     def adaptive_result(self) -> bool:
         """Derive whether this original result committed a compaction."""
 
+    @abstractmethod
+    def require_prepared(self) -> None:
+        """Require a committed saved context before reserving a future input."""
+
     async def after_terminal(self, runner, session_id: str) -> None:
         """A refused result publishes no committed transcript invalidation."""
 
@@ -33,6 +37,9 @@ class CommittedCompactionResult(CompactionResult):
 
     def adaptive_result(self) -> bool:
         return True
+
+    def require_prepared(self) -> None:
+        pass
 
     def terminal_event(self):
         return ManualCompactionEnd(aborted=False, summary=self.summary)
@@ -60,6 +67,11 @@ class RefusedCompactionResult(CompactionResult):
 
     def adaptive_result(self) -> bool:
         return False
+
+    def require_prepared(self) -> None:
+        from .owner_compaction_settings import PiSettingsEvidenceError
+
+        raise PiSettingsEvidenceError(self.error)
 
     def terminal_event(self):
         return ManualCompactionEnd(aborted=True, summary=self.error)
