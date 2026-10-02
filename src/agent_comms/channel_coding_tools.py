@@ -140,7 +140,10 @@ class CodingToolMode(NativeToolMode):
         return CodingToolSocket(directory, token, self.owner)
 
     async def finish(self) -> None:
-        await Coordination.run_async(self.owner.store.session.path, self.owner.finish)
+        await Coordination.run_async(
+            self.owner.store.session.path, self.owner.finish,
+            clock_ms=self.owner.store.session.now,
+        )
 
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):
