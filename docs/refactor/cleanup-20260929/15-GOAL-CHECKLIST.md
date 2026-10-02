@@ -1,3 +1,21 @@
+## Installed concurrency source pass — 2026-10-02
+
+User now reports delivery reliable but still unacceptably slow. Parent read the
+actual installed Core74877: exclusive bus reads/decoding under custody, blocking
+file and SQLite operations on async paths, and native pipe writes retaining
+wire/bus/registry/coordination/compaction exclusion. See
+[installed concurrency architecture](INSTALLED-CONCURRENCY-20261002.md).
+Arendt509 owns exact admission/publication resource narrowing; Kepler512 owns
+source-selection and acceptance consumers through the same Coordination owner.
+Heisenberg305/Text22 is implementing process-backed whole sidebar preparation
+and reducing unrelated layout invalidations. Async waits alone are insufficient.
+No new discovery tests or independent competing patch. Preserve durable UNKNOWN.
+
+Core503 is now merged d51100ec after normal main integration. Its production
+remains byte-identical to qualified ad7. Toad304 merged-combination receiving
+is qualified b48b2a96; independent default cutover remains to execute. That
+checkpoint does not contain509/512 or claim global latency/compaction closure.
+
 ## Parallel source and qualified checkpoint progress — 2026-10-02 04:37 UTC
 
 Default remains the qualified505/508/297/295/301 bundle recorded below.

@@ -8,6 +8,7 @@ refactor-audit skills. Current owner instructions supersede old plan holds.
   main checkout, other agents' work, native sessions and uncertain input records.
 - Fix a demonstrated defect yourself or assign a named implementation owner at
   the next safe checkpoint. Follow through to the actual affected entry path.
+- Use AST for every structural refactor: enumerate declarations, writes, decisions, checks, imports, inheritance and all consumers across the relevant production and dependency roots before editing. Read the resulting sites semantically, find the existing behavior-owning class, and migrate the complete related family in one coherent batch, deleting every competing authority path. Record before/after owner and consumer evidence in the PR; report parse omissions and ambiguous dynamic resolution explicitly. Reuse NRA/refactor-audit tooling instead of copying scanners. AST is source evidence, not a behavioral proof; tests and the affected installed live path come last. Preserve legitimate parallel execution while removing parallel semantic authorities. OpenHCS PR #60, commit 5e8812ee83d0dc8714392445bad3e32fc47a1755, tests/unit/test_cellprofiler_static_deletion_gates.py, is the concrete precedent.
 - Choose coherent behavior ownership and migrate every caller. Delete replaced
   code in place. No compatibility aliases, alternate codecs or second caches.
 - FieldCodec has one implementation owner. Extend its declared field capabilities;
