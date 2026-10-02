@@ -1,17 +1,17 @@
 """Enroll an already running native test host in the actual retained custody owner."""
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated
 
 from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import CompactionOperation, SelectedSummaryAttempt
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.native_entries import CompactionEntry, MessageEntry, NativeEntry
 from agent_comms.native_input_record import NativeInputIdText
-from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_pi import NativeContextProof, NativeContextRecord
 
 from agent_comms.backend import PersistentPiSession
 from agent_comms.native_attestation import ObservedAttestation
@@ -25,7 +25,7 @@ from agent_comms.pi_rpc import PiRpcChannel
 class RecordedNativeCheckpoint:
     """References to original measured evidence, never a replacement checkpoint."""
 
-    journal: Path
+    journal: Annotated[Path, PathText]
     reference: SummaryOperationIdentity
     commit_id: str
 
@@ -34,8 +34,12 @@ class RecordedNativeCheckpoint:
 
         def read(db):
             attempt = SelectedSummaryAttempt.one(db, operation_id=self.reference.operation_id)
+            if attempt is None:
+                raise ValueError("Recorded checkpoint has no original selected request")
             attempt.require_session(session.session_file)
             operation = CompactionOperation.one(db, commit_id=self.commit_id)
+            if operation is None:
+                raise ValueError("Recorded checkpoint has no original commit")
             # Read-only linkage verifies the original intent/source digest. It
             # does not obtain or consume the commit owner's returned ACK.
             operation.require_summary_link(attempt, admit_original=True)
@@ -91,7 +95,13 @@ class RecordedNativeProbe:
                 "applicable": False, "reason": "No compaction checkpoint declared for this control"
             }
             return {
-                "context": FieldCodec.encode(context),
+                # The located proof's Path is an acquired resource coordinate.
+                # Export its original declared wire facts, not a second proof.
+                "context": FieldCodec.encode({
+                    item.metadata.get("wire_name", item.name): getattr(context, item.name)
+                    for item in fields(NativeContextRecord)
+                }),
+                "session": FieldCodec.encode(self.session),
                 "prompt": user.message.text,
                 "answer": FieldCodec.encode(answer),
                 "answer_text": answer.message.authoritative_text,

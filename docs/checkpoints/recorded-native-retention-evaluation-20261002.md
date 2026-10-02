@@ -65,3 +65,37 @@ condition construction nor prove provider prompt presence. Actual model/usage
 come from the original assistant entry; checkpoint settings/retained facts come
 from the original selected request. Canonical availability is reported, not yet
 independently scored. Full S4 quality/latency acceptance remains unimplemented.
+
+## Use and final validation
+
+Export frozen probe text with `python tests/compaction_retention_fixture.py
+--probe-prompts`. A native references JSON file maps each round ID to
+`RecordedNativeProbe` fields: `session` (original `sessionId`/`sessionFile`),
+`input_id`, `answer_entry_id`, and an optional `checkpoint`. The checkpoint has
+`journal`, `reference` (existing `session_file`/`operation_id`) and `commit_id`.
+Run `--native-probes FILE --condition full-context` to consume it. The label is
+still a label; this command does not construct the experimental condition.
+
+Final validation used installed Core457b104 and native00c2 through the existing
+`native_backend` fixture, localhost transport only. Two original calls seeded
+the first authored history and answered its frozen probe. They completed before
+the initial export failed: the located context proof contains a filesystem Path.
+The corrected reader derives wire fields from `NativeContextRecord`; the
+external journal reference declares the existing `PathText` representation.
+The corrected CLI then consumed those **same completed originals**, with no
+additional native/provider call. Eleven scorer controls passed; the original
+failed pytest log is retained, not relabeled as a full passing pytest run.
+
+The receiver scored seven controlled answers and kept fourteen missing answers
+in the denominator. Wrong-round and nonterminal references refused. A read-only
+observation of the already qualified529 original commit verified exact selected
+request/native linkage and retained-summary content. Missing journal storage
+refused without creating it. Native files, input proofs and journal hashes stayed
+identical, and no fixture native child remained. This qualifies reader/scorer
+plumbing only, not model retention, cost, provider prompt presence or S4 quality.
+
+Evidence: `evidence/recorded-native-retention-evaluation-20261002/` contains the
+installed receipt and the before/after AST declarations/references for nine
+scorer/reader/dependency files, with zero parse omissions. Dynamic resolution is
+not inferred. Twelve scorer/reader lines were deleted, including the displaced
+duplicate JSON parser; all production source and runtime formats are unchanged.
