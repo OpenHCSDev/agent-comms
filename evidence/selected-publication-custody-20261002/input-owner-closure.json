@@ -5685,79 +5685,6 @@
           ]
         },
         {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 186,
-          "kind": "ClassDef",
-          "name": "NativeContextJournal",
-          "bases": [
-            "NativeContextRecord",
-            "TypedTable"
-          ],
-          "members": [
-            "triggers",
-            "native_contract",
-            "open_evidence",
-            "for_input",
-            "corroborate"
-          ],
-          "annotations": [
-            "schema: Literal[1]",
-            "type: Literal['context_committed']"
-          ]
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 299,
-          "kind": "ClassDef",
-          "name": "NativeContextProof",
-          "bases": [
-            "NativeContextRecord"
-          ],
-          "members": [
-            "corroborates_input",
-            "read_evidence",
-            "read_history_evidence"
-          ],
-          "annotations": [
-            "session_file: Path"
-          ]
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 579,
-          "kind": "ClassDef",
-          "name": "PrivateEvidenceRead",
-          "bases": [],
-          "members": [
-            "__init__",
-            "open",
-            "close",
-            "_capture_append",
-            "_decode_row",
-            "rows",
-            "verify_snapshot"
-          ],
-          "annotations": []
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 809,
-          "kind": "FunctionDef",
-          "name": "read_tracked_input_digest"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 232,
-          "kind": "FunctionDef",
-          "name": "open_evidence"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 315,
-          "kind": "FunctionDef",
-          "name": "read_evidence"
-        },
-        {
           "path": "src/agent_comms/owner_compaction_prepare.py",
           "line": 136,
           "kind": "FunctionDef",
@@ -5953,46 +5880,6 @@
           "line": 92,
           "kind": "FunctionDef",
           "name": "record_native_phase"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 171,
-          "kind": "ClassDef",
-          "name": "SavedSelectedSession",
-          "bases": [
-            "SelectedSession"
-          ],
-          "members": [
-            "path",
-            "session_file",
-            "attestation",
-            "prepare_context",
-            "require_launch_header",
-            "attest",
-            "admit",
-            "require_context"
-          ],
-          "annotations": [
-            "identity: NativeSessionIdentity = field(kw_only=True)"
-          ]
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 53,
-          "kind": "AsyncFunctionDef",
-          "name": "prepare_context"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 188,
-          "kind": "AsyncFunctionDef",
-          "name": "prepare_context"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 255,
-          "kind": "AsyncFunctionDef",
-          "name": "prepare_context"
         },
         {
           "path": "src/agent_comms/tracked_turn.py",
@@ -6191,6 +6078,119 @@
           "line": 95,
           "kind": "FunctionDef",
           "name": "input_evidence"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 189,
+          "kind": "ClassDef",
+          "name": "NativeContextJournal",
+          "bases": [
+            "NativeContextRecord",
+            "TypedTable"
+          ],
+          "members": [
+            "triggers",
+            "native_contract",
+            "open_evidence",
+            "for_input",
+            "corroborate"
+          ],
+          "annotations": [
+            "schema: Literal[1]",
+            "type: Literal['context_committed']"
+          ]
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 302,
+          "kind": "ClassDef",
+          "name": "NativeContextProof",
+          "bases": [
+            "NativeContextRecord"
+          ],
+          "members": [
+            "corroborates_input",
+            "read_evidence",
+            "read_history_evidence"
+          ],
+          "annotations": [
+            "session_file: Path"
+          ]
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 586,
+          "kind": "ClassDef",
+          "name": "PrivateEvidenceRead",
+          "bases": [],
+          "members": [
+            "__init__",
+            "open",
+            "close",
+            "_capture_append",
+            "_decode_row",
+            "rows",
+            "verify_snapshot"
+          ],
+          "annotations": []
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 816,
+          "kind": "FunctionDef",
+          "name": "read_tracked_input_digest"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 235,
+          "kind": "FunctionDef",
+          "name": "open_evidence"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 318,
+          "kind": "FunctionDef",
+          "name": "read_evidence"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 171,
+          "kind": "ClassDef",
+          "name": "SavedSelectedSession",
+          "bases": [
+            "SelectedSession"
+          ],
+          "members": [
+            "path",
+            "session_file",
+            "attestation",
+            "prepare_context",
+            "require_launch_header",
+            "attest",
+            "admit",
+            "require_context"
+          ],
+          "annotations": [
+            "identity: NativeSessionIdentity = field(kw_only=True)"
+          ]
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 53,
+          "kind": "AsyncFunctionDef",
+          "name": "prepare_context"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 188,
+          "kind": "AsyncFunctionDef",
+          "name": "prepare_context"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 258,
+          "kind": "AsyncFunctionDef",
+          "name": "prepare_context"
         }
       ],
       "references": [
@@ -6823,222 +6823,6 @@
           "line": 54,
           "kind": "Name",
           "source": "RegistryOwner"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 28,
-          "kind": "ImportFrom",
-          "source": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 815,
-          "kind": "ImportFrom",
-          "source": "from .native_entries import NativeInputEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 832,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 173,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 291,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 322,
-          "kind": "ImportFrom",
-          "source": "from .native_entries import NativeInputEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 318,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 386,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 274,
-          "kind": "Name",
-          "source": "NativeContextJournal"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 175,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 290,
-          "kind": "Name",
-          "source": "SessionEntry"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 337,
-          "kind": "Name",
-          "source": "SessionEntry"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 338,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 357,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 810,
-          "kind": "Name",
-          "source": "NativeEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 831,
-          "kind": "Name",
-          "source": "NativeEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 838,
-          "kind": "Attribute",
-          "source": "NativeContextProof.read_evidence"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 303,
-          "kind": "Name",
-          "source": "NativeEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 312,
-          "kind": "Attribute",
-          "source": "self.read_evidence"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 317,
-          "kind": "Name",
-          "source": "NativeEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 344,
-          "kind": "Name",
-          "source": "NativeEntry"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 346,
-          "kind": "Attribute",
-          "source": "NativeContextJournal.open_evidence"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 575,
-          "kind": "Name",
-          "source": "PrivateEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 817,
-          "kind": "Name",
-          "source": "NativeInputEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 819,
-          "kind": "Name",
-          "source": "NativeEntry"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 837,
-          "kind": "Name",
-          "source": "NativeEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 838,
-          "kind": "Name",
-          "source": "NativeContextProof"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 290,
-          "kind": "Name",
-          "source": "NativeEntry"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 324,
-          "kind": "Name",
-          "source": "NativeInputEvidenceRead"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 326,
-          "kind": "Name",
-          "source": "NativeEntry"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 329,
-          "kind": "Attribute",
-          "source": "NativeContextJournal.open_evidence"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 337,
-          "kind": "Name",
-          "source": "NativeEntry"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 346,
-          "kind": "Name",
-          "source": "NativeContextJournal"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 329,
-          "kind": "Name",
-          "source": "NativeContextJournal"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 330,
-          "kind": "Name",
-          "source": "NativeContextJournal"
-        },
-        {
-          "path": "src/agent_comms/native_pi.py",
-          "line": 348,
-          "kind": "Name",
-          "source": "NativeContextJournal"
         },
         {
           "path": "src/agent_comms/native_prompt_binding.py",
@@ -8065,90 +7849,6 @@
           "line": 18,
           "kind": "Name",
           "source": "SelectedParticipant"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 25,
-          "kind": "ImportFrom",
-          "source": "from .selected_participant import SelectedParticipant"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 26,
-          "kind": "ImportFrom",
-          "source": "from .tracked_turn import TrackedTurnSession"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 252,
-          "kind": "Name",
-          "source": "SavedSelectedSession"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 53,
-          "kind": "Name",
-          "source": "SelectedParticipant"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 53,
-          "kind": "Name",
-          "source": "TrackedTurnSession"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 100,
-          "kind": "Name",
-          "source": "SavedSelectedSession"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 108,
-          "kind": "Name",
-          "source": "SavedSelectedSession"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 114,
-          "kind": "Name",
-          "source": "SelectedParticipant"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 188,
-          "kind": "Name",
-          "source": "SelectedParticipant"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 188,
-          "kind": "Name",
-          "source": "TrackedTurnSession"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 255,
-          "kind": "Name",
-          "source": "SelectedParticipant"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 255,
-          "kind": "Name",
-          "source": "TrackedTurnSession"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 164,
-          "kind": "Name",
-          "source": "SavedSelectedSession"
-        },
-        {
-          "path": "src/agent_comms/selected_session.py",
-          "line": 233,
-          "kind": "Attribute",
-          "source": "turn.resume_prepared"
         },
         {
           "path": "src/agent_comms/selected_turn.py",
@@ -11281,11 +10981,287 @@
           "line": 14,
           "kind": "Name",
           "source": "NativeContextJournal"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 29,
+          "kind": "ImportFrom",
+          "source": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 839,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 176,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 294,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 321,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 389,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 277,
+          "kind": "Name",
+          "source": "NativeContextJournal"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 178,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 293,
+          "kind": "Name",
+          "source": "SessionEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 340,
+          "kind": "Name",
+          "source": "SessionEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 341,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 360,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 817,
+          "kind": "Name",
+          "source": "NativeEvidenceRead"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 838,
+          "kind": "Name",
+          "source": "NativeEvidenceRead"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 845,
+          "kind": "Attribute",
+          "source": "NativeContextProof.read_evidence"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 306,
+          "kind": "Name",
+          "source": "NativeEvidenceRead"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 315,
+          "kind": "Attribute",
+          "source": "self.read_evidence"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 320,
+          "kind": "Name",
+          "source": "NativeEvidenceRead"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 347,
+          "kind": "Name",
+          "source": "NativeEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 349,
+          "kind": "Attribute",
+          "source": "NativeContextJournal.open_evidence"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 582,
+          "kind": "Name",
+          "source": "PrivateEvidenceRead"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 826,
+          "kind": "Name",
+          "source": "NativeEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 844,
+          "kind": "Name",
+          "source": "NativeEvidenceRead"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 845,
+          "kind": "Name",
+          "source": "NativeContextProof"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 293,
+          "kind": "Name",
+          "source": "NativeEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 329,
+          "kind": "Name",
+          "source": "NativeEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 332,
+          "kind": "Attribute",
+          "source": "NativeContextJournal.open_evidence"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 340,
+          "kind": "Name",
+          "source": "NativeEntry"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 349,
+          "kind": "Name",
+          "source": "NativeContextJournal"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 332,
+          "kind": "Name",
+          "source": "NativeContextJournal"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 333,
+          "kind": "Name",
+          "source": "NativeContextJournal"
+        },
+        {
+          "path": "src/agent_comms/native_pi.py",
+          "line": 351,
+          "kind": "Name",
+          "source": "NativeContextJournal"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 25,
+          "kind": "ImportFrom",
+          "source": "from .selected_participant import SelectedParticipant"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 26,
+          "kind": "ImportFrom",
+          "source": "from .tracked_turn import TrackedTurnSession"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 255,
+          "kind": "Name",
+          "source": "SavedSelectedSession"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 53,
+          "kind": "Name",
+          "source": "SelectedParticipant"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 53,
+          "kind": "Name",
+          "source": "TrackedTurnSession"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 100,
+          "kind": "Name",
+          "source": "SavedSelectedSession"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 108,
+          "kind": "Name",
+          "source": "SavedSelectedSession"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 114,
+          "kind": "Name",
+          "source": "SelectedParticipant"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 188,
+          "kind": "Name",
+          "source": "SelectedParticipant"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 188,
+          "kind": "Name",
+          "source": "TrackedTurnSession"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 258,
+          "kind": "Name",
+          "source": "SelectedParticipant"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 258,
+          "kind": "Name",
+          "source": "TrackedTurnSession"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 164,
+          "kind": "Name",
+          "source": "SavedSelectedSession"
+        },
+        {
+          "path": "src/agent_comms/selected_session.py",
+          "line": 234,
+          "kind": "Attribute",
+          "source": "turn.resume_prepared"
         }
       ]
     }
   },
-  "after": "production297c3014 with current receiving test/receipt changes only",
+  "after": "production30277862 normal-main integration",
   "production_files": [
     {
       "path": "src/agent_comms/agent_activity.py",
@@ -11297,7 +11273,7 @@
     },
     {
       "path": "src/agent_comms/native_pi.py",
-      "sha256": "44e570062e9675e0be68ef904c4d72b375460994008885415f50b0e8089b0876"
+      "sha256": "0acbcaedbceb1ef0a0e0e74f4a74a692dfa8ddd32df257d3c1d1d8d62e6e9024"
     },
     {
       "path": "src/agent_comms/private_send_stage.py",
@@ -11321,7 +11297,7 @@
     },
     {
       "path": "src/agent_comms/selected_session.py",
-      "sha256": "61f601fc99a9979e71cf30006afda4634948b2f7ed911c29d1f0e70c4b854a2e"
+      "sha256": "77c1b6dfbf94a2e82b9f91debb1970b3c2a7078c7ee9ed24bb8e4ac6cdfb4630"
     },
     {
       "path": "src/agent_comms/tracked_turn.py",

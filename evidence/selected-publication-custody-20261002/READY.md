@@ -1,6 +1,26 @@
 # PR530 scoped installed checkpoint
 
-Production **297c3014: 58 deleted /176 added, 13 existing files**. All339 installed
+Final production **30277862: 58 deleted /178 added, 13 existing files**. Normal
+main cf7aa2f4 integration preserves settings.require_prepared(result) and the
+NativeInputEvidenceRead projection. An unchanged prepared child still calls the
+existing RetainedNative idle capability to check original revision and liveness
+before input; it omits only the redundant reacquisition/attestation. Committed
+compaction still requires its owner result and reopens/attests.
+
+`installed-native07-main-receipt.json` /`installed-native07-main.log` qualify this
+current source with full-trust Native ad533 and canonical packaged owner
+instructions: **14.740834145s PASS**, same actual42MB saved TRIAGE/FULL/canonical
+reply/cursor/lease journey, two attestations/two local requests/two owned native
+children exited. This changed-intersection check follows the source revision
+guard correction and main API/native integration; unchanged earlier controls
+were not repeated. All339 source/resource files match30277862;
+`installed-source-proof-main.json`, `installed-assets-main.json`,
+`requirements-main.txt` retain wheel/directURL/asset provenance. Compatible15
+dependencies and SDK0.12.1. Final prefix:
+`/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530-main`.
+No default/public install occurred.
+
+Earlier production **297c3014: 58 deleted /176 added**. All339 installed
 source/resource files match; normal wheel/dependency resolution, SDK0.12.1 and
 unchanged full-trust Native5184. Prefix:
 `/home/ts/wt/comms-goal-ledger-schema-carry-20261002/.artifacts/runtime-selected-publication530`.
@@ -65,6 +85,7 @@ No failed original input was replayed; S3 PR527 remains parked.
 Private resources protected pending release review:
 
 - `/home/ts/wt/n530`: successful real native/source/proof fixture.
+- `/home/ts/wt/p530`: final main/ad533 successful real native/source/proof fixture.
 - `/home/ts/wt/m530`: failed reply-fixture original native/proof evidence.
 - `/home/ts/.cache/agent-scratch/mendel530`: receipts, failed short-path fixture
   originals and private prelaunch buses.
