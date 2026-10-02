@@ -47,8 +47,7 @@ async def run(stage, package):
     with source_file.open('rb') as stream:
         source_hash = hashlib.file_digest(stream, 'sha256').hexdigest()
     environment = dict(launch.environment)
-    config = Path(environment.get('AGENT_COMMS_NATIVE_CONFIG_DIR') or
-                  environment.get('PI_CODING_AGENT_DIR') or '~/.pi/agent').expanduser()
+    config = launch.configuration.native_config
     settings_hashes = {}
     for name in ('auth.json', 'models.json', 'settings.json'):
         original = config / name
@@ -57,9 +56,9 @@ async def run(stage, package):
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
     fork = await ForkSessionHelper.run(
-        ForkSessionRequest(str(package), str(source_file), source.worktree),
+        ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),
-        env=dict(environment, PI_CODING_AGENT_DIR=str(stage / 'forks')),
+        env=environment,
     )
     assert Path(fork.session_file).is_relative_to(stage)
     service = Comms(stage / 'w')
@@ -69,7 +68,6 @@ async def run(stage, package):
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
-        AGENT_COMMS_NATIVE_CONFIG_DIR=str(config),
         AGENT_COMMS_AGENT_BIN=str(binary),
         AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
         PATH=str(binary.parent) + os.pathsep + environment.get('PATH', ''),

@@ -1,5 +1,6 @@
 """Real retained owner/native/Codex summary with representative private history."""
 
+from agent_comms.owner_launch import RestartEnvironment
 import asyncio
 import hashlib
 import json
@@ -108,7 +109,7 @@ async def test_retained_summary_accounting_and_original_custody(tmp_path, monkey
             before = hashlib.sha256(file.read_bytes()).hexdigest()
             persistent = retained_native_host(
                 child,
-                NativePiRpcLaunch(("node",), tmp_path, {}, tmp_path, file, package),
+                NativePiRpcLaunch(("node",), tmp_path, {}, tmp_path, file, package, configuration=RestartEnvironment.inherit({})),
                 NativeSessionIdentity(ready["sessionId"], str(file)),
             )
             (tmp_path / "settings.json").write_text(os.environ["PR95_NATIVE_SETTINGS"])

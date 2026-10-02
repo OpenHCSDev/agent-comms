@@ -918,7 +918,8 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_policy(
     monkeypatch.setenv("PI_AGENT_ID", "must-not-leak")
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "wrong-global"))
     launch = NativePiRpcLaunch.tracked(Path(selected), worktree=worktree, session_dir=sessions)
-    assert launch.argv[:4] == ("node", str(_trusted_package(Path(selected))), "--mode", "rpc")
+    assert str(_trusted_package(Path(selected))) in launch.argv
+    assert launch.argv[launch.argv.index("--mode") + 1] == "rpc"
     assert "--no-approve" in launch.argv
     assert launch.cwd == worktree
     assert launch.session_dir == sessions
@@ -1353,7 +1354,7 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
     from agent_comms import native_pi, private_nk_entrypoint
 
     launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
-    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: launch)
+    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: launch))
     verified = []
     cli = launch.native_package / "dist" / "cli.js"
 
@@ -1361,7 +1362,7 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
         verified.append(package)
         return cli
 
-    monkeypatch.setattr(native_pi, "_trusted_package", trusted)
+    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "validate", lambda self: trusted(self.native_package))
     monkeypatch.setattr(sys, "argv", ["pi-comms-native", "--mode", "rpc", "--model", "owner/model"])
     executed = []
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
@@ -1394,7 +1395,7 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
 def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
     from agent_comms import native_pi, private_nk_entrypoint
 
-    monkeypatch.setattr(private_nk_entrypoint, "private_nk_from_environment", lambda: None)
+    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: None))
     with pytest.raises(NativePiUnavailable, match="configured private route"):
         native_pi.main()
 

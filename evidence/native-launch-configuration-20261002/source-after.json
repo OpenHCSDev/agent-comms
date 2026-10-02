@@ -1,0 +1,60 @@
+{
+  "parsed_production": 311,
+  "omitted_production": [],
+  "omitted_tests": [],
+  "external_configuration_declarations": [
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 64,
+      "external_name": "AGENT_COMMS_NATIVE_CONFIG_DIR"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 68,
+      "external_name": "PI_CODING_AGENT_DIR"
+    }
+  ],
+  "explicit_launch_constructors": [
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 30,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_selected_owner_compaction_integration.py",
+      "line": 165,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_selected_summary_output_accounting.py",
+      "line": 112,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_selected_summary_failure_native.py",
+      "line": 249,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_maintenance_native_boundary.py",
+      "line": 61,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/conftest.py",
+      "line": 82,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 19,
+      "configuration_passed": true
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 97,
+      "configuration_passed": true
+    }
+  ],
+  "interpretation": "The two external names are declared on existing RestartEnvironment. NativePiRpcLaunch and RetainedOwnerLaunch hold that decoded contract. Settings/auth consumers call owner behavior. These are lexical references, not a dynamic dispatch proof. Native6 selected session migration remains a normal integration into #489."
+}

@@ -1,5 +1,6 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
+from agent_comms.owner_launch import RestartEnvironment
 from pathlib import Path
 
 import pytest
@@ -85,6 +86,7 @@ def native_rpc_fixture(monkeypatch):
             Path(worktree),
             Path(session_file) if session_file else None,
             Path(worktree),
+            configuration=RestartEnvironment.inherit(env),
         )
 
     monkeypatch.setattr(NativePiRpcLaunch, "managed", prepare)

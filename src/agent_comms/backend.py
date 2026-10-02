@@ -96,7 +96,7 @@ class PersistentPiSession:
     async def open(
         self, launch, session_file, *, reuse, require_input_id, startup, finish_event, watchdog
     ) -> PiSessionChild:
-        key = (launch, auth_revision())
+        key = (launch, launch.configuration.auth_revision())
         child = self.custody.reuse(key, session_file) if reuse else None
         reused = child is not None
         if child is None:
@@ -142,15 +142,6 @@ class PersistentPiSession:
             self.require_reopen(session_file)
             await self.close()
 
-
-def auth_revision() -> tuple[int, int]:
-    """Detect credential changes without reading or exposing their contents."""
-    root = Path(os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")).expanduser()
-    try:
-        stat = (root / "auth.json").stat()
-        return stat.st_mtime_ns, stat.st_size
-    except OSError:
-        return 0, 0
 
 
 async def terminate_task_process(task: asyncio.Task[Any]) -> None:

@@ -1,6 +1,7 @@
 """S2 declaration extension and real stream-boundary invariants."""
 
 from __future__ import annotations
+from agent_comms.owner_launch import RestartEnvironment
 
 import asyncio
 import itertools
@@ -93,7 +94,7 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
 )
 def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
     session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, Path.cwd(), None, Path.cwd()), "unused"
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, Path.cwd(), None, Path.cwd(), configuration=RestartEnvironment.inherit({})), "unused"
     )
     for cls in (left, right, left):
         session.output.record_failure(cls(cls.__name__))

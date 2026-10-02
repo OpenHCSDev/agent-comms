@@ -14,7 +14,6 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from agent_comms.backend import auth_revision
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
@@ -37,7 +36,7 @@ async def run(root: Path, package: Path) -> dict:
     admission = NativeStartupAdmission(root)
     started = time.monotonic()
     await admission.acquire()
-    child = await PiSessionChild.start((launch, auth_revision()), None)
+    child = await PiSessionChild.start((launch, launch.configuration.auth_revision()), None)
     spawned = time.monotonic()
     request = child.attestation.request
     receipt = {

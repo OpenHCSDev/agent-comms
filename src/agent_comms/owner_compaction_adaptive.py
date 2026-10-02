@@ -76,19 +76,7 @@ async def maybe_compact_owner_turn(
     # or a detached settings decision. Effective values are still read from Pi.
     launch = persistent.custody.idle().child.key[0]
     package = launch.package
-    environment = launch.env
-    global_dir = Path(environment.get("PI_CODING_AGENT_DIR") or Path(environment["HOME"]) / ".pi" / "agent")
-    if global_dir.parts and global_dir.parts[0] == "~":
-        global_dir = Path(environment["HOME"]).joinpath(*global_dir.parts[1:])
-    native_config = Path(environment["AGENT_COMMS_NATIVE_CONFIG_DIR"])
-    if not global_dir.is_absolute() or not native_config.is_absolute():
-        raise PiSettingsEvidenceError("Prepared native configuration directories must be absolute")
-    project_settings = launch.cwd / ".pi" / "settings.json"
-    settings_paths = tuple(dict.fromkeys(map(str, (
-        global_dir / "settings.json", project_settings,
-        global_dir / "models.json", native_config / "models.json",
-        project_settings.with_name("models.json"),
-    ))))
+    settings_paths = launch.configuration.settings_paths(launch.cwd)
 
     async def decision() -> PiCompactionDecision:
         # Native preparation owns model identity; the same retained child owns

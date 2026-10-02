@@ -6,6 +6,7 @@ admission, native process, source proof and response publication remain real.
 import argparse
 import hashlib
 import shutil
+import shlex
 from dataclasses import replace
 import asyncio
 import json
@@ -42,7 +43,7 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.bus_publication import stable_thread_lookup
 
 
-def configured_stage(arguments, configured):
+def configured_stage(arguments, configured, snapshot):
     """Share the original installed/configured private receiving preparation."""
     from agent_comms.native_package import verify_native_package
 
@@ -50,33 +51,39 @@ def configured_stage(arguments, configured):
     stage = arguments.stage.absolute()
     assert stage.is_relative_to('/home/ts/wt')
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
-    project, profile = stage/'project', stage/'config'
-    project.mkdir(mode=0o700); profile.mkdir(mode=0o700)
-    source_profile = Path(os.environ.get('AGENT_COMMS_NATIVE_CONFIG_DIR') or
-                          os.environ.get('PI_CODING_AGENT_DIR') or '~/.pi/agent').expanduser()
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.native_pi import NativePiRpcLaunch
+
+    project = stage/'project'
+    project.mkdir(mode=0o700)
+    retained = RetainedOwnerLaunch.capture(configured, snapshot)
+    # The original owner owns auth/settings/extension selection. Bootstrap is
+    # its existing OS-environment decoder, not a second fixture configuration.
+    _, environment = NativePiRpcLaunch.bootstrap(
+        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment, retained.configuration)
+    source_profile = retained.configuration.native_config
     source_hashes = {}
     for filename in ('auth.json', 'models.json', 'settings.json'):
         original = source_profile/filename
         if original.exists():
-            assert original.stat().st_size < 1024 * 1024
-            data = original.read_bytes()
-            source_hashes[str(original)] = hashlib.sha256(data).hexdigest()
-            destination = profile/filename
-            destination.write_bytes(data); destination.chmod(0o600)
-    assert (profile/'auth.json').exists(), "Configured authentication is unavailable"
+            source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
     service = Comms(stage/'wire', private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
-    environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith(('AGENT_COMMS_', 'PI_')) and key != 'PYTHONPATH'}
+    binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(arguments.package),
-        AGENT_COMMS_NATIVE_CONFIG_DIR=str(profile), PI_CODING_AGENT_DIR=str(profile),
-        AGENT_COMMS_AGENT_MODELS=configured.model,
-        AGENT_COMMS_AGENT_BIN='pi', AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
-        PATH=str(Path(sys.executable).parent)+os.pathsep+environment.get('PATH', ''))
+        AGENT_COMMS_AGENT_BIN=str(binary),
+        AGENT_COMMS_AGENT_ARGS=shlex.join(retained.arguments or ()),
+        AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
+        VIRTUAL_ENV=str(binary.parent.parent),
+        AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
+        PATH=str(binary.parent)+os.pathsep+environment.get('PATH', ''))
+    for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID',
+                'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY', 'PYTHONPATH'):
+        environment.pop(key, None)
     os.environ.clear(); os.environ.update(environment)
     return stage, project, service, root_id, source_hashes
 
@@ -107,7 +114,7 @@ async def configured_pure_channel(arguments):
     assert all(source.model and source.session_file for source in sources)
     common_tags = set.intersection(*(set(source.tags) for source in sources))
     assert 'openhcs' in common_tags
-    stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0])
+    stage, project, service, root_id, source_hashes = configured_stage(arguments, sources[0], snapshot)
     assert len(str(service.root/'native-sessions'/('0'*32)/'s')) < 108
     names, settings = [], []
     for index, source in enumerate(sources):
@@ -116,7 +123,7 @@ async def configured_pure_channel(arguments):
         # Existing SessionManager fork owns strict saved-history creation under
         # its native source lock. Its output stays under the owned profile.
         fork = await ForkSessionHelper.run(
-            ForkSessionRequest(str(arguments.package), str(original), source.worktree),
+            ForkSessionRequest(str(arguments.package), str(original), source.worktree, str(stage / 'forks')),
             cwd=Path(source.worktree), env=dict(os.environ),
         )
         assert Path(fork.session_file).is_relative_to(stage)
@@ -351,9 +358,10 @@ async def configured_mixed_routes(arguments):
 
     assert arguments.owners == 1 and arguments.collective
     assert not (arguments.saved_source or arguments.contention or arguments.cancel_before_grant)
-    configured = wire().registry.require(arguments.configured_owner)
+    snapshot = wire().registry.snapshot()
+    configured = snapshot.require(arguments.configured_owner)
     assert configured.model, "Configured owner has no selected model"
-    stage, project, service, root_id, source_hashes = configured_stage(arguments, configured)
+    stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
     name = 'batch-receiver'
     service.registry.declare(Thread('human',frozenset(),str(project),role=ThreadRole.USER))
     service.registry.declare(Thread(name,frozenset({'team'}),str(project),

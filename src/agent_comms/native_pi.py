@@ -22,6 +22,7 @@ from uuid import uuid4
 
 from . import pi_events as pi
 from .native_arguments import NativeArguments
+from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
@@ -101,38 +102,11 @@ def main() -> int:
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
-    environment = dict(os.environ)
-    # Global extensions invoke this installation's console tools. Services
-    # need not inherit an activated virtualenv or an interactive shell PATH.
-    environment["PATH"] = os.pathsep.join(
-        (str(Path(sys.executable).parent), environment.get("PATH", os.defpath))
+    configuration = RestartEnvironment.inherit(os.environ)
+    argv, environment = NativePiRpcLaunch.bootstrap(
+        cli, tuple(sys.argv[1:]), Path.cwd(), dict(os.environ), configuration
     )
-    environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-        Path(
-            environment.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-            or environment.get("PI_CODING_AGENT_DIR")
-            or "~/.pi/agent"
-        )
-        .expanduser()
-        .resolve()
-    )
-    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-        environment.pop(name, None)
-    environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
-    os.execvpe(
-        "node",
-        [
-            "node",
-            "--no-global-search-paths",
-            "--import",
-            str(cli.with_name("agent-comms-import-fence.mjs")),
-            "--import",
-            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
-            str(cli),
-            *sys.argv[1:],
-        ],
-        environment,
-    )
+    os.execvpe(argv[0], list(argv), environment)
     return 0
 
 
@@ -433,6 +407,28 @@ class NativePiRpcLaunch:
     session_file: Path | None
     package: Path
 
+    configuration: RestartEnvironment = field(kw_only=True)
+
+    @classmethod
+    def bootstrap(cls, cli, arguments, cwd, environment, configuration: RestartEnvironment):
+        """Encode the held launch configuration at the native process boundary."""
+        env = dict(environment)
+        for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
+            env.pop(name, None)
+        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        env["PI_WORKTREE"] = str(cwd)
+        env["PATH"] = os.pathsep.join(
+            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
+        )
+        env.update(configuration.encode_native())
+        argv = (
+            "node", "--no-global-search-paths",
+            "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
+            "--import", str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+            str(cli), *arguments,
+        )
+        return argv, env
+
     @classmethod
     def package_for_command(cls, command: str) -> Path:
         """Resolve an explicitly supported launcher to the reviewed package.
@@ -496,36 +492,13 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
         env.update(environment or {})
-        for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-            env.pop(name, None)
-        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        env["PI_WORKTREE"] = str(cwd)
-        env["PATH"] = os.pathsep.join(
-            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
-        )
-        env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-            Path(
-                env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-                or env.get("PI_CODING_AGENT_DIR")
-                or "~/.pi/agent"
-            )
-            .expanduser()
-            .resolve()
-        )
+        configuration = RestartEnvironment.inherit(env)
         saved = Path(session_file).absolute() if session_file else None
         if saved is not None:
             arguments += ("--fork" if fork_session else "--session", str(saved))
-        argv = (
-            "node",
-            "--no-global-search-paths",
-            "--import",
-            str(cli.with_name("agent-comms-import-fence.mjs")),
-            "--import",
-            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
-            str(cli),
-            *arguments,
-        )
-        return cls(argv, cwd, env, saved.parent if saved else cwd, saved, package)
+        argv, env = cls.bootstrap(cli, arguments, cwd, env, configuration)
+        return cls(argv, cwd, env, saved.parent if saved else cwd, saved, package,
+                   configuration=configuration)
 
     @classmethod
     def tracked(
@@ -584,9 +557,7 @@ class NativePiRpcLaunch:
             if selected_tool_mode is not None
             else ("--no-tools",)
         )
-        argv = [
-            "node",
-            str(cli),
+        arguments = [
             "--mode",
             "rpc",
             "--no-approve",
@@ -602,20 +573,22 @@ class NativePiRpcLaunch:
             model,
         ]
         if selected_thinking_level is not None:
-            argv.extend(
+            arguments.extend(
                 ("--thinking", selected_thinking_level, "--no-prompt-templates", "--no-themes")
             )
         if session_file is not None:
-            argv.extend(("--session", str(session_file)))
+            arguments.extend(("--session", str(session_file)))
         if thinking_level is not None and selected_thinking_level is None:
-            argv.extend(("--thinking", thinking_level))
-        env = cls.private_environment(agent_dir, session_dir, selected_thinking_level)
-        return cls(tuple(argv), worktree, env, session_dir, session_file, package)
+            arguments.extend(("--thinking", thinking_level))
+        env, configuration = cls.private_environment(agent_dir, session_dir, selected_thinking_level)
+        argv, env = cls.bootstrap(cli, tuple(arguments), worktree, env, configuration)
+        return cls(argv, worktree, env, session_dir, session_file, package,
+                   configuration=configuration)
 
     @staticmethod
     def private_environment(
         agent_dir: Path, session_dir: Path, selected_thinking_level: str | None
-    ) -> dict[str, str]:
+    ) -> tuple[dict[str, str], RestartEnvironment]:
         if selected_thinking_level is not None:
             # This selected-only candidate is still hard-denied before real spawn.
             # Do not hand a credential, proxy, hooks, or ambient provider settings
@@ -634,9 +607,11 @@ class NativePiRpcLaunch:
                 "LANG": "C.UTF-8",
                 "TMPDIR": str(session_dir),
                 "PI_OFFLINE": "1",
-                "PI_CODING_AGENT_DIR": str(agent_dir),
                 "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
             }
+            configuration = RestartEnvironment(
+                home=str(agent_dir), native_config=agent_dir, agent_directory=agent_dir
+            )
         else:
             env = os.environ.copy()
             for name in (
@@ -650,18 +625,8 @@ class NativePiRpcLaunch:
             ):
                 env.pop(name, None)
             env["PI_OFFLINE"] = "1"
-            # Canonical credentials/catalog remain separate from retry isolation.
-            env["AGENT_COMMS_NATIVE_CONFIG_DIR"] = str(
-                Path(
-                    env.get("AGENT_COMMS_NATIVE_CONFIG_DIR")
-                    or env.get("PI_CODING_AGENT_DIR")
-                    or "~/.pi/agent"
-                )
-                .expanduser()
-                .resolve()
-            )
-            env["PI_CODING_AGENT_DIR"] = str(agent_dir)
-        return env
+            configuration = RestartEnvironment.inherit(env).for_agent(agent_dir)
+        return env, configuration
 
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -141,8 +141,8 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                   process_identity=ProcessIdentity.capture(os.getpid()))
     owner._comms.registry.declare(peer)
     c_identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
-        str(fixture.session), str(project)), cwd=project,
-        env=dict(os.environ, PI_CODING_AGENT_DIR=str(fixture.root.parent / 'c-native-fork')))
+        str(fixture.session), str(project), str(fixture.root.parent / 'c-native-fork')),
+        cwd=project, env=dict(os.environ))
     receiver = Thread('context-receiver', frozenset({'team'}), str(project),
         process_identity=ProcessIdentity.capture(os.getpid()),
         session_file=c_identity.session_file, model='response-local/fixture', thinking_level='off')

@@ -1,6 +1,7 @@
 """Real cold Pi CLI, localhost provider failure, and unchanged saved reopen."""
 
 from __future__ import annotations
+from agent_comms.owner_launch import RestartEnvironment
 
 import asyncio
 import json
@@ -245,7 +246,7 @@ async def native_failure_owner(tmp_path, status):
 def selected_owner(child, reader, package, session, preparation, errors):
     persistent = retained_native_host(
         child,
-        NativePiRpcLaunch(("node",), package, {}, session.parent, session, package),
+        NativePiRpcLaunch(("node",), package, {}, session.parent, session, package, configuration=RestartEnvironment.inherit({})),
         NativeSessionIdentity(preparation.witness.session_id, str(session)),
         reader=reader,
         stderr_task=errors,
