@@ -195,3 +195,184 @@ copied assignment IDs/targets. The existing actual-native coding-provider
 fixture now emits the single canonical Message-array grammar through FieldCodec;
 it was not executed and is not a native acceptance claim. These are 3 test files,
 14 added / 12 deleted; production source/DDL is unchanged from369b10be.
+
+
+## Current-main integration and configured installed journey
+
+Normal main9954cdd73dff20e590aebf15467a170f0a69e799 integration is published
+at3725f23e44212ca313afe3aa14983c6846905c88. No production conflict occurred.
+The single shared_bus_restart_native fixture conflict retains #498 saved-source
+and cursor-contention evidence alongside #490 wave membership. Its final receipt
+now observes the triage cursor only in the triage case that actually binds it.
+No resource/evidence closure was dropped; no unfinished #489 Native6 was merged.
+
+Declaration-derived coordinator9/snapshot3/response3/native5 DDL digests are
+identical to369b10be after this integration. Singer495 has the exact source
+receipt; parent owns stopped-owner activation and preserves originals/UNKNOWN.
+
+The existing shared_bus_restart_native journey now accepts --configured-owner.
+It reads only the configured model/level, copies the existing private provider
+configuration into its owned private profile, and submits fresh private originals
+through the ordinary owner/ACP/native path. No provider substitution: two channel
+questions plus a direct private question must belong to one full native input;
+a late direct question must belong to its separate next input. Assertions require
+original per-route receipts, all original historical proofs, cursor publication,
+private-answer isolation, the actual native read tool and real ACP facts. Native
+publication and cursor emission are awaited rather than assumed atomic.
+
+Source parses and diff checks pass. This journey has NOT run: exact paired
+receiving Toad286 Core pin / normal shadow-prefix builder is the next dependency.
+Resource preflight observed home8.0GiB/RAM14.7GiB/swap10.2GiB critical warning;
+bounded reuse is required, not another native/dependency build. Existing private
+fixture scope does not mutate/restart public owners or replay saved inputs.
+
+
+### Normal paired shadow stage and first configured negative
+
+Normal uv lock/sync installed Core3725, receiving Toad82bafcaa366d48d14dd40e18c39e76ebffa656e7,
+Text5fbf, diff8fa7, official ACP SDK0.12.1 with persistent-renderer support.
+The before-mutation manifest/PURPOSE, lock/sync logs, installed direct URLs,
+pip-check result and stage preflight are in .artifacts/batch-paired-project.
+All329 Core production files and2 declared Hatch assets match3725 exactly;
+verify_native_package passed the original53b8 complete tree. No source overlay,
+--no-deps install, native build, public activation or Native6 is involved.
+
+Configured01 used actual Sol6.1/off and exited1 after5.946s: the late-human
+fixture used Messaging.send_initial_cohort, whose owner correctly requires an
+executable sender. The first3 originals were captured in one FULL input;
+original input7e27a456a79848b0f09914377b3ccbb6 is preserved, not retried.
+Raw receipt/journals/config remain /home/ts/wt/k490c01; private worker cleaned up.
+No native user entry was present at inspection, but no provider absence or safe
+retry is inferred. Driver now uses the same ordinary HumanOrigin publisher as
+the first wave. Subsequent fresh fixture bodies carry their own run identity.
+Production/DDL stays byte-equal3725, so the paired runtime is unchanged.
+
+Stage preflight resource warning: home7.1GiB/RAM13.0GiB/swap10.2GiB. Shadow
+prefix123152KiB is owned; next one-owner fresh private fixture is bounded64MiB.
+This is a preserved failed installed attempt, not a functional batch PASS.
+
+
+### Actual configured mixed-route functional receipt (same original02)
+
+Original configured02 completed both FULL native workflows in24.229s using
+actual openai-codex/gpt-6.1-sol/off. Three originals shared ONE native input: two
+channel questions produced one combined #team answer and the direct question
+produced its human-only answer. PRIVATE_ROUTE_490 did not leak into the channel.
+The late fourth original belonged only to its next native input. All four
+original assignments completed; each historical proof recovered the original
+expected input, and the single current cursor covered the late original.
+
+The process still exited1: after these checks, the driver tried
+Path(registry_owner.session_file), which is absent for this fresh selected owner.
+The recorded original context, not that registration field, owns the native file.
+Raw failure and cleanup remain immutable in configured02-preserved-observer-failure.json.
+Both owned workers were retired; original provider configuration remained unchanged.
+No global owner restart, input replay or public activation occurred.
+
+A subsequent READ-ONLY inspection of THE SAME original02 used existing
+HistoricalNativeInput.context -> NativeEntry.open_evidence. It confirmed native
+input6ead6b031f9a81c8a83aa9ace910fac9, successful read tool entryb0d75e37 and
+source equality. It made no provider call or native prompt. Observer now uses
+that same canonical context and persists actual ACP callback packets even on
+failure; this correction is test-only, with production/assets still equal3725.
+
+The original02 ACP callback packets were in memory and were not retained before
+the observer failed. Their count/content is NOT reconstructed or claimed passed.
+The ordinary ACP load/owner path executed, but full notification observation
+remains a named acceptance gap. No further provider run was made to hide it.
+Evidence is committed in evidence/pending-message-batch-execution-20261001;
+private originals remain /home/ts/wt/k490c01 and k490c02. This is a useful scoped
+Native5 functional checkpoint, not whole-PR Ready or a public/live claim.
+
+
+Read-only same-original02 late-answer closure: original sequence4's completed
+assignment recovers its own execution/one human-route receipt at sequence7;
+the original message contains23. See configured02-original-late-answer-proof.json.
+This confirms the separate late batch answered, not merely acknowledged.
+The driver now checks this original route/body too. No provider/native input
+was repeated; raw exit1 and missing notification measurement remain unchanged.
+
+## Tool authority consumer closure at 25c419cb
+
+This is a source review of the existing contract, not an additional live write
+acceptance claim. No production behavior or native/provider input changed.
+The complete current-main production diff is 44 files, 965 added / 754 deleted;
+the earlier 21-file plural-builder increment is not the complete branch count.
+
+### The actual producer constrains the policy relation
+
+`SelectedExecution.action(session)` selects one trusted policy for this work
+turn: explicit SelectedToolIntent, explicit foreground SelectedExistingFileWrite,
+or the existing SelectedSession.default_action. SelectedAttempt.prepare passes
+that SAME action to SelectedWriteAuthority.select for every original. The only
+production BatchSelectedAction construction is in that method.
+
+NoSelectedWritePlans returns the action unchanged. AcpSelectedWriteAuthority
+loads the original's accepted SelectedWriteIntent through SelectedWritePlans.load:
+root, MessageReference, assignment and AdmissionIdentity must match. It verifies
+the original ACP controller, then replaces only that original's action through
+SelectedAction.with_plan with PlannedSelectedWrite. PlannedSelectedWrite inherits
+NoSelectedTools; it does not acquire a native model-tool capability from the plan.
+
+Consequently, the admitted originals have one common native policy or an
+original-specific post-model operator plan. They do not have independently
+chosen read-only versus read/write native policies. Ordinary CodingSelectedAction
+enables read/bash/edit/write for the selected session, with existing cooperative
+claim checks; a read-only request's prose is not a declared read-only capability.
+
+### Anchor, native policy, and original operator grant are distinct
+
+SelectedAttempt.tool_owner initially binds the execution resource to assignment0.
+BatchSelectedAction.mode does NOT pass that unmodified admission to a broker:
+before calling each action.mode it projects CodingToolOwner.for_original onto
+that action's actual assignment. The projection requires membership in the
+reserved NativeRuntimeInput's original execution relation and replaces source
+seq/message ID, assignment ID/revision and operation ID, retaining the SAME
+execution/attempt/participant/native input. The first nonempty mode therefore
+belongs to its chosen original, not necessarily assignment0.
+
+This is selection of the one admitted turn policy, NOT a general union algorithm
+for arbitrary heterogeneous native policies. No current production producer
+admits such a heterogeneous policy set. If that product contract changes,
+first-nonempty selection must not be reused as authority composition.
+
+For a NoSelectedTools first original and a later controller-bound write plan,
+neither contributes a native tool mode: native launch uses --no-tools. After the
+verified result, BatchSelectedAction.apply separately projects EACH original.
+PlannedSelectedWrite.require_current rechecks its own controller and operation;
+SelectedExistingFileWrite publishes the claim and writes using that projected
+original admission; only then is that original plan marked applied. The later
+plan never borrows the first source's controller or operation.
+
+### All broker and mutation consumers
+
+- CodingSelectedAction.mode -> CodingToolMode -> CodingToolSocket ->
+  CodingToolOwner.admit: verifies the exact sent FULL input and original selected
+  wake before consuming the call slot and admitting any edit/write claim.
+  CodingToolOwner.finish releases observed claim generations through the same
+  selected-owner boundary. CodingTool's existing Read/Bash/Edit/Write declarations
+  own claim behavior; no second per-message permissions table exists.
+- SelectedToolIntent.mode -> selected_tool_mode_for_owner -> SelectedToolMode's
+  owner callback -> verify_sent_full_input / perform_selected_write: captures the
+  already projected original admission, then uses the same selected claim/writer.
+- PlannedSelectedWrite and the explicitly trusted foreground write both use
+  SelectedExistingFileWrite.apply -> publish_selected_resource_claim ->
+  write_selected_claimed_file. The original WakeAdmission.source selects the
+  committed delivery and claim audience; _verify_selected_wake_state verifies
+  exact engaged binding and current attempt membership. The writer requires
+  ClaimOwner.admission equality and the current durable claim before mutation.
+- NativePiRpcLaunch.tracked reads only NativeToolMode.launch_arguments;
+  TrackedTurn.open_tools/result use its authenticated socket and finish hook.
+  Neither reconstructs an original or replaces the captured admission.
+
+Declaration/caller searches over src, tools and tests identify one production
+CodingToolOwner constructor (SelectedAttempt.tool_owner), two for_original
+consumers (BatchSelectedAction.mode/apply), one BatchSelectedAction producer,
+and the two native policy leaves CodingToolMode/SelectedToolMode. All original
+write-plan selectors and post-model writers above were read. This review adds
+no guard, registry, capability class, copied decision or compatibility path;
+production deletion count in THIS source-review checkpoint is zero.
+
+Same-original02 remains the useful mixed-route/native-read functional proof.
+Its unretained ACP callback packets remain an explicit measurement gap, not
+reconstructed facts. No provider call was repeated to obtain counters.
