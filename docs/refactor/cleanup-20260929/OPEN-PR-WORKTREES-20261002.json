@@ -1,51 +1,27 @@
 {
-  "as_of": "2026-10-02T06:31:15.131220+00:00",
+  "as_of": "2026-10-02T06:53:07.870650+00:00",
   "scope": "All open PRs in OpenHCSDev agent-comms/toad/textual/textual-diff-view; source/receiving ownership for this goal.",
   "default_prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002",
   "prs": [
     {
-      "createdAt": "2026-10-02T06:21:51Z",
-      "headRefName": "fix/goal-ledger-schema-carry-20261002",
-      "headRefOid": "d1baf0e84961927130e2062e881019d77810ff55",
+      "createdAt": "2026-10-02T06:41:43Z",
+      "headRefName": "fix/context-manifest-resource-owner-20261002",
+      "headRefOid": "1a2c311cc75040ba5cfd82054238b4c8a42ee114",
       "isDraft": true,
-      "number": 514,
-      "title": "Carry declaration-derived goal ledger schema under stopped installation",
-      "updatedAt": "2026-10-02T06:21:51Z",
-      "url": "https://github.com/OpenHCSDev/agent-comms/pull/514",
+      "number": 515,
+      "title": "Own context observation resource in existing manifest declaration",
+      "updatedAt": "2026-10-02T06:41:43Z",
+      "url": "https://github.com/OpenHCSDev/agent-comms/pull/515",
       "repo": "agent-comms",
-      "owner": "Mendel",
-      "scope": "Automatic declaration-derived goal ledger carry and preserving installation; original rows and uncertain inputs retained.",
+      "owner": "Singer",
+      "scope": "Existing NativeContextManifestData owns joined worker resource and both event-family callers; delete selected forwarding helper.",
       "worktrees": [
         {
-          "path": "/home/ts/wt/comms-goal-ledger-schema-carry-20261002",
-          "head": "e5aa883478c008a72eac4b42ea0f6952485a0836",
-          "branch": "fix/goal-ledger-schema-carry-20261002",
+          "path": "/home/ts/wt/comms-context-manifest-resource-20261002",
+          "head": "1a2c311cc75040ba5cfd82054238b4c8a42ee114",
+          "branch": "fix/context-manifest-resource-owner-20261002",
           "registered": true,
-          "exists": true,
-          "status": " M tools/cutover/native_schema_carry.py\n M tools/cutover/retained_summary_reset.py\n?? evidence/goal-ledger-schema-carry-20261002/authority-before.json.gz\n"
-        }
-      ]
-    },
-    {
-      "createdAt": "2026-10-02T06:19:13Z",
-      "headRefName": "fix/goal-ledger-declared-schema-20261002",
-      "headRefOid": "6606d695931b340db24f415efb408e96ca933a26",
-      "isDraft": true,
-      "number": 513,
-      "title": "Derive goal ledger schema identity from its existing table declarations",
-      "updatedAt": "2026-10-02T06:28:33Z",
-      "url": "https://github.com/OpenHCSDev/agent-comms/pull/513",
-      "repo": "agent-comms",
-      "owner": "Arendt",
-      "scope": "Goal ledger schema identity derives from its existing table declarations; paired installer514.",
-      "worktrees": [
-        {
-          "path": "/home/ts/wt/comms-goal-ledger-declared-schema-20261002",
-          "head": "6606d695931b340db24f415efb408e96ca933a26",
-          "branch": "fix/goal-ledger-declared-schema-20261002",
-          "registered": true,
-          "exists": true,
-          "status": ""
+          "exists": true
         }
       ]
     },
@@ -68,18 +44,18 @@
           "branch": "fix/native-compaction-source-carry-20261002",
           "registered": true,
           "exists": true,
-          "status": ""
+          "status": "A  docs/checkpoints/async-bus-custody-20261002.md\nA  docs/checkpoints/channel-reply-batch-policy-20261002.md\nA  docs/checkpoints/goal-ledger-declared-schema-20261002.md\nA  docs/checkpoints/goal-ledger-schema-carry-20261002.md\nA  docs/checkpoints/selected-source-async-resource-20261002.md\nA  docs/checkpoints/selected-turn-context-closure-20261002.md\nA  docs/checkpoints/settled-native-cursor-publication-20261002.md\nA  evidence/async-bus-custody-20261002/configured509-qualified01.json\nA  evidence/async-bus-custody-20261002/current-resource-reference-census.json\nA  evidence/async-bus-custody-20261002/owner-consumers-before-after.json\nA  evidence/async-bus-custody-20261002/projection-borrower-before.json\nA  evidence/async-bus-custody-20261002/qualify-configured509.py\nA  evidence/async-bus-custody-20261002/source-reference-census.json\nA  evidence/goal-ledger-declared-schema-20261002/source-consumers.json\nA  evidence/goal-ledger-schema-carry-20261002/SCOPE.md\nA  evidence/goal-ledger-schema-carry-20261002/authority-after.json.gz\nA  evidence/goal-ledger-schema-carry-20261002/authority-before.json.gz\nA  evidence/goal-ledger-schema-carry-20261002/authority-summary.json\nA  evidence/goal-ledger-schema-carry-20261002/operator-tools-manifest.json\nA  evidence/goal-ledger-schema-carry-20261002/original-goal-declaration.json\nA  evidence/goal-ledger-schema-carry-20261002/running-inventory.json\nA  evidence/goal-ledger-schema-carry-20261002/runtime-installation-plan.json\nA  evidence/goal-ledger-schema-carry-20261002/source-copied-original-carry.json\nA  evidence/pending-source503-20261002/checkout-restoration-receipt.json\nA  evidence/pending-source503-20261002/configured-wave01-native-overlap-timeline.json\nA  evidence/pending-source503-20261002/configured-wave01-receipt.json\nA  evidence/pending-source503-20261002/cursor-integration-receipt.json\nA  evidence/pending-source503-20261002/fresh-configured-wave01-receipt.json\nA  evidence/pending-source503-20261002/fresh-cursor-publication-observations.json\nA  evidence/pending-source503-20261002/installed-original-relation.json\nA  evidence/pending-source503-20261002/normal-main-integration-inventory.json\nA  evidence/pending-source503-20261002/ownership.json\nA  evidence/pending-source503-20261002/same-run-source-proof01.json\nA  evidence/pending-source503-20261002/sanity.json\nA  evidence/pending-source503-20261002/semantic-owner-closure.json\nA  evidence/pending-source503-20261002/source-proof-before-toad295.json\nA  evidence/pending-source503-20261002/source-proof.json\nA  evidence/selected-source-async-resource-20261002/ast-before-after.json.gz\nA  evidence/selected-source-async-resource-20261002/ast-census.py\nA  evidence/selected-source-async-resource-20261002/ast-closure-summary.json\nA  evidence/selected-source-async-resource-20261002/caller-census.txt\nA  evidence/selected-source-async-resource-20261002/source-sanity-receipt.json\nA  evidence/selected-turn-context-20261002/ast-after.json\nA  evidence/selected-turn-context-20261002/ast-before.json\nA  evidence/selected-turn-context-20261002/ast-initial-python311-summary.json\nA  evidence/selected-turn-context-20261002/ast-summary.json\nA  evidence/selected-turn-context-20261002/existing-owner-and-caller-search.txt\nA  evidence/selected-turn-context-20261002/final-handler-owner-correction.json\nA  evidence/selected-turn-context-20261002/final-provider-free-checks.log\nA  evidence/selected-turn-context-20261002/installed-reader-journey.json\nA  evidence/selected-turn-context-20261002/original-render-byte-identity.json\nA  evidence/selected-turn-context-20261002/source-semantic-receipt.json\nA  evidence/settled-native-cursor-publication-20261002/end-original-admission-relation.json\nA  evidence/settled-native-cursor-publication-20261002/existing-owner-caller-search.txt\nA  evidence/settled-native-cursor-publication-20261002/implementation-owner-search.txt\nA  evidence/settled-native-cursor-publication-20261002/qualified-installed-receiving-receipt.json\nA  evidence/settled-native-cursor-publication-20261002/readonly-original-admission-check.py\nA  evidence/settled-native-cursor-publication-20261002/source-owner-receipt.json\nM  src/agent_comms/acp.py\nM  src/agent_comms/acp_extension.py\nM  src/agent_comms/bus_activity_index.py\nM  src/agent_comms/bus_projection.py\nM  src/agent_comms/bus_publication.py\nM  src/agent_comms/bus_route_counts.py\nM  src/agent_comms/child_process.py\nM  src/agent_comms/cohort_foreground.py\nM  src/agent_comms/coordinated_runtime.py\nM  src/agent_comms/coordination_response.py\nM  src/agent_comms/coordinator.py\nM  src/agent_comms/cursor_owner.py\nM  src/agent_comms/cursor_publication.py\nM  src/agent_comms/goal_attempts.py\nM  src/agent_comms/goal_failure_observation.py\nM  src/agent_comms/goal_management.py\nM  src/agent_comms/goal_waits.py\nA  src/agent_comms/instructions/selected-awareness-content.md\nA  src/agent_comms/instructions/selected-awareness.md\nA  src/agent_comms/instructions/selected-coding.md\nA  src/agent_comms/instructions/selected-no-tools.md\nA  src/agent_comms/instructions/selected-response-example.md\nA  src/agent_comms/instructions/selected-response.md\nA  src/agent_comms/instructions/selected-triage-output.md\nA  src/agent_comms/instructions/selected-triage.md\nA  src/agent_comms/instructions/selected-wake.md\nA  src/agent_comms/instructions/selected-work.md\nM  src/agent_comms/message_bus.py\nM  src/agent_comms/native_source_cursor.py\nM  src/agent_comms/native_turn_context.py\nM  src/agent_comms/optional_awareness_projection.py\nM  src/agent_comms/private_bus_checkpoint.py\nM  src/agent_comms/private_send_admission.py\nM  src/agent_comms/proven_source_coverage.py\nM  src/agent_comms/routing.py\nM  src/agent_comms/runtime_requests.py\nM  src/agent_comms/selected_actions.py\nM  src/agent_comms/selected_participant.py\nM  src/agent_comms/selected_request.py\nM  src/agent_comms/selected_result.py\nM  src/agent_comms/selected_source_batch.py\nM  src/agent_comms/selected_triage.py\nM  src/agent_comms/selected_turn.py\nM  src/agent_comms/session_lifecycle.py\nM  src/agent_comms/store_files.py\nM  src/agent_comms/task_sources.py\nM  src/agent_comms/tracked_turn.py\nM  src/agent_comms/transcript_routes.py\nM  src/agent_comms/turn_progress.py\nM  src/agent_comms/wake_injection.py\nM  src/agent_comms/wire_log.py\nM  src/agent_comms/wire_record.py\nM  tests/native_evidence_reader_installed_journey.py\nM  tests/shared_bus_restart_native.py\nM  tests/test_acp.py\nM  tests/test_acp_private_nk_delivery.py\nM  tests/test_acp_queue_contract.py\nM  tests/test_acp_selected_write_plan.py\nM  tests/test_channel_participant_registration.py\nM  tests/test_coordinated_runtime.py\nM  tests/test_current_delivery.py\nM  tests/test_cursor_load_recovery.py\nM  tests/test_cutover_admission.py\nM  tests/test_goal_attempts.py\nM  tests/test_keyed_response_delivery.py\nM  tests/test_mcp_relay.py\nM  tests/test_native_send_admission.py\nM  tests/test_outbound_transcript_source.py\nM  tests/test_private_idle_drain.py\nM  tests/test_selected_source_batch.py\nM  tests/test_toad_contract.py\nUU tools/cutover/native_schema_carry.py\nUU tools/cutover/native_schema_carry_controls.py\nM  tools/cutover/publish_retained_summary.py\nM  tools/cutover/retained_summary_reset.py\nM  tools/cutover/runtime_installation.py"
         }
       ]
     },
     {
       "createdAt": "2026-10-02T03:21:20Z",
       "headRefName": "fix/selected-preparation-compaction-owner-20261002",
-      "headRefOid": "8d14034d3f991b3e978b20cef89a3f773a9c2de5",
+      "headRefOid": "b33c4c7377f08b6dc3169f81c7c94a12b309703b",
       "isDraft": true,
       "number": 506,
       "title": "fix: journal selected saved-context preparation before input",
-      "updatedAt": "2026-10-02T06:20:54Z",
+      "updatedAt": "2026-10-02T06:52:45Z",
       "url": "https://github.com/OpenHCSDev/agent-comms/pull/506",
       "repo": "agent-comms",
       "owner": "Einstein",
@@ -87,22 +63,22 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-retained-human-main-20261001",
-          "head": "8d14034d3f991b3e978b20cef89a3f773a9c2de5",
+          "head": "b33c4c7377f08b6dc3169f81c7c94a12b309703b",
           "branch": "fix/selected-preparation-compaction-owner-20261002",
           "registered": true,
           "exists": true,
-          "status": "?? .artifacts/\n"
+          "status": "?? .artifacts/"
         }
       ]
     },
     {
       "createdAt": "2026-10-01T18:18:14Z",
       "headRefName": "fix/request-budget-compaction-custody-20261001",
-      "headRefOid": "65d5788b1bca75e412f382a18a2f8b37b08acc0c",
+      "headRefOid": "0e50c9796af1e5034d981f521122339dc4619a20",
       "isDraft": true,
       "number": 489,
       "title": "Own native runtime facts and lifecycle through existing nominal authorities",
-      "updatedAt": "2026-10-02T06:00:20Z",
+      "updatedAt": "2026-10-02T06:40:38Z",
       "url": "https://github.com/OpenHCSDev/agent-comms/pull/489",
       "repo": "agent-comms",
       "owner": "Arendt",
@@ -110,22 +86,22 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-request-budget-compaction-custody-20261001",
-          "head": "9822b8406a586671a0afe8f8290f5737ecbb19aa",
+          "head": "0e50c9796af1e5034d981f521122339dc4619a20",
           "branch": "fix/request-budget-compaction-custody-20261001",
           "registered": true,
           "exists": true,
-          "status": "?? .observations/\n"
+          "status": "?? .observations/"
         }
       ]
     },
     {
       "createdAt": "2026-09-30T00:21:49Z",
       "headRefName": "refactor/cleanup-live-integration-20260929",
-      "headRefOid": "7c58ee6c30651cb516c9c82086b6227d8755b2b2",
+      "headRefOid": "0c9d1e592089922f41a96d923f8eafaee9538161",
       "isDraft": true,
       "number": 432,
       "title": "Track live checkpoint and remaining nominal integration scope",
-      "updatedAt": "2026-10-02T06:16:02Z",
+      "updatedAt": "2026-10-02T06:31:17Z",
       "url": "https://github.com/OpenHCSDev/agent-comms/pull/432",
       "repo": "agent-comms",
       "owner": "Parent",
@@ -133,45 +109,67 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-          "head": "7c58ee6c30651cb516c9c82086b6227d8755b2b2",
+          "head": "0c9d1e592089922f41a96d923f8eafaee9538161",
           "branch": "refactor/cleanup-live-integration-20260929",
           "registered": true,
           "exists": true,
-          "status": "?? .artifacts/\n?? .release-private/\n?? evidence/performance275-feedback-edges-20261001/pr275-body.md\n?? evidence/performance275-feedback-edges-20261001/pr277-body.md\n?? evidence/performance275-feedback-edges-20261001/pr278-ready-body.md\n"
+          "status": "M docs/refactor/cleanup-20260929/OPEN-PR-WORKTREES-20261002.json\n M docs/refactor/cleanup-20260929/OPEN-PR-WORKTREES-20261002.md\n?? .artifacts/\n?? .release-private/\n?? evidence/performance275-feedback-edges-20261001/pr275-body.md\n?? evidence/performance275-feedback-edges-20261001/pr277-body.md\n?? evidence/performance275-feedback-edges-20261001/pr278-ready-body.md"
+        }
+      ]
+    },
+    {
+      "createdAt": "2026-10-02T06:50:49Z",
+      "headRefName": "deploy/native6-owned-receiving-20261002",
+      "headRefOid": "3dc7ef00c042629c0c622ea9d08a0bf1eb68548b",
+      "isDraft": true,
+      "number": 313,
+      "title": "Package owned Native6 source with qualified frontend",
+      "updatedAt": "2026-10-02T06:51:05Z",
+      "url": "https://github.com/OpenHCSDev/toad/pull/313",
+      "repo": "toad",
+      "owner": "Einstein (end-to-end integration); Kepler package completed",
+      "scope": "Existing built combined lifecycle/compaction candidate; Einstein owns actual saved-fork/cancel/continue through fixes and final candidate.",
+      "worktrees": [
+        {
+          "path": "/home/ts/wt/toad-receiving-native5-batch490-20261001",
+          "head": "3dc7ef00c042629c0c622ea9d08a0bf1eb68548b",
+          "branch": "deploy/native6-owned-receiving-20261002",
+          "registered": true,
+          "exists": true
         }
       ]
     },
     {
       "createdAt": "2026-10-02T06:29:14Z",
       "headRefName": "deploy/native5-goal-receiving-20261002",
-      "headRefOid": "8e5f9c9519a535eb238d7a68ad5af23ce4d51845",
+      "headRefOid": "d2e5d4a8828efa6dad2c1c1cc9cf2f250d2ec535",
       "isDraft": true,
       "number": 312,
       "title": "Pair declared goal ledger and preserving carry with current Native5 frontend",
-      "updatedAt": "2026-10-02T06:29:14Z",
+      "updatedAt": "2026-10-02T06:50:19Z",
       "url": "https://github.com/OpenHCSDev/toad/pull/312",
       "repo": "toad",
-      "owner": "Unassigned",
-      "scope": "",
+      "owner": "Kepler",
+      "scope": "One combined Native5 receiving stage for the merged async/sidebar features and declaration-derived goal schema/install carry513/514; original default retained until verified.",
       "worktrees": [
         {
           "path": "/home/ts/wt/toad-receiving-native5-batch490-20261001",
-          "head": "8e5f9c9519a535eb238d7a68ad5af23ce4d51845",
-          "branch": "deploy/native5-goal-receiving-20261002",
+          "head": "3dc7ef00c042629c0c622ea9d08a0bf1eb68548b",
+          "branch": "deploy/native6-owned-receiving-20261002",
           "registered": true,
           "exists": true,
-          "status": "?? .artifacts/\n"
+          "status": "?? .artifacts/"
         }
       ]
     },
     {
       "createdAt": "2026-10-02T06:20:27Z",
       "headRefName": "perf/sidebar-style-after308-20261002",
-      "headRefOid": "30709e96202b646751441dd403c2f1e43f8986e1",
+      "headRefOid": "9df3d504f2bc3e1142fdad4cf2726740d660f717",
       "isDraft": true,
       "number": 311,
       "title": "Continue sidebar and native style performance after308",
-      "updatedAt": "2026-10-02T06:29:22Z",
+      "updatedAt": "2026-10-02T06:39:37Z",
       "url": "https://github.com/OpenHCSDev/toad/pull/311",
       "repo": "toad",
       "owner": "Heisenberg",
@@ -179,11 +177,11 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001",
-          "head": "30709e96202b646751441dd403c2f1e43f8986e1",
+          "head": "9df3d504f2bc3e1142fdad4cf2726740d660f717",
           "branch": "perf/sidebar-style-after308-20261002",
           "registered": true,
           "exists": true,
-          "status": "?? .artifacts/\n"
+          "status": "?? .artifacts/"
         }
       ]
     },
@@ -204,11 +202,11 @@
     {
       "createdAt": "2026-10-02T04:36:30Z",
       "headRefName": "perf/native-scene-after21-20261002",
-      "headRefOid": "f7770efdf607395c4bdfa0a920f895927cdd3fee",
-      "isDraft": true,
+      "headRefOid": "3e8dcda4648d73bb001638b9334157f5dd0c6e0e",
+      "isDraft": false,
       "number": 22,
       "title": "Continue native scene layout and raster ownership after21",
-      "updatedAt": "2026-10-02T06:24:41Z",
+      "updatedAt": "2026-10-02T06:38:02Z",
       "url": "https://github.com/OpenHCSDev/textual/pull/22",
       "repo": "textual",
       "owner": "Heisenberg",
@@ -216,21 +214,20 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/textual-intrinsic-placement-after18-20261001",
-          "head": "f7770efdf607395c4bdfa0a920f895927cdd3fee",
+          "head": "3e8dcda4648d73bb001638b9334157f5dd0c6e0e",
           "branch": "perf/native-scene-after21-20261002",
           "registered": true,
           "exists": true,
-          "status": "?? .artifacts/\n"
+          "status": "?? .artifacts/"
         }
       ]
     }
   ],
-  "draft_count": 10,
+  "draft_count": 9,
   "reconciled_since_previous": [
-    "Core509 mergedf913; source includes selected context511",
-    "Core511 merged; zero production delta after509",
-    "Toad308 merged5dab; entire remaining performance continues311/Textual22",
-    "Toad310 mergedb8f2; later combined goal receiving ownedKepler",
-    "Toad296 closed superseded; branch/original negative evidence retained"
+    "Core513 merged57aeb5e; Core514 mergeda8a3ba05; complete src/tools equal installed9ccc.",
+    "Goal ledger carry preserved492 factrows and row identities; sourcecontrol only, installedjourney Sch in progress.",
+    "Toad312 packaged Native5 goal cohort; parent publication follows affected journey.",
+    "Visual assessment was deferred in latestperformance run. Existing recorder must supply appframe delivery timeline and concurrent motion review."
   ]
 }

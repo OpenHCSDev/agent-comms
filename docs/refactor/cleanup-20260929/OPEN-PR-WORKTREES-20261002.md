@@ -1,96 +1,73 @@
 # Handoff: open PRs, owners and worktrees
 
-Checked GitHub and Git worktree registrations at **2026-10-02T06:31:15.131220+00:00**. This is a snapshot; use the linked PR for its latest head.
+Checked GitHub and local worktrees at **2026-10-02T06:53:07.870650+00:00**. 10 open PRs, 9 drafts. The linked PR owns its current status.
 
 ## Open PRs
 
-| PR | Owner | Worktree | Branch | What it carries |
-|---|---|---|---|---|
-| [agent-comms #432](https://github.com/OpenHCSDev/agent-comms/pull/432) (draft) | Parent | [comms-cleanup-live-integration-20260929](/home/ts/wt/comms-cleanup-live-integration-20260929) | `refactor/cleanup-live-integration-20260929` | Integration checklist, operator artifacts and standing instructions. Do not merge this broad draft wholesale. |
-| [agent-comms #489](https://github.com/OpenHCSDev/agent-comms/pull/489) (draft) | Arendt | [comms-request-budget-compaction-custody-20261001](/home/ts/wt/comms-request-budget-compaction-custody-20261001) | `fix/request-budget-compaction-custody-20261001` | Native turn lifecycle, budget and compaction authority; separate from the Native5 async checkpoint. |
-| [agent-comms #506](https://github.com/OpenHCSDev/agent-comms/pull/506) (draft) | Einstein | [comms-retained-human-main-20261001](/home/ts/wt/comms-retained-human-main-20261001) | `fix/selected-preparation-compaction-owner-20261002` | Same-child saved-context preparation and compaction. Content digest derives from the existing frozen source; migrate all consumers. |
-| [agent-comms #510](https://github.com/OpenHCSDev/agent-comms/pull/510) (draft) | Mendel | [comms-native-compaction-source-carry-20261002](/home/ts/wt/comms-native-compaction-source-carry-20261002) | `fix/native-compaction-source-carry-20261002` | Outside-src Native6 carry tool. Preserve original source proofs, history and uncertain inputs; await the corrected Native6 producer for stopped qualification. |
-| [agent-comms #513](https://github.com/OpenHCSDev/agent-comms/pull/513) (draft) | Arendt | [comms-goal-ledger-declared-schema-20261002](/home/ts/wt/comms-goal-ledger-declared-schema-20261002) | `fix/goal-ledger-declared-schema-20261002` | Goal ledger schema identity derives from its existing table declarations; paired installer514. |
-| [agent-comms #514](https://github.com/OpenHCSDev/agent-comms/pull/514) (draft) | Mendel | [comms-goal-ledger-schema-carry-20261002](/home/ts/wt/comms-goal-ledger-schema-carry-20261002) | `fix/goal-ledger-schema-carry-20261002` | Automatic declaration-derived goal ledger carry and preserving installation; original rows and uncertain inputs retained. |
-| [textual #22](https://github.com/OpenHCSDev/textual/pull/22) (draft) | Heisenberg | [textual-intrinsic-placement-after18-20261001](/home/ts/wt/textual-intrinsic-placement-after18-20261001) | `perf/native-scene-after21-20261002` | Native layout/scene/raster continuation paired with Toad308. |
-| [toad #309](https://github.com/OpenHCSDev/toad/pull/309) (draft) | compaction499-live-architecture-memory; plan only | None; planning worktree intentionally deleted | `feat/context-tree-inspector-20261002` | User requested planning-only context Tree/detail pane. No implementation now; temporary worktree intentionally deleted. |
-| [toad #311](https://github.com/OpenHCSDev/toad/pull/311) (draft) | Heisenberg | [toad-viewport-raster-cpu-continuation-20261001](/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001) | `perf/sidebar-style-after308-20261002` | Full performance continuation after merged308; shared Styles invalidation is pushed in paired Textual22. |
-| [toad #312](https://github.com/OpenHCSDev/toad/pull/312) (draft) | Unassigned | [toad-receiving-native5-batch490-20261001](/home/ts/wt/toad-receiving-native5-batch490-20261001) | `deploy/native5-goal-receiving-20261002` |  |
+| PR | Owner | Open for | Worktree | Branch | Scope |
+|---|---|---|---|---|---|
+| [agent-comms #432](https://github.com/OpenHCSDev/agent-comms/pull/432) (draft) | Parent | 54.5 hours | [comms-cleanup-live-integration-20260929](/home/ts/wt/comms-cleanup-live-integration-20260929) | `refactor/cleanup-live-integration-20260929` | Integration checklist, operator artifacts and standing instructions. Do not merge this broad draft wholesale. |
+| [agent-comms #489](https://github.com/OpenHCSDev/agent-comms/pull/489) (draft) | Arendt | 12.6 hours | [comms-request-budget-compaction-custody-20261001](/home/ts/wt/comms-request-budget-compaction-custody-20261001) | `fix/request-budget-compaction-custody-20261001` | Native turn lifecycle, budget and compaction authority; separate from the Native5 async checkpoint. |
+| [agent-comms #506](https://github.com/OpenHCSDev/agent-comms/pull/506) (draft) | Einstein | 3.5 hours | [comms-retained-human-main-20261001](/home/ts/wt/comms-retained-human-main-20261001) | `fix/selected-preparation-compaction-owner-20261002` | Same-child saved-context preparation and compaction. Content digest derives from the existing frozen source; migrate all consumers. |
+| [agent-comms #510](https://github.com/OpenHCSDev/agent-comms/pull/510) (draft) | Mendel | 2.5 hours | [comms-native-compaction-source-carry-20261002](/home/ts/wt/comms-native-compaction-source-carry-20261002) | `fix/native-compaction-source-carry-20261002` | Outside-src Native6 carry tool. Preserve original source proofs, history and uncertain inputs; await the corrected Native6 producer for stopped qualification. |
+| [agent-comms #515](https://github.com/OpenHCSDev/agent-comms/pull/515) (draft) | Singer | 0.2 hours | No worktree; planning only | `fix/context-manifest-resource-owner-20261002` | Own context observation resource in existing manifest declaration |
+| [textual #22](https://github.com/OpenHCSDev/textual/pull/22)  | Heisenberg | 2.3 hours | [textual-intrinsic-placement-after18-20261001](/home/ts/wt/textual-intrinsic-placement-after18-20261001) | `perf/native-scene-after21-20261002` | Native layout/scene/raster continuation paired with Toad308. |
+| [toad #309](https://github.com/OpenHCSDev/toad/pull/309) (draft) | compaction499-live-architecture-memory; plan only | 1.1 hours | No worktree; planning only | `feat/context-tree-inspector-20261002` | User requested planning-only context Tree/detail pane. No implementation now; temporary worktree intentionally deleted. |
+| [toad #311](https://github.com/OpenHCSDev/toad/pull/311) (draft) | Heisenberg | 0.5 hours | [toad-viewport-raster-cpu-continuation-20261001](/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001) | `perf/sidebar-style-after308-20261002` | Full performance continuation after merged308; shared Styles invalidation is pushed in paired Textual22. |
+| [toad #312](https://github.com/OpenHCSDev/toad/pull/312) (draft) | Kepler | 0.4 hours | [toad-receiving-native5-batch490-20261001](/home/ts/wt/toad-receiving-native5-batch490-20261001) | `deploy/native5-goal-receiving-20261002` | One combined Native5 receiving stage for the merged async/sidebar features and declaration-derived goal schema/install carry513/514; original default retained until verified. |
+| [toad #313](https://github.com/OpenHCSDev/toad/pull/313) (draft) | Einstein, complete workflow; package built by Kepler | See JSON creation time | [receiving checkout](/home/ts/wt/toad-receiving-native5-batch490-20261001) | `deploy/native6-owned-receiving-20261002` | Existing built combined lifecycle/compaction candidate; Einstein owns actual saved-fork/cancel/continue through fixes and final candidate. |
 
-Exact remote/local heads and uncommitted status are in [the JSON snapshot](OPEN-PR-WORKTREES-20261002.json). There are no open PRs in textual-diff-view.
+Exact remote/local heads, creation/update times and uncommitted status are in [the JSON snapshot](OPEN-PR-WORKTREES-20261002.json). No open textual-diff-view PRs were found.
 
-## Who is doing the work
+## Current release
 
-| Worker | Thread ID | Responsibility |
-|---|---|---|
-| Arendt | `01a0eedd-9f61-7400-9fe7-867e727b2df2` | Core489/509 integration; sole combined installed busy/native qualification |
-| Einstein | `01a0ef42-347d-7242-98d1-d7573f1d91eb` | Core506 source/preparation/compaction ownership |
-| Mendel | `01a0eed6-20e1-7b80-988b-cc860742a21d` | Core510 one-time durable/native carry |
-| Singer | `01a0f84d-cf04-70d2-8109-45a8a05cf3fc` | Core511 context assembler/manifests and actual CLI inspection |
-| Kepler | `01a0ef42-35e5-78a2-b315-0e1bc6fb267e` | Original batch/source consumers; Toad310 paired packaging |
-| Schrodinger | `01a0ef00-6563-7ec0-9c64-564ece67a6eb` | Merged307 prompt actions; merged305+307 frontend stage |
-| Heisenberg | `01a0ee64-8b4f-7921-a359-2357a04a19e1` | Toad308/Textual22 full performance work |
+Core509/511/513/514 and Toad308/310 are merged. Toad296 is closed after its entire unique product delta was shown to be the superseded Core pin. Branches and original failed evidence are retained.
 
-Read the workers’ current threads before giving a status or assigning overlapping changes. They coordinate shared methods directly. Reuse these workers; do not start a second implementation or coordinator.
+**Default remains certified508**, Core74877 / Toad8b24 / Textual68a0 / Native5184. No new cutover has been executed. Public root `/var/tmp/agent-comms-live-20260927-wzjtqhza`, root identity `e206f3766e60451a989ca34df0e2a94b`.
 
-## Latest reconciled checkpoints
+The next paired package is `/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-goal513-514-20261002`: Core9ccc / receiving Toadf07f / Textual2382 / Native5184, normal69 and SDK0.12.1. All package/source/native inventories match; merged a8a3 has zero src/tools delta from9ccc.
 
-Core509 and511, Toad308 and receiving310 are now merged. Toad296 is closed as superseded after confirming its only product change was the older Core pin and that source is an ancestor of current main. Its branch and original failed gate remain intact. Textual22 implementation is pushed at f7770efd; its old scope-only head is no longer current. Heisenberg continues the complete performance scope in Toad311/Textual22. These changes are not yet in the default install.
+Mendel514 extends the existing RuntimeInstallation and stopped-store carry. The actual copied old ledger now admits the declaration-derived schema and preserves492 fact rows, all row identities and its original preimage. This source control is not the installed native/UI journey. Sch owns that one journey on the matching installed package. Parent alone publishes using the reviewed tools and authenticated original DDL.
 
-## Merged but not in the current default
+Original goal677e was saved ACTIVE before tool-end ledger bookkeeping failed. Its goal `aa78e918e8e24c5abcb9666dc586b339` remains ACTIVE and has no Generation row. Preserve it and the uncertain original input. Never resend, synthesize a grant or recreate it to hide the failure.
 
-- Core503/507, Toad298/302/304/305/307 and Textual21 are merged. Existing source/installed journey receipts cover their named changes.
-- Core512 is merged; its later source/lease and context-worker changes are integrated into open509. Do not look only at the closed512 head for that work.
-- Toad305 moves pure bar preparation into the existing process renderer. Its actual public journey passed warm16/input7 with22 body identities retained, but showed no overall CPU gain.
-- Toad307 removes copied prompt readiness/queue fields and routes buttons and keyboard through the same declared action. Its installed native queue/click journey passed with controlled localhost responses.
+Parent checked19 current executable public owners: all idle, all using the exact original508 interpreter. Client3149961 is still open. Recheck actual lifetimes/drafts before normal quit and publication; this observation does not authorize stale PID reuse.
 
-## Current default and protected artifacts
+## Current worker ownership
 
-Current resolved `agent-comms` prefix: `/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002`.
+- Arendt: merged513 declaration owner; full Native6 lifecycle489 integrated with506 and currentmain. Latest reported joined acquisition0e50; Kepler owns packaging.
+- Einstein: Native6 same-child preparation/compaction506 and the single configured saved-fork/cancel/continue journey after packaging and carry.
+- Mendel: merged514 goal installer/carry; Native6 original-proof carry510. Original sessions,341 UNKNOWN inputs and native proof links remain protected.
+- Kepler: receiving312 and the one urgent Native5 package; Native6 packaging follows independently. No duplicate builder or provider journey.
+- Schrodinger: actual installed goal/native/ACP/physical workflow. Inspect frames during provider and control transitions, not only after exit.
+- Heisenberg: entire remaining Toad311/Textual22 performance scope. Existing frame_enqueued/frame_flushed observer, recorder and profile must yield a frame-delivery timeline and timed motion sequences. Latest60fps capture was reviewed after completion; it does not prove smoothness.
+- Singer: merged511 context assembly/manifests; existing granted async manifest closure and remaining S5 ownership evidence.
 
-Default remains Core74877 / Toad8b24 / Textual68a0 / Native5184. The public root is `/var/tmp/agent-comms-live-20260927-wzjtqhza`, identity `e206f3766e60451a989ca34df0e2a94b`. Native5 stays unchanged for the async checkpoint.
+Read their actual threads before reporting activity or assigning overlapping work. They coordinate shared-file ownership directly.
 
-Keep these worktrees/artifacts until publication and borrower checks say otherwise:
+## Visual performance verification
 
-- `/home/ts/wt/toad-receiving-native5-batch490-20261001`: contains the **current default** `.artifacts/runtime-certified508-corrected-candidate-20261002` and new310 `.artifacts/runtime-async-selected509-20261002`.
-- `/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001`: active308 plus qualified305 `.artifacts/runtime-sidebar-process305-20261002` and public recordings.
-- `/home/ts/wt/toad-prompt-action-owner-20261002`: merged307 source, original native journey and combined305/307 staging owned by Schrodinger.
-- `/home/ts/wt/toad-merged-selection-sidebar-20261002`: merged304 receiving proofs and fallback candidate; activation metadata corrected to reference the source proof, with the actual journey receipt separate.
-- `/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23`: currently used native package; preserve it.
-- Parent432 `.release-private/merged297-505-certified508-20261002/publication.json` records the **already executed** default publication. Never rerun that one-use publisher.
-- Parent432 `.release-private/merged503-305-process-20261002/` is prepared and **not executed**. Read-only preflight refused one active owner; no defaults/root/packages/owners changed.
+Recording at60fps is not evidence that the application delivers60fps. The latest103s capture still records visual assessment as unreviewed/deferred. Readable phase screenshots and a short contact sheet do not prove fluidity.
 
-## Next actions and current issues
+Every necessary integration run must include visual inspection while active. Reuse the existing opt-in frame delivery trace: timeline of rolling delivered frame rate, longest gaps during held PageUp/PageDown/reverse/End, and consecutive timestamped frames at those gaps, correlated with CPU samples. Idle zero motion is legitimate; key-repeat and scroll-travel establish actual demand. Keep requested recording rate configurable, including144Hz work. Use isolated st/Xvfb; never seize the user desktop.
 
-1. Schrodinger has qualified the merged305/307 frontend at `/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-sidebar-prompt-actions-20261002` (Toadf207/Coread7/Text2382/Native5184, normal69). Its installed saved-history, warm return, rename, queued input, SendNow click, reply and draft journey passed with four controlled localhost requests. Parent has prepared `.release-private/merged503-305-307-prompt-20261002/`; it has not executed. Its preflight refused the still-open public Toad client3149961 before mutation. Inspect and preserve drafts before a normal quit, then publish at an actual idle window; preserve live work, sessions, drafts, original wire and uncertain inputs. No format reset or input replay for Native5.
-2. Kepler has packaged310: Coreca4 / Toad26b425 (merged307+305) / Textual2382 / Native5184, normal69 packages. That journey has ended in private `/home/ts/wt/b509c01`: three configured saved forks, wave3 per owner, concurrent readers and650 unrelated retained rows. The raw driver receipt timed out. Arendt reports all nine original claims completed by43.03s and three original full-turn proofs; the driver waited for a current cursor to remain FULL after later relevance turns advanced it. Arendt is checking the original proofs and correcting the existing observer; preserve the raw failure and do not replay its inputs. No public input or default mutation. This is independent of the Native6 compaction carry.
-3. Einstein/Arendt are removing the proposed global provenance digest because23 actual historical ContextManifest refs lack it. The existing frozen InputTaskFact.source/StoredInput.digest owns content identity. Mendel’s carry preserves original bytes. No compatibility default, silent rehash or original rewrite.
-4. Heisenberg’s latest308 deletes mirrored channel row fields, shares the original publication owner and reduces repeated class/style updates. Its changed physical public recording at `/home/ts/.cache/agent-scratch/sidebar-owner308-public-20261002-01/capture` has finished: exit1, original owner epoch unchanged, cleanup empty. One predicate failed (`held_page_down_admitted_newer_source`): the observer discarded within-page start/stop offsets. Heisenberg corrected all NativePhase consumers through the existing TranscriptPageAdmission and reassessed the same original recording, with raw exit1 preserved separately. Scoped308 is now Ready at063c4981: warm16/input7 and18 ready body identities. CPU was73.8–87.2% scrolling,31.22% mid-history idle and22.66% at End; the baseline is unmatched, so this proves no overall CPU gain. No new capture or provider replay; full performance scope remains open.
-5. The active `compaction499-live-architecture-memory` owner was doing newer authorized context-inspector work, not a dead compaction test. Einstein verified live native tool progress. Do not kill it based on the old test name. Planning-only309 is a separate user instruction, not permission to implement the inspector.
-6. Missed-message report: canonical sends347 and349 from that thread to `agent-comms-ux` exist; actual message notifications mark both **Responded**, busy=false. User did not see receipt feedback. Record this as a display/feedback discrepancy; publication alone does not prove what the user saw.
+The raw latest recording is `/home/ts/.cache/agent-scratch/native-style22-public-20261002-01/capture/terminal.mp4`. Parent inspected after-run motion at18.7–21.1s:144 captured frames, first message-area unchanged interval0.467s and later longest0.100s. These pixel holds need demand/profile correlation before being called stalls. No new run was started for this inspection.
+
+## Worktree reuse and cleanup
+
+Reuse a finished isolated checkout by switching to a new branch. Create another worktree only for genuinely concurrent source changes or a different repository. Publish unfinished implementation as a branch checkpoint; a local stash does not make work reviewable. Do not switch a checkout still borrowed by a running source job. Remove closed clean checkouts after confirming their branches are published and no runtime, proof or process needs their paths. Most fresh Core checkout size is repeated tracked historical evidence, not source.
+
+## Protected artifacts and cleanup
+
+- Receiving312 worktree contains both the current default508 and new goal513/514 prefix. Do not remove either while in use.
+- Heisenberg worktree contains original recorded performance evidence and current paired source. Clean only disposable output after borrower/process checks.
+- Sch worktree retains merged307 native queue/click evidence and current goal journey.
+- Preserve `/home/ts/wt/comms-selected-native-compaction-budget-20261001/stack/.pi-native-5184ffa6d842fe23`; it is the currently used native package.
+- Parent `.release-private/merged297-505-certified508-20261002/publication.json` is the already executed publication. Never rerun it.
+- Older305/307 publishers were not executed and are superseded. The new parent one-use directory is `.release-private/merged509-513-514-sidebar308-20261002/`; it has not published anything.
 
 ## Full scope and working rules
 
-Continue the full original goal, not only the recent checkpoints. [15-GOAL-CHECKLIST.md](15-GOAL-CHECKLIST.md) retains the original T2/T3/T4, workspace/resource, lifecycle, compaction, scrolling and S1/S3/S4/S5 scope. The full prior requirement audit is `/home/ts/.cache/agent-scratch/toad297-command-source-20261002/FULL-ORIGINAL-GOAL-CLOSURE-20261002.md`.
+The full original goal remains active. [15-GOAL-CHECKLIST.md](15-GOAL-CHECKLIST.md) retains T2/T3/T4, workspace/resource, lifecycle, compaction, scrolling and S1/S3/S4/S5. The earlier full requirement audit is `/home/ts/.cache/agent-scratch/toad297-command-source-20261002/FULL-ORIGINAL-GOAL-CLOSURE-20261002.md`. A planning-only context inspector309 is not authorization to implement it.
 
-Read [OPENHCS-HISTORY.md](OPENHCS-HISTORY.md), the latest NRA/refactor-audit archive and [the standing prompt](../../../.pi/APPEND_SYSTEM.md). One fact, one existing owner; migrate every consumer and delete the copies. Use shared behavior, hooks, mixins, metaclasses and context managers where they remove work. Source reasoning first; proportionate tests and the actual installed path last. Speak plainly. Ship useful checkpoints; CI is deferred. Preserve dirty shared checkouts and other agents’ work. Clean only verified owned disposable output.
-
-Existing configured multi-owner driver for the509 journey: `/home/ts/wt/comms-channel-reply-batch-policy-20261002/tests/shared_bus_restart_native.py`. Use a new owned stage with `--owners 3 --collective --wave-size 3 --configured-pure-channel --configured-owner openhcs-helper --configured-peers openhcs-helper2 openhcs-architecture-memory`, the exact receiving Python and native package. The original `/home/ts/wt/b503507c01` is evidence: never rerun or replay its inputs. Arendt owns the new journey.
-
-## Watching tests and the actual UI
-
-Workers can read stdout/stderr during a running test through the execution session. For visual checks, the existing Toad `tools/performance/capture_live.py` exports actual Textual screens and records profiles; the physical terminal capture journey records rendered frames. Inspect those frames together with the profile. A passing test log does not establish smooth scrolling or correct visible feedback. Use an isolated terminal/display for interaction; do not seize Tristan’s desktop or mouse.
-
-## New live goal failure — 2026-10-02
-
-Diagnostic `677e7d84a1694f5aa74f932501e14c0d` is from `agent-comms-ux`. The installed `FailedTurnEvidence` declaration adds `model_request_failed` to the SQL reason constraint, while the original live goal ledger lacks it. A read-only comparison found that this is the only schema-object difference; both versions report `GoalAttemptSchema(1,6)`. Successful `comms_set_goal` is followed by the goal account opening that ledger and failing its schema assertion. The registry goal remains stored and active (`aa78e918e8e24c5abcb9666dc586b339`, revision1). Do not resend the original input or remove the ledger.
-
-Arendt owns source PR513 in `/home/ts/wt/comms-goal-ledger-declared-schema-20261002`; Mendel owns preserving installation PR514 in `/home/ts/wt/comms-goal-ledger-schema-carry-20261002`. This Native5 blocker must not wait on Native6 work. The next release must preserve goal ledger rows and qualify its target schema alongside the other durable stores. No live fix has been applied yet. Publication of the pending305/307 cohort is paused until the existing installation machinery also carries and verifies this ledger; that candidate has the same schema mismatch. This is a demonstrated incompatibility, not an optional check.
-
-The required synchronization belongs to the existing declaration/schema/install owners. Derive the target from GoalLedgerTable and TypedTable declarations, preserve existing rows through the shared carry mechanism, and cover all generated constraints affected by family growth. Do not require the user to perform manual SQL, maintain a second per-table schema list, or separately coordinate every new failure case.
-
-Batch related source corrections first, then batch checks around the affected complete workflow. Every check must name a concrete failure it catches. “Best practice” is not a reason. Source reasoning comes first, validation last; use the actual OpenHCS PR examples rather than adding ceremony. This direction was sent to all seven workers.
-
-## Current publication order
-
-The old305/307 one-use publisher remains unexecuted and superseded by the next combined cohort. Kepler owns one receiving stage with merged509/511/308/310 plus the closed513/514 goal schema and installer changes. Mendel supplies the declared-schema carry; Schrodinger owns one installed saved-fork/native/ACP/physical goal journey. Parent publishes defaults after that path is verified. Native6 lifecycle506/489/carry510 and full performance311/Textual22 continue independently; neither is an artificial gate for this Native5 release. Heisenberg may record changed renderer performance while publication is paused; parent coordinates the actual capture lifetime before cutover.
+Read [OPENHCS-HISTORY.md](OPENHCS-HISTORY.md), current NRA/refactor-audit guidance and [the standing prompt](../../../.pi/APPEND_SYSTEM.md). Trace facts through owner/storage/lifecycle/all consumers first. Extend existing classes, make abstractions carry behavior, delete other authorities in the same change. Batch coherent source changes, then proportionate checks and the actual installed user path. CI is deferred. Preserve dirty shared work, history and uncertain inputs. Ship useful checkpoints and clean owned disposable artifacts.

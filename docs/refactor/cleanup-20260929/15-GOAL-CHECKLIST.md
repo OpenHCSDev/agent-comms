@@ -1,27 +1,31 @@
-## Merged source and current live goal blocker — 2026-10-02 06:27 UTC
+## Goal schema source and preserving installer merged — 2026-10-02
 
-Core509 mergedf913; Core511 merged after normal main integration with zero
-additional production delta. Toad308 merged5dab and receiving310 mergedb8f2.
-Toad296 is closed as superseded after full unique-product delta review.
-Default remains certified508. No new public cutover or input replay occurred.
+Core513 merged57aeb5e and514 mergeda8a3ba05. Merged src/tools are
+byte-identical to staged9ccc. The existing declaration family owns schema
+identity; literal6 and both copied marker construction sites are deleted.
+The existing RuntimeInstallation automatically authenticates/carries changed
+goal constraints during the same stopped publication, preserving492 factrows
+and physical row identities in the actual copied493-row original ledger.
+This is verified source carry, not installed native/UI acceptance.
 
-Actual goal677e was saved before tool-end ledger reopen failed: FailureReason
-grew model_request_failed, generating changed SQL while the manually maintained
-GoalAttemptSchema marker still claimed6. Source513 removes the manual marker,
-deriving identity from all existing GoalLedgerTable declarations. Mendel514
-extends the existing installer/carry to include this ledger and preserve every
-row. Sch owns one real installed goal workflow; Kepler one paired stage; parent
-publishes. This Native5 release is independent of remaining Native6 work.
+Kepler312 has the one normal69 Native5 goal package. Sch owns one affected
+saved-fork/native/ACP/physical goal journey; parent owns the one-use publication.
+Default remains508. All19 observed public executable owners were idle, using
+exact508; client3149961 remains open and requires fresh draft/lifetime checks.
+No public store mutation, stop or replay occurred.
 
-Full performance continues311/Textual22. Text22 f777 commits the existing Styles
-batch lifetime used by compiled CSS and programmatic mutations, combining
-inherited cache invalidation. Source74 checks passed2.31s; changed installed
-recording/profile remains. No overall CPU/144Hz claim.
+The latest performance video exists at60fps, but its visual assessment was
+unreviewed/deferred. Heisenberg inspected frames after completion. This fails
+the existing requirement to inspect every integration run while active.
+Heisenberg owns actual application frame-delivery timeline and motion review
+through the existing recorder/frame-flush observer, including held/reverse/End,
+idle and CPU correlation. Captured FPS is not delivered FPS; no smoothness
+or overall CPU gain claim is established. Full311/Textual22 scope continues.
 
-All original scope below remains active. Batch coherent owner/all-consumer
-changes first, then proportionate checks for concrete failure mechanisms and
-the real installed path. Do not repeat unchanged gates or use best practice
-as justification.
+Full Native6 lifecycle489/preparation506/carry510 continues independently.
+All original T2/T3/T4 and S1/S3/S4/S5/workspace scope remains active below.
+Historical checkpoint notes follow; current state above supersedes their
+then-current source/installation status.
 
 ## Working checkpoints merged; publication and runtime work continue — 2026-10-02
 
