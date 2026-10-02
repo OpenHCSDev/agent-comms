@@ -36,7 +36,19 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
-async def run(stage, package, source_file):
+def unchanged_launch(environment):
+    """Ordinary configured launch when no private observation is requested."""
+
+
+def ordinary_source():
+    public = wire()
+    snapshot = public.registry.snapshot()
+    original = snapshot.require_active('openhcs-architecture-memory')
+    return original, RetainedOwnerLaunch.capture(original, snapshot)
+
+
+async def run(stage, package, source_file, *, capture_source=ordinary_source,
+              observe_launch=unchanged_launch):
     import agent_comms
     installed = Path(agent_comms.__file__).resolve().parent
     checkout = Path(__file__).resolve().parents[1]
@@ -47,10 +59,7 @@ async def run(stage, package, source_file):
     started = time.monotonic()
     receipt = {'complete': False, 'public_inputs': 0, 'input_replays': 0,
                'installed_UI': False, 'acceptance_scope': 'configured SDK/ACP/native saved-source compaction and distinct input'}
-    public = wire()
-    snapshot = public.registry.snapshot()
-    original = snapshot.require_active('openhcs-architecture-memory')
-    launch = RetainedOwnerLaunch.capture(original, snapshot)
+    original, launch = capture_source()
     original_hash = digest(source_file)
     verify_native_package(package)
     service = Comms(stage/'wire')
@@ -78,6 +87,7 @@ async def run(stage, package, source_file):
             model=original.model, thinking_level=original.thinking_level))
     owner = service.registry.require('source529')
     environment.update(owner.native_environment(service.root, service.registry.snapshot(), owner.worktree))
+    observe_launch(environment)
     os.environ.clear(); os.environ.update(environment)
     agent = CommsAgent(service, agent_bin=str(binary), agent_args=list(launch.arguments or ()),
         runtime_enabled=True, auto_wake=False, private_nk_native_package=package,
