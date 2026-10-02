@@ -101,13 +101,6 @@
     },
     {
       "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
-      "path": "src/agent_comms/store_files.py",
-      "line": 163,
-      "kind": "FunctionDef",
-      "source": "def _atomic_write_text(path: Path, text: str, *, fsync_parent: bool=False, mode: int=PrivateFileRole.permissions) -> None:\n    \"\"\"Replace a snapshot; private guarded writes also durably sync its name.\"\"\"\n    path.parent.mkdir(parents=True, exist_ok=True)\n    fd, temporary = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.tmp', dir=path.parent)\n    temporary_path = Path(temporary)\n    try:\n        with os.fdopen(fd, 'w', encoding='utf-8') as output:\n            os.chmod(temporary_path, mode)\n            output.write(text)\n            output.flush()\n            os.fsync(output.fileno())\n        _replace_snapshot(temporary_path, path)\n        if fsync_parent and os.name == 'posix':\n            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))\n            try:\n                os.fsync(directory_fd)\n            finally:\n                os.close(directory_fd)\n    finally:\n        temporary_path.unlink(missing_ok=True)"
-    },
-    {
-      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
       "path": "src/agent_comms/thread_management.py",
       "line": 37,
       "kind": "ImportFrom",
@@ -318,62 +311,6 @@
     },
     {
       "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-      "path": "tools/cutover/global_extension_activation.py",
-      "line": 16,
-      "kind": "ImportFrom",
-      "source": "from agent_comms.store_files import _atomic_write_text"
-    },
-    {
-      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-      "path": "tools/cutover/global_extension_activation.py",
-      "line": 22,
-      "kind": "ClassDef",
-      "source": "@dataclass(frozen=True)\nclass GlobalSourceInstall(ABC):\n    source: ReviewedArtifact\n    destination: Path\n\n    def require_original(self):\n        self.source.require_original()\n        TrustedAncestorRole.require(self.destination.parent.lstat())\n        self.require_destination()\n\n    @abstractmethod\n    def require_destination(self):\n        pass\n\n    @abstractmethod\n    def retain_original(self, directory: Path):\n        pass\n\n    def install(self):\n        self.require_original()\n        _atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())\n        if digest(self.destination) != self.source.sha256:\n            raise RuntimeError(f'Installed global source differs: {self.destination}')\n\n    def installation_mode(self) -> int:\n        return 384"
-    },
-    {
-      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-      "path": "tools/cutover/global_extension_activation.py",
-      "line": 51,
-      "kind": "ClassDef",
-      "source": "@dataclass(frozen=True)\nclass ReplaceGlobalSource(GlobalSourceInstall):\n    original: ReviewedArtifact\n\n    def installation_mode(self) -> int:\n        return stat.S_IMODE(self.original.path.stat().st_mode)\n\n    def require_destination(self):\n        if self.original.path != self.destination:\n            raise RuntimeError('Source preimage names another destination')\n        if self.destination.is_symlink() or not self.destination.is_file():\n            raise RuntimeError('Global source must be a regular file')\n        self.original.require_original()\n\n    def retain_original(self, directory):\n        self.require_original()\n        preimage = directory / self.destination.name\n        _atomic_write_text(preimage, self.destination.read_text(), fsync_parent=True)\n        if digest(preimage) != self.original.sha256:\n            raise RuntimeError('Global source changed while preserving its preimage')"
-    },
-    {
-      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-      "path": "tools/cutover/global_extension_activation.py",
-      "line": 46,
-      "kind": "FunctionDef",
-      "source": "def installation_mode(self) -> int:\n    return PrivateFileRole.permissions"
-    },
-    {
-      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-      "path": "tools/cutover/global_extension_activation.py",
-      "line": 46,
-      "kind": "FunctionDef",
-      "source": "def installation_mode(self) -> int:\n    return PrivateFileRole.permissions"
-    },
-    {
-      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-      "path": "tools/cutover/global_extension_activation.py",
-      "line": 41,
-      "kind": "Call",
-      "source": "_atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())"
-    },
-    {
-      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-      "path": "tools/cutover/global_extension_activation.py",
-      "line": 41,
-      "kind": "Call",
-      "source": "_atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())"
-    },
-    {
-      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-      "path": "tools/cutover/global_extension_activation.py",
-      "line": 42,
-      "kind": "Call",
-      "source": "self.installation_mode()"
-    },
-    {
-      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
       "path": "tools/cutover/install_retained_routing.py",
       "line": 10,
       "kind": "ImportFrom",
@@ -483,6 +420,92 @@
       "line": 72,
       "kind": "Call",
       "source": "_atomic_write_text(self.originals / name, contents.decode(), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 15,
+      "kind": "ImportFrom",
+      "qualified_owner": null,
+      "source": "from agent_comms.private_path import PrivateFileRole, TrustedAncestorRole"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 16,
+      "kind": "ImportFrom",
+      "qualified_owner": null,
+      "source": "from agent_comms.store_files import _atomic_write_text"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 22,
+      "kind": "ClassDef",
+      "qualified_owner": "GlobalSourceInstall",
+      "source": "@dataclass(frozen=True)\nclass GlobalSourceInstall(ABC):\n    source: ReviewedArtifact\n    destination: Path\n\n    def require_original(self):\n        self.source.require_original()\n        TrustedAncestorRole.require(self.destination.parent.lstat())\n        self.require_destination()\n\n    @abstractmethod\n    def require_destination(self):\n        pass\n\n    @abstractmethod\n    def retain_original(self, directory: Path):\n        pass\n\n    def install(self):\n        self.require_original()\n        _atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())\n        if digest(self.destination) != self.source.sha256:\n            raise RuntimeError(f'Installed global source differs: {self.destination}')\n\n    def installation_mode(self) -> int:\n        return PrivateFileRole.permissions"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 39,
+      "kind": "FunctionDef",
+      "qualified_owner": "GlobalSourceInstall.install",
+      "source": "def install(self):\n    self.require_original()\n    _atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())\n    if digest(self.destination) != self.source.sha256:\n        raise RuntimeError(f'Installed global source differs: {self.destination}')"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 46,
+      "kind": "FunctionDef",
+      "qualified_owner": "GlobalSourceInstall.installation_mode",
+      "source": "def installation_mode(self) -> int:\n    return PrivateFileRole.permissions"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 51,
+      "kind": "ClassDef",
+      "qualified_owner": "ReplaceGlobalSource",
+      "source": "@dataclass(frozen=True)\nclass ReplaceGlobalSource(GlobalSourceInstall):\n    original: ReviewedArtifact\n\n    def installation_mode(self) -> int:\n        return stat.S_IMODE(self.original.path.stat().st_mode)\n\n    def require_destination(self):\n        if self.original.path != self.destination:\n            raise RuntimeError('Source preimage names another destination')\n        if self.destination.is_symlink() or not self.destination.is_file():\n            raise RuntimeError('Global source must be a regular file')\n        self.original.require_original()\n\n    def retain_original(self, directory):\n        self.require_original()\n        preimage = directory / self.destination.name\n        _atomic_write_text(preimage, self.destination.read_text(), fsync_parent=True)\n        if digest(preimage) != self.original.sha256:\n            raise RuntimeError('Global source changed while preserving its preimage')"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 54,
+      "kind": "FunctionDef",
+      "qualified_owner": "ReplaceGlobalSource.installation_mode",
+      "source": "def installation_mode(self) -> int:\n    return stat.S_IMODE(self.original.path.stat().st_mode)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 41,
+      "kind": "Call",
+      "source": "_atomic_write_text(self.destination, self.source.path.read_text(), fsync_parent=True, mode=self.installation_mode())"
+    },
+    {
+      "repository": "/home/ts/wt/comms-cleanup-live-integration-20260929",
+      "path": "tools/cutover/global_extension_activation.py",
+      "line": 67,
+      "kind": "Call",
+      "source": "_atomic_write_text(preimage, self.destination.read_text(), fsync_parent=True)"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/store_files.py",
+      "line": 19,
+      "kind": "ImportFrom",
+      "qualified_owner": null,
+      "source": "from .private_path import PrivateFileRole"
+    },
+    {
+      "repository": "/home/ts/wt/comms-task-aware-native-bundle-20261002",
+      "path": "src/agent_comms/store_files.py",
+      "line": 163,
+      "kind": "FunctionDef",
+      "qualified_owner": "_atomic_write_text",
+      "source": "def _atomic_write_text(path: Path, text: str, *, fsync_parent: bool=False, mode: int=PrivateFileRole.permissions) -> None:\n    \"\"\"Replace a snapshot; private guarded writes also durably sync its name.\"\"\"\n    path.parent.mkdir(parents=True, exist_ok=True)\n    fd, temporary = tempfile.mkstemp(prefix=f'.{path.name}.', suffix='.tmp', dir=path.parent)\n    temporary_path = Path(temporary)\n    try:\n        with os.fdopen(fd, 'w', encoding='utf-8') as output:\n            os.chmod(temporary_path, mode)\n            output.write(text)\n            output.flush()\n            os.fsync(output.fileno())\n        _replace_snapshot(temporary_path, path)\n        if fsync_parent and os.name == 'posix':\n            directory_fd = os.open(path.parent, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))\n            try:\n                os.fsync(directory_fd)\n            finally:\n                os.close(directory_fd)\n    finally:\n        temporary_path.unlink(missing_ok=True)"
     }
   ],
   "scope": "One atomic writer; original new-source/private600 default and reviewed replaced-file mode via existing hook. No postreplacechmod/newatomicwriter/class. Dynamic aliases/external Python users not proven by AST; unchanged default preserves their contract.",
