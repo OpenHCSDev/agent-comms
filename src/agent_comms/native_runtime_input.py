@@ -179,6 +179,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             parameters=(user.input_id, str(reader.path), reader.session_id),
         )
         for row in rows:
+            user.require_tracked_user()
             if row.reference.recorded and row.session_entry_id != user.id:
                 raise IdentityConflict("Native transcript input conflicts with its original entry")
         return rows
@@ -191,7 +192,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         frozen; TranscriptRead's original publication revision fences appends.
         """
         entry = record.entry
-        user = entry.tracked_user if entry.input_boundary else reader.input_ancestor(record)
+        user = entry if entry.input_boundary else reader.input_ancestor(record)
         originals, publications = (), ()
         if user is not None:
             with cls._publication_read(root) as db:
