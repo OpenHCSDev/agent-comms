@@ -86,3 +86,23 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     decoded = Prompt.from_wire(command.to_rpc())
     assert decoded == command
     assert decoded.message.encode() == raw and decoded.images == images
+
+
+def test_current_relevance_resource_is_frozen_with_coordination_provenance(tmp_path, monkeypatch):
+    from agent_comms.turn_context import CoordinationSegment, InstructionFile
+    from agent_comms.wake_policy import WakePolicy
+
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    original = WakePolicy.relevance_instruction()
+    captured = CoordinationSegment.capture(owner, ())
+    assert original.source in captured.provenance
+    assert hashlib.sha256(original.content.encode()).hexdigest() == original.source.sha256
+
+    def changed_instruction(cls, name):
+        raise AssertionError('Captured instructions must not reread the current file')
+
+    monkeypatch.setattr(InstructionFile, 'read', classmethod(changed_instruction))
+    assert original.content in captured.text()
+    assert original.content in captured.summary_instructions(None)
+    assert captured.response_instruction.source == original.source

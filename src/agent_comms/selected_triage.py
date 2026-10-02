@@ -23,6 +23,16 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
     family_discriminator = "decision"
 
     @classmethod
+    def output_instruction(cls) -> str:
+        names = [member.declared_name for member in cls.members_with(cls)]
+        return (
+            f"Output ONLY a JSON object with one key {cls.family_discriminator} and "
+            f"one of these declared values: {json.dumps(names)}. "
+            "No tools, extra keys, prose or markdown. "
+            "Original messages are the selected JSON above.\n"
+        )
+
+    @classmethod
     def parse(cls, text: str) -> SelectedTriage:
         if not 0 < len(text.encode("utf-8")) <= 256:
             raise InvalidTriageDecision("triage response is not bounded")

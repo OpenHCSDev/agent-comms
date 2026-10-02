@@ -286,6 +286,7 @@ class PeerState:
 
 @dataclass(frozen=True, kw_only=True)
 class CoordinationSegment(InstructionSegment):
+    response_instruction: InstructionFile
     owner: ThreadIncarnation
     parent: str | None
     project: str
@@ -293,7 +294,10 @@ class CoordinationSegment(InstructionSegment):
 
     @classmethod
     def capture(cls, owner: Thread, views: tuple[ThreadView, ...]) -> CoordinationSegment:
+        from .wake_policy import WakePolicy
+
         instruction = InstructionFile.read("coordination.md")
+        response_instruction = WakePolicy.relevance_instruction()
         peers = tuple(
             PeerState.from_view(view)
             for view in sorted(views, key=lambda v: v.thread.name)
@@ -301,8 +305,10 @@ class CoordinationSegment(InstructionSegment):
         )[:50]
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return cls(
-            provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source),
+            provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source,
+                        response_instruction.source),
             instruction=instruction,
+            response_instruction=response_instruction,
             owner=owner.incarnation,
             parent=owner.parent,
             project=owner.worktree,
@@ -311,6 +317,7 @@ class CoordinationSegment(InstructionSegment):
 
     def values(self) -> dict[str, object]:
         return dict(
+            response_instruction=self.response_instruction.content,
             name=self.owner.name,
             parent=self.parent,
             project=self.project,
