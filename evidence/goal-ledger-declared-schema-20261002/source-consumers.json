@@ -1,0 +1,357 @@
+{
+  "head": "c7cddb15aee444ec82509400d7beb9c3235a2503",
+  "method": "existing refactor-audit ParsedModule and Python AST, declared roots src/tests/tools; calls are lexical, inherited/dynamic receivers resolved by source reading",
+  "parsed": 719,
+  "omissions": [],
+  "declarations": [
+    {
+      "file": "src/agent_comms/goal_attempts.py",
+      "line": 313,
+      "name": "GoalAttemptSchema",
+      "bases": [
+        "GoalLedgerTable",
+        "TypedTable"
+      ]
+    },
+    {
+      "file": "src/agent_comms/goal_attempts.py",
+      "line": 509,
+      "name": "GoalAttemptStore",
+      "bases": []
+    },
+    {
+      "file": "src/agent_comms/diagnostics.py",
+      "line": 48,
+      "name": "FailureReason",
+      "bases": [
+        "StrEnum"
+      ]
+    },
+    {
+      "file": "src/agent_comms/goal_failure_observation.py",
+      "line": 34,
+      "name": "GoalLedgerTable",
+      "bases": []
+    }
+  ],
+  "goal_tables": [
+    {
+      "file": "src/agent_comms/goal_attempts.py",
+      "line": 76,
+      "name": "Generation"
+    },
+    {
+      "file": "src/agent_comms/goal_attempts.py",
+      "line": 214,
+      "name": "AttemptRecord"
+    },
+    {
+      "file": "src/agent_comms/goal_attempts.py",
+      "line": 282,
+      "name": "GoalHumanDecision"
+    },
+    {
+      "file": "src/agent_comms/goal_attempts.py",
+      "line": 297,
+      "name": "GoalProviderUsage"
+    },
+    {
+      "file": "src/agent_comms/goal_attempts.py",
+      "line": 313,
+      "name": "GoalAttemptSchema"
+    },
+    {
+      "file": "src/agent_comms/goal_failure_observation.py",
+      "line": 54,
+      "name": "FailedTurnEvidence"
+    }
+  ],
+  "durable_failure_reason_fields": [
+    {
+      "file": "src/agent_comms/goal_failure_observation.py",
+      "line": 65,
+      "class": "FailedTurnEvidence",
+      "field": "reason",
+      "annotation": "FailureReason"
+    }
+  ],
+  "direct_calls": [
+    {
+      "file": "src/agent_comms/goal_attempts.py",
+      "line": 533,
+      "call": "assert_goal_attempt_schema"
+    },
+    {
+      "file": "src/agent_comms/goal_actions.py",
+      "line": 362,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "src/agent_comms/diagnostics.py",
+      "line": 119,
+      "call": "FailureReason"
+    },
+    {
+      "file": "src/agent_comms/goal_failure_observation.py",
+      "line": 238,
+      "call": "assert_goal_attempt_schema"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 37,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 52,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 59,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 118,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 132,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 153,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 161,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 186,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 207,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 254,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 278,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 295,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 395,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 464,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 488,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 548,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 570,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 47,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 80,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 317,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts.py",
+      "line": 315,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_stack_retry_running.py",
+      "line": 188,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_stack_retry_running.py",
+      "line": 213,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_runtime_goal_retry_running.py",
+      "line": 151,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts_windows.py",
+      "line": 25,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempts_windows.py",
+      "line": 32,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_resume.py",
+      "line": 136,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_failure_observation.py",
+      "line": 205,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_failure_observation.py",
+      "line": 286,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_failure_observation.py",
+      "line": 313,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_failure_observation.py",
+      "line": 90,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1042,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1116,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1202,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1288,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 721,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 994,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1164,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 993,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1381,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 875,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1088,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_acp.py",
+      "line": 1298,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempt_lifecycle.py",
+      "line": 28,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_attempt_lifecycle.py",
+      "line": 40,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_stack_goal_cancel_resume.py",
+      "line": 180,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_stack_goal_cancel_resume.py",
+      "line": 220,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_ui_creation.py",
+      "line": 69,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_ui_creation.py",
+      "line": 51,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_failure_native.py",
+      "line": 298,
+      "call": "GoalAttemptStore"
+    },
+    {
+      "file": "tests/test_goal_standby.py",
+      "line": 55,
+      "call": "GoalAttemptStore"
+    }
+  ],
+  "remaining_manual_version_6": 0,
+  "constraints_owner": "SqlStorage.constraints through TypedTable.schema_objects; same whole-family schema consumed by GoalAttemptSchema.current and strict readers"
+}
