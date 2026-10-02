@@ -166,10 +166,10 @@ class AdmissionChangedRule(ReservationRule):
 
 class ContentChangedRule(ReservationRule):
     check_type = InputSourceCheck
-    explanation = "The original input content changed after reservation."
+    explanation = "The original input provenance or content changed after reservation."
 
     def violated(self, check: InputSourceCheck) -> bool:
         return any(
-            not row.exists or row.key != original.key or row.digest != original.digest
+            not row.matches_original_provenance(original)
             for original, row in zip(check.source.originals, check.rows, strict=True)
         )

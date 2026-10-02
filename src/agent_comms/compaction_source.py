@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
-from .input_attempt import StoredInput
+from .input_origin import InputProvenance
 from .field_codec import FieldCodec, projected
 from .owner_compaction_prepare import NativeWitness
 from .retained_task_facts import RetainedTaskFacts
@@ -29,7 +29,7 @@ class CompactionSource:
     bus_revision: str
     input_revision: str
     retained: RetainedTaskFacts
-    pending_inputs: tuple[StoredInput, ...]
+    pending_inputs: tuple[InputProvenance, ...]
     settings_paths: tuple[str, ...] | None = None
     settings_revision: tuple[str, ...] | None = None
 

@@ -119,7 +119,7 @@ class SelectedSummaries(JournalRole):
                     if SelectedSummaryAttempt.blocking_in(db, canonical, inputs):
                         raise CompactionJournalError("Blocked selected summary; never replay")
                     SelectedSummaryAttempt(
-                        operation_id, canonical, payload, ReservedSummary()
+                        operation_id, canonical, payload, envelope, ReservedSummary()
                     ).insert(db)
         except sqlite3.IntegrityError as error:
             raise CompactionJournalError(

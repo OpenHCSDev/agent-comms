@@ -1,4 +1,4 @@
-"""Current selected-summary source records; journals reset at installation."""
+"""Current selected-summary source proofs; original journals require stopped carry."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from .child_process import ProcessIdentity
 from .coordination_errors import StaleRevision
 from .declared_family import DeclaredFamily
 from .private_path import FileRevision
-from .input_attempt import StoredInput
+from .input_origin import InputProvenance
 from .text_digest import TextDigest
 from .thread_identity import ThreadIncarnation, TurnId
 
@@ -142,7 +142,7 @@ class SelectedSource(DeclaredFamily, affix="Source"):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ManualSource(SelectedSource):
-    """Owner compaction with no reserved prompt, explicit or before private input."""
+    """Owner compaction without an InputDocument original-admission grant."""
 
     def summary_outcome(self, result, journal):
         return result.manual_summary(journal)
@@ -159,7 +159,7 @@ class ManualSource(SelectedSource):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SelectedAdmissionSource(SelectedSource):
-    originals: tuple[StoredInput, ...]
+    originals: tuple[InputProvenance, ...]
     admission_generation: int
     correction_witness: str
     input_digest: TextDigest
@@ -171,7 +171,7 @@ class SelectedAdmissionSource(SelectedSource):
     @classmethod
     def capture(cls, owner, turn, admission, keys, inputs, text, revision):
         """Derive the whole original witness once from its actual input document."""
-        rows = inputs.originals(keys)
+        rows = inputs.original_provenances(keys)
         if not rows:
             raise ValueError("Selected original input requires original receipts")
         digest = TextDigest.of(text)

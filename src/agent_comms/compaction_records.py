@@ -68,13 +68,6 @@ class SelectedSummarySource:
             )
         )
 
-    @classmethod
-    def read(cls, payload: str) -> SelectedSummarySource:
-        source = FieldCodec.decode(cls, json.loads(payload))
-        source.journal_json()
-        return source
-
-
 class JournalTable:
     """Tables whose schema and transactions belong to the compaction journal."""
 
@@ -166,11 +159,19 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
 class SelectedSummaryAttempt(
     UnresolvedJournalHistory, TypedTable, declared_name="selected_summary_attempts"
 ):
-    """Provider attempt reservation, not a summary or native commit receipt."""
+    """Provider reservation and its two distinct source evidence roles.
+
+    request is the current typed semantic source. source_json is the immutable
+    original byte string committed by SelectedCommitReference; it is never a
+    runtime decoder input. A stopped external declaration carry authenticates
+    historical requests without changing their original native proof bytes.
+    Neither role issues input admission or resolves an uncertain attempt.
+    """
 
     operation_id: str = field(metadata={"sql": Column(primary_key=True)})
     session_file: str
     source_json: str
+    request: SelectedSummarySource
     state: SummaryState
 
     indexes = (
@@ -188,12 +189,6 @@ class SelectedSummaryAttempt(
     def require_session(self, session_file: str) -> None:
         if self.session_file != session_file:
             raise CompactionJournalError("Selected summary reservation changed before commit")
-
-    def source(self) -> SelectedSource:
-        return self.envelope().source
-
-    def envelope(self) -> SelectedSummarySource:
-        return SelectedSummarySource.read(self.source_json)
 
     def require_transition(self, target: SummaryState) -> None:
         if not self.state.may_become(target):
@@ -247,8 +242,7 @@ class SelectedSummaryAttempt(
         cannot retire the reservation. Historical rows and IDs stay intact.
         """
         try:
-            envelope = self.envelope()
-            return envelope.source.original_has_started(inputs)
+            return self.request.source.original_has_started(inputs)
         except (KeyError, TypeError, ValueError):
             return False
 

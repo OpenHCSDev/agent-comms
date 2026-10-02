@@ -144,7 +144,7 @@ class HeldCompaction:
             bus_revision,
             TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,
             RetainedTaskFacts(facts).for_owner(owner, snapshot),
-            pending_inputs=inputs.originals(pending_input_keys),
+            pending_inputs=inputs.original_provenances(pending_input_keys),
             settings_paths=settings_paths,
             settings_revision=self.boundary.settings_revision(settings_paths),
         )

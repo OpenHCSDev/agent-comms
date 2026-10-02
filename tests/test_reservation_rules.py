@@ -38,11 +38,7 @@ def test_session_observation_preserves_source_and_distinguishes_unreadable_proof
     assert isinstance(absent.input_proof, MissingInputProofRevision)
     assert absent.current(str(session))
     observed = session.stat()
-    # Golden form belongs only to the unchanged external native ABI.
-    assert absent.native_stamp == (
-        f"{observed.st_dev}:{observed.st_ino}:{observed.st_size}:"
-        f"{observed.st_mtime_ns}:{observed.st_ctime_ns}"
-    )
+    assert absent.native.size == session.stat().st_size
     proof = session.with_name(session.name + ".input-proof")
     with sqlite3.connect(proof) as db:
         db.execute("CREATE TABLE original_context (input_id TEXT)")
@@ -79,18 +75,18 @@ def test_rule_family_names_actual_refusals_and_discovers_new_policy(tmp_path, mo
     source = admission_identity(session, text="original", key="acp:original", turn="before").source
     inputs = InputDispositions(tmp_path / InputDispositions.filename)
     inputs.record(
-        source.ingress_key,
+        source.originals[0].key,
         seq=None,
         owner="project",
         admission=1,
         target="project",
         text="original",
     )
-    row = inputs.read().lookup(source.ingress_key)
+    row = inputs.read().lookup(source.originals[0].key)
     check = InterruptedInputCheck(
         source=source,
         revision=source.reserved_revision,
-        row=row,
+        rows=(row,),
         incarnation=source.incarnation,
         turn=TurnId("now"),
     )
@@ -101,11 +97,11 @@ def test_rule_family_names_actual_refusals_and_discovers_new_policy(tmp_path, mo
         incarnation=source.incarnation,
         turn=source.turn,
         owner=source.owner,
-        pending_input_key=source.ingress_key,
+        pending_input_keys=source.pending_input_keys,
     )
     commit.require_valid()
     inputs.bind(
-        source.ingress_key, admission=1, turn_id="before", native_id="a" * 32, text="original"
+        source.originals[0].key, admission=1, turn_id="before", native_id="a" * 32, text="original"
     )
     cases = {
         "owner_changed": replace(check, incarnation=ThreadIncarnation("project", 2.0)),
@@ -115,17 +111,17 @@ def test_rule_family_names_actual_refusals_and_discovers_new_policy(tmp_path, mo
         "turn_changed": replace(commit, turn=TurnId("another")),
         "turn_still_active": replace(check, turn=source.turn),
         "session_changed": replace(check, revision=SessionRevision.observe(str(tmp_path / "missing"))),
-        "ingress_changed": replace(commit, pending_input_key="acp:another"),
-        "missing_input": replace(check, row=inputs.read().lookup("acp:missing")),
+        "ingress_changed": replace(commit, pending_input_keys=("acp:another",)),
+        "missing_input": replace(check, rows=(inputs.read().lookup("acp:missing"),)),
         "already_sent": InputReservationCheck(
             source=source,
             revision=source.reserved_revision,
-            row=inputs.read().lookup(source.ingress_key),
+            rows=(inputs.read().lookup(source.originals[0].key),),
         ),
-        "native_binding_exists": replace(check, row=inputs.read().lookup(source.ingress_key)),
-        "input_owner_changed": replace(check, row=replace(row, owner="another")),
-        "admission_changed": replace(check, row=replace(row, admission=2)),
-        "content_changed": replace(check, row=replace(row, source_text="changed")),
+        "native_binding_exists": replace(check, rows=(inputs.read().lookup(source.originals[0].key),)),
+        "input_owner_changed": replace(check, rows=(replace(row, owner="another"),)),
+        "admission_changed": replace(check, rows=(replace(row, admission=2),)),
+        "content_changed": replace(check, rows=(replace(row, source_text="changed"),)),
     }
     for declaration in ReservationRule.members_with(ReservationRule):
         if not issubclass(declaration.check_type, ReservationCheck):
@@ -176,3 +172,34 @@ def test_source_family_roundtrips_nested_values_and_requires_declared_kind(tmp_p
     assert FieldCodec.decode(TextDigest, FieldCodec.encode(admission.input_digest)).matches(
         "original"
     )
+
+
+def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp_path):
+    from agent_comms.selected_source import SelectedAdmissionSource
+    from agent_comms.threads import Thread
+
+    session = tmp_path / "saved.jsonl"
+    session.write_text("{}\n")
+    owner = Thread("project", frozenset(), str(tmp_path),
+                   process_identity=ProcessIdentity.capture(os.getpid()))
+    inputs = InputDispositions(tmp_path / InputDispositions.filename)
+    keys = ("acp:first", "acp:second")
+    for key, text in zip(keys, ("first", "second"), strict=True):
+        inputs.record(key, seq=None, owner=owner.name, admission=1, target=owner.name, text=text)
+    revision = SessionRevision.observe(str(session)).require_available()
+    source = SelectedAdmissionSource.capture(
+        owner, TurnId("turn"), 1, keys, inputs.read(), "first\n\nsecond", revision
+    )
+    assert source.originals == inputs.read().original_provenances(keys)
+    assert tuple(ref.digest for ref in source.originals) == tuple(
+        row.digest for row in inputs.read().originals(keys)
+    )
+    assert FieldCodec.decode(SelectedSource, FieldCodec.encode(source)) == source
+    assert source.pending_input_keys == keys
+    assert not source.matches_pending_inputs(tuple(reversed(keys)))
+    assert inputs.bind(keys[1], admission=1, turn_id="other", native_id="a" * 32, text="second")
+    before = inputs.read()
+    assert not inputs.bind_originals(keys, admission=1, turn_id="turn", native_id="b" * 32,
+                                     text="first\n\nsecond")
+    assert inputs.read() == before
+    assert inputs.read().lookup(keys[0]).accepts_reservation

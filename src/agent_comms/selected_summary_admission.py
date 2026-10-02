@@ -104,7 +104,7 @@ class SelectedSummaryAdmission:
             raise CompactionJournalError("Exact returned terminal fsync ACK required")
         try:
             attempt = terminal.attempt
-            source = attempt.envelope()
+            source = attempt.request
             identity.require_current(source, attempt.session_file)
             attempt.state.require_original_admission()
         except (TypeError, ValueError, OSError) as error:
