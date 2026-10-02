@@ -34,6 +34,55 @@ class CompactionBoundary:
     def root(self) -> Path:
         return self.registry.store.path.parent.resolve(strict=True)
 
+    def retained_history(self, owner: Thread, *, diff: bool = False):
+        """Inspect original attempts without constructing a journal writer."""
+        from .compaction_journal import CompactionJournal
+
+        try:
+            session_file = owner.require_saved_session()
+        except ValueError as error:
+            return dict(available=False, reason=str(error),
+                        scope="no canonical saved session; native facts cannot be inferred")
+        path = self.root / "compaction-commits.sqlite3"
+        if diff:
+            return CompactionJournal.retained_changes(path, session_file)
+        return CompactionJournal.retained_history(path, session_file)
+
+    def inspect(self, name: str):
+        """Observe current sources and original compaction cuts separately.
+
+        The current wire/registry/input cut is certified by its existing reader.
+        The journal has its own read transaction. Neither cut is an owner/writer
+        grant; future input queue membership and native branch/cut selection are
+        exclusively determined by hold/capture during actual compaction.
+        """
+        from .retained_context import RetainedSegment
+
+        with WireLog(self.root / "bus.jsonl").retained_sources(name, self.registry) as (
+            owner, snapshot, facts, inputs, export
+        ):
+            pinned = facts.original_input_facts(inputs)
+            authored = RetainedTaskFacts((*facts.facts, *pinned)).for_owner(owner, snapshot)
+            segment = RetainedSegment.capture(authored, owner, snapshot, export)
+            keys = tuple(dict.fromkeys((*inputs.owner_originals(owner),
+                                        *(row.key for fact in pinned for row in fact.input_sources()))))
+            originals = inputs.retained_task_facts(keys)
+            observed = RetainedTaskFacts((*facts.facts, *owner.retained_task_facts(),
+                                         *originals)).for_owner(owner, snapshot)
+        return dict(segment.inspection(),
+                    observations=dict(
+                        scope="current certified wire/registry/input read; durable owner inputs and pinned originals including queued and UNKNOWN; not a compaction admission",
+                        facts=FieldCodec.encode(observed),
+                    ),
+                    compaction=self.retained_history(owner),
+                    native_source_contract=(
+                        "NativeWitness.retained_task_facts reads only its exact session, leaf and file revision; "
+                        "NativeEvidenceRead preserves original request/result entry pairs. Current native leaf, "
+                        "uncaptured tool results and filesystem state are not inferred by this inspection. "
+                        "Original attempt requests/intents retain the facts captured by HeldCompaction; "
+                        "operation and summary states retain failures and UNKNOWN without replay."
+                    ))
+
     @contextmanager
     def hold(
         self,

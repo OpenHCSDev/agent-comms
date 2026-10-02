@@ -93,7 +93,7 @@ class PublicationMeasurements:
                 self.maximum_started_ns, self.maximum_finished_ns = started, finished
 
 
-def record_request_progress(root, lease, progress, *, native_process, publication=None):
+def record_request_progress(root, lease, progress, native_process, *, publication=None):
     """Append original measurements with the exact existing turn/owner fence.
 
     This private diagnostic does not contain prompt bodies, headers or credentials,

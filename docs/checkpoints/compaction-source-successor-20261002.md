@@ -16,6 +16,8 @@ Use the existing CompactionSource and RetainedTaskFacts. The held boundary remai
 
 Preparation changes only the original cut allocation. Native commit changes only the witnessed native successor. Manual summaries link a commit without admitting an input; adaptive summaries still recheck the full original source under writer/owner/input custody. No field is refreshed to make equality pass. Source refusal reports only differing declaration names, never private text or a new grant.
 
+Normal integration of frozen521 (`d056981f`) preserves its certified `retained_sources` context-manager lifetime. It yields the original owner, registry snapshot, task facts, inputs and export boundary, without a second message-wide source digest. The existing `RetainedSegment.capture` derives provenance once from its final captured `RetainedTaskFacts.source_digest`; both `WireLog.retained_context` and `CompactionBoundary.inspect` use that constructor. The two old digest helpers and every caller are removed, with no alias. Relative to frozen521,529 changes five production files: 30 lines added,25 deleted. Held capture, native successor and all durable intent contracts remain as described below.
+
 ## Delivery
 
 Source reasoning and complete caller migration precede validation. Original365 and every UNKNOWN remain untouched. This draft does not claim the installed application repaired.
@@ -47,3 +49,5 @@ The installed529 reader was also run read-only against the actual current journa
 The distinct private fork used the original 42,924,939-byte saved state, configured Sol/HIGH settings and native5184, through the installed SDK/ACP/native path with automatic extensions. A real peer reply was published while its summary streamed. The provider then exceeded the plan's output budget: retained 5,534, reasoning 0, budget 4,096. The native guard refused it before commit; the original follow-up prompt was never issued. Source bytes stayed identical and children closed. The failed attempt remains preserved without replay at `/home/ts/wt/s52901`.
 
 This is a **failed final gate**, not acceptance of commit/admission or a physical UI test. The independent summary-budget owner was notified. The source closure and original-record read verification remain reviewable; readiness requires an actually completed configured path, without replaying this uncertain provider attempt or weakening the budget guard.
+
+Focused final source checks:32 passed for original input, task decisions, recipient scope and native/source declarations. After the521 API integration,5 affected retained-inspection/export and recipient checks passed, covering the changed constructor and stream lifetime. Those results do not replace the failed configured gate.

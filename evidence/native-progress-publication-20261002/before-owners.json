@@ -1,0 +1,2431 @@
+{
+  "head": "b8e5b0334ba2b65545942e504a61dbe6423c6022",
+  "method": "NRA audit.findings.Package.load",
+  "scope": [
+    "src/agent_comms",
+    "tests",
+    "tools"
+  ],
+  "parse_failures": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 83,
+      "name": "NativePhaseChanged",
+      "context": "",
+      "bases": [
+        "AgentEvent"
+      ],
+      "fields": {
+        "phase": "TurnPhase",
+        "native_process": "ProcessIdentity"
+      }
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 263,
+      "name": "TurnSession",
+      "context": "",
+      "bases": [],
+      "fields": {
+        "active": "ClassVar[dict[asyncio.Task[Any], TurnSession]]"
+      }
+    },
+    {
+      "path": "src/agent_comms/diagnostics.py",
+      "line": 96,
+      "name": "record_request_progress",
+      "context": ""
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 143,
+      "name": "ModelRequestProgress",
+      "context": "",
+      "bases": [
+        "PiEvent"
+      ],
+      "fields": {
+        "progress": "'RequestProgress'"
+      }
+    },
+    {
+      "path": "src/agent_comms/request_progress.py",
+      "line": 8,
+      "name": "RequestProgress",
+      "context": "",
+      "bases": [
+        "PiPayload"
+      ],
+      "fields": {
+        "request_id": "str",
+        "session_id": "str",
+        "input_id": "str",
+        "started_at_ms": "int",
+        "observed_at_ms": "int",
+        "monotonic_ns": "str",
+        "elapsed_ms": "float",
+        "callback_ms": "float",
+        "callback_count": "int",
+        "callback_max_ms": "float",
+        "stage": "str",
+        "detail": "str",
+        "transport": "str",
+        "attempt": "int",
+        "status": "int | None",
+        "response_id": "str | None",
+        "callback": "str"
+      }
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 36,
+      "name": "SelectedParticipant",
+      "context": "",
+      "bases": [
+        "MroDispatch"
+      ],
+      "fields": {
+        "comms": "Comms",
+        "bus": "MessageBus",
+        "store": "Coordination",
+        "root_id": "str",
+        "owner": "RegistryOwner",
+        "identity": "ParticipantOwner",
+        "lookup": "str",
+        "batch": "SelectedSourceBatch",
+        "provider": "str",
+        "model": "str"
+      }
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 90,
+      "name": "native_phase",
+      "context": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 93,
+      "name": "record_native_phase",
+      "context": "SelectedParticipant"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 137,
+      "name": "TrackedTurnSession",
+      "context": "",
+      "bases": [
+        "TurnSession",
+        "MroDispatch"
+      ],
+      "fields": {}
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 29,
+      "name": "TurnPhase",
+      "context": "",
+      "bases": [
+        "DeclaredFamily"
+      ],
+      "fields": {
+        "detail": "str",
+        "stall_reason": "ClassVar[str]",
+        "pauses_input_clock": "ClassVar[bool]",
+        "busy": "ClassVar[bool]",
+        "accepts_prompt": "ClassVar[bool]",
+        "accepts_followup": "ClassVar[bool]",
+        "can_compact": "ClassVar[bool]",
+        "can_cancel": "ClassVar[bool]",
+        "activity_state": "ClassVar[ActivityState]",
+        "label": "ClassVar[str]"
+      }
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 166,
+      "name": "ModelWaitPhase",
+      "context": "",
+      "bases": [
+        "TurnPhase"
+      ],
+      "fields": {
+        "source": "RequestProgress | None"
+      }
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 24,
+      "name": "model_request",
+      "context": "StallExempt"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 99,
+      "name": "model_request",
+      "context": "TurnPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 103,
+      "name": "request_observations",
+      "context": "TurnPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 177,
+      "name": "request_observations",
+      "context": "ModelWaitPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 50,
+      "name": "TurnProgress",
+      "context": "",
+      "bases": [
+        "events.AgentEventConsumer"
+      ],
+      "fields": {}
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 241,
+      "name": "native_phase",
+      "context": "TurnProgress"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 23,
+      "name": "ProgressWatchdog",
+      "context": "",
+      "bases": [],
+      "fields": {}
+    }
+  ],
+  "references": [
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 178,
+      "name": "TurnPhase",
+      "context": "AgentActivity.transition_turn"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 85,
+      "name": "TurnPhase",
+      "context": "NativePhaseChanged"
+    },
+    {
+      "path": "src/agent_comms/agent_events.py",
+      "line": 349,
+      "name": "TurnPhase",
+      "context": "TurnState"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 324,
+      "name": "NativePhaseChanged",
+      "context": "TurnSession.native_phase_changes"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 295,
+      "name": "ProgressWatchdog",
+      "context": "TurnSession.__init__"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 324,
+      "name": "TurnPhase",
+      "context": "TurnSession.native_phase_changes"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 150,
+      "name": "TurnSession",
+      "context": "terminate_task_process"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 266,
+      "name": "TurnSession",
+      "context": "TurnSession"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 154,
+      "name": "TurnSession",
+      "context": "terminate_task_process"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 327,
+      "name": "NativePhaseChanged",
+      "context": "TurnSession.native_phase_changes"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "line": 233,
+      "name": "TurnSession",
+      "context": "stream_agent_events"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 89,
+      "name": "SelectedParticipant",
+      "context": "SelectedExecution.run"
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "line": 64,
+      "name": "NativePhaseChanged",
+      "context": "DurableTurn.excursion"
+    },
+    {
+      "path": "src/agent_comms/durable_turn.py",
+      "line": 69,
+      "name": "ModelWaitPhase",
+      "context": "DurableTurn.model"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 25,
+      "name": "TurnSession",
+      "context": "ExtensionUiSession.observe"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 32,
+      "name": "TurnSession",
+      "context": "ExtensionUiSession.choose"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 45,
+      "name": "TurnSession",
+      "context": "ExtensionUiSession.fail"
+    },
+    {
+      "path": "src/agent_comms/extension_ui.py",
+      "line": 50,
+      "name": "TurnSession",
+      "context": "ExtensionUiSession.answer"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 26,
+      "name": "TurnSession",
+      "context": "AttestationError.refuse"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "line": 32,
+      "name": "TurnSession",
+      "context": "IdentityAttestationError.refuse"
+    },
+    {
+      "path": "src/agent_comms/native_session_prepare.py",
+      "line": 25,
+      "name": "TurnSession",
+      "context": "NativeSessionPreparation"
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "line": 281,
+      "name": "TurnProgress",
+      "context": "OwnedTurn.open_stream"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 52,
+      "name": "TurnSession",
+      "context": "SessionSnapshot.invalidates_identity"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 63,
+      "name": "TurnSession",
+      "context": "MutatesSession.invalidates_identity"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 66,
+      "name": "TurnSession",
+      "context": "MutatesSession.steer"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 86,
+      "name": "TurnSession",
+      "context": "PiCommand.invalidates_identity"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 89,
+      "name": "TurnSession",
+      "context": "PiCommand.steer"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 123,
+      "name": "TurnSession",
+      "context": "PiCommand.on_response"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 140,
+      "name": "TurnSession",
+      "context": "Prompt.steer"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 182,
+      "name": "TurnSession",
+      "context": "Prompt.on_response"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 210,
+      "name": "TurnSession",
+      "context": "GetState.on_response"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 235,
+      "name": "TurnSession",
+      "context": "GetSessionStats.on_response"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 336,
+      "name": "TurnSession",
+      "context": "InterruptSteering.on_response"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 341,
+      "name": "TurnSession",
+      "context": "InterruptSteering.steer"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 358,
+      "name": "TurnSession",
+      "context": "SettingCommand.on_response"
+    },
+    {
+      "path": "src/agent_comms/pi_commands.py",
+      "line": 191,
+      "name": "ModelWaitPhase",
+      "context": "Prompt.on_response"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 62,
+      "name": "TurnSession",
+      "context": "PiEvent.consume"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 67,
+      "name": "TurnSession",
+      "context": "PiEvent.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 81,
+      "name": "TurnSession",
+      "context": "PiEvent.observe_abort"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 110,
+      "name": "TurnSession",
+      "context": "AgentSettled.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 147,
+      "name": "model_request",
+      "context": "ModelRequestProgress.observed_phase"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 154,
+      "name": "TurnSession",
+      "context": "AutoRetryEnd.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 182,
+      "name": "TurnSession",
+      "context": "RetryAttemptEvent.prepare_retry"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 185,
+      "name": "TurnSession",
+      "context": "RetryAttemptEvent.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 200,
+      "name": "TurnSession",
+      "context": "AutoRetryStart.prepare_retry"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 229,
+      "name": "TurnSession",
+      "context": "CompactionEnd.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 276,
+      "name": "TurnSession",
+      "context": "CompactionProgress.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 299,
+      "name": "TurnSession",
+      "context": "CompactionStart.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 322,
+      "name": "TurnSession",
+      "context": "TurnContextObserved.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 545,
+      "name": "TurnSession",
+      "context": "MessageEnd.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 560,
+      "name": "TurnSession",
+      "context": "MessageStart.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 574,
+      "name": "TurnSession",
+      "context": "MessageStart.observe_abort"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 586,
+      "name": "TurnSession",
+      "context": "MessageUpdate.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 627,
+      "name": "TurnSession",
+      "context": "Response.consume"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 659,
+      "name": "TurnSession",
+      "context": "Response.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 666,
+      "name": "TurnSession",
+      "context": "SteeringInterruptCompleted.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 673,
+      "name": "TurnSession",
+      "context": "SteeringInterruptStarted.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 688,
+      "name": "TurnSession",
+      "context": "SummarizationRetryFinished.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 709,
+      "name": "TurnSession",
+      "context": "ToolExecutionEnd.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 735,
+      "name": "TurnSession",
+      "context": "ToolExecutionStart.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 759,
+      "name": "TurnSession",
+      "context": "ToolExecutionUpdate.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 193,
+      "name": "ModelWaitPhase",
+      "context": "RetryAttemptEvent.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 162,
+      "name": "ModelWaitPhase",
+      "context": "AutoRetryEnd.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 263,
+      "name": "ModelWaitPhase",
+      "context": "CompactionEnd.apply"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 692,
+      "name": "ModelWaitPhase",
+      "context": "SummarizationRetryFinished.apply"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 49,
+      "name": "SelectedParticipant",
+      "context": "PrivateSendAdmission"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 92,
+      "name": "SelectedParticipant",
+      "context": "PrivateSendAdmission.reserve"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 134,
+      "name": "TrackedTurnSession",
+      "context": "PrivateSendAdmission.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 155,
+      "name": "TrackedTurnSession",
+      "context": "PrivateSendAdmission.execute"
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "line": 197,
+      "name": "TurnPhase",
+      "context": "Registration.transition_turn"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 89,
+      "name": "NativePhaseChanged",
+      "context": "SelectedParticipant.native_phase"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 96,
+      "name": "request_observations",
+      "context": "SelectedParticipant.record_native_phase"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 74,
+      "name": "TurnPhase",
+      "context": "SelectedParticipant.transition"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 90,
+      "name": "NativePhaseChanged",
+      "context": "SelectedParticipant.native_phase"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 93,
+      "name": "NativePhaseChanged",
+      "context": "SelectedParticipant.record_native_phase"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 97,
+      "name": "record_request_progress",
+      "context": "SelectedParticipant.record_native_phase"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 91,
+      "name": "record_native_phase",
+      "context": "SelectedParticipant.native_phase"
+    },
+    {
+      "path": "src/agent_comms/selected_request.py",
+      "line": 18,
+      "name": "SelectedParticipant",
+      "context": "SelectedRequest"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 53,
+      "name": "SelectedParticipant",
+      "context": "SelectedSession.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 53,
+      "name": "TrackedTurnSession",
+      "context": "SelectedSession.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 114,
+      "name": "SelectedParticipant",
+      "context": "SelectedSession.prepare"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 188,
+      "name": "SelectedParticipant",
+      "context": "SavedSelectedSession.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 188,
+      "name": "TrackedTurnSession",
+      "context": "SavedSelectedSession.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 252,
+      "name": "SelectedParticipant",
+      "context": "FirstSelectedSession.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 252,
+      "name": "TrackedTurnSession",
+      "context": "FirstSelectedSession.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 44,
+      "name": "SelectedParticipant",
+      "context": "SelectedPrompt"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 98,
+      "name": "SelectedParticipant",
+      "context": "SelectedTriageSegment"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 121,
+      "name": "SelectedParticipant",
+      "context": "SelectedWorkSegment"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 146,
+      "name": "SelectedParticipant",
+      "context": "SelectedAttempt"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 282,
+      "name": "SelectedParticipant",
+      "context": "SelectedConsideration"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 152,
+      "name": "SelectedParticipant",
+      "context": "SelectedAttempt.engage"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 137,
+      "name": "TurnSession",
+      "context": "TrackedTurnSession"
+    },
+    {
+      "path": "src/agent_comms/turn_admission.py",
+      "line": 39,
+      "name": "TurnSession",
+      "context": "PromptAdmission.permits_extension_ui"
+    },
+    {
+      "path": "src/agent_comms/turn_admission.py",
+      "line": 42,
+      "name": "TurnSession",
+      "context": "PromptAdmission.permits_retention"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 70,
+      "name": "TurnSession",
+      "context": "TerminalFailure.detected"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 84,
+      "name": "TurnSession",
+      "context": "InputMissing.detected"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 97,
+      "name": "TurnSession",
+      "context": "FinalStopMissing.detected"
+    },
+    {
+      "path": "src/agent_comms/turn_failure.py",
+      "line": 119,
+      "name": "TurnSession",
+      "context": "QueuedInputMissing.detected"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 63,
+      "name": "TurnSession",
+      "context": "InputForwarding.forward"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 87,
+      "name": "TurnSession",
+      "context": "InputForwarding.interrupt"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 122,
+      "name": "TurnSession",
+      "context": "InputForwarding.send_prompt"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "line": 167,
+      "name": "TurnSession",
+      "context": "InputForwarding.mark_started"
+    },
+    {
+      "path": "src/agent_comms/turn_lease.py",
+      "line": 23,
+      "name": "TurnPhase",
+      "context": "ActiveTurn"
+    },
+    {
+      "path": "src/agent_comms/turn_lease.py",
+      "line": 57,
+      "name": "TurnPhase",
+      "context": "TurnState.phase"
+    },
+    {
+      "path": "src/agent_comms/turn_output.py",
+      "line": 70,
+      "name": "TurnSession",
+      "context": "TurnOutput.done"
+    },
+    {
+      "path": "src/agent_comms/turn_output.py",
+      "line": 92,
+      "name": "TurnSession",
+      "context": "TurnOutput.settle"
+    },
+    {
+      "path": "src/agent_comms/turn_output.py",
+      "line": 101,
+      "name": "TurnSession",
+      "context": "TurnOutput.permits_retention"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 110,
+      "name": "TurnPhase",
+      "context": "Excursion"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 117,
+      "name": "TurnPhase",
+      "context": "PromptAcceptancePhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 122,
+      "name": "TurnPhase",
+      "context": "PreparingPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 126,
+      "name": "TurnPhase",
+      "context": "IdlePhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 136,
+      "name": "TurnPhase",
+      "context": "CancellingPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 144,
+      "name": "TurnPhase",
+      "context": "ShutdownPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 156,
+      "name": "TurnPhase",
+      "context": "PublishingPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 166,
+      "name": "TurnPhase",
+      "context": "ModelWaitPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 181,
+      "name": "TurnPhase",
+      "context": "SettlingStatsPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 21,
+      "name": "TurnPhase",
+      "context": "StallExempt.model_progress"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 24,
+      "name": "TurnPhase",
+      "context": "StallExempt.model_request"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 50,
+      "name": "TurnPhase",
+      "context": "TurnPhase.described"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 53,
+      "name": "TurnPhase",
+      "context": "TurnPhase.input_started"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 56,
+      "name": "TurnPhase",
+      "context": "TurnPhase.tool_started"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 59,
+      "name": "TurnPhase",
+      "context": "TurnPhase.tool_ended"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 62,
+      "name": "TurnPhase",
+      "context": "TurnPhase.compacting"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 65,
+      "name": "TurnPhase",
+      "context": "TurnPhase.compaction_ended"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 68,
+      "name": "TurnPhase",
+      "context": "TurnPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 71,
+      "name": "TurnPhase",
+      "context": "TurnPhase.following_compaction"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 74,
+      "name": "TurnPhase",
+      "context": "TurnPhase.on"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 87,
+      "name": "TurnPhase",
+      "context": "TurnPhase.enter"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 96,
+      "name": "TurnPhase",
+      "context": "TurnPhase.model_progress"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 99,
+      "name": "TurnPhase",
+      "context": "TurnPhase.model_request"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 106,
+      "name": "TurnPhase",
+      "context": "TurnPhase.stalled"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 141,
+      "name": "TurnPhase",
+      "context": "CancellingPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 152,
+      "name": "TurnPhase",
+      "context": "ShutdownPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 161,
+      "name": "TurnPhase",
+      "context": "PublishingPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 173,
+      "name": "TurnPhase",
+      "context": "ModelWaitPhase.model_progress"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 188,
+      "name": "TurnPhase",
+      "context": "CompactionPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 201,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.measured"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 207,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 210,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.following_compaction"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 219,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.enter"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 230,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.compacting"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 233,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.input_started"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 236,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.tool_started"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 239,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.tool_ended"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 242,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.compaction_ended"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 282,
+      "name": "TurnPhase",
+      "context": "ToolRunningPhase.tool_started"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 286,
+      "name": "TurnPhase",
+      "context": "ToolRunningPhase.tool_ended"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 302,
+      "name": "TurnPhase",
+      "context": "ToolRunningPhase.enter"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 306,
+      "name": "TurnPhase",
+      "context": "ToolRunningPhase.on"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 311,
+      "name": "TurnPhase",
+      "context": "ToolRunningPhase.stalled"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 167,
+      "name": "RequestProgress",
+      "context": "ModelWaitPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 24,
+      "name": "RequestProgress",
+      "context": "StallExempt.model_request"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 54,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.input_started"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 60,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.tool_ended"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 68,
+      "name": "TurnPhase",
+      "context": "TurnPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 75,
+      "name": "TurnPhase",
+      "context": "TurnPhase.on"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 87,
+      "name": "TurnPhase",
+      "context": "TurnPhase.enter"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 97,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.model_progress"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 99,
+      "name": "RequestProgress",
+      "context": "TurnPhase.model_request"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 100,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.model_request"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 103,
+      "name": "RequestProgress",
+      "context": "TurnPhase.request_observations"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 141,
+      "name": "TurnPhase",
+      "context": "CancellingPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 152,
+      "name": "TurnPhase",
+      "context": "ShutdownPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 161,
+      "name": "TurnPhase",
+      "context": "PublishingPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 177,
+      "name": "RequestProgress",
+      "context": "ModelWaitPhase.request_observations"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 188,
+      "name": "ModelWaitPhase",
+      "context": "CompactionPhase"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 207,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.observed"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 219,
+      "name": "TurnPhase",
+      "context": "CompactionPhase.enter"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 302,
+      "name": "TurnPhase",
+      "context": "ToolRunningPhase.enter"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 75,
+      "name": "TurnPhase",
+      "context": "TurnPhase.on"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 79,
+      "name": "ModelWaitPhase",
+      "context": "TurnPhase.on"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 288,
+      "name": "ModelWaitPhase",
+      "context": "ToolRunningPhase.tool_ended"
+    },
+    {
+      "path": "src/agent_comms/turn_phase.py",
+      "line": 312,
+      "name": "ModelWaitPhase",
+      "context": "ToolRunningPhase.stalled"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 242,
+      "name": "request_observations",
+      "context": "TurnProgress.native_phase"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 240,
+      "name": "NativePhaseChanged",
+      "context": "TurnProgress.native_phase"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 241,
+      "name": "NativePhaseChanged",
+      "context": "TurnProgress.native_phase"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 243,
+      "name": "record_request_progress",
+      "context": "TurnProgress.native_phase"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "line": 152,
+      "name": "TurnPhase",
+      "context": "TurnRunner.transition_turn"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "line": 53,
+      "name": "TurnSession",
+      "context": "StatsRequest.request"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "line": 82,
+      "name": "TurnSession",
+      "context": "StatsRequest.settle"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "line": 94,
+      "name": "ModelWaitPhase",
+      "context": "StatsRequest.settle"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 34,
+      "name": "TurnPhase",
+      "context": "ProgressWatchdog.__init__"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 71,
+      "name": "TurnSession",
+      "context": "ProgressWatchdog.observe"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 90,
+      "name": "TurnSession",
+      "context": "ProgressWatchdog.read_timeout"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 114,
+      "name": "TurnPhase",
+      "context": "ProgressWatchdog.state"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 125,
+      "name": "TurnSession",
+      "context": "ProgressWatchdog.read"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 166,
+      "name": "TurnSession",
+      "context": "ProgressWatchdog.expired_wait"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 187,
+      "name": "TurnSession",
+      "context": "ProgressWatchdog.expire"
+    },
+    {
+      "path": "src/agent_comms/turn_watchdog.py",
+      "line": 77,
+      "name": "ModelWaitPhase",
+      "context": "ProgressWatchdog.observe"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 18,
+      "name": "TurnProgress",
+      "context": "test_progress_and_goal_accounts_never_capture_execution_or_runner"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 24,
+      "name": "TurnProgress",
+      "context": "test_progress_and_goal_accounts_never_capture_execution_or_runner"
+    },
+    {
+      "path": "tests/guards/test_turn_progress_ownership.py",
+      "line": 29,
+      "name": "TurnProgress",
+      "context": "test_turn_owners_have_bounded_methods_and_no_new_long_predicates"
+    },
+    {
+      "path": "tests/native_evidence_reader_installed_journey.py",
+      "line": 123,
+      "name": "TrackedTurnSession",
+      "context": "main"
+    },
+    {
+      "path": "tests/selected_write_owner_child.py",
+      "line": 28,
+      "name": "TrackedTurnSession",
+      "context": "main"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 82,
+      "name": "TrackedTurnSession",
+      "context": "test_uncertain_channel_input_keeps_notification_and_never_replays"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 126,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_owner_revocation_before_send_never_creates_receipt"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 169,
+      "name": "TrackedTurnSession",
+      "context": "test_notification_busy_requires_matching_live_process_identity"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 34,
+      "name": "TrackedTurnSession",
+      "context": "test_channel_outcomes_and_receipts_are_per_recipient_and_source"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 37,
+      "name": "TrackedTurnSession",
+      "context": "test_channel_outcomes_and_receipts_are_per_recipient_and_source"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 41,
+      "name": "TrackedTurnSession",
+      "context": "test_channel_outcomes_and_receipts_are_per_recipient_and_source"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 128,
+      "name": "TrackedTurnSession",
+      "context": "test_acp_new_session_owner_consumes_private_selected_source"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 168,
+      "name": "TrackedTurnSession",
+      "context": "test_private_owner_rename_migrates_generation_before_canonical_selected_send"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 192,
+      "name": "TrackedTurnSession",
+      "context": "test_private_rename_does_not_replay_unserved_old_name_selected_source"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 211,
+      "name": "TrackedTurnSession",
+      "context": "test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_scan"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 272,
+      "name": "TrackedTurnSession",
+      "context": "test_private_rename_intent_fences_inflight_reserved_native_send"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 404,
+      "name": "TrackedTurnSession",
+      "context": "test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 452,
+      "name": "TrackedTurnSession",
+      "context": "test_observed_mid_session_admission_change_invalidates_old_proof"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 503,
+      "name": "TrackedTurnSession",
+      "context": "test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 583,
+      "name": "TrackedTurnSession",
+      "context": "test_acp_private_does_not_overlap_owner_turn"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 626,
+      "name": "TrackedTurnSession",
+      "context": "test_acp_private_no_wake_has_delivery_receipt_but_no_model"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 661,
+      "name": "TrackedTurnSession",
+      "context": "test_acp_uncertain_native_turn_is_not_replayed_or_acked"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 698,
+      "name": "TrackedTurnSession",
+      "context": "test_two_acp_instances_cannot_engage_or_send_simultaneously"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 740,
+      "name": "TrackedTurnSession",
+      "context": "test_human_owner_turn_cannot_be_borrowed_by_private_acp"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 770,
+      "name": "TrackedTurnSession",
+      "context": "test_goal_change_between_reservation_and_native_send_refuses"
+    },
+    {
+      "path": "tests/test_acp_private_nk_delivery.py",
+      "line": 793,
+      "name": "TrackedTurnSession",
+      "context": "test_stable_existing_goal_allows_separate_selected_direct_reply"
+    },
+    {
+      "path": "tests/test_acp_selected_write_plan.py",
+      "line": 208,
+      "name": "TrackedTurnSession",
+      "context": "test_public_acp_preplan_one_selected_write_after_verified_fake_native"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 347,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_stream_failure_reaps_backend_and_steering_task"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 378,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_caller_cancellation_reaps_backend_and_steering_task"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 941,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_stats_identity_change_fails_closed_to_unknown"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1090,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_outbound_session_mutation_rejected_before_write_but_a_continues"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1197,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_unsolicited_rebind_quarantines_subsequent_b_events"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2030,
+      "name": "TurnSession",
+      "context": "TestNativeInputBinding.test_malformed_native_user_content_fails_typed_and_reaps_live_child"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2187,
+      "name": "TurnSession",
+      "context": "TestNativeInputBinding.test_queued_steer_needs_its_own_user_start_before_success"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 369,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_caller_cancellation_reaps_backend_and_steering_task"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 2079,
+      "name": "TurnSession",
+      "context": "TestNativeInputBinding.test_steering_forwarder_is_reaped_on_invalid_rpc_or_early_close"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 371,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_caller_cancellation_reaps_backend_and_steering_task"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1169,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_unsolicited_rebind_quarantines_subsequent_b_events"
+    },
+    {
+      "path": "tests/test_backend.py",
+      "line": 1073,
+      "name": "TurnSession",
+      "context": "TestRpcParsing.test_outbound_session_mutation_rejected_before_write_but_a_continues.consume"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 213,
+      "name": "TurnSession",
+      "context": "test_actual_native_interrupted_turn_never_replays_or_retains"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 226,
+      "name": "TurnSession",
+      "context": "test_actual_native_interrupted_turn_never_replays_or_retains"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 253,
+      "name": "TurnSession",
+      "context": "test_actual_native_cancelled_owner_stop_keeps_cleanup_custody"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 275,
+      "name": "TurnSession",
+      "context": "test_actual_native_cancelled_owner_stop_keeps_cleanup_custody"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 267,
+      "name": "TurnSession",
+      "context": "test_actual_native_cancelled_owner_stop_keeps_cleanup_custody"
+    },
+    {
+      "path": "tests/test_backend_native_lifecycle.py",
+      "line": 30,
+      "name": "TurnSession",
+      "context": "NativeBackendFixture.started"
+    },
+    {
+      "path": "tests/test_backend_native_watchdog.py",
+      "line": 68,
+      "name": "TurnSession",
+      "context": "UntrackedOracleTurn"
+    },
+    {
+      "path": "tests/test_backend_response_ownership.py",
+      "line": 30,
+      "name": "TurnSession",
+      "context": "test_new_command_capabilities_guard_identity_without_backend_dispatch_edits"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 165,
+      "name": "TrackedTurnSession",
+      "context": "test_foreground_registers_own_pid_and_seals_one_selected_direct"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 209,
+      "name": "TrackedTurnSession",
+      "context": "test_foreground_explicit_selected_existing_file_entry_mutates_under_claim"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 376,
+      "name": "TrackedTurnSession",
+      "context": "test_foreground_explicit_selected_write_never_mutates_no_wake"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 416,
+      "name": "TrackedTurnSession",
+      "context": "test_foreground_two_recipients_one_no_wake_and_no_model"
+    },
+    {
+      "path": "tests/test_cohort_foreground.py",
+      "line": 768,
+      "name": "TrackedTurnSession",
+      "context": "test_failed_model_reservation_is_not_polled_or_replayed"
+    },
+    {
+      "path": "tests/test_compaction_progress.py",
+      "line": 29,
+      "name": "ModelWaitPhase",
+      "context": "test_native_progress_roundtrip_and_phase_clock"
+    },
+    {
+      "path": "tests/test_compaction_progress.py",
+      "line": 25,
+      "name": "ModelWaitPhase",
+      "context": "test_native_progress_roundtrip_and_phase_clock"
+    },
+    {
+      "path": "tests/test_compaction_progress.py",
+      "line": 54,
+      "name": "ModelWaitPhase",
+      "context": "test_stream_measurements_do_not_republish_unchanged_source_state"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 486,
+      "name": "TrackedTurnSession",
+      "context": "test_explicit_fresh_enrollment_precedes_fake_private_raw_send"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 547,
+      "name": "TrackedTurnSession",
+      "context": "test_explicit_selected_first_source_is_fenced_before_fake_raw_send"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 604,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_startup_changed_after_state_denies_before_fake_raw_byte"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 634,
+      "name": "TrackedTurnSession",
+      "context": "test_fresh_creation_fsync_unknown_never_enters_fake_model"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 682,
+      "name": "TrackedTurnSession",
+      "context": "test_production_awareness_caller_includes_or_omits_without_losing_original"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 708,
+      "name": "TrackedTurnSession",
+      "context": "test_slow_optional_awareness_omits_without_blocking_selected_original"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 804,
+      "name": "TrackedTurnSession",
+      "context": "test_optional_awareness_requires_complete_binding_and_resource_budget"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 840,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_original_survives_auxiliary_cursor_over_100_initials"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1388,
+      "name": "TrackedTurnSession",
+      "context": "test_stop_before_atomic_turn_lease_does_not_revive_or_prompt"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1420,
+      "name": "TrackedTurnSession",
+      "context": "test_owner_generation_denies_revival_without_blocking_another_owner"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1514,
+      "name": "TrackedTurnSession",
+      "context": "test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1543,
+      "name": "TrackedTurnSession",
+      "context": "test_owner_stop_before_response_boundary_never_appends"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1578,
+      "name": "TrackedTurnSession",
+      "context": "test_registry_stop_during_response_append_linearizes_after_sql_commit"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1621,
+      "name": "TrackedTurnSession",
+      "context": "test_revoked_turn_never_prepares_or_appends_a_response"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1678,
+      "name": "TrackedTurnSession",
+      "context": "test_saved_stopped_turn_cannot_regain_owner_authority"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1780,
+      "name": "TrackedTurnSession",
+      "context": "test_existing_owner_turn_is_not_borrowed_or_consumed"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1921,
+      "name": "TrackedTurnSession",
+      "context": "test_channel_triage_and_full_use_configured_owner_model"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1937,
+      "name": "TrackedTurnSession",
+      "context": "test_unconfigured_owner_does_not_reserve_or_launch"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1970,
+      "name": "TrackedTurnSession",
+      "context": "test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_input"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2001,
+      "name": "TrackedTurnSession",
+      "context": "test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_input"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2026,
+      "name": "TrackedTurnSession",
+      "context": "test_current_work_context_reaches_both_triage_and_full"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2060,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_execution_cannot_be_run_twice_or_reentered"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 2105,
+      "name": "TrackedTurnSession",
+      "context": "test_native_rpc_refusal_retains_private_details_without_replay"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 781,
+      "name": "TrackedTurnSession",
+      "context": "test_repeated_awareness_timeouts_cannot_starve_unrelated_original"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 1710,
+      "name": "TrackedTurnSession",
+      "context": "test_saved_stopped_turn_cannot_regain_owner_authority"
+    },
+    {
+      "path": "tests/test_native_catalog_discovery.py",
+      "line": 166,
+      "name": "TurnSession",
+      "context": "test_actual_native_setting_responses_use_the_command_result_owner"
+    },
+    {
+      "path": "tests/test_native_failure_recovery.py",
+      "line": 65,
+      "name": "TrackedTurnSession",
+      "context": "failed_owner"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 20,
+      "name": "TurnSession",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 24,
+      "name": "ModelWaitPhase",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 41,
+      "name": "ModelWaitPhase",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 28,
+      "name": "NativePhaseChanged",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects.consume"
+    },
+    {
+      "path": "tests/test_native_phase_producer.py",
+      "line": 43,
+      "name": "NativePhaseChanged",
+      "context": "test_native_tool_lifecycle_publishes_actual_phase_after_effects"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 604,
+      "name": "TrackedTurnSession",
+      "context": "test_context_proof_alone_cannot_validate_a_failed_model_reply"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 526,
+      "name": "TrackedTurnSession",
+      "context": "test_cancelled_native_turn_reaps_its_real_subprocess"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 200,
+      "name": "TrackedTurnSession",
+      "context": "test_unprivate_session_rejected_before_pi_process_starts"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 268,
+      "name": "TrackedTurnSession",
+      "context": "test_tracked_launch_pins_private_no_retry_settings_before_subprocess"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 304,
+      "name": "TrackedTurnSession",
+      "context": "test_any_prelaunch_fsync_failure_denies_subprocess"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 353,
+      "name": "TrackedTurnSession",
+      "context": "test_visible_policy_after_failed_parent_fsync_is_resynced_before_launch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 357,
+      "name": "TrackedTurnSession",
+      "context": "test_visible_policy_after_failed_parent_fsync_is_resynced_before_launch"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 436,
+      "name": "TrackedTurnSession",
+      "context": "test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 440,
+      "name": "TrackedTurnSession",
+      "context": "test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 466,
+      "name": "TrackedTurnSession",
+      "context": "test_reused_session_parent_fsync_failure_denies_spawn"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 490,
+      "name": "TrackedTurnSession",
+      "context": "test_redirected_private_policy_directory_denies_subprocess"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 681,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_header_marker_denies_path_only_legacy_reopen_before_spawn"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 709,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_first_source_is_default_off_before_any_real_cli_spawn"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 837,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_first_source_get_state_fences_runtime_before_raw_prompt"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 896,
+      "name": "TrackedTurnSession",
+      "context": "test_untracked_capability_is_rejected_before_prompt"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1341,
+      "name": "TrackedTurnSession",
+      "context": "test_stock_pi_is_rejected_before_any_tracked_prompt"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1195,
+      "name": "TrackedTurnSession",
+      "context": "test_copied_cli_private_policy_allows_one_local_http_attempt"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1241,
+      "name": "TrackedTurnSession",
+      "context": "test_copied_cli_private_policy_allows_one_local_http_attempt"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1300,
+      "name": "TrackedTurnSession",
+      "context": "test_copied_cli_private_policy_allows_one_local_http_attempt"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1219,
+      "name": "TrackedTurnSession",
+      "context": "test_copied_cli_private_policy_allows_one_local_http_attempt"
+    },
+    {
+      "path": "tests/test_native_pi.py",
+      "line": 1260,
+      "name": "TrackedTurnSession",
+      "context": "test_copied_cli_private_policy_allows_one_local_http_attempt"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 105,
+      "name": "TrackedTurnSession",
+      "context": "test_suppressed_binding_insert_denies_native_send"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 133,
+      "name": "TrackedTurnSession",
+      "context": "test_uncertain_binding_commit_denies_native_send_and_retry"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 284,
+      "name": "TrackedTurnSession",
+      "context": "test_source_coverage_stops_at_missing_claim_and_unknown_input"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 323,
+      "name": "TrackedTurnSession",
+      "context": "test_source_coverage_mismatch_cannot_skip_to_later_proof"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 331,
+      "name": "TrackedTurnSession",
+      "context": "test_source_coverage_mismatch_cannot_skip_to_later_proof"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 364,
+      "name": "TrackedTurnSession",
+      "context": "test_source_coverage_distinguishes_no_wake_from_native_injection"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 409,
+      "name": "TrackedTurnSession",
+      "context": "test_source_coverage_stops_at_triage_without_required_full"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 431,
+      "name": "TrackedTurnSession",
+      "context": "test_current_cursor_never_promotes_old_owner_generation"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 457,
+      "name": "TrackedTurnSession",
+      "context": "test_old_input_id_cannot_directly_seed_new_admission_cursor"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 510,
+      "name": "TrackedTurnSession",
+      "context": "test_current_cursor_rejects_forged_high_water"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 529,
+      "name": "TrackedTurnSession",
+      "context": "test_current_cursor_new_owner_generation_cannot_borrow_proof"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 645,
+      "name": "TrackedTurnSession",
+      "context": "test_full_stage_digest_mismatch_is_unproven_and_never_replayed"
+    },
+    {
+      "path": "tests/test_native_prompt_binding.py",
+      "line": 712,
+      "name": "TrackedTurnSession",
+      "context": "test_live_gate_refuses_persisted_sidecar_identity_tamper"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 180,
+      "name": "TrackedTurnSession",
+      "context": "_same_loop_backpressure_case"
+    },
+    {
+      "path": "tests/test_native_send_admission.py",
+      "line": 185,
+      "name": "TrackedTurnSession",
+      "context": "_same_loop_backpressure_case"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 88,
+      "name": "TrackedTurnSession",
+      "context": "test_fresh_open_after_1001_unrelated_and_over_8mib"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 118,
+      "name": "TrackedTurnSession",
+      "context": "test_addressed_no_wake_page_boundary_does_not_become_injection"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 148,
+      "name": "TrackedTurnSession",
+      "context": "test_frozen_n_selected_cursor_provider_free"
+    },
+    {
+      "path": "tests/test_native_source_cursor_certificate.py",
+      "line": 176,
+      "name": "TrackedTurnSession",
+      "context": "test_certified_cursor_rejects_changed_sidecar_without_replay"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 42,
+      "name": "TrackedTurnSession",
+      "context": "test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 107,
+      "name": "TrackedTurnSession",
+      "context": "test_page_budget_refuses_progress_but_original_is_not_replayed"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 143,
+      "name": "TrackedTurnSession",
+      "context": "test_unknown_first_source_cannot_be_bridged_by_101_unrelated"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 162,
+      "name": "TrackedTurnSession",
+      "context": "test_unknown_first_source_cannot_be_bridged_by_101_unrelated"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 180,
+      "name": "TrackedTurnSession",
+      "context": "test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 246,
+      "name": "TrackedTurnSession",
+      "context": "test_reconnect_rechecks_sql_generation_after_proof_scan"
+    },
+    {
+      "path": "tests/test_native_source_cursor_scale.py",
+      "line": 283,
+      "name": "TrackedTurnSession",
+      "context": "test_replaced_bus_between_coverage_and_commit_omits_cursor"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 154,
+      "name": "TrackedTurnSession",
+      "context": "test_actual_tracked_unresponsive_native_owns_not_sent_witness.StoppedTracked"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 201,
+      "name": "TrackedTurnSession",
+      "context": "test_actual_tracked_waiting_for_startup_cancels_without_prompt.WaitingTracked"
+    },
+    {
+      "path": "tests/test_native_startup_actual.py",
+      "line": 129,
+      "name": "TrackedTurnSession",
+      "context": "test_actual_tracked_ready_pipe_survives_busy_owner"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 47,
+      "name": "TrackedTurnSession",
+      "context": "unknown_owner"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 141,
+      "name": "TrackedTurnSession",
+      "context": "test_abandon_unknown_preserves_evidence_and_allows_only_new_work"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 299,
+      "name": "TrackedTurnSession",
+      "context": "test_real_local_rpc_failure_reaps_child_and_releases_slot"
+    },
+    {
+      "path": "tests/test_native_unknown_recovery.py",
+      "line": 316,
+      "name": "TrackedTurnSession",
+      "context": "test_revoked_live_failure_keeps_slot_for_recovery"
+    },
+    {
+      "path": "tests/test_nk_foreground.py",
+      "line": 78,
+      "name": "TrackedTurnSession",
+      "context": "_recipient"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 250,
+      "name": "TrackedTurnSession",
+      "context": "test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered"
+    },
+    {
+      "path": "tests/test_optional_awareness_projection.py",
+      "line": 510,
+      "name": "TrackedTurnSession",
+      "context": "test_real_selected_caller_after_rename_injects_only_new_generation"
+    },
+    {
+      "path": "tests/test_ordinary_nk_delivery.py",
+      "line": 74,
+      "name": "TrackedTurnSession",
+      "context": "test_normal_send_to_existing_foreground_executes_exact_nk"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 58,
+      "name": "ModelWaitPhase",
+      "context": "test_new_excursion_declares_both_transitions_without_dispatch_edits"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 71,
+      "name": "ModelWaitPhase",
+      "context": "test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 74,
+      "name": "ModelWaitPhase",
+      "context": "test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 97,
+      "name": "TurnSession",
+      "context": "test_failure_precedence_text_and_uncertainty_have_one_owner"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 52,
+      "name": "ModelWaitPhase",
+      "context": "test_new_excursion_declares_both_transitions_without_dispatch_edits"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 60,
+      "name": "TurnPhase",
+      "context": "test_new_excursion_declares_both_transitions_without_dispatch_edits"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 68,
+      "name": "ModelWaitPhase",
+      "context": "test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 72,
+      "name": "ModelWaitPhase",
+      "context": "test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 134,
+      "name": "TurnPhase",
+      "context": "test_external_formats_are_derived_and_pin_wire_spellings"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 134,
+      "name": "TurnPhase",
+      "context": "test_external_formats_are_derived_and_pin_wire_spellings"
+    },
+    {
+      "path": "tests/test_pi_rpc_nominal.py",
+      "line": 135,
+      "name": "TurnPhase",
+      "context": "test_external_formats_are_derived_and_pin_wire_spellings"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 85,
+      "name": "TrackedTurnSession",
+      "context": "test_fresh_open_1002_initials_over_eight_mib_remain_exact"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 119,
+      "name": "TrackedTurnSession",
+      "context": "test_certified_unproven_first_source_cannot_be_skipped"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 131,
+      "name": "TrackedTurnSession",
+      "context": "test_certified_unproven_first_source_cannot_be_skipped"
+    },
+    {
+      "path": "tests/test_private_checkpoint_cursor_integration.py",
+      "line": 153,
+      "name": "TrackedTurnSession",
+      "context": "test_pending_unknown_append_cold_rebuild_does_not_replay"
+    },
+    {
+      "path": "tests/test_private_idle_drain.py",
+      "line": 105,
+      "name": "TrackedTurnSession",
+      "context": "test_new_inputs_and_recovery_revision_invalidate_idle_observation"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 109,
+      "name": "TrackedTurnSession",
+      "context": "test_installed_retained_native_read_round_preserves_original_custody"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 147,
+      "name": "TrackedTurnSession",
+      "context": "test_installed_retained_native_read_round_preserves_original_custody"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 148,
+      "name": "TrackedTurnSession",
+      "context": "test_installed_retained_native_read_round_preserves_original_custody"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 149,
+      "name": "TrackedTurnSession",
+      "context": "test_installed_retained_native_read_round_preserves_original_custody"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 110,
+      "name": "TrackedTurnSession",
+      "context": "test_installed_retained_native_read_round_preserves_original_custody"
+    },
+    {
+      "path": "tests/test_retained_native_tool_latency.py",
+      "line": 110,
+      "name": "TrackedTurnSession",
+      "context": "test_installed_retained_native_read_round_preserves_original_custody"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 72,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_turn_accepts_and_starts_fresh_input_once"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 138,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_pending_input_never_replays_unknown"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 263,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_handoff_rechecks_authority_at_native_write"
+    },
+    {
+      "path": "tests/test_selected_owner_followup.py",
+      "line": 498,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_handoff_keeps_images_controller_and_future_input_receipts"
+    },
+    {
+      "path": "tests/test_selected_source_batch.py",
+      "line": 51,
+      "name": "SelectedParticipant",
+      "context": "test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending"
+    },
+    {
+      "path": "tests/test_selected_tool_native_fake.py",
+      "line": 105,
+      "name": "TrackedTurnSession",
+      "context": "test_fake_rpc_tool_event_and_terminal_gate"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 140,
+      "name": "TrackedTurnSession",
+      "context": "test_default_full_has_normal_coding_tools_and_cooperative_claim_instruction"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 168,
+      "name": "TrackedTurnSession",
+      "context": "test_real_owner_selected_tool_writes_existing_file_once"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 203,
+      "name": "TrackedTurnSession",
+      "context": "test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 264,
+      "name": "TrackedTurnSession",
+      "context": "test_opted_in_triage_remains_no_tools"
+    },
+    {
+      "path": "tests/test_selected_tool_runner_hook.py",
+      "line": 302,
+      "name": "TrackedTurnSession",
+      "context": "test_selected_full_failure_never_reissues_or_forges_response"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 77,
+      "name": "TurnProgress",
+      "context": "test_installed_context_callbacks_share_original_writer_custody"
+    },
+    {
+      "path": "tests/test_turn_context_wire.py",
+      "line": 135,
+      "name": "SelectedParticipant",
+      "context": "test_installed_context_callbacks_share_original_writer_custody"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 70,
+      "name": "SelectedParticipant",
+      "context": "seed_historical_failure"
+    }
+  ],
+  "limits": [
+    "AST spelling/annotations/imports identify consumers; receiver resolution and runtime dispatch not proved. NativeJS timing producer inspected directly; not parsed by Python AST. Toad consumer source searched: phase.summary only, no RequestProgress/source readers."
+  ]
+}
