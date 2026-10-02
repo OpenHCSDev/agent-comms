@@ -1,0 +1,58 @@
+{
+  "head": "c80fcae5ee1a2fd2e10475229adb6572adbb1de7",
+  "parsed": 50,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 229,
+      "declaration": "protected_files"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 262,
+      "call": "self.protected_files"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 264,
+      "call": "self.runtime_installation.unchanged_protected"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 270,
+      "call": "self.runtime_installation.retain_protected"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 286,
+      "call": "self.protected_files"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 21,
+      "declaration": "unchanged_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 26,
+      "declaration": "retain_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 34,
+      "declaration": "retain_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 44,
+      "declaration": "retain_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 61,
+      "declaration": "unchanged_protected"
+    }
+  ],
+  "limits": "AST call spellings are source references, not dynamic resolution."
+}

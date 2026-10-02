@@ -1,0 +1,31 @@
+{
+  "source": "53607176",
+  "integrated_runtime_source": "a87a7065",
+  "source_order": "existing-owner census, coherent nominal implementation, end validation",
+  "sanity": {
+    "command": "PYTHONPATH=src:tests:/usr/lib/python3.14/site-packages <default-python> -m pytest -o addopts='' tests/test_channel_input_batch.py tests/test_reservation_rules.py tests/guards/test_owned_send_ownership.py -q",
+    "exit": 0,
+    "passed": 12,
+    "elapsed_seconds": 0.94,
+    "scope": "source only; system pytest plugin path added to existing installed interpreter, no packages changed"
+  },
+  "preceding_environment_failure": {
+    "command": "same source batch without system pytest path",
+    "exit": 1,
+    "cause": "No module named pytest",
+    "provider_calls": 0
+  },
+  "installed_acceptance": "pending accepted integrated Native6 artifact and explicit old hash-bearing journal disposition",
+  "provider_calls": 0,
+  "public_inputs": 0,
+  "public_mutations": 0,
+  "production_delta_from_a87a7065": {
+    "deleted": 450,
+    "added": 511,
+    "files": 30
+  },
+  "original_authority": "InputDocument/StoredInput, one ordered originals collection in captured InputBatch/SelectedAdmissionSource; keys/text/digests derived",
+  "resource_authority": "TurnSession/PersistentPiSession/NativeCustody in original AsyncExitStack; same launch/transport, no preflight child",
+  "proof_format_constraint": "SelectedCommitReference.require_source hashes exact source_json; no silent rewrite/reset of UNKNOWN/private-input enrollment",
+  "next_gate": "actual configured saved-owner/native/ACP input with plural source and triggered compaction; skip same child, commit strict reopen, once-only input, cleanup"
+}

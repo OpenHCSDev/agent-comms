@@ -104,7 +104,7 @@ class SelectedSummaryAdmission:
             raise CompactionJournalError("Exact returned terminal fsync ACK required")
         try:
             attempt = terminal.attempt
-            source = attempt.envelope()
+            source = attempt.request
             identity.require_current(source, attempt.session_file)
             attempt.state.require_original_admission()
         except (TypeError, ValueError, OSError) as error:
@@ -145,11 +145,11 @@ class SelectedSummaryAdmission:
             identity.require_live_input(session_file, sent_text)
             journal = CompactionJournal(self._terminal.path)
             journal.summaries.require_original_admission(attempt)
-            identity.source.reservation_check(
+            attempt.request.reservation_check(
                 identity.source.reserved_revision, dispositions.read()
             ).require_valid()
-            return dispositions.bind(
-                identity.source.ingress_key,
+            return dispositions.bind_originals(
+                identity.source.ingress_keys,
                 admission=identity.source.admission_generation,
                 turn_id=identity.source.turn.value,
                 native_id=native_id,

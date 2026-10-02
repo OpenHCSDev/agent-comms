@@ -1,0 +1,73 @@
+{
+  "source": "working source batch based on f23ddaf1c27f32017f215f94a04bf60088d7aa00",
+  "parsed": 50,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 229,
+      "declaration": "protected_files"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 262,
+      "call": "self.protected_files"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 270,
+      "call": "self.runtime_installation.unchanged_protected(paths).difference"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 272,
+      "call": "self.runtime_installation.retain_protected"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 270,
+      "call": "self.runtime_installation.unchanged_protected"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 284,
+      "call": "self.protected_files"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 21,
+      "declaration": "unchanged_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 26,
+      "declaration": "retain_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 34,
+      "declaration": "retain_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 44,
+      "declaration": "retain_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 61,
+      "declaration": "unchanged_protected"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 63,
+      "call": "super().unchanged_protected(paths).difference"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 63,
+      "call": "super().unchanged_protected"
+    }
+  ],
+  "limits": "AST source spellings, not dynamic resolution."
+}

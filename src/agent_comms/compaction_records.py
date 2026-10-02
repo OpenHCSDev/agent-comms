@@ -50,8 +50,7 @@ class SelectedSummarySource:
     retained: RetainedTaskFacts
 
     def __post_init__(self):
-        if not self.source:
-            raise ValueError("Selected source witness required")
+        self.source.require_retained(self.retained)
 
     def summary_instructions(self, owner: Thread, instructions: str | None) -> str:
         from .turn_context import CoordinationSegment
@@ -60,6 +59,15 @@ class SelectedSummarySource:
             raise CompactionJournalError("Summary instructions belong to another current owner")
         return CoordinationSegment.capture(owner, ()).summary_instructions(instructions)
 
+    def reservation_check(self, revision, inputs):
+        return self.source.reservation_check(revision, inputs, self.retained)
+
+    def interrupted_check(self, revision, inputs, incarnation, turn):
+        return self.source.interrupted_check(revision, inputs, incarnation, turn, self.retained)
+
+    def original_has_started(self, inputs: InputDocument) -> bool:
+        return self.source.original_has_started(inputs, self.retained)
+
     def journal_json(self) -> str:
         record = FieldCodec.encode(self)
         return RetainedTaskFacts.frame_journal(
@@ -67,13 +75,6 @@ class SelectedSummarySource:
                 FieldCodec.encode(self.retained)
             )
         )
-
-    @classmethod
-    def read(cls, payload: str) -> SelectedSummarySource:
-        source = FieldCodec.decode(cls, json.loads(payload))
-        source.journal_json()
-        return source
-
 
 class JournalTable:
     """Tables whose schema and transactions belong to the compaction journal."""
@@ -166,11 +167,19 @@ class CompactionOperation(UnresolvedJournalHistory, TypedTable, declared_name="o
 class SelectedSummaryAttempt(
     UnresolvedJournalHistory, TypedTable, declared_name="selected_summary_attempts"
 ):
-    """Provider attempt reservation, not a summary or native commit receipt."""
+    """Provider reservation and its two distinct source evidence roles.
+
+    request is the current typed semantic source. source_json is the immutable
+    original byte string committed by SelectedCommitReference; it is never a
+    runtime decoder input. A stopped external declaration carry authenticates
+    historical requests without changing their original native proof bytes.
+    Neither role issues input admission or resolves an uncertain attempt.
+    """
 
     operation_id: str = field(metadata={"sql": Column(primary_key=True)})
     session_file: str
     source_json: str
+    request: SelectedSummarySource
     state: SummaryState
 
     indexes = (
@@ -188,12 +197,6 @@ class SelectedSummaryAttempt(
     def require_session(self, session_file: str) -> None:
         if self.session_file != session_file:
             raise CompactionJournalError("Selected summary reservation changed before commit")
-
-    def source(self) -> SelectedSource:
-        return self.envelope().source
-
-    def envelope(self) -> SelectedSummarySource:
-        return SelectedSummarySource.read(self.source_json)
 
     def require_transition(self, target: SummaryState) -> None:
         if not self.state.may_become(target):
@@ -247,8 +250,7 @@ class SelectedSummaryAttempt(
         cannot retire the reservation. Historical rows and IDs stay intact.
         """
         try:
-            envelope = self.envelope()
-            return envelope.source.original_has_started(inputs)
+            return self.request.original_has_started(inputs)
         except (KeyError, TypeError, ValueError):
             return False
 
@@ -305,9 +307,7 @@ class EnrolledPrivateSession(JournalTable, TypedTable, declared_name="enrolled_p
         witness: SelectedSource,
         admission_generation: int | None,
     ) -> None:
-        observed = FreshCoverageIdentity(witness.incarnation, witness.owner, fresh.path.parent.name)
-        if observed != self.coverage_identity:
-            raise CompactionJournalError("Fresh private owner coverage differs: owner identity")
+        self.coverage_identity.require_owner(witness)
         if admission_generation is not None and admission_generation != self.admission_generation:
             raise CompactionJournalError("Fresh private owner coverage differs: admission")
         fresh.verify_saved_identity()

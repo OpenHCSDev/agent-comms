@@ -1,0 +1,264 @@
+{
+  "head": "a8a3ba05d789ef46c08570543b2bed96a80b3a9c",
+  "root": "tools/cutover",
+  "parsed": 50,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 87,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/install_retained_task_source.py",
+      "line": 95,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/launch_thread_retirement.py",
+      "line": 27,
+      "call": "_publish_active_route_locked"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 115,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 131,
+      "call": "NativeSchemaCarryPlan.install_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 510,
+      "call": "self.install_prepared"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 527,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 539,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 575,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 548,
+      "call": "_publish"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry.py",
+      "line": 551,
+      "call": "staging.replace"
+    },
+    {
+      "path": "tools/cutover/native_schema_carry_controls.py",
+      "line": 243,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 301,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 302,
+      "call": "_publish_active_route_locked"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 310,
+      "call": "temporary.replace"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 192,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 250,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/publish_openhcs_recovery.py",
+      "line": 244,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 184,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 185,
+      "call": "_publish_active_route_locked"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 193,
+      "call": "temporary.replace"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 271,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/publish_retained_summary.py",
+      "line": 300,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/restart_thread_format.py",
+      "line": 52,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 34,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_index_writer.py",
+      "line": 42,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 36,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_routing_writer.py",
+      "line": 43,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 72,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 111,
+      "call": "RetainedRuntimeFile"
+    },
+    {
+      "path": "tools/cutover/retained_summary_reset.py",
+      "line": 113,
+      "call": "RetainedRuntimeFile"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 21,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 22,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 23,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 24,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 25,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_summary_stage_controls.py",
+      "line": 22,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/retained_task_installed_pilot.py",
+      "line": 38,
+      "call": "original_bus.replace"
+    },
+    {
+      "path": "tools/cutover/runtime_installation.py",
+      "line": 35,
+      "call": "retain_file"
+    },
+    {
+      "path": "tools/cutover/seed_original_owner_capture.py",
+      "line": 25,
+      "call": "OwnerReleaseStore(root / 'owner_release_receipts.json').replace"
+    },
+    {
+      "path": "tools/cutover/seed_original_task_carry.py",
+      "line": 30,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/seed_retained_index_fixture.py",
+      "line": 28,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/seed_retained_routing_fixture.py",
+      "line": 42,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/seed_thread_retirement_fixture.py",
+      "line": 155,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/task_envelope_promotion.py",
+      "line": 59,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/task_envelope_promotion.py",
+      "line": 66,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/task_envelope_promotion.py",
+      "line": 59,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/task_envelope_promotion.py",
+      "line": 66,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 104,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 63,
+      "call": "replace"
+    },
+    {
+      "path": "tools/cutover/thread_retirement_installed_pilot.py",
+      "line": 140,
+      "call": "replace"
+    }
+  ],
+  "limits": "AST call spelling maps source references, not dynamic resolution."
+}

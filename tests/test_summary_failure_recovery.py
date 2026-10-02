@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import InputAttempt
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.compaction_records import SelectedSummarySource
+from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
 from agent_comms.owner_compaction_commit import OwnerCompactionCommit
 from agent_comms.owner_compaction_prepare import prepare_native_source
 from agent_comms.owner_compaction_settings import PiCompactionSettings
@@ -73,23 +74,21 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
         digest = TextDigest.of(text)
         operation = bridge.journal.summaries.reserve(
             session,
-            {
-                "source": FieldCodec.encode(
-                    SelectedAdmissionSource(
-                        owner=owner.process_identity,
-                        incarnation=owner.incarnation,
-                        turn=TurnId("earlier-failed-turn"),
-                        ingress_key="acp:original",
-                        admission_generation=owner.active_turn.admission_generation,
-                        correction_witness="prior",
-                        input_digest=digest,
-                        original_digest=digest,
-                        reserved_revision=SessionRevision.observe(session).require_available(),
-                    )
+            SelectedSummarySource(
+                source=SelectedAdmissionSource(
+                    owner=owner.process_identity,
+                    incarnation=owner.incarnation,
+                    turn=TurnId("earlier-failed-turn"),
+                    originals=inputs.read().original_provenances(("acp:original",)),
+                    admission_generation=owner.active_turn.admission_generation,
+                    correction_witness="prior",
+                    input_digest=digest,
+                    reserved_revision=SessionRevision.observe(session).require_available(),
                 ),
-                "selected": selected.to_wire(),
-                "settings": dict(reserveTokens=1000, keepRecentTokens=10),
-            },
+                selected=selected,
+                settings=PiCompactionSettings(1000, 10),
+                retained=RetainedTaskFacts((InputTaskFact(inputs.read().rows["acp:original"]),)),
+            ),
         )
         bridge.journal.summaries.mark_unknown(operation)
         if bound:

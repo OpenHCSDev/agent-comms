@@ -1,0 +1,228 @@
+{
+  "before": {
+    "unique_selected_batch_declaration": [
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "0e50c9796af1e5034d981f521122339dc4619a20",
+        "path": "src/agent_comms/selected_source_batch.py",
+        "line": 46,
+        "context": "",
+        "name": "SelectedSourceBatch",
+        "bases": [
+          "InputBatch"
+        ],
+        "methods": [
+          {
+            "name": "__post_init__",
+            "line": 49
+          },
+          {
+            "name": "admits_multiple",
+            "line": 65
+          },
+          {
+            "name": "assignments",
+            "line": 69
+          },
+          {
+            "name": "assignment_ids",
+            "line": 74
+          },
+          {
+            "name": "execution_id",
+            "line": 78
+          },
+          {
+            "name": "requires_triage",
+            "line": 84
+          },
+          {
+            "name": "targets",
+            "line": 90
+          },
+          {
+            "name": "response_segment",
+            "line": 96
+          },
+          {
+            "name": "response_messages",
+            "line": 111
+          }
+        ],
+        "fields": [
+          {
+            "name": "sources",
+            "annotation": "tuple[SelectedSource, ...]",
+            "line": 47
+          }
+        ]
+      }
+    ],
+    "constructor_consumers": [
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "0e50c9796af1e5034d981f521122339dc4619a20",
+        "path": "src/agent_comms/selected_participant.py",
+        "line": 121,
+        "context": "SelectedParticipant.select",
+        "callee": "SelectedSourceBatch",
+        "imported_binding": "src.agent_comms.selected_source_batch.SelectedSourceBatch",
+        "positional_arguments": [
+          "sources"
+        ],
+        "keyword_arguments": [],
+        "resolution": "syntactic constructor/call; runtime binding not proven"
+      }
+    ],
+    "limitations": [
+      "AST references enumerate syntax, not dynamic receiver types or runtime MRO resolution",
+      "Inherited families use source base-name closure; imported aliases, metaclasses and conditional definitions remain ambiguous",
+      "Toad committed source is an explicitly identified dependency snapshot, not an installed/runtime acceptance claim",
+      "SDK node_modules and dynamic/generated/f-string code are not parsed by this Python tool; native producer mapping remains with Arendt"
+    ],
+    "coverage": [
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "0e50c9796af1e5034d981f521122339dc4619a20",
+        "root": "src",
+        "parsed_python": 311,
+        "unparsed_python": [],
+        "empty_root": false
+      },
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "0e50c9796af1e5034d981f521122339dc4619a20",
+        "root": "tests",
+        "parsed_python": 355,
+        "unparsed_python": [],
+        "empty_root": false
+      },
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "0e50c9796af1e5034d981f521122339dc4619a20",
+        "root": "tools",
+        "parsed_python": 52,
+        "unparsed_python": [],
+        "empty_root": false
+      },
+      {
+        "repository": "/home/ts/wt/toad-receiving-native5-batch490-20261001",
+        "revision": "c7290d5b7d23d0366812e2e3988aa3f80e1e0de0",
+        "root": "src",
+        "parsed_python": 276,
+        "unparsed_python": [],
+        "empty_root": false
+      }
+    ]
+  },
+  "after": {
+    "unique_selected_batch_declaration": [
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "28401d70228237936d6489cba419271764edb905",
+        "path": "src/agent_comms/selected_source_batch.py",
+        "line": 45,
+        "context": "",
+        "name": "SelectedSourceBatch",
+        "bases": [],
+        "methods": [
+          {
+            "name": "__post_init__",
+            "line": 48
+          },
+          {
+            "name": "assignments",
+            "line": 64
+          },
+          {
+            "name": "assignment_ids",
+            "line": 69
+          },
+          {
+            "name": "execution_id",
+            "line": 73
+          },
+          {
+            "name": "requires_triage",
+            "line": 79
+          },
+          {
+            "name": "targets",
+            "line": 85
+          },
+          {
+            "name": "response_segment",
+            "line": 91
+          },
+          {
+            "name": "response_messages",
+            "line": 106
+          }
+        ],
+        "fields": [
+          {
+            "name": "sources",
+            "annotation": "tuple[SelectedSource, ...]",
+            "line": 46
+          }
+        ]
+      }
+    ],
+    "constructor_consumers": [
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "28401d70228237936d6489cba419271764edb905",
+        "path": "src/agent_comms/selected_participant.py",
+        "line": 121,
+        "context": "SelectedParticipant.select",
+        "callee": "SelectedSourceBatch",
+        "imported_binding": "src.agent_comms.selected_source_batch.SelectedSourceBatch",
+        "positional_arguments": [
+          "sources"
+        ],
+        "keyword_arguments": [],
+        "resolution": "syntactic constructor/call; runtime binding not proven"
+      }
+    ],
+    "limitations": [
+      "AST references enumerate syntax, not dynamic receiver types or runtime MRO resolution",
+      "Inherited families use source base-name closure; imported aliases, metaclasses and conditional definitions remain ambiguous",
+      "Toad committed source is an explicitly identified dependency snapshot, not an installed/runtime acceptance claim",
+      "SDK node_modules and dynamic/generated/f-string code are not parsed by this Python tool; native producer mapping remains with Arendt"
+    ],
+    "coverage": [
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "28401d70228237936d6489cba419271764edb905",
+        "root": "src",
+        "parsed_python": 311,
+        "unparsed_python": [],
+        "empty_root": false
+      },
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "28401d70228237936d6489cba419271764edb905",
+        "root": "tests",
+        "parsed_python": 355,
+        "unparsed_python": [],
+        "empty_root": false
+      },
+      {
+        "repository": "/home/ts/wt/comms-retained-human-main-20261001",
+        "revision": "28401d70228237936d6489cba419271764edb905",
+        "root": "tools",
+        "parsed_python": 52,
+        "unparsed_python": [],
+        "empty_root": false
+      },
+      {
+        "repository": "/home/ts/wt/toad-receiving-native5-batch490-20261001",
+        "revision": "c7290d5b7d23d0366812e2e3988aa3f80e1e0de0",
+        "root": "src",
+        "parsed_python": 276,
+        "unparsed_python": [],
+        "empty_root": false
+      }
+    ]
+  }
+}

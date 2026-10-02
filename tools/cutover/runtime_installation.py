@@ -6,16 +6,24 @@ from pathlib import Path
 from agent_comms.declared_family import DeclaredFamily
 from publish_openhcs_recovery import retain_file
 from retained_summary_reset import AcquiredRuntimeFiles
-from native_schema_carry import NativeSchemaCarryPlan
+from native_schema_carry import NativeSchemaCarryPlan, NativeSchemaDeclaration
 
 
+@dataclass(frozen=True)
 class RuntimeInstallation(DeclaredFamily, affix='RuntimeInstallation'):
-    def unchanged_protected(self, paths: set[Path]) -> set[Path]:
+    # Frozen whole-family source declaration, captured by the authentic writer.
+    # No table roster, target DDL, reason cases or version shortcut live here.
+    goal_schema: dict[str, str]
+
+    def synchronize_goal(self, acquired, destination):
+        return NativeSchemaDeclaration.observe().synchronize_goal(acquired, destination, self.goal_schema)
+
+    def unchanged_protected(self, paths: frozenset[Path]) -> frozenset[Path]:
         """The member owns which original bytes its installation may change."""
-        return paths
+        return frozenset(paths)
 
     @abstractmethod
-    def retain_protected(self, paths: set[Path], directory: Path): ...
+    def retain_protected(self, paths: frozenset[Path], directory: Path): ...
 
     @abstractmethod
     def install(self, acquired: AcquiredRuntimeFiles, destination: Path): ...
@@ -23,7 +31,7 @@ class RuntimeInstallation(DeclaredFamily, affix='RuntimeInstallation'):
 
 @dataclass(frozen=True)
 class ResetRuntimeInstallation(RuntimeInstallation):
-    def retain_protected(self, paths, directory):
+    def retain_protected(self, paths: frozenset[Path], directory: Path):
         return [retain_file(path, directory / f'protected-{index}')
                 for index, path in enumerate(sorted(paths))]
 
@@ -33,7 +41,7 @@ class ResetRuntimeInstallation(RuntimeInstallation):
 
 @dataclass(frozen=True)
 class PreserveRuntimeInstallation(RuntimeInstallation):
-    def retain_protected(self, paths, directory):
+    def retain_protected(self, paths: frozenset[Path], directory: Path):
         # Original protected bytes are hashed by the installation before/after.
         # The earlier reset's private preimages remain at their original paths.
         return []
@@ -50,9 +58,10 @@ class CarryNativeRuntimeInstallation(PreserveRuntimeInstallation):
 
     plan: NativeSchemaCarryPlan
 
-    def unchanged_protected(self, paths):
+    def unchanged_protected(self, paths: frozenset[Path]) -> frozenset[Path]:
         self.plan.require_candidate()
-        return paths - {self.plan.root / item.name for item in self.plan.stores}
+        return super().unchanged_protected(paths).difference(
+            self.plan.root / item.name for item in self.plan.stores)
 
     def install(self, acquired, destination):
         if acquired.paths[0].parent != self.plan.root:

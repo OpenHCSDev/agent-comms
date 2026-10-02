@@ -18,10 +18,21 @@ export class ContextBudget {
             : estimateSerializedRequestTokens(context, serializedInput);
     }
 
-    allowance(desired, minimum = 1) {
-        const available = this.model.contextWindow > 0
+    get available() {
+        return this.model.contextWindow > 0
             ? this.model.contextWindow - this.input : Infinity;
-        if (available < minimum) {
+    }
+
+    fits(minimum) {
+        return this.available >= minimum;
+    }
+
+    compactionRequired(settings) {
+        return !this.fits(settings.reserveTokens);
+    }
+
+    allowance(desired, minimum = 1) {
+        if (!this.fits(minimum)) {
             throw new BudgetAdmissionError("Estimated input leaves no admissible generation budget");
         }
         // Optional API parameters stay absent. Capability is not generation intent.
@@ -32,7 +43,7 @@ export class ContextBudget {
         if (!Number.isSafeInteger(this.model.maxTokens) || this.model.maxTokens < minimum) {
             throw new BudgetAdmissionError("Model has no admissible declared output capability");
         }
-        const fitted = Math.min(desired, this.model.maxTokens, available);
+        const fitted = Math.min(desired, this.model.maxTokens, this.available);
         if (fitted < minimum) {
             throw new BudgetAdmissionError("Estimated input and model capability cannot admit the API output minimum");
         }

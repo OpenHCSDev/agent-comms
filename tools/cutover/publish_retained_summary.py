@@ -7,6 +7,7 @@ signal, native input or alternative owner-stop/launch implementation.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from contextlib import ExitStack
 import fcntl
 import json
 import os
@@ -27,7 +28,7 @@ from agent_comms.private_path import PrivateDirectoryRole
 from agent_comms.store_files import _atomic_write_text
 from agent_comms.threads import Thread
 from publish_openhcs_recovery import COMMANDS, LINKS, ROOT, digest, fsync_directory, require_no_clients, retain_file
-from retained_summary_reset import RuntimeCompactionFiles
+from retained_summary_reset import RuntimeCompactionFiles, RuntimeGoalFiles
 from runtime_installation import RuntimeInstallation
 
 
@@ -225,7 +226,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         InputDispositions(ROOT / InputDispositions.filename).read()
         self.task_carry.require_selection(snapshot, owners)
 
-    def protected_files(self):
+    def protected_files(self) -> frozenset[Path]:
         # Original uncertainty and evidence stay in their OWN stores. Runtime
         # compaction rows and task-carry bus rows are not competing authorities.
         paths = set()
@@ -244,7 +245,9 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
                     proof = Path(str(session) + suffix)
                     if proof.exists() or proof.is_symlink():
                         paths.add(proof)
-        return paths
+        paths.update(path for path in RuntimeGoalFiles(ROOT).paths
+                     if path.exists() or path.is_symlink())
+        return frozenset(paths)
 
     def after_stopped(self, lifecycle):
         self.cohort.require_original()
@@ -258,23 +261,31 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         PrivateDirectoryRole.require(directory.lstat())
         paths = self.protected_files()
         protected = {str(path): digest(path) for path in sorted(paths)}
-        unchanged = self.runtime_installation.unchanged_protected(paths)
-        invariant = {str(path): protected[str(path)] for path in unchanged}
         # No decoding of old input records from a target-compaction journal.
-        with RuntimeCompactionFiles(ROOT).acquire() as runtime:
+        with ExitStack() as custody:
+            runtime = custody.enter_context(RuntimeCompactionFiles(ROOT).acquire())
+            goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
+            # Freeze original membership before deriving the byte-preserved
+            # partition. Goal members have their own preimage/row/DDL proof.
+            unchanged = self.runtime_installation.unchanged_protected(paths).difference(goals.paths)
+            invariant = {str(path): protected[str(path)] for path in unchanged}
             original_files = self.runtime_installation.retain_protected(paths, directory)
             retain_file(ROOT / 'registry.json', directory / 'registry.json')
             fsync_directory(directory)
             fsync_directory(directory.parent)
             self.note('all-original-owners-stopped-originals-audited',
                       protected_original_sha256=protected, protected_preimages=original_files)
+            goal_installation = self.runtime_installation.synchronize_goal(
+                goals, directory / 'goal-ledger')
+            installed_goals = custody.enter_context(RuntimeGoalFiles(ROOT).acquire())
             # The carry and runtime member share the ORIGINAL stopped wire custody.
             self.task_carry.after_stopped(lifecycle)
             installed = self.runtime_installation.install(runtime, directory / 'runtime-compaction')
             if self.protected_files() != paths or {str(path): digest(path) for path in unchanged} != invariant:
                 raise RuntimeError('Original input/native/proof/goal bytes changed; remain stopped')
+            installed_goals.require_original()
             self.note('runtime-installed-protected-originals-unchanged', runtime_installation=installed,
-                      byte_invariant_originals=invariant)
+                      goal_installation=goal_installation, byte_invariant_originals=invariant)
         self.cohort.publish(self.route_directory)
         self.note('target-route-and-defaults-published-before-retained-launch')
 

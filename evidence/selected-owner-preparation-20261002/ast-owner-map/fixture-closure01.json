@@ -1,0 +1,18 @@
+{
+  "command": [
+    "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-native5-batch490-20261001/bin/python",
+    "-m",
+    "pytest",
+    "-o",
+    "addopts=",
+    "--basetemp=.artifacts/ast-source-closure01",
+    "tests/test_selected_summary_admission.py",
+    "-q"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 5.10877893702127,
+  "scope": "source-only final sanity after AST/semantic owner and caller migration; not installed acceptance",
+  "provider_calls": 0,
+  "public_mutations": 0,
+  "production_changes": false
+}

@@ -29,8 +29,9 @@ class NativeSessionPreparation(backend.TurnSession):
         state = self.native.attestation.state
         assert state is not None
         identity = self.native.attestation.identity
-        if identity is None or identity.session_file != self.session_file:
+        if identity is None:
             raise NativePiUnavailable("Native preparation did not attest the saved session")
+        self.launch.session.attest(identity)
         if (
             state.is_streaming is not False
             or state.is_compacting is not False
@@ -71,9 +72,9 @@ class NativeSessionPreparation(backend.TurnSession):
             environment=environment,
             session_file=session_file,
         )
-        preparation = cls(launch, "", session_file=session_file, persistent_session=persistent)
+        preparation = cls(launch, "", persistent_session=persistent)
         owner = asyncio.current_task()
-        async with session_writer_fence(session_file), persistent.lock:
+        async with session_writer_fence(launch.session.session_file), persistent.lock:
             try:
                 async with aclosing(preparation.run()) as stream:
                     async for event in stream:

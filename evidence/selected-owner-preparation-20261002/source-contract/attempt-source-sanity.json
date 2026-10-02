@@ -1,0 +1,26 @@
+{
+  "scope": "source-only final sanity after coherent current/proof reader closure; not installed/native readiness",
+  "command": [
+    "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-purechannel502-20261002/bin/python",
+    "-m",
+    "pytest",
+    "-o",
+    "addopts=",
+    "--basetemp=.artifacts/attempt-source-sanity02",
+    "tests/test_selected_summary_journal.py",
+    "tests/test_channel_input_batch.py",
+    "tests/test_reservation_rules.py",
+    "tests/guards/test_owned_send_ownership.py",
+    "-q"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 6.648836376029067,
+  "previous_batch": {
+    "result": "33 passed,10 failed in3.95s",
+    "cause": "five stale raw-history error-message expectations; five fixture NativeWitness revision strings instead of FileRevision",
+    "production_changed_in_response": false
+  },
+  "provider_calls": 0,
+  "public_mutations": 0,
+  "accepted_native6_artifact": false
+}

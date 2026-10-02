@@ -12,23 +12,22 @@ from pathlib import Path
 
 from .backend import PersistentPiSession
 from .compaction_errors import CompactionJournalError
-from .compaction_records import SelectedSummaryAttempt, SelectedSummarySource
+from .compaction_records import SelectedSummaryAttempt
 from .compaction_result import CompactionResult
 from .compaction_states import ManualCommittedSummary
 from .native_input_owner import RegistryOwner
 from .owner_compaction_commit import OwnerCompactionCommit
-from .owner_compaction_prepare import NativePreparation
 from .owner_compaction_provider import NativeSummary
-from .owner_compaction_runtime import compact_owner_once
 from .pi_payloads import StateData
 from .selected_pi_route import read_selected_compaction_decision
-from .selected_pi_summary_rpc import SelectedSummarySlot
 from .selected_source import ManualSource, SessionRevision
 from .thread_identity import TurnId
 
 
 @dataclass(frozen=True)
 class ManualSelectedSummary(NativeSummary):
+    """A journaled owner summary without an original prompt to admit."""
+
     attempt: SelectedSummaryAttempt
 
     def commit_options(self) -> dict:
@@ -65,77 +64,43 @@ async def compact_manual_owner(
         OwnerCompactionCommit, runner.comms.registry.store.path, Path(package)
     )
 
-    pending_input_key = None
+    pending_input_keys = ()
     refusals = bridge.journal.summaries.blocking(session_file)
     for refusal in refusals:
         refusal.state.manual_recovery()
         prior = refusal.source()
         if prior.incarnation != owner.incarnation:
             raise CompactionJournalError("Refused selected source belongs to another owner")
-        key = prior.pending_input_key
-        if key is not None:
-            row = bridge.inputs.read().lookup(key)
-            if not row.accepts_reservation:
+        keys = prior.pending_input_keys
+        if keys:
+            inputs = bridge.inputs.read()
+            if any(not inputs.lookup(key).accepts_reservation for key in keys):
                 raise CompactionJournalError("Refused original input is no longer unbound")
-            if pending_input_key is not None and pending_input_key != key:
+            if pending_input_keys and pending_input_keys != keys:
                 raise CompactionJournalError(
                     "Multiple unresolved originals require explicit review"
                 )
-            pending_input_key = key
+            pending_input_keys = keys
 
-    async def decision():
-        return await read_selected_compaction_decision(
-            persistent,
-            session_file=session_file,
-            expected_package=Path(package),
-            selected=selected,
-        )
+    settings = await read_selected_compaction_decision(
+        persistent, session_file=session_file,
+        expected_package=Path(package), selected=selected,
+    )
+    source = ManualSource(
+        incarnation=owner.incarnation,
+        owner=owner.process_identity,
+        turn=TurnId(turn.id),
+        reserved_revision=SessionRevision.observe(session_file).require_available(),
+    )
 
-    settings = await decision()
-
-    async def summarize(prepared: NativePreparation, captured):
-        attestation = owner.compaction_attestation(generation, prepared.witness)
-        attestation.require_registry(runner.comms.registry, owner)
-        settings.require_current(await decision())
+    def retire_refusals():
         for refusal in refusals:
             bridge.journal.summaries.retire_refused(refusal)
-        source = SelectedSummarySource(
-            retained=captured.retained,
-            source=ManualSource(
-                incarnation=owner.incarnation,
-                owner=owner.process_identity,
-                turn=TurnId(turn.id),
-                reserved_revision=SessionRevision.observe(session_file).require_available(),
-            ),
-            selected=selected,
-            settings=settings.summary_settings(),
-        )
-        result = await SelectedSummarySlot(
-            owner.name, prepared.witness.session_id
-        ).run_selected_summary(
-            persistent,
-            bridge.journal,
-            prepared.witness,
-            source,
-            owner=owner,
-            expected_package=Path(package),
-            tokens_before=prepared.tokens_before,
-            custom_instructions=instructions.strip() if instructions else None,
-            on_event=lambda event: runner.effects._emit_event(session_id, event),
-            reason="manual",
-        )
-        summary = result.manual_summary(bridge.journal)
-        attestation.require_registry(runner.comms.registry, owner)
-        settings.require_current(await decision())
-        return summary
 
-    return await compact_owner_once(
-        bridge,
-        owner,
-        generation,
-        persistent,
-        summarize,
-        settings=settings,
-        context_window=selected.context_window,
-        pending_input_key=pending_input_key,
+    return await bridge.compact_selected(
+        owner, generation, persistent, source, selected, settings,
+        instructions=instructions.strip() if instructions else None,
+        pending_input_keys=pending_input_keys, before_summary=retire_refusals,
+        on_event=lambda event: runner.effects._emit_event(session_id, event),
+        reason="manual",
     )

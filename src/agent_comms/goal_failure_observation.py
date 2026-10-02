@@ -6,6 +6,8 @@ or owner-control ingress. Historical diagnostics cannot reconstruct a binding.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 import re
 import sqlite3
@@ -31,6 +33,21 @@ if TYPE_CHECKING:
 
 class GoalLedgerTable:
     """Declarations in the durable goal-attempt and passive evidence ledger."""
+
+    @classmethod
+    def declared_schema(cls) -> dict[str, str]:
+        return {
+            name: sql
+            for table in TypedTable.members_with(cls)
+            for name, sql in table.schema_objects().items()
+        }
+
+    @classmethod
+    def schema_digest(cls) -> str:
+        """Identity of the actual declarations, including generated family checks."""
+        return hashlib.sha256(
+            json.dumps(cls.declared_schema(), sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
 
 
 @dataclass(frozen=True)
