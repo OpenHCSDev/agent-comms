@@ -118,3 +118,90 @@ async def test_interrupted_summary_recovery_requires_unsent_original_and_unchang
             assert not bridge.journal.summaries.blocking(session)
         assert Path(session).read_bytes() == original
         assert inputs.path.read_bytes() == dispositions
+
+
+@pytest.mark.parametrize("state", ["reserved", "unknown", "refused"])
+def test_summary_recovery_requires_original_no_write_source(tmp_path, state):
+    """One transition family: wrong turn/binding/revision never retire the barrier."""
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.compaction_errors import CompactionJournalError
+    from agent_comms.compaction_records import CompactionOperation
+    from agent_comms.compaction_states import IntentOperation
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.retained_task_facts import RetainedTaskFacts
+    from agent_comms.selected_source import ManualSource
+    from agent_comms.thread_identity import ThreadIncarnation
+    from agent_comms.owner_compaction_settings import PiCompactionSettings
+    from agent_comms.pi_summary_payloads import SelectedModel
+    from dataclasses import replace
+
+    session = tmp_path / "saved.jsonl"
+    session.write_text('{"type":"session","version":3}\n')
+    source = ManualSource(owner=ProcessIdentity.capture(os.getpid()),
+        incarnation=ThreadIncarnation("owner", 1.), turn=TurnId("prior"),
+        reserved_revision=SessionRevision.observe(str(session)).require_available())
+    envelope = SelectedSummarySource(source, SelectedModel("fixture", "model", 1000),
+        PiCompactionSettings(100, 100), RetainedTaskFacts(()))
+    journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+    operation = journal.summaries.reserve(str(session), envelope)
+    if state == "unknown": journal.summaries.mark_unknown(operation)
+    if state == "refused": journal.summaries.refuse(operation, "context_requires_compaction")
+    attempt = journal.summaries.get(operation)
+    inputs = InputDispositions(tmp_path / InputDispositions.filename)
+    check = envelope.interrupted_check(source.reserved_revision, inputs.read(),
+        source.incarnation, TurnId("new-authorized-turn"))
+    with pytest.raises(ReservationViolationError, match="turn_still_active"):
+        journal.summaries.retire_unchanged(attempt, replace(check, turn=source.turn))
+    with pytest.raises(ReservationViolationError, match="owner_changed"):
+        journal.summaries.retire_unchanged(attempt,
+            replace(check, incarnation=ThreadIncarnation("owner", 2.)))
+    with journal.transaction() as db:
+        CompactionOperation("commit", str(session),
+            '{"selectedSummaryOperationId":"' + operation + '"}',
+            IntentOperation(), None).insert(db)
+    with pytest.raises(CompactionJournalError, match="intent prevents"):
+        journal.summaries.retire_unchanged(attempt, check)
+    assert journal.summaries.get(operation) == attempt
+    session.write_text(session.read_text() + '{}\n')
+    with pytest.raises(ReservationViolationError, match="session_changed"):
+        journal.summaries.retire_unchanged(attempt, replace(check,
+            revision=SessionRevision.observe(str(session))))
+    assert journal.summaries.get(operation) == attempt
+
+
+def test_known_refusal_retirement_does_not_admit_or_reclassify_original(tmp_path):
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.compaction_states import RetiredRefusalSummary
+    from agent_comms.pi_summary_payloads import SelectedModel
+    from agent_comms.input_attempt import NotSentInput
+    from agent_comms.threads import Thread
+    from agent_comms.child_process import ProcessIdentity
+
+    session = tmp_path / "saved.jsonl"
+    session.write_text('{"type":"session","version":3}\n')
+    inputs = InputDispositions(tmp_path / InputDispositions.filename)
+    inputs.record("acp:prior", seq=None, owner="owner", admission=1,
+        target="owner", text="original never replayed")
+    rows = inputs.read()
+    source = SelectedAdmissionSource.capture(
+        Thread(
+            'owner', frozenset(), str(tmp_path), created_at=1.,
+            process_identity=ProcessIdentity.capture(os.getpid())),
+        TurnId("prior"), 1, ("acp:prior",), rows, "original never replayed",
+        SessionRevision.observe(str(session)).require_available())
+    envelope = SelectedSummarySource(source, SelectedModel("fixture", "model", 1000),
+        PiCompactionSettings(100, 100), RetainedTaskFacts((InputTaskFact(rows.lookup("acp:prior")),)))
+    journal = CompactionJournal(tmp_path / "compaction-commits.sqlite3")
+    op = journal.summaries.reserve(str(session), envelope)
+    journal.summaries.refuse(op, "context_requires_compaction")
+    inputs.settle_unbound(("acp:prior",))
+    before = inputs.path.read_bytes()
+    check = envelope.interrupted_check(source.reserved_revision, inputs.read(),
+        source.incarnation, TurnId("distinct-authorized-input"))
+    journal.summaries.retire_unchanged(journal.summaries.get(op), check)
+    assert isinstance(journal.summaries.get(op).state, RetiredRefusalSummary)
+    assert not journal.summaries.blocking(str(session))
+    assert isinstance(inputs.read().lookup("acp:prior"), NotSentInput)
+    assert inputs.path.read_bytes() == before
+    assert not inputs.bind("acp:prior", admission=1, turn_id="distinct-authorized-input",
+        native_id="a" * 32, text="original never replayed")

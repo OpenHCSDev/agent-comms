@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.retained_task_facts import RetainedTaskFacts
+from agent_comms.input_disposition import InputDispositions
 from agent_comms.compaction_errors import CompactionJournalError
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_send_admission import native_input_admitted
@@ -170,12 +171,16 @@ async def test_actual_selected_mismatch_refuses_without_provider_or_replay(
         journal.summaries.refuse(result.operation_id, "different native reason")
     with pytest.raises(CompactionJournalError, match="commit reservation"):
         attempt.state.require_commit_reservation()
-    journal.summaries.retire_refused(attempt)
+    check = attempt.request.reservation_check(
+        SessionRevision.observe(str(native.session)),
+        InputDispositions(native.root / "input_dispositions.json").read(),
+    )
+    journal.summaries.retire_unchanged(attempt, check)
     retired = journal.summaries.get(result.operation_id)
     assert isinstance(retired.state, RetiredRefusalSummary)
     assert retired.state.decline_reason == result.reason
     with pytest.raises(CompactionJournalError, match="changed"):
-        journal.summaries.retire_refused(attempt)
+        journal.summaries.retire_unchanged(attempt, check)
     assert journal.summaries.get(result.operation_id) == retired
     assert native.provider.posts == calls
     assert native.session.read_bytes() == original

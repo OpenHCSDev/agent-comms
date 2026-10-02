@@ -32,6 +32,7 @@ from .store_files import _store_lock
 if TYPE_CHECKING:
     from .fresh_private_session import FreshPrivateSession
     from .selected_summary_admission import SelectedAdmissionIdentity, SelectedSummaryAdmission
+    from .reservation_rules import ReservationCheck
 
 
 class _ReturnedTerminalAck:
@@ -171,18 +172,20 @@ class SelectedSummaries(JournalRole):
             target = row.state.refuse(reason)
             row.transition(db, target)
 
-    def retire_refused(self, attempt: SelectedSummaryAttempt) -> None:
-        """Explicitly retire a known refusal without admitting its original input."""
-        target = attempt.state.manual_recovery()
-        with self.journal.transaction() as db:
-            row = SelectedSummaryAttempt.one(db, operation_id=attempt.operation_id)
-            if row != attempt:
-                raise CompactionJournalError("Native refusal changed before explicit retirement")
-            attempt.transition(db, target)
+    def retire_unchanged(
+        self, attempt: SelectedSummaryAttempt, check: ReservationCheck
+    ) -> None:
+        """Retire only the original no-write source under the bridge's custody.
 
-    def retire_unchanged(self, attempt: SelectedSummaryAttempt) -> None:
-        """Bridge holds the native writer and exact owner/source/input fences."""
+        The state supplies the disposition. The source supplies the check; no
+        row, manual command or retirement receipt admits/replays its input.
+        """
         target = attempt.state.retire_unchanged_source()
+        if target == attempt.state:
+            return
+        if check.source != attempt.request.source:
+            raise CompactionJournalError("Summary recovery check belongs to another source")
+        check.require_valid()
         with self.journal.transaction() as db:
             if SelectedSummaryAttempt.one(db, operation_id=attempt.operation_id) != attempt:
                 raise CompactionJournalError("Selected summary changed during reconciliation")
