@@ -20,6 +20,8 @@ One source sanity batch: **17 passed/3 stale-fixture failures in2.50s**, with ra
 
 Failures are existing old API callers: QueuedInputContext.capture argument count and two singular selected-stage.assignment fixture accesses after the plural assignments owner change. They are recorded, not suppressed; no unrelated production repair or broad rerun.
 
-**Installed acceptance remains pending:** Mendel owns ONE configured saved SDK-fork native/ACP journey using Sch's matched existing receiver. This PR stays draft until that receipt arrives. No extra provider run from this source contribution.
+**Installed acceptance passed:** ONE configured saved SDK-fork native/ACP journey,51.9857s on the source-equivalent7dd package. Real Toad headless editor→ACP→native configured Sol/OFF: one new input, exact native reply, same original turn/admission/generation through source attachment and canonical idle. The original41MB history/settings remain unchanged. Owned harness/native processes are absent, with no private-root borrowers found; inaccessible unrelated processes are explicitly unclassified. This is installed headless application/protocol acceptance, not physical st/public activation or a latency-fix claim.
+
+Original authored receipt0cee2ee is copied byte-for-byte and hash verified under `evidence/turn-lease-native-source-20261002/installed/`. Receipt SHAa632f2ddfa2f518865a5eaaaecf367046a7df68a45f19a91ee24b8672fcfe816. No second provider run.
 
 Original79cb UNKNOWN and540 original NotSentInput/source-preparation qualifiers are preserved. No original replay or public/default mutation.
