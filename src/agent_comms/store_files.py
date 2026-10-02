@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import BinaryIO, TYPE_CHECKING
 
 from .errors import RelationViolationError
+from .private_path import PrivateFileRole
 
 if TYPE_CHECKING:
     from .private_bus_checkpoint import CertifiedSourceRead
@@ -160,7 +161,8 @@ def _replace_snapshot(source: Path, target: Path, *, windows: bool = os.name == 
 
 
 def _atomic_write_text(
-    path: Path, text: str, *, fsync_parent: bool = False, mode: int = 0o600
+    path: Path, text: str, *, fsync_parent: bool = False,
+    mode: int = PrivateFileRole.permissions,
 ) -> None:
     """Replace a snapshot; private guarded writes also durably sync its name."""
     path.parent.mkdir(parents=True, exist_ok=True)
