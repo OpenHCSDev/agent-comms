@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -122,47 +122,54 @@ class SelectedSession:
         thinking_level: str | None,
         package: Path,
     ) -> SelectedSession:
-        directory = participant.comms.root / "native-sessions" / participant.lookup
-        worktree = Path(participant.owner.thread.worktree).absolute()
-        if not worktree.is_dir():
-            raise IdentityConflict("registered participant worktree is unavailable")
-        if not fresh:
-            directory.mkdir(parents=True, mode=0o700, exist_ok=True)
-            # Captured registry intent selects ordinary continuation. An explicit
-            # operator selection remains explicit; no downstream reader guesses it.
-            selected = path if path is not None else participant.owner.thread.session_file
-            return await asyncio.to_thread(cls.for_launch, directory,
-                Path(selected).absolute() if selected is not None else None, package)
-        # Original wire→bus→registry→store→journal order spans exclusive file
-        # creation, fsync and enrollment. No historical-file coverage inference.
-        with _response_boundary(participant.bus) as registry, participant.store.session.read():
-            try:
-                participant.owner.require_snapshot(
-                    registry, "fresh-session owner changed before enrollment"
+        def acquire() -> SelectedSession:
+            directory = participant.comms.root / "native-sessions" / participant.lookup
+            worktree = Path(participant.owner.thread.worktree).absolute()
+            if not worktree.is_dir():
+                raise IdentityConflict("registered participant worktree is unavailable")
+            if not fresh:
+                directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+                # Captured registry intent selects ordinary continuation. An explicit
+                # operator selection remains explicit; no downstream reader guesses it.
+                selected = path if path is not None else participant.owner.thread.session_file
+                return cls.for_launch(directory,
+                    Path(selected).absolute() if selected is not None else None, package)
+            # Original wire→bus→registry→store→journal order spans exclusive file
+            # creation, fsync and enrollment. No historical-file coverage inference.
+            with (
+                _response_boundary(participant.bus) as registry,
+                Coordination(str(participant.store.session.path)) as resource,
+                resource.session.read(),
+            ):
+                try:
+                    participant.owner.require_snapshot(
+                        registry, "fresh-session owner changed before enrollment"
+                    )
+                except RelationViolationError as error:
+                    raise StaleFence("fresh-session owner changed before enrollment") from error
+                participant.identity.require(resource, participant.lookup)
+                MaintenanceBarrier(participant.bus._registry.store.path).assert_open_unlocked()
+                creation = create_fresh_private_session(
+                    directory,
+                    worktree=worktree,
+                    selected_thinking_level=thinking_level,
                 )
-            except RelationViolationError as error:
-                raise StaleFence("fresh-session owner changed before enrollment") from error
-            participant.identity.require(participant.store, participant.lookup)
-            MaintenanceBarrier(participant.bus._registry.store.path).assert_open_unlocked()
-            creation = create_fresh_private_session(
-                directory,
-                worktree=worktree,
-                selected_thinking_level=thinking_level,
-            )
-            CompactionJournal(
-                participant.comms.root / "compaction-commits.sqlite3"
-            ).private_inputs.enroll(
-                creation,
-                incarnation=participant.owner.thread.incarnation,
-                owner_lookup=participant.lookup,
-                owner_generation=participant.identity.generation,
-                admission_generation=participant.owner.admission_generation,
-            )
-        if thinking_level is not None:
-            return FirstSelectedSession(directory,
+                CompactionJournal(
+                    participant.comms.root / "compaction-commits.sqlite3"
+                ).private_inputs.enroll(
+                    creation,
+                    incarnation=participant.owner.thread.incarnation,
+                    owner_lookup=participant.lookup,
+                    owner_generation=participant.identity.generation,
+                    admission_generation=participant.owner.admission_generation,
+                )
+            if thinking_level is not None:
+                return FirstSelectedSession(directory,
+                    identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
+            return SavedSelectedSession(directory,
                 identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
-        return SavedSelectedSession(directory,
-            identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
+
+        return await Coordination.run_worker(acquire)
 
 
 @dataclass(frozen=True)
@@ -212,9 +219,9 @@ class SavedSelectedSession(SelectedSession):
             self.identity.require_session(owner.require_saved_session())
             snapshot = participant.comms.registry.snapshot()
             generation = snapshot.owner_generations[owner.name]
-            bridge = await asyncio.to_thread(
+            bridge = await Coordination.run_worker(partial(
                 OwnerCompactionCommit, participant.comms.registry.store.path, turn.launch.package
-            )
+            ))
             source = ManualSource(
                 incarnation=owner.incarnation, owner=owner.process_identity,
                 turn=TurnId(participant.owner.require_active_turn().id),
