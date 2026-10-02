@@ -198,3 +198,36 @@ cancellation and distinct next input/terminal reply. It does not replay historic
 UNKNOWN or substitute explicit loopback-selected files for ordinary continuation.
 Supplied phase patch remains in #489; no separate TurnExposure/replay authority.
 Patterns: IDEN-1/3/5/6, IMPL-4/5/13/14, BOUND-2, AGENT-2/6.
+
+## Original configured compaction publication relation (#501)
+
+The independently merged #501 (`b4ea9f8f`) classifies the existing
+CompactionSourceProgress leaf phase as an observation, retaining raw stream
+semantics while excluding leaf changes from aggregate turn equality. Its
+actual configured saved-fork snapshot has 1,042 raw observations / 363 leaf
+switches / zero aggregate work changes and one whole-turn publication. This
+is publication evidence, not a complete UI or controlled latency acceptance.
+
+The same single original input later reached native commit `1a251fa0`, user
+`1dd3b365` and assistant `4332fd6f` with stopReason=stop. The original typed
+receipt linked operation `bc86b8f7f27f452da0e72a3019d71fd3`, committed its exact
+native entry, recorded the original input started/unresolved=false and observed
+no active turn. The UI had already failed on tab return with source-reader
+retirement. Source and terminal evidence live on #501 at `540b198b`; no replay,
+provider invocation or lifecycle mutation was performed by the observer.
+
+Source-consumption counters and their native observation clock are owned by
+CompactionPlan; they do not carry a provider-terminal timestamp. The original
+851.234-second interval is last source observation to commit, not known provider
+completion to commit. The fresh single UI submission to persisted answer was
+132.327464 seconds; these different attempts do not isolate any stage's cost.
+
+The complete downstream seam remains in this scope: SelectedPiSummaryRpc awaits
+the original on_event callback; AcpEventConsumer observes canonical compaction
+before publishing the original raw update; TurnRunner.observe_compaction reads
+the original bound lease/phase and transition_turn rereads phase for equality
+before AgentActivity/Registration/RegistryDocument publication. These are actual
+consumers/questions, not permission to introduce a cached phase, event coalescer,
+timer or independent proof. Their per-delta cost has no retained timing bracket
+yet. Native custody/receive ownership and exact lease publication must be closed
+together; the presence of two reads alone does not justify a symptom patch.
