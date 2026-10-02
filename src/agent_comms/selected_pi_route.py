@@ -22,7 +22,7 @@ from .registration import Registration
 from .message_reference import MessageReference
 
 
-class SelectedPiProbeUnknownError(RuntimeError):
+class SelectedPiProbeUnknownError(NativePiUnavailable):
     """A sent or untrusted probe is not retry/commit/input authority."""
 
 
