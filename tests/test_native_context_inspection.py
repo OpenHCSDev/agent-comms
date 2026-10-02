@@ -55,7 +55,7 @@ async def test_original_context_query_preserves_native_journal_and_dispatches_no
             assert {segment.declared_name for segment in first.segments} >= {"system_layer", "tool_catalog"}
             selected = Path(first.identity.session_file)
             assert selected == Path(thread.require_saved_session())
-            assert owner._comms.bus.log.context_manifests(thread.incarnation) == ()
+            assert owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry) == ()
             assert fixture.session.read_bytes() == selected_before
         finally:
             await connection.close()
@@ -217,7 +217,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                         'scope': FieldCodec.encode(CurrentTaskScopeSelection()),
                         'change': FieldCodec.encode(CorrectionTaskChange(private_choice.reference)),
                     })
-                previous = owner._comms.bus.log.context_manifests(thread.incarnation)
+                previous = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
                 image = {'mimeType': 'image/png',
                     'data': 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='} if index == 1 else None
                 original = await observer.submit(text, image=image,
@@ -225,7 +225,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
                 originals.append(original)
                 assert isinstance(original.origin.require_human().goal, PresentGoalCheckpoint)
                 assert not failures, failures
-                manifests = owner._comms.bus.log.context_manifests(thread.incarnation)
+                manifests = owner._comms.bus.log.context_manifests(thread.name, owner._comms.registry)
                 assert len(manifests) > len(previous)
                 manifest = manifests[-1]
                 assert {segment.kind for segment in manifest.segments} >= {

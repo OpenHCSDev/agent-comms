@@ -371,8 +371,17 @@ class ContextTurn(DeclaredFamily, affix="ContextTurn"):
     @abstractmethod
     def source_revision(self, owner: Thread) -> str: ...
 
-    def require_recorded(self):
+    def require_recorded(self) -> RecordedContextTurn:
         raise ValueError("A next-context preview cannot be published as a recorded turn")
+
+    def same_recording(self, other: ContextTurn) -> bool:
+        """A recorded allocation keeps its identity across a registry rename."""
+        selected = self.require_recorded()
+        previous = other.require_recorded()
+        return (selected.identity == previous.identity
+                and selected.occurrence.generation == previous.occurrence.generation
+                and selected.occurrence.incarnation.created_at
+                == previous.occurrence.incarnation.created_at)
 
     def matches_generation(self, generation: int) -> bool:
         return False
@@ -390,8 +399,8 @@ class RecordedContextTurn(ContextTurn):
     def source_revision(self, owner: Thread) -> str:
         return self.identity.value
 
-    def require_recorded(self):
-        return None
+    def require_recorded(self) -> RecordedContextTurn:
+        return self
 
     def matches_generation(self, generation: int) -> bool:
         return self.occurrence.generation == generation
@@ -408,6 +417,25 @@ class ContextManifest:
     turn: ContextTurn
     segments: tuple[SegmentManifest, ...]
     counter: str
+
+    def changed_from_history(self, history: tuple[ContextManifest, ...]) -> dict:
+        """Compare with the previous original turn at this sealed wire position.
+
+        A turn's immutable ID and allocation survive a rename; its recorded
+        spelling remains original evidence. Later observations cannot be this
+        historical manifest's predecessor.
+        """
+        earlier = reversed(history)
+        try:
+            next(manifest for manifest in earlier if manifest == self)
+        except StopIteration as error:
+            raise ValueError("Context manifest is outside the original history") from error
+        try:
+            previous = next(manifest for manifest in earlier
+                            if not self.turn.same_recording(manifest.turn))
+        except StopIteration as error:
+            raise ValueError("No preceding recorded turn exists for comparison") from error
+        return self.changed_since(previous)
 
     def changed_since(self, previous: ContextManifest) -> dict:
         """An inspection projection, never a retained input copy."""

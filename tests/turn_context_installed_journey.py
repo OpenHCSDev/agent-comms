@@ -152,7 +152,7 @@ async def run_configured(options):
         terminal_replies = tuple(entry for entry in entries[entries.index(user) + 1:]
             if entry.final_reply)
         assert terminal_replies[-1].message.authoritative_text.strip() == token
-        manifests = service.bus.log.context_manifests(thread.incarnation)
+        manifests = service.bus.log.context_manifests(thread.name, service.registry)
         assert manifests
         historical = await query('--turn', str(manifests[-1].turn.occurrence.generation))
         (output / 'recorded-context.json').write_text(json.dumps(historical))
@@ -240,7 +240,7 @@ def complete_goal_controls(root):
         durable = dispositions.read()
         assert all(durable.lookup(item.key) == item for item in originals)
         difference = ContextCliCommand(thread=source.name, diff=True).apply(service)
-        manifests = service.bus.log.context_manifests(source.incarnation)
+        manifests = service.bus.log.context_manifests(source.name, service.registry)
         assert difference['turn'] != difference['previous_turn']
         recorded = ContextCliCommand(thread=source.name,
             turn=manifests[-1].turn.occurrence.generation).apply(service)
@@ -262,6 +262,86 @@ def complete_goal_controls(root):
         print(json.dumps(receipt), flush=True)
 
 
+def complete_history_controls(root):
+    """Installed historical CLI only; original sealed records, no native input."""
+    import hashlib
+    import subprocess
+    from dataclasses import replace
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.comms import Comms
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.thread_identity import TurnId, TurnIdentity
+    from agent_comms.threads import Thread
+    from agent_comms.turn_context import RecordedContextTurn, TurnContext
+
+    root.mkdir(mode=0o700)
+    wire = root / 'wire'
+    wire.mkdir(mode=0o700)
+    service = Comms(wire)
+    owner = Thread('history-original', frozenset(), str(root),
+                   process_identity=ProcessIdentity.capture(os.getpid()), created_at=18002.0)
+    service.registry.register(owner)
+    service.messaging.initialize_private_initial_protocol()
+    originals = []
+    for generation in (1, 2):
+        turn = RecordedContextTurn(TurnId(f'original-history-{generation}'),
+                                   TurnIdentity(owner.incarnation, generation))
+        context = TurnContext.for_owner(owner, turn, f'Original private source {generation} π', ())
+        observation = context.manifest(tuple(0 for _ in context.segments),
+                                       counter='fixture-original-estimate')
+        service.bus.log.record_context(observation)
+        originals.append(observation)
+    service.registry.rename(owner.name, 'history-renamed')
+    renamed = service.registry.require('history-renamed')
+    second = originals[-1]
+    continuation = replace(second, thread=renamed.incarnation,
+        turn=replace(second.turn, occurrence=replace(second.turn.occurrence,
+                                                   incarnation=renamed.incarnation)))
+    service.bus.log.record_context(continuation)
+    future_context = TurnContext.for_owner(renamed,
+        RecordedContextTurn(TurnId('original-history-3'), TurnIdentity(renamed.incarnation, 3)),
+        'Later original private source', ())
+    future = future_context.manifest(tuple(0 for _ in future_context.segments),
+                                    counter='fixture-original-estimate')
+    service.bus.log.record_context(future)
+    expected = (*originals, continuation, future)
+    before = hashlib.sha256(service.bus.log.path.read_bytes()).hexdigest()
+    environment = dict(os.environ)
+    environment.pop('PYTHONPATH', None)
+    outputs = []
+
+    def query(name, *arguments, accepted=True):
+        result = subprocess.run([str(Path(sys.executable).parent / 'agent-comms'),
+            '--root', str(wire), 'context', name, *arguments], env=environment,
+            text=True, capture_output=True, timeout=15)
+        assert result.returncode == (0 if accepted else 1), result.stderr + result.stdout
+        payload = json.loads(result.stdout)
+        outputs.append(dict(name=name, arguments=arguments, result=payload))
+        return payload
+
+    assert query('history-renamed', '--turn', '1')['manifests'] == FieldCodec.encode((originals[0],))
+    assert query('history-original', '--turn', '2')['manifests'] == FieldCodec.encode((originals[1], continuation))
+    difference = query('history-renamed', '--turn', '2', '--diff')
+    assert difference == continuation.changed_since(originals[0])
+    assert query('history-original', '--diff') == future.changed_since(continuation)
+    assert 'No preceding recorded turn' in query('history-renamed', '--turn', '1', '--diff', accepted=False)['error']
+    reopened = Comms(wire)
+    assert reopened.bus.log.context_manifests('history-original', reopened.registry) == expected
+    service.registry.unregister('history-renamed')
+    service.registry.remove('history-renamed')
+    service.registry.register(replace(renamed, created_at=19002.0))
+    assert 'No original context manifest' in query('history-renamed', '--turn', '1', accepted=False)['error']
+    after = hashlib.sha256(service.bus.log.path.read_bytes()).hexdigest()
+    assert before == after
+    receipt = dict(state='INSTALLED_HISTORICAL_CLI_PASS', python=sys.executable,
+        core=agent_comms.__file__, original_records=FieldCodec.encode(expected),
+        queries=outputs, wire_sha256=after, original_wire_unchanged=True,
+        native_prompts=0, provider_calls=0, public_mutations=0, original_input_replays=0)
+    (root / 'context-history-receipt.json').write_text(json.dumps(receipt, indent=2))
+    print(json.dumps({key: value for key, value in receipt.items()
+                      if key not in ('original_records', 'queries')}), flush=True)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
@@ -270,6 +350,7 @@ if __name__ == "__main__":
     parser.add_argument('--configured-source-root', type=Path)
     parser.add_argument('--original-python', type=Path)
     parser.add_argument('--complete-goal-controls', action='store_true')
+    parser.add_argument('--complete-history-controls', action='store_true')
     journey = parser.add_mutually_exclusive_group()
     journey.add_argument('--receiving-only', action='store_true')
     journey.add_argument('--authored-operations-only', action='store_true')
@@ -284,7 +365,9 @@ if __name__ == "__main__":
     sys.path.append(str(options.toad_driver_dir))
     sys.path.append(str(Path(__file__).resolve().parents[1] / 'tools' / 'cutover'))
     os.environ['PATH'] = os.pathsep.join((str(Path(sys.executable).parent), os.environ.get('PATH', os.defpath)))
-    if options.complete_goal_controls:
+    if options.complete_history_controls:
+        complete_history_controls(options.root)
+    elif options.complete_goal_controls:
         complete_goal_controls(options.root)
     else:
         asyncio.run(run_configured(options) if options.configured_source_root

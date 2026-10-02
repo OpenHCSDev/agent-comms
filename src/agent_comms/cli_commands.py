@@ -757,9 +757,8 @@ class ContextCliCommand(CliCommand):
         from .runtime import RuntimeConnection, socket_path
         from .turn_context import TurnContext, NextContextTurn
 
-        owner = ctx.registry.require(self.thread)
         if self.turn is not None or self.diff:
-            manifests = ctx.bus.log.context_manifests(owner.incarnation)
+            manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)
             selected = tuple(
                 manifest for manifest in manifests
                 if self.turn is None or manifest.turn.matches_generation(self.turn)
@@ -767,15 +766,9 @@ class ContextCliCommand(CliCommand):
             if not selected:
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
-                latest = selected[-1]
-                prior = next(
-                    (manifest for manifest in reversed(manifests)
-                     if manifest.turn != latest.turn), None,
-                )
-                if prior is None:
-                    raise ValueError("No preceding recorded turn exists for comparison")
-                return latest.changed_since(prior)
+                return selected[-1].changed_from_history(manifests)
             return {"manifests": FieldCodec.encode(selected), "text_recorded": False}
+        owner = ctx.registry.require(self.thread)
         context = TurnContext.for_owner(owner, NextContextTurn(), "", ctx.views.thread_views())
         for segment in owner.context_goal_segments():
             context = context.prepend(segment)
