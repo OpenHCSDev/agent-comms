@@ -56,7 +56,9 @@ class SelectedParticipant(MroDispatch):
         identity = event.identity
         if identity is None:
             raise IdentityConflict("Native source publication lacks its attested identity")
-        self.owner = self.comms.registry.attach_native_session(self.owner, identity.session_file)
+        self.owner = await Coordination.run_worker(partial(
+            self.comms.registry.attach_native_session, self.owner, identity.session_file
+        ))
 
     def require_current(self, resource: Coordination) -> None:
         self.owner.require_registry(self.comms.registry)
