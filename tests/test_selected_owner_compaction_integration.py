@@ -252,11 +252,10 @@ async def test_selected_native_summary_commits_and_admits_original_exactly_once(
         assert (
             await maybe_compact_owner_turn(
                 registry,
-                launcher,
                 "owner",
                 "turn",
                 info,
-                "acp:original",
+                ("acp:original",),
                 persistent,
                 input_text="Continue",
                 on_admission=admitted.append,
@@ -767,11 +766,10 @@ async def test_correction_after_native_commit_never_mints_original_admission(tmp
         with pytest.raises(RelationViolationError, match="Unsettled"):
             await maybe_compact_owner_turn(
                 registry,
-                launcher,
                 "owner",
                 "turn",
                 info,
-                "acp:original",
+                ("acp:original",),
                 persistent,
                 input_text="Continue",
                 on_admission=admissions.append,
@@ -800,11 +798,10 @@ async def test_selected_effective_disabled_skips_without_reserving_or_mutating(
         before = Path(file).read_bytes()
         assert not await maybe_compact_owner_turn(
             registry,
-            launcher,
             "owner",
             "turn",
             info,
-            "acp:original",
+            ("acp:original",),
             persistent,
             input_text="Continue",
             on_admission=lambda _: pytest.fail("Disabled admission"),
@@ -834,11 +831,10 @@ async def test_selected_custom_model_and_project_settings_use_actual_owner(tmp_p
         assert info.model.display_name == "custom-local/custom-model"
         assert await maybe_compact_owner_turn(
             registry,
-            launcher,
             "owner",
             "turn",
             info,
-            "acp:original",
+            ("acp:original",),
             persistent,
             input_text="Continue",
             on_admission=admitted.append,
@@ -866,11 +862,10 @@ async def test_owner_without_goal_compacts_with_exact_turn_authority(tmp_path, m
         admitted = []
         assert await maybe_compact_owner_turn(
             registry,
-            launcher,
             "owner",
             "turn",
             info,
-            "acp:original",
+            ("acp:original",),
             persistent,
             input_text="Continue",
             on_admission=admitted.append,
