@@ -1,0 +1,375 @@
+.............F...FF.                                                     [100%]
+=================================== FAILURES ===================================
+_________ test_admission_scope_cannot_decode_a_registry_process_owner __________
+
+tmp_path = PosixPath('/home/ts/wt/comms-retained-human-main-20261001/.artifacts/turn-source542-sanity01/test_admission_scope_cannot_de0')
+
+    def test_admission_scope_cannot_decode_a_registry_process_owner(tmp_path):
+        from agent_comms.acp_extension import CursorScope, QueueScope
+        from agent_comms.queued_input import QueuedInputContext
+    
+        registry = registry_with_owner(tmp_path)
+        snapshot = registry.snapshot()
+        owner = snapshot.threads["owner"]
+        admission = snapshot.admission_identity("owner")
+        registry_owner = snapshot.owner_identity("owner")
+        assert admission.admission_generation == registry_owner.generation
+        assert admission != registry_owner
+>       context = QueuedInputContext.capture(owner, admission, None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: QueuedInputContext.capture() takes 3 positional arguments but 4 were given
+
+tests/test_thread_identity.py:160: TypeError
+______ test_durable_private_admission_names_each_changed_authority[False] ______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-_axgi87i')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f8561e25f40>
+direct = False
+
+    @pytest.mark.parametrize("direct", [False, True])
+    async def test_durable_private_admission_names_each_changed_authority(
+        tmp_path, monkeypatch, direct
+    ):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        observed = []
+    
+        class InspectedError(Exception):
+            pass
+    
+        async def inspect_before_native(*args, **kwargs):
+            admission = kwargs["prompt_send_boundary"]
+            with Coordination(root / "coordination.sqlite3") as store:
+                row = NativeRuntimeInput.one(store.session._connection, input_id=admission.input_id)
+                binding = read_expected_prompt_binding(store, admission.input_id)
+            stage = admission.stage
+            expected = admission.participant.coordinator_identity(stage.assignment.recipient_lookup)
+            reservation = rules.NativeReservationCheck(
+                row=row, stage=stage, owner=expected, token_digest=admission.token_digest
+            )
+            bound = rules.NativeBindingCheck(
+                row=binding,
+                stage=stage,
+                owner=expected,
+                wire_root_id=root_id,
+                prompt_digest=TextDigest(native_request_digest(admission.prompt)),
+            )
+            current, generation = comms.registry.live_owner_with_admission(owner.name)
+            registry = rules.GoalRegistryAdmissionCheck(
+                actual=current,
+                expected=current,
+                admission=generation,
+                expected_admission=generation,
+                process=ProcessIdentity.capture(os.getpid()),
+            )
+            claim = rules.NativeClaimCheck(captured=stage.assignment, current=stage.assignment)
+            for check in (registry, reservation, bound, claim):
+                check.require_valid()
+            cases = {
+                rules.RegistryIncarnationRule: replace(
+                    registry, actual=replace(current, created_at=current.created_at + 1)
+                ),
+                rules.RegistryProcessRule: replace(
+                    registry,
+                    process=replace(registry.process, start_time=registry.process.start_time + 1),
+                ),
+                rules.RegistryAdmissionRule: replace(registry, admission=generation + 1),
+                rules.RegistryRoleRule: replace(
+                    registry, actual=replace(current, role=ThreadRole.USER)
+                ),
+                rules.RegistryWorktreeRule: replace(
+                    registry, actual=replace(current, worktree=str(tmp_path / "other"))
+                ),
+                rules.RegistryModelRule: replace(registry, actual=replace(current, model="fixture/changed")),
+                rules.RegistryThinkingRule: replace(registry, actual=replace(current, thinking_level=next(level for level in ThinkingLevel.members_with(ThinkingLevel) if level is not current.thinking_level))),
+                rules.RegistrySessionRule: replace(registry, actual=replace(current, session_file=str(tmp_path / "changed.jsonl"))),
+                rules.RegistryTurnRule: replace(registry, actual=replace(current, active_turn=None)),
+                rules.RegistryGoalRule: replace(
+                    registry, actual=replace(current, goal=Goal("changed", "changed"))
+                ),
+                rules.NativeInputIdentityRule: replace(
+                    reservation, row=replace(row, owner_generation=expected.generation + 1)
+                ),
+                rules.NativeTokenRule: replace(reservation, token_digest="0" * 64),
+                rules.NativeAlreadyAdmittedRule: replace(
+                    reservation, row=replace(row, sent_owner_admission_generation=RecordedNativeAdmission(1))
+                ),
+                rules.NativeAlreadyProvenRule: replace(
+                    reservation, row=replace(row, session_id="returned")
+                ),
+                rules.NativeAlreadyDecidedRule: replace(
+                    reservation, row=replace(row, verdict=IgnoreSelectedTriage)
+                ),
+                rules.NativeBindingRootRule: replace(bound, wire_root_id="0" * 32),
+                rules.NativeBindingContentRule: replace(bound, prompt_digest=TextDigest.of("changed")),
+                rules.NativeClaimRecipientRule: replace(
+                    claim, current=replace(claim.current, recipient="another")
+                ),
+                rules.NativeClaimLookupRule: replace(
+                    claim, current=replace(claim.current, recipient_lookup="another")
+                ),
+                rules.NativeClaimSequenceRule: replace(
+                    claim, current=replace(claim.current, wire_seq=claim.current.wire_seq + 1)
+                ),
+                rules.NativeClaimMessageRule: replace(
+                    claim, current=replace(claim.current, message_id="another")
+                ),
+            }
+            # Wake-mode variants belong to the existing assignment-state family.
+            from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
+    
+            cases[rules.NativeClaimModeRule] = replace(
+                claim,
+                current=replace(
+                    claim.current,
+                    lifecycle=TriagePendingAssignment() if direct else FullPendingAssignment(),
+                ),
+            )
+            applicable = {
+                declaration
+                for declaration in ReservationRule.members_with(ReservationRule)
+                if any(
+                    isinstance(check, declaration.check_type)
+                    for check in (registry, reservation, bound, claim)
+                )
+            }
+            assert cases.keys() == applicable
+            for declaration, check in cases.items():
+                with pytest.raises(ReservationViolationError) as caught:
+                    check.require_valid()
+                assert type(caught.value.rule) is declaration
+                assert declaration.declared_name in str(caught.value)
+            # The shared owner/attempt rules also apply to the independent prelaunch row.
+            for changes, refusal in (
+                ({"owner_generation": expected.generation + 1}, rules.NativeInputIdentityRule),
+            ):
+                with pytest.raises(ReservationViolationError) as caught:
+                    replace(bound, row=replace(binding, **changes)).require_valid()
+                assert type(caught.value.rule) is refusal
+            try:
+                changed_attempt = replace(binding, attempt_ordinal=99)
+            except IdentityConflict:
+                # Triage has no execution: reject partial original SQL at acquisition.
+                assert isinstance(binding.execution, TriageNativeExecution)
+            else:
+                with pytest.raises(ReservationViolationError) as caught:
+                    replace(bound, row=changed_attempt).require_valid()
+                assert type(caught.value.rule) is rules.NativeInputIdentityRule
+            observed.append(True)
+            raise InspectedError
+    
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn.TrackedTurnSession.execute", inspect_before_native
+        )
+        with pytest.raises(InspectedError):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_admission_rules.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:108: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/selected_turn.py:309: in run
+    result = await request.admission.execute(
+src/agent_comms/private_send_admission.py:156: in execute
+    result = await TrackedTurnSession.execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('/var/tmp/ac-sealed-test-_axgi87i'),)
+kwargs = {'input_id': '895d161e94336abe8261e67926ffc851', 'prompt': '── comms: 1 selected ──\nselected: [{"source_seq":1,"claim...de5b79f5b0dedd712f5a0447dae761f8907e2172', images=())), 'worktree': PosixPath('/var/tmp/ac-sealed-test-_axgi87i'), ...}
+
+    async def inspect_before_native(*args, **kwargs):
+        admission = kwargs["prompt_send_boundary"]
+        with Coordination(root / "coordination.sqlite3") as store:
+            row = NativeRuntimeInput.one(store.session._connection, input_id=admission.input_id)
+            binding = read_expected_prompt_binding(store, admission.input_id)
+        stage = admission.stage
+>       expected = admission.participant.coordinator_identity(stage.assignment.recipient_lookup)
+                                                              ^^^^^^^^^^^^^^^^
+E       AttributeError: 'TriageNativeSend' object has no attribute 'assignment'. Did you mean: 'assignments'?
+
+tests/test_native_admission_rules.py:48: AttributeError
+______ test_durable_private_admission_names_each_changed_authority[True] _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-pzur3umu')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f856228d0d0>
+direct = True
+
+    @pytest.mark.parametrize("direct", [False, True])
+    async def test_durable_private_admission_names_each_changed_authority(
+        tmp_path, monkeypatch, direct
+    ):
+        root, root_id, comms, _, people = _root(tmp_path, direct=direct)
+        owner = people[2] if direct else people[1]
+        monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
+        observed = []
+    
+        class InspectedError(Exception):
+            pass
+    
+        async def inspect_before_native(*args, **kwargs):
+            admission = kwargs["prompt_send_boundary"]
+            with Coordination(root / "coordination.sqlite3") as store:
+                row = NativeRuntimeInput.one(store.session._connection, input_id=admission.input_id)
+                binding = read_expected_prompt_binding(store, admission.input_id)
+            stage = admission.stage
+            expected = admission.participant.coordinator_identity(stage.assignment.recipient_lookup)
+            reservation = rules.NativeReservationCheck(
+                row=row, stage=stage, owner=expected, token_digest=admission.token_digest
+            )
+            bound = rules.NativeBindingCheck(
+                row=binding,
+                stage=stage,
+                owner=expected,
+                wire_root_id=root_id,
+                prompt_digest=TextDigest(native_request_digest(admission.prompt)),
+            )
+            current, generation = comms.registry.live_owner_with_admission(owner.name)
+            registry = rules.GoalRegistryAdmissionCheck(
+                actual=current,
+                expected=current,
+                admission=generation,
+                expected_admission=generation,
+                process=ProcessIdentity.capture(os.getpid()),
+            )
+            claim = rules.NativeClaimCheck(captured=stage.assignment, current=stage.assignment)
+            for check in (registry, reservation, bound, claim):
+                check.require_valid()
+            cases = {
+                rules.RegistryIncarnationRule: replace(
+                    registry, actual=replace(current, created_at=current.created_at + 1)
+                ),
+                rules.RegistryProcessRule: replace(
+                    registry,
+                    process=replace(registry.process, start_time=registry.process.start_time + 1),
+                ),
+                rules.RegistryAdmissionRule: replace(registry, admission=generation + 1),
+                rules.RegistryRoleRule: replace(
+                    registry, actual=replace(current, role=ThreadRole.USER)
+                ),
+                rules.RegistryWorktreeRule: replace(
+                    registry, actual=replace(current, worktree=str(tmp_path / "other"))
+                ),
+                rules.RegistryModelRule: replace(registry, actual=replace(current, model="fixture/changed")),
+                rules.RegistryThinkingRule: replace(registry, actual=replace(current, thinking_level=next(level for level in ThinkingLevel.members_with(ThinkingLevel) if level is not current.thinking_level))),
+                rules.RegistrySessionRule: replace(registry, actual=replace(current, session_file=str(tmp_path / "changed.jsonl"))),
+                rules.RegistryTurnRule: replace(registry, actual=replace(current, active_turn=None)),
+                rules.RegistryGoalRule: replace(
+                    registry, actual=replace(current, goal=Goal("changed", "changed"))
+                ),
+                rules.NativeInputIdentityRule: replace(
+                    reservation, row=replace(row, owner_generation=expected.generation + 1)
+                ),
+                rules.NativeTokenRule: replace(reservation, token_digest="0" * 64),
+                rules.NativeAlreadyAdmittedRule: replace(
+                    reservation, row=replace(row, sent_owner_admission_generation=RecordedNativeAdmission(1))
+                ),
+                rules.NativeAlreadyProvenRule: replace(
+                    reservation, row=replace(row, session_id="returned")
+                ),
+                rules.NativeAlreadyDecidedRule: replace(
+                    reservation, row=replace(row, verdict=IgnoreSelectedTriage)
+                ),
+                rules.NativeBindingRootRule: replace(bound, wire_root_id="0" * 32),
+                rules.NativeBindingContentRule: replace(bound, prompt_digest=TextDigest.of("changed")),
+                rules.NativeClaimRecipientRule: replace(
+                    claim, current=replace(claim.current, recipient="another")
+                ),
+                rules.NativeClaimLookupRule: replace(
+                    claim, current=replace(claim.current, recipient_lookup="another")
+                ),
+                rules.NativeClaimSequenceRule: replace(
+                    claim, current=replace(claim.current, wire_seq=claim.current.wire_seq + 1)
+                ),
+                rules.NativeClaimMessageRule: replace(
+                    claim, current=replace(claim.current, message_id="another")
+                ),
+            }
+            # Wake-mode variants belong to the existing assignment-state family.
+            from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
+    
+            cases[rules.NativeClaimModeRule] = replace(
+                claim,
+                current=replace(
+                    claim.current,
+                    lifecycle=TriagePendingAssignment() if direct else FullPendingAssignment(),
+                ),
+            )
+            applicable = {
+                declaration
+                for declaration in ReservationRule.members_with(ReservationRule)
+                if any(
+                    isinstance(check, declaration.check_type)
+                    for check in (registry, reservation, bound, claim)
+                )
+            }
+            assert cases.keys() == applicable
+            for declaration, check in cases.items():
+                with pytest.raises(ReservationViolationError) as caught:
+                    check.require_valid()
+                assert type(caught.value.rule) is declaration
+                assert declaration.declared_name in str(caught.value)
+            # The shared owner/attempt rules also apply to the independent prelaunch row.
+            for changes, refusal in (
+                ({"owner_generation": expected.generation + 1}, rules.NativeInputIdentityRule),
+            ):
+                with pytest.raises(ReservationViolationError) as caught:
+                    replace(bound, row=replace(binding, **changes)).require_valid()
+                assert type(caught.value.rule) is refusal
+            try:
+                changed_attempt = replace(binding, attempt_ordinal=99)
+            except IdentityConflict:
+                # Triage has no execution: reject partial original SQL at acquisition.
+                assert isinstance(binding.execution, TriageNativeExecution)
+            else:
+                with pytest.raises(ReservationViolationError) as caught:
+                    replace(bound, row=changed_attempt).require_valid()
+                assert type(caught.value.rule) is rules.NativeInputIdentityRule
+            observed.append(True)
+            raise InspectedError
+    
+        monkeypatch.setattr(
+            "agent_comms.tracked_turn.TrackedTurnSession.execute", inspect_before_native
+        )
+        with pytest.raises(InspectedError):
+>           await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            ).run()
+
+tests/test_native_admission_rules.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/coordinated_runtime.py:108: in run
+    return await SelectedConsideration(participant).run(self, session)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/selected_turn.py:294: in run
+    return await attempt.run(execution.native_package, session,
+src/agent_comms/selected_turn.py:253: in run
+    result = await request.admission.execute(
+src/agent_comms/private_send_admission.py:156: in execute
+    result = await TrackedTurnSession.execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('/var/tmp/ac-sealed-test-pzur3umu'),)
+kwargs = {'input_id': '14642361ac4395bf32b6ffc713ea1dc1', 'prompt': '── comms: 1 selected ──\nselected: [{"source_seq":1,"claim...36fa99d8ef13a6eef37c0041efd4178551fdca05', images=())), 'worktree': PosixPath('/var/tmp/ac-sealed-test-pzur3umu'), ...}
+
+    async def inspect_before_native(*args, **kwargs):
+        admission = kwargs["prompt_send_boundary"]
+        with Coordination(root / "coordination.sqlite3") as store:
+            row = NativeRuntimeInput.one(store.session._connection, input_id=admission.input_id)
+            binding = read_expected_prompt_binding(store, admission.input_id)
+        stage = admission.stage
+>       expected = admission.participant.coordinator_identity(stage.assignment.recipient_lookup)
+                                                              ^^^^^^^^^^^^^^^^
+E       AttributeError: 'FullNativeSend' object has no attribute 'assignment'. Did you mean: 'assignments'?
+
+tests/test_native_admission_rules.py:48: AttributeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.optional_awareness_projection:optional_awareness_projection.py:233 Optional awareness omitted; original delivered alone (ProjectionUnavailableError)
+=========================== short test summary info ============================
+FAILED tests/test_thread_identity.py::test_admission_scope_cannot_decode_a_registry_process_owner
+FAILED tests/test_native_admission_rules.py::test_durable_private_admission_names_each_changed_authority[False]
+FAILED tests/test_native_admission_rules.py::test_durable_private_admission_names_each_changed_authority[True]
+3 failed, 17 passed in 2.50s
