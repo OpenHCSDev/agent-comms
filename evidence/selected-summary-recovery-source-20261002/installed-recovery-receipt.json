@@ -1,0 +1,86 @@
+{
+  "completed": true,
+  "provider_inputs": 0,
+  "prompt_writes": 0,
+  "cases": [
+    {
+      "original": "reserved",
+      "operation_id": "48d3877d54f54ed7a251c9a5128d1149",
+      "recovered": "retired_unknown",
+      "original_inputs_unchanged": true,
+      "native_bytes_unchanged": true,
+      "new_input_admission_barrier_open": true
+    },
+    {
+      "original": "unknown",
+      "operation_id": "9faff41b917245c1b0a080a806bb97e9",
+      "recovered": "retired_unknown",
+      "original_inputs_unchanged": true,
+      "native_bytes_unchanged": true,
+      "new_input_admission_barrier_open": true
+    },
+    {
+      "original": "refused",
+      "operation_id": "b760d8a18b0541fb8617087549462bd8",
+      "recovered": "retired_refusal",
+      "original_inputs_unchanged": true,
+      "native_bytes_unchanged": true,
+      "new_input_admission_barrier_open": true
+    }
+  ],
+  "original_classification": [
+    {
+      "operation_id": "371c6e50b7f94e9f904b953b290ad6ee",
+      "state": "refused",
+      "owner": "openhcs-architecture-memory",
+      "original_keys": [
+        "acp:bb30216393204b2b9a69c52514802170"
+      ],
+      "native_and_proof_revision_equal": true,
+      "native_binding_absent": true,
+      "private_exact_original_retirement": "retired_refusal",
+      "original_request_unchanged": true
+    },
+    {
+      "operation_id": "824b080ac898434598894256da6f29cc",
+      "state": "reserved",
+      "owner": "openhcs-audit-open-prs",
+      "original_keys": [],
+      "native_and_proof_revision_equal": true,
+      "native_binding_absent": true,
+      "private_exact_original_retirement": "retired_unknown",
+      "original_request_unchanged": true
+    },
+    {
+      "operation_id": "3dcf9c47b5db49a48ad44b4f37eda822",
+      "state": "reserved",
+      "owner": "openhcs-audit-merged-runtime",
+      "original_keys": [],
+      "native_and_proof_revision_equal": true,
+      "native_binding_absent": true,
+      "private_exact_original_retirement": "retired_unknown",
+      "original_request_unchanged": true
+    },
+    {
+      "operation_id": "03edf6915ee9438eb21ec652cb379535",
+      "state": "reserved",
+      "owner": "openhcs-audit-merged-models",
+      "original_keys": [],
+      "native_and_proof_revision_equal": true,
+      "native_binding_absent": true,
+      "private_exact_original_retirement": "retired_unknown",
+      "original_request_unchanged": true
+    }
+  ],
+  "model": "openai-codex/gpt-6.1-sol",
+  "thinking": "high",
+  "original_bytes": 42044804,
+  "fork_bytes": 42044813,
+  "original_public_hash_unchanged": true,
+  "native_child_closed": true,
+  "elapsed_seconds": 17.280003170017153,
+  "core_head": "30f9cf74f6f1ede7d4f795ea857cce51b6e7857c",
+  "native_manifest": "5184ffa6d842fe23",
+  "raw_stage": "/home/ts/wt/s52303",
+  "scope": "installed SDK fork, native configured preparation, exact original private-copy retirement and held recovery; no fresh provider input or public mutation"
+}

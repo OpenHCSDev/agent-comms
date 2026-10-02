@@ -26,6 +26,9 @@ from contextlib import AbstractContextManager, AsyncExitStack, aclosing, context
 from pathlib import Path
 from typing import Any, ClassVar
 
+from .child_process import ProcessIdentity
+from .request_progress import RequestProgress
+
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
@@ -51,7 +54,6 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
 from .selected_source import SessionRevision, SessionRevisionUnavailable
 from .selected_tool_broker import SelectedToolDenied
-from .store_files import _store_lock
 from .turn_admission import UnwrittenPrompt
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
@@ -172,8 +174,7 @@ def _maintenance_send_boundary(
         with delegate(public_id, native_id, text) as allowed:
             yield allowed
         return
-    with _store_lock(root / "wire"):
-        MaintenanceBarrier(root / "registry.json").assert_open_unlocked()
+    with MaintenanceBarrier(root / "registry.json").admit_ingress():
         with delegate(public_id, native_id, text) if delegate else nullcontext(True) as allowed:
             yield allowed
 
@@ -201,6 +202,7 @@ async def stream_agent_events(
     persistent_session: PersistentPiSession | None = None,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
+    request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend; native completion ends with a ``done`` event.
 
@@ -247,6 +249,7 @@ async def stream_agent_events(
                         interrupt_boundary=interrupt_boundary,
                         persistent_session=persistent_session,
                         ui_request=ui_request,
+                        request_observer=request_observer,
                     ).run()
                 ) as stream:
                     async for event in stream:
@@ -288,12 +291,14 @@ class TurnSession:
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         startup: NativeStartupAdmission | None = None,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
+        request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
     ):
         self.launch = launch
         self.task = task
         self.finish_event = finish_event
         self.images = images
         self.context_contributions = context_contributions
+        self.request_observer = request_observer
         self.watchdog = ProgressWatchdog(
             model_wait_timeout, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
         )
@@ -338,6 +343,7 @@ class TurnSession:
 
     async def consume_native_event(self, event):
         """Observe one decoded event through the shared native lifecycle owner."""
+        event.observe_request(self)
         previous = self.watchdog.phase
         async for update in self.watchdog.observe(event, self):
             yield update
@@ -346,6 +352,16 @@ class TurnSession:
         self.watchdog.transition(event, self.active_tools)
         for update in self.native_phase_changes(previous):
             yield update
+
+    def record_request_progress(self, progress: RequestProgress) -> None:
+        """Record the original sample without borrowing global publication locks.
+
+        The acquired native process supplies custody identity; the configured
+        observer binds the original public turn lease. No phase owns a copy of
+        the transport clock or request lifecycle.
+        """
+        if self.request_observer is not None:
+            self.request_observer(progress, self.native.proc.identity)
 
     async def apply_native_event(self, event):
         async for update in event.apply(self):

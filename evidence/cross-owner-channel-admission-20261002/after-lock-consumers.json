@@ -1,0 +1,1472 @@
+{
+  "head": "ee84a488410459e4586ded1dbbabcbae76e90025",
+  "parsed": 311,
+  "omissions": [],
+  "lexical_not_dynamic_resolution": true,
+  "sites": [
+    {
+      "path": "src/agent_comms/activity.py",
+      "owner": "ActivityLog.emit",
+      "line": 210,
+      "contexts": [
+        "_store_lock(self._path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "owner": "ActivityLog._latest_events",
+      "line": 242,
+      "contexts": [
+        "_store_lock(self._path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "owner": "ActivityLog.remove_thread",
+      "line": 303,
+      "contexts": [
+        "_store_lock(self._path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/activity.py",
+      "owner": "ActivityLog.rename_thread",
+      "line": 313,
+      "contexts": [
+        "_store_lock(self._path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "owner": "AgentActivity.set_activity",
+      "line": 107,
+      "contexts": [
+        "_store_lock(self._wire_lock_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "owner": "AgentActivity.set_drain_diagnostic",
+      "line": 152,
+      "contexts": [
+        "_store_lock(self._wire_lock_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "owner": "AgentActivity.begin_turn",
+      "line": 167,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "owner": "AgentActivity.transition_turn",
+      "line": 179,
+      "contexts": [
+        "_store_lock(self._wire_lock_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "owner": "AgentActivity.finish_turn",
+      "line": 184,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "owner": "AgentActivity.set_agent_info",
+      "line": 202,
+      "contexts": [
+        "_store_lock(self._wire_lock_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/agent_event_updates.py",
+      "owner": "AcpEventConsumer.on_done",
+      "line": 229,
+      "contexts": [
+        "_store_lock(self.agent._comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.create_tag",
+      "line": 61,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.update_tags",
+      "line": 72,
+      "contexts": [
+        "guard_original_root_write(self.root)",
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.set_saved_view",
+      "line": 104,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.delete_saved_view",
+      "line": 112,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)",
+        "self.catalog.editing()"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.set_channel_metadata",
+      "line": 116,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.set_channel_any_mode",
+      "line": 122,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.set_channel_sort",
+      "line": 128,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.set_channel_order",
+      "line": 134,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)",
+        "self.catalog.editing()"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.set_channel_pinned",
+      "line": 139,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement.set_thread_pinned",
+      "line": 146,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/channel_management.py",
+      "owner": "ChannelManagement._change_tag",
+      "line": 176,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "owner": "verify_selected_wake",
+      "line": 50,
+      "contexts": [
+        "_store_lock(comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "owner": "_selected_claim_boundary",
+      "line": 131,
+      "contexts": [
+        "_store_lock(comms._wire_lock_path)",
+        "bus.log.locked()",
+        "_store_lock(comms.registry.store.path)"
+      ],
+      "lexical_suspensions": [
+        {
+          "line": 163,
+          "expression": "(yield (bus, metadata, registry, owner, initial))"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "owner": "write_selected_claimed_file",
+      "line": 362,
+      "contexts": [
+        "_store_lock(comms._wire_lock_path)",
+        "bus.log.locked()",
+        "_store_lock(comms.registry.store.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "owner": "run_foreground_once",
+      "line": 171,
+      "contexts": [
+        "_store_lock(comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "owner": "run_foreground_once",
+      "line": 223,
+      "contexts": [
+        "_store_lock(comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/collaboration_ledger.py",
+      "owner": "CollaborationLedger.merge",
+      "line": 17,
+      "contexts": [
+        "_store_lock(self.path.with_name('wire'))"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/compaction_boundary.py",
+      "owner": "CompactionBoundary.hold",
+      "line": 54,
+      "contexts": [
+        "_store_lock(self.root / 'wire')",
+        "_store_lock(self.root / 'bus.jsonl')",
+        "self.registry.guard_owner_compaction(owner, expected)",
+        "self.inputs.locked()"
+      ],
+      "lexical_suspensions": [
+        {
+          "line": 64,
+          "expression": "(yield HeldCompaction(self, witness, receipt, fd, (executor_fd, wire_lock.descriptor, bus_lock.descriptor, input_fd), native_facts))"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "owner": "SelectedSummaries.reserve",
+      "line": 90,
+      "contexts": [
+        "_store_lock(self.journal.path.parent / 'wire')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.unresolved_inputs",
+      "line": 45,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.input_delivery",
+      "line": 64,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.dismiss_historical_inputs",
+      "line": 81,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.goal_input_review",
+      "line": 90,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.goal_history",
+      "line": 159,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.recover_closed_goal_wait",
+      "line": 173,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.release_waits_after_terminal_turn",
+      "line": 224,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.goal_snapshot",
+      "line": 313,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.consume_reply_wait",
+      "line": 339,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.update_goal",
+      "line": 365,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.block_goal_after_failed_turn",
+      "line": 379,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "owner": "Goals.block_unverified_goal_completion",
+      "line": 403,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/goal_scheduler.py",
+      "owner": "GoalScheduler.schedule_goal",
+      "line": 103,
+      "contexts": [
+        "_store_lock(self.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "owner": "HistoryArchive.attach",
+      "line": 303,
+      "contexts": [
+        "_store_lock(self.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "owner": "HistoryViews.attach_history",
+      "line": 133,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "owner": "HistoryViews.export_wire",
+      "line": 257,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "owner": "HistoryViews.mark_user_view_read",
+      "line": 451,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "owner": "InputDrain.clear_queued_inputs",
+      "line": 95,
+      "contexts": [
+        "_store_lock(self.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "owner": "InputDrain.accept_followup",
+      "line": 335,
+      "contexts": [
+        "_store_lock(self.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "owner": "InputDrain.send_now",
+      "line": 417,
+      "contexts": [
+        "_store_lock(self.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "owner": "InputDrain.finish_turn_inputs",
+      "line": 501,
+      "contexts": [
+        "_store_lock(self.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "owner": "InputDrain.run_owned_input",
+      "line": 532,
+      "contexts": [
+        "_store_lock(self.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/input_origin.py",
+      "owner": "HumanInputOrigin.capture",
+      "line": 91,
+      "contexts": [
+        "guard_original_root_write(comms.root)",
+        "_store_lock(comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/locked_store.py",
+      "owner": "LockedStore.locked",
+      "line": 71,
+      "contexts": [
+        "_store_lock(self.path, shared=shared, blocking=blocking)"
+      ],
+      "lexical_suspensions": [
+        {
+          "line": 72,
+          "expression": "(yield lock.descriptor)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "owner": "MaintenanceBarrier.read",
+      "line": 172,
+      "contexts": [
+        "_store_lock(self.wire_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "owner": "MaintenanceBarrier.admit_ingress",
+      "line": 185,
+      "contexts": [
+        "_store_lock(self.wire_path, shared=True, blocking=blocking)"
+      ],
+      "lexical_suspensions": [
+        {
+          "line": 186,
+          "expression": "(yield self.assert_open_unlocked())"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/maintenance_barrier.py",
+      "owner": "MaintenanceBarrier.admit_ingress_async",
+      "line": 195,
+      "contexts": [
+        "_async_store_lock(self.wire_path, shared=True)"
+      ],
+      "lexical_suspensions": [
+        {
+          "line": 196,
+          "expression": "(yield self.assert_open_unlocked())"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging.send_message",
+      "line": 67,
+      "contexts": [
+        "guard_original_root_write(self.root)",
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging.initialize_private_initial_protocol",
+      "line": 102,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging.send_initial_cohort",
+      "line": 115,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging.user_identity",
+      "line": 148,
+      "contexts": [
+        "_store_lock(self._wire_lock_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging.user_identity",
+      "line": 154,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging.send_user_message",
+      "line": 162,
+      "contexts": [
+        "guard_original_root_write(self.root)",
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging._pin_constraint",
+      "line": 182,
+      "contexts": [
+        "guard_original_root_write(self.root)",
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging.acknowledge",
+      "line": 215,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/messaging.py",
+      "owner": "Messaging.acknowledge_through",
+      "line": 219,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "owner": "reserve_foreground_owner",
+      "line": 111,
+      "contexts": [
+        "_store_lock(comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "owner": "OptionalAwarenessProjection._verify_live_inclusion",
+      "line": 518,
+      "contexts": [
+        "_store_lock(registry.store.path, blocking=False)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "owner": "OwnedTurn.begin",
+      "line": 147,
+      "contexts": [
+        "_store_lock(self.runner.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "owner": "OwnedTurn.run_native",
+      "line": 453,
+      "contexts": [
+        "_store_lock(self.runner.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owned_turn.py",
+      "owner": "OwnedTurn.run_native",
+      "line": 461,
+      "contexts": [
+        "_store_lock(self.runner.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner": "OwnerLifecycle.acquire_thread",
+      "line": 178,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner": "OwnerLifecycle.ensure_owner",
+      "line": 193,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner": "OwnerLifecycle.start",
+      "line": 208,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner": "OwnerLifecycle._signal_guard",
+      "line": 271,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": [
+        {
+          "line": 273,
+          "expression": "(yield)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner": "OwnerLifecycle.stop",
+      "line": 283,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner": "OwnerLifecycle._finish_stopped_owner",
+      "line": 416,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner": "OwnerLifecycle.release",
+      "line": 430,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/owner_restart.py",
+      "owner": "AdmittedOwnerBatch.restart",
+      "line": 229,
+      "contexts": [
+        "_store_lock(lifecycle.root / 'wire')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "owner": "BusPresentation.snapshot",
+      "line": 242,
+      "contexts": [
+        "_store_lock(self._wire_lock_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "owner": "BusPresentation.mark_channel_read",
+      "line": 306,
+      "contexts": [
+        "_store_lock(self._wire_lock_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "owner": "Publisher._initialize_private_protocol_unlocked",
+      "line": 197,
+      "contexts": [
+        "_store_lock(self._registry.store.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/queued_input.py",
+      "owner": "QueuedInput.dispatch",
+      "line": 150,
+      "contexts": [
+        "_store_lock(inputs.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "owner": "DMDisplayBasis.fetch_page",
+      "line": 162,
+      "contexts": [
+        "_store_lock(root / 'wire', shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "owner": "DMDisplayBasis.fetch_page",
+      "line": 186,
+      "contexts": [
+        "_store_lock(root / 'wire', shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "owner": "DMDisplayBasis.acknowledge",
+      "line": 253,
+      "contexts": [
+        "_store_lock(root / 'wire', shared=True)",
+        "_store_lock(registry.store.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "owner": "Registration.attach_native_session",
+      "line": 56,
+      "contexts": [
+        "_store_lock(self.store.path.parent / 'wire')",
+        "self.store.editing()"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/registration.py",
+      "owner": "Registration.declare",
+      "line": 76,
+      "contexts": [
+        "_store_lock(self.store.path.parent / 'wire')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "owner": "ThreadRelationships.collaborations",
+      "line": 396,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "owner": "ThreadRelationships.goal_contacts",
+      "line": 429,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "owner": "ThreadRelationships.contact_projection",
+      "line": 440,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "owner": "ThreadRelationships.edit",
+      "line": 487,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "owner": "ThreadRelationships.set_order",
+      "line": 509,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "owner": "ThreadRelationships._recent_messages",
+      "line": 525,
+      "contexts": [
+        "_store_lock(path)",
+        "path.open('rb')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "owner": "ThreadRelationships.snapshot",
+      "line": 550,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "owner": "enqueue",
+      "line": 164,
+      "contexts": [
+        "_store_lock(comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "owner": "enqueue",
+      "line": 176,
+      "contexts": [
+        "_store_lock(directory / 'queue')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "owner": "status",
+      "line": 203,
+      "contexts": [
+        "_store_lock(_directory(comms) / 'queue')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "owner": "cancel",
+      "line": 212,
+      "contexts": [
+        "_store_lock(directory / 'queue')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "owner": "step",
+      "line": 226,
+      "contexts": [
+        "_store_lock(directory / 'queue')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "owner": "step",
+      "line": 277,
+      "contexts": [
+        "_store_lock(directory / 'queue')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "owner": "run",
+      "line": 322,
+      "contexts": [
+        "_store_lock(directory / 'queue')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "owner": "main",
+      "line": 340,
+      "contexts": [
+        "_store_lock(directory / 'queue')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/selected_write_plan.py",
+      "owner": "SelectedWritePlans.submit",
+      "line": 194,
+      "contexts": [
+        "_store_lock(self.comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.import_thread",
+      "line": 138,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.restore_stopped",
+      "line": 184,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.restore_stopped",
+      "line": 186,
+      "contexts": [
+        "_store_lock(self.registry.store.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.claim_thread",
+      "line": 213,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.rename_self",
+      "line": 233,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.set_project",
+      "line": 252,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.rename_managed_thread",
+      "line": 278,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement._rename_thread",
+      "line": 300,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.heartbeat",
+      "line": 432,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.set_thread_model",
+      "line": 440,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.set_thread_thinking_level",
+      "line": 449,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.initialize_native_configuration",
+      "line": 460,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.attach_session",
+      "line": 481,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.archive",
+      "line": 501,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "owner": "ThreadManagement.fork",
+      "line": 512,
+      "contexts": [
+        "_store_lock(self._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "owner": "TranscriptRoutes._ensure_database",
+      "line": 156,
+      "contexts": [
+        "_store_lock(self.database_path)",
+        "closing(sqlite3.connect(self.database_path, timeout=30))"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "owner": "TranscriptRoutes.record",
+      "line": 191,
+      "contexts": [
+        "_store_lock(self.database_path)",
+        "closing(sqlite3.connect(self.database_path, timeout=30))"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "owner": "TranscriptRoutes._record_publication",
+      "line": 257,
+      "contexts": [
+        "_store_lock(self.database_path)",
+        "closing(sqlite3.connect(self.database_path, timeout=30))"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "owner": "TranscriptRoutes.record_input_display",
+      "line": 285,
+      "contexts": [
+        "_store_lock(self.database_path)",
+        "closing(sqlite3.connect(self.database_path, timeout=30))"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/turn_goal_account.py",
+      "owner": "TurnGoalAccount.reserve",
+      "line": 110,
+      "contexts": [
+        "_store_lock(comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.locked",
+      "line": 62,
+      "contexts": [
+        "_store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes, contention=contention)"
+      ],
+      "lexical_suspensions": [
+        {
+          "line": 64,
+          "expression": "(yield lock)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.certified_read",
+      "line": 69,
+      "contexts": [
+        "_store_lock(self.path, blocking=blocking, contention=contention)"
+      ],
+      "lexical_suspensions": [
+        {
+          "line": 73,
+          "expression": "(yield source)"
+        }
+      ]
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.conversation_sources",
+      "line": 78,
+      "contexts": [
+        "_store_lock(self.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.context_manifests",
+      "line": 135,
+      "contexts": [
+        "_store_lock(self.path.parent / 'wire')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.retained_context",
+      "line": 177,
+      "contexts": [
+        "_store_lock(self.path.parent / 'wire')"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.read_keyed_response",
+      "line": 380,
+      "contexts": [
+        "_store_lock(self.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog._opened_wire_snapshot",
+      "line": 400,
+      "contexts": [
+        "_store_lock(self.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.latest_sequence",
+      "line": 500,
+      "contexts": [
+        "_store_lock(self.path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.read_metadata_unlocked",
+      "line": 573,
+      "contexts": [
+        "_store_lock(self.metadata_path, shared=True)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "owner": "WireLog.write_metadata_unlocked",
+      "line": 617,
+      "contexts": [
+        "_store_lock(self.metadata_path)"
+      ],
+      "lexical_suspensions": []
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "owner": "run_startup_input",
+      "line": 55,
+      "contexts": [
+        "_store_lock(agent._comms._wire_lock_path)"
+      ],
+      "lexical_suspensions": []
+    }
+  ],
+  "consumer_leads": [
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "owner": "VerifiedOwnerLoss.observe_native_release",
+      "line": 70,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "owner": "_maintenance_send_boundary",
+      "line": 174,
+      "call": "MaintenanceBarrier(root / 'registry.json').admit_ingress"
+    },
+    {
+      "path": "src/agent_comms/backend.py",
+      "owner": "TurnSession.input_ready",
+      "line": 630,
+      "call": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "owner": "publish_selected_resource_claim",
+      "line": 179,
+      "call": "_selected_claim_boundary"
+    },
+    {
+      "path": "src/agent_comms/claim_admission.py",
+      "owner": "release_selected_resources",
+      "line": 238,
+      "call": "_selected_claim_boundary"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "owner": "prepare_fenced_response",
+      "line": 406,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "owner": "_settle_fenced_response",
+      "line": 504,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/native_attestation.py",
+      "owner": "PendingAttestation",
+      "line": 76,
+      "call": "commands.GetState"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "owner": "NativeSourceCursor._advance_proven",
+      "line": 122,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "owner": "NativeSourceCursor.read",
+      "line": 195,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "owner": "NativeSourceCursor.read",
+      "line": 223,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/owned_send_admission.py",
+      "owner": "OwnedSendAdmission.__call__",
+      "line": 143,
+      "call": "self.comms.owners.maintenance.admit_ingress"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "owner": "OwnerCompactionCommit.capture_source",
+      "line": 124,
+      "call": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "owner": "OwnerCompactionCommit.require_source_current",
+      "line": 170,
+      "call": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "owner": "OwnerCompactionCommit.reconcile_interrupted_summaries",
+      "line": 185,
+      "call": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "owner": "OwnerCompactionCommit.commit",
+      "line": 215,
+      "call": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "owner": "OwnerCompactionCommit.admit_selected_decline",
+      "line": 253,
+      "call": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "owner": "OwnerCompactionCommit.admit_selected_original",
+      "line": 277,
+      "call": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_commit.py",
+      "owner": "OwnerCompactionCommit.reconcile",
+      "line": 300,
+      "call": "self.boundary.hold"
+    },
+    {
+      "path": "src/agent_comms/owner_lifecycle.py",
+      "owner": "OwnerLifecycle._stop_process",
+      "line": 279,
+      "call": "self._signal_guard"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "owner": "PrivateSendAdmission.execute",
+      "line": 155,
+      "call": "TrackedTurnSession.execute"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "owner": "PrivateSendAdmission._admit_once",
+      "line": 206,
+      "call": "MaintenanceBarrier(self.bus._registry.store.path).admit_ingress"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "owner": "FullNativeSend.fail_unknown",
+      "line": 330,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "owner": "read_selected_compaction_decision",
+      "line": 100,
+      "call": "AgentCommsCompactionSettings"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "owner": "SelectedSession.prepare.acquire",
+      "line": 135,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "owner": "SelectedAttempt.run",
+      "line": 267,
+      "call": "participant.response_owner.publish_responses"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "owner": "TrackedTurnSession.send",
+      "line": 313,
+      "call": "MaintenanceBarrier(self.maintenance_root / 'registry.json').admit_ingress_async"
+    },
+    {
+      "path": "src/agent_comms/turn_inputs.py",
+      "owner": "InputForwarding.send_prompt",
+      "line": 133,
+      "call": "_maintenance_send_boundary"
+    },
+    {
+      "path": "src/agent_comms/turn_runner.py",
+      "owner": "TurnRunner.prepare_selected_session",
+      "line": 177,
+      "call": "NativeSessionPreparation.open"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "owner": "StatsRequest.request",
+      "line": 59,
+      "call": "commands.GetState"
+    },
+    {
+      "path": "src/agent_comms/turn_stats.py",
+      "owner": "StatsRequest.request",
+      "line": 66,
+      "call": "commands.GetSessionStats"
+    }
+  ]
+}

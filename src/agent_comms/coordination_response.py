@@ -219,7 +219,7 @@ def _response_boundary(bus: MessageBus, *, blocking: bool = True,
     with ExitStack() as custody:
         with observations.operation("wire_exclusion"):
             custody.enter_context(_store_lock(bus.log.path.parent / "wire", blocking=blocking,
-                                             contention=contention))
+                                             shared=True, contention=contention))
         with observations.operation("bus_certified_exclusion"):
             custody.enter_context(bus.log.locked(blocking=blocking, contention=contention))
         with observations.operation("registry_exclusion"):

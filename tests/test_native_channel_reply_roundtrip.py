@@ -26,6 +26,8 @@ from agent_comms.comms import Comms
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.messages import Message, MessageType
+from agent_comms.field_codec import FieldCodec
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 # Reuse the existing sealed-runtime persistent /var/tmp test root.
@@ -33,12 +35,14 @@ tmp_path = private_root_fixture
 
 
 @pytest.mark.parametrize(
-    ("restart_after_reply", "contend_cursor", "reject_triage"),
-    [(False, False, False), (True, False, False), (False, True, False), (False, False, True)],
-    ids=["reply", "saved-restart", "contended-reply", "rejected-triage-continuity"],
+    ("restart_after_reply", "contend_cursor", "reject_triage", "broadcast"),
+    [(False, False, False, False), (True, False, False, False),
+     (False, True, False, False), (False, False, True, False),
+     (False, False, False, True)],
+    ids=["reply", "saved-restart", "contended-reply", "rejected-triage-continuity", "parallel-channel"],
 )
 async def test_native_channel_reply_automatically_reaches_original_sender(
-    tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage
+    tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast
 ):
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:
@@ -46,6 +50,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
     package = Path(pin).resolve(strict=True)
     requests = []
     failures = []
+    request_times = []
+    request_inputs = []
+    parallel_triage = threading.Event()
     seed_count = 2 if restart_after_reply else 0
 
     class Handler(BaseHTTPRequestHandler):
@@ -54,12 +61,60 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 assert self.headers["Authorization"] == "Bearer local-only"
                 requests.append(request)
-                assert len(requests) <= 2 + seed_count + restart_after_reply + 2 * reject_triage, "Reply observation caused replay or ping-pong"
+                request_times.append(time.monotonic())
+                assert len(requests) <= (8 if broadcast else 2 + seed_count + restart_after_reply + 2 * reject_triage), "Reply observation caused replay or ping-pong"
+                serialized = json.dumps(request)
+                if broadcast:
+                    # The current original native reservation owns stage. Join
+                    # its exact ID to the actual saved input, never prior text.
+                    from agent_comms.coordination_tables.assignments import WakeAssignment
+                    from agent_comms.coordinator import Coordination
+                    from agent_comms.native_runtime_input import NativeRuntimeInput
+                    from agent_comms.native_transcript import NativeTranscript
+
+                    with Coordination(comms.root / "coordination.sqlite3") as store:
+                        with store.session.read():
+                            pending = NativeRuntimeInput.select(
+                                store.session._connection,
+                                where="owner_thread=? AND session_entry_id IS NULL",
+                                parameters=(request["model"],),
+                            )
+                            assert len(pending) == 1
+                            original = pending[0]
+                            user = next(entry for entry in NativeTranscript(
+                                Path(original.session_file)
+                            ).tail() if entry.input_boundary).require_tracked_user()
+                            assert user.input_id == original.input_id
+                            is_triage = original.stage is TriageNativeExecution
+                            assignments = tuple(WakeAssignment.one(
+                                store.session._connection, assignment_id=identity
+                            ) for identity in original.execution.source_assignment_ids(
+                                store.session._connection, original.input_id
+                            ))
+                            requires_answer = any(row.source == question.reference for row in assignments)
+                    request_inputs.append({"input_id": original.input_id,
+                                           "stage": original.stage.declared_name,
+                                           "owner": original.owner_thread})
+                else:
+                    is_triage = "bounded triage" in serialized
+                if broadcast and len(requests) <= 2:
+                    # Both actual owners must reach the endpoint while the
+                    # first request is still open. No model turn may retain
+                    # global bus/admission custody through its response.
+                    if len(requests) == 2:
+                        parallel_triage.set()
+                    assert parallel_triage.wait(5), "Independent owner blocked behind another native request"
                 text = (
-                    '{"decision":"IGNORE"}'
-                    if "bounded triage" in json.dumps(request)
+                    ('{"decision":"FULL"}' if broadcast and requires_answer
+                     else '{"decision":"IGNORE"}')
+                    if is_triage
                     else "ROUNDTRIP_NATIVE_REPLY"
                 )
+                if broadcast and not is_triage:
+                    text = json.dumps(FieldCodec.encode((Message(
+                        request["model"], "#team", "ROUNDTRIP_NATIVE_REPLY",
+                        MessageType.INFO, timestamp=0,
+                    ),)))
                 if reject_triage and len(requests) == 2:
                     # Actual successful native output from the live failure:
                     # bare IGNORE violates the required JSON decision contract.
@@ -112,6 +167,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                                 "contextWindow": 32768,
                                 "maxTokens": 2048,
                             }
+                        ] if not broadcast else [
+                            {"id": name, "name": name, "contextWindow": 32768, "maxTokens": 2048}
+                            for name in ("questioner", "answerer", "answerer2")
                         ],
                     }
                 }
@@ -147,7 +205,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         monkeypatch.delenv(key, raising=False)
     comms = Comms(tmp_path / "wire")
     projects = {}
-    for name in ("questioner", "answerer"):
+    for name in (("questioner", "answerer", "answerer2") if broadcast else ("questioner", "answerer")):
         project = tmp_path / name
         project.mkdir()
         projects[name] = project
@@ -156,7 +214,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 name,
                 frozenset({"team"}),
                 str(project),
-                model="roundtrip-local/fixture",
+                model=f"roundtrip-local/{name}" if broadcast else "roundtrip-local/fixture",
                 thinking_level="off",
             )
         )
@@ -210,8 +268,58 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             assert len(requests) == seed_count
         facts.clear()
         question = comms.messaging.send_message(
-            "questioner", "#team", "@answerer ROUNDTRIP_QUESTION"
+            "questioner", "#team", "ROUNDTRIP_QUESTION" if broadcast else "@answerer ROUNDTRIP_QUESTION"
         )
+        if broadcast:
+            from agent_comms.coordination_tables.assignments import WakeAssignment
+            from agent_comms.coordinator import Coordination
+
+            await until(lambda: len(comms.views.channel_history("#team")) == 3,
+                        "Both independent native replies published")
+            replies = comms.views.channel_history("#team")[1:]
+            assert {row.sender for row in replies} == {"answerer", "answerer2"}
+            assert all(row.body == "ROUNDTRIP_NATIVE_REPLY" for row in replies)
+            assert len({row.message_id for row in replies}) == 2
+            assert parallel_triage.is_set() and request_times[1] - request_times[0] < 5
+
+            def settled():
+                with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+                    with store.session.read():
+                        rows = WakeAssignment.select(store.session._connection)
+                        return len(rows) == 6 and all(row.lifecycle.terminal for row in rows)
+
+            await until(settled, "Original and every peer-reply claim settled")
+            with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
+                rows = db.execute("SELECT input_id, session_file, session_entry_id FROM native_runtime_input").fetchall()
+            assert 7 <= len(rows) <= 8 and all(row[2] for row in rows)
+            assert len({row[0] for row in rows}) == len(rows)
+            assert len({row[1] for row in rows}) == 3
+            await asyncio.sleep(1.2)
+            assert 7 <= len(requests) <= 8 and not failures
+            assert len(comms.views.channel_history("#team")) == 3
+            # The real request reader owns every timing sample. They must
+            # survive independently of registry phase changes and publication.
+            observations = [json.loads(line)
+                            for path in (comms.root / "diagnostics").glob("*.requests.jsonl")
+                            for line in path.read_text().splitlines()]
+            native = [row for row in observations if "native" in row]
+            assert {row["native"]["inputId"] for row in native} == {
+                row["input_id"] for row in request_inputs
+            }
+            for original in request_inputs:
+                samples = [row for row in native
+                           if row["native"]["inputId"] == original["input_id"]]
+                assert {"preparing", "dispatch", "first_event", "finished"} <= {
+                    row["native"]["stage"] for row in samples
+                }
+                assert all(row["turn"]["identity"]["incarnation"]["name"] == original["owner"]
+                           for row in samples)
+                assert len({tuple(row["native_process"].items()) for row in samples}) == 1
+            print("Native original timing samples", len(native), "inputs", len(request_inputs),
+                  "maximum parent receipt lag seconds",
+                  max((row["recorded_monotonic_ns"] - int(row["native"]["monotonicNs"])) / 1e9
+                      for row in native), flush=True)
+            return
         await until(lambda: len(requests) >= seed_count + 1, "B actual native request")
         await until(
             lambda: len(comms.views.channel_history("#team")) >= 2, "B published actual reply"
@@ -373,6 +481,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 "saved_restart": restart_after_reply,
                 "contended_cursor": contend_cursor,
                 "rejected_triage_continuity": reject_triage,
+                "parallel_channel": broadcast,
+                "request_monotonic_times": request_times,
+                "original_native_request_inputs": request_inputs,
                 "localhost_posts": len(requests),
                 "provider_failures": failures,
                 "owners_stopped": True,

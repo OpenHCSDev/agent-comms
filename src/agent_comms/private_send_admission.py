@@ -12,15 +12,15 @@ import threading
 from collections.abc import Awaitable, Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .compaction_journal import CompactionJournal
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict
-from .coordination_response import _response_boundary
 from .coordinator import Coordination
-from .diagnostics import PublicationMeasurements, record_acquisition_progress
+from .diagnostics import PublicationMeasurements, record_acquisition_progress, record_request_progress
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
@@ -170,6 +170,10 @@ class PrivateSendAdmission:
                     maintenance_root=self.bus.log.path.parent,
                     selected_tool_mode=selected_tool_mode,
                     observe_event=observe_event,
+                    request_observer=partial(
+                        record_request_progress, self.bus.log.path.parent,
+                        self.owner.thread.require_turn_lease(),
+                    ),
                     prompt_send_boundary=self,
                     acquisition_measurements=self._measurements,
                 )
@@ -203,9 +207,16 @@ class PrivateSendAdmission:
             try:
                 with self._measurements.operation("coordinator_open"):
                     store = authority.enter_context(Coordination(str(self.store_path), lock_timeout=0))
-                with self._measurements.operation("response_boundary"):
-                    registry = authority.enter_context(_response_boundary(
-                        self.bus, blocking=False, measurements=self._measurements))
+                with self._measurements.operation("maintenance_ingress"):
+                    authority.enter_context(MaintenanceBarrier(
+                        self.bus._registry.store.path
+                    ).admit_ingress(blocking=False))
+                with self._measurements.operation("registry_exclusion"):
+                    document = authority.enter_context(
+                        self.bus._registry.store.reading(blocking=False)
+                    )
+                with self._measurements.operation("registry_snapshot"):
+                    registry = document.snapshot()
                 with self._measurements.operation("coordinator_exclusive"):
                     db = authority.enter_context(store.session.irreversible_admission())
                 with self._measurements.operation("prompt_binding"):
@@ -233,7 +244,6 @@ class PrivateSendAdmission:
                 raise IdentityConflict("native send admission cannot be reused")
             with self._measurements.operation("admission_checks"):
                 _require_no_private_owner_rename(self.bus.log.path.parent)
-                MaintenanceBarrier(self.bus._registry.store.path).assert_open_unlocked()
                 self.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
                 )
@@ -250,7 +260,10 @@ class PrivateSendAdmission:
                     reserved, db, self.owner.admission_generation, identity
                 )
             # ExitStack commits/closes the original journal and coordinator
-            # before releasing registry/bus/wire custody. No payload byte is
+            # before releasing shared registry/wire custody. No bus publication
+            # resource is borrowed: the selected claim and prompt are already
+            # certified originals, and this grant changes only their SQL/input
+            # records. No payload byte is
             # eligible until all of that retirement has returned successfully.
 
     @contextmanager
