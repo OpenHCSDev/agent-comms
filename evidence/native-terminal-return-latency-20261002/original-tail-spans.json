@@ -1,0 +1,37 @@
+{
+  "classification": "Original request-finished to acquisition-return evidence, not native-turn-completion attribution",
+  "cases": [
+    {
+      "thread": "openhcs-helper2",
+      "turn": "e5055481e257132538ef987638e751dc",
+      "input_id": "b3436d3199bc9a5e2c22bdd086393833",
+      "original_diagnostic": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/e5055481e257132538ef987638e751dc.requests.jsonl",
+      "original_sha256": "3ae73521237d8c366dda8f5f8eea851bfadc67aecac995a4f2521c7cef973279",
+      "provider_request_finished_native_ns": 436747146502731,
+      "parent_observed_request_finished_ns": 436747149095264,
+      "acquisition_return_recorded_ns": 436755599369312,
+      "native_to_parent_ms": 2.592533,
+      "parent_observation_to_return_seconds": 8.450274048,
+      "completed_provider_callbacks_ms": 13.037501,
+      "completed_provider_callback_max_ms": 8.207151,
+      "completed_provider_callback_count": 57,
+      "tail_subspan_evidence": "Original acquisition operations cover startup/admission only; no separate AgentSettled receive/observer, terminal proof or native retirement samples."
+    },
+    {
+      "thread": "compaction499-live-architecture-memory",
+      "turn": "5e1cb3b603413ea9665bfa0c298aa61f",
+      "input_id": "09f81d490b728fa3c2ff407267001bd8",
+      "original_diagnostic": "/var/tmp/agent-comms-live-20260927-wzjtqhza/diagnostics/5e1cb3b603413ea9665bfa0c298aa61f.requests.jsonl",
+      "original_sha256": "73a9cf24d02cb6ec78dbaad717d161fefa39ba02d5c428ed896e47598c2959a6",
+      "provider_request_finished_native_ns": 436752770768458,
+      "parent_observed_request_finished_ns": 436752773052616,
+      "acquisition_return_recorded_ns": 436768592331144,
+      "native_to_parent_ms": 2.284158,
+      "parent_observation_to_return_seconds": 15.819278528,
+      "completed_provider_callbacks_ms": 8.368602,
+      "completed_provider_callback_max_ms": 2.748267,
+      "completed_provider_callback_count": 60,
+      "tail_subspan_evidence": "Original acquisition operations cover startup/admission only; no separate AgentSettled receive/observer, terminal proof or native retirement samples."
+    }
+  ]
+}
