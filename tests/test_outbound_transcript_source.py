@@ -18,6 +18,107 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 import pytest
 
 
+def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811
+    import sqlite3
+    from agent_comms.coordination_errors import CoordinationReadUnavailable
+    from agent_comms.native_runtime_input import NativeRuntimeInput
+    from agent_comms.recovery_gateway import _snapshot
+    from agent_comms.recovery_projection import (
+        UnavailableRecoveryProjection, read_recovery_projection,
+    )
+
+    root, _root_id, comms, initial, _people = _root(tmp_path)
+    database = root / "coordination.sqlite3"
+    lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+    predicate, parameters = "w.wire_seq=?", (initial.message.seq,)
+    original = NotificationAssignment.select(root, predicate, parameters)
+    wire_before = comms.bus.log.path.read_bytes()
+    assert original
+    with Coordination(str(database)) as writer:
+        with writer.session.irreversible_admission():
+            for read in (
+                lambda: NotificationAssignment.select(root, predicate, parameters),
+                lambda: _snapshot(root, database, "beta"),
+            ):
+                with pytest.raises(CoordinationReadUnavailable) as unavailable:
+                    read()
+                assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (
+                    sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
+                )
+            with pytest.raises(CoordinationReadUnavailable):
+                with NativeRuntimeInput._publication_read(root):
+                    pytest.fail("Busy acquisition reached the native schema decoder")
+            assert read_recovery_projection(
+                database, owner_lookup=lookup, owner_thread="beta"
+            ) == UnavailableRecoveryProjection("busy")
+    assert NotificationAssignment.select(root, predicate, parameters) == original
+    with NativeRuntimeInput._publication_read(root) as native_read:
+        assert native_read is not None
+    assert comms.bus.log.path.read_bytes() == wire_before
+
+
+def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypatch):  # noqa: F811
+    import json
+    import threading
+    from contextlib import contextmanager
+    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.recovery_gateway import _snapshot
+    from agent_comms.recovery_projection import RecoverySelection
+
+    root, _root_id, comms, _initial, _people = _root(tmp_path)
+    database = root / "coordination.sqlite3"
+    lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+    commit_requested = threading.Event()
+    committed = threading.Event()
+    errors, statements = [], []
+    project = RecoverySelection.project
+    observe = CoordinationStore.observing
+
+    # Instrument the original resource and callback, without substituting SQL,
+    # schema, identities, projection results, or transaction ownership.
+    @contextmanager
+    def traced_read(*args, **kwargs):
+        with observe(*args, **kwargs) as db:
+            db.set_trace_callback(statements.append)
+            yield db
+
+    def writer():
+        try:
+            with Coordination(str(database)) as store:
+                store.session._connection.set_trace_callback(
+                    lambda sql: commit_requested.set() if sql == "COMMIT" else None
+                )
+                store.participants.advance_generation(
+                    lookup, "renamed", expected_generation=1
+                )
+            committed.set()
+        except BaseException as error:
+            errors.append(error)
+
+    changing = threading.Thread(target=writer)
+
+    def during_commit(db, owner_lookup, owner_thread):
+        changing.start()
+        assert commit_requested.wait(2)
+        assert not committed.is_set()
+        return project(db, owner_lookup, owner_thread)
+
+    monkeypatch.setattr(CoordinationStore, "observing", staticmethod(traced_read))
+    monkeypatch.setattr(RecoverySelection, "project", staticmethod(during_commit))
+    try:
+        original = json.loads(_snapshot(root, database, "beta"))
+    finally:
+        changing.join(3)
+    assert not changing.is_alive() and not errors
+    assert committed.is_set()
+    assert original["availability"] == "available" and original["owner"] == "beta"
+    assert sum("PRAGMA user_version" in sql for sql in statements) == 1
+    assert sum("schema_meta" in sql and sql.startswith("SELECT") for sql in statements) == 1
+    monkeypatch.setattr(RecoverySelection, "project", project)
+    current = json.loads(_snapshot(root, database, "renamed"))
+    assert current["availability"] == "available" and current["owner"] == "renamed"
+
+
 @pytest.mark.parametrize('direct', [False, True])
 def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path, direct):  # noqa: F811
     from dataclasses import replace
