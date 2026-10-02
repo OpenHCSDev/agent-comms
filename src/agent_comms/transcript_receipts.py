@@ -247,17 +247,21 @@ class AssignedTranscriptSource:
         predicate, parameters = traversal.predicate(sequence, through)
         return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
-    def native_events(self, record, routes, reader, native_inputs):
+    def native_events(self, record, routes, reader):
         from dataclasses import replace
         from .native_entries import TranscriptProjection
 
         entry = record.entry
         published = False
         routing = routes.get(entry.id)
-        if entry.final_reply:
-            from .native_runtime_input import NativeRuntimeInput
+        from .native_runtime_input import NativeRuntimeInput
 
-            lookup = stable_thread_lookup(self.recipient.created_at)
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        events, references = NativeRuntimeInput.transcript_events(
+            self.root, reader, record,
+            TranscriptProjection(routing, routes.input_display(entry.input_id)), lookup,
+        )
+        if entry.final_reply:
             if routing is not None and routing.publications:
                 marks = ",".join("?" for _ in routing.publications)
                 originals = self.rows(
@@ -269,28 +273,17 @@ class AssignedTranscriptSource:
                         and original.audience.sender_lookup == lookup for original in originals)
                     for ref in routing.publications
                 )
-            user = reader.input_ancestor(record) if not published else None
-            if user is not None:
-                references = NativeRuntimeInput.published_replies(native_inputs, reader, user, lookup)
-                if references:
-                    marks = ",".join("?" for _ in references)
-                    originals = self.rows(
-                        f"w.seq IN ({marks})", tuple(ref.seq for ref in references), limit=len(references),
-                    )
-                    published = all(
-                        any(original.message.reference == ref
-                            and original.audience.sender_lookup == lookup for original in originals)
-                        for ref in references
-                    )
+            if not published and references:
+                marks = ",".join("?" for _ in references)
+                originals = self.rows(
+                    f"w.seq IN ({marks})", tuple(ref.seq for ref in references), limit=len(references),
+                )
+                published = all(
+                    any(original.message.reference == ref
+                        and original.audience.sender_lookup == lookup for original in originals)
+                    for ref in references
+                )
 
-        from .native_runtime_input import NativeRuntimeInput
-
-        events = NativeRuntimeInput.transcript_events(
-            native_inputs, reader, record, TranscriptProjection(
-                routing,
-                routes.input_display(entry.input_id),
-            )
-        )
         result = []
         for event in events:
             if published and isinstance(event, AssistantTranscript):

@@ -184,14 +184,26 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         return rows
 
     @classmethod
-    def transcript_events(cls, db, reader, record, projection):
+    def transcript_events(cls, root, reader, record, projection, owner_lookup):
+        """Capture immutable stage/replies, then release SQL before rendering/wire.
+
+        No current lifecycle witness is retained. These original identities are
+        frozen; TranscriptRead's original publication revision fences appends.
+        """
         entry = record.entry
         user = entry.tracked_user if entry.input_boundary else reader.input_ancestor(record)
-        if db is not None and user is not None:
-            for original in cls.for_native_user(db, reader, user):
-                return original.execution.transcript_events(entry, projection, user)
-        # Untracked or detached history is not classified by text or native role.
-        return entry.events(projection)
+        originals, publications = (), ()
+        if user is not None:
+            with cls._publication_read(root) as db:
+                if db is not None:
+                    originals = cls.for_native_user(db, reader, user)
+                    if entry.final_reply:
+                        for original in originals:
+                            publications = original.published_replies(db, user, owner_lookup)
+        for original in originals:
+            return original.execution.transcript_events(entry, projection, user), publications
+        # Untracked/detached history is not classified by text or native role.
+        return entry.events(projection), publications
 
     @classmethod
     def publication_revision(cls, root, reader, owner_lookup):
@@ -222,16 +234,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 )
             )[0]
 
-    @classmethod
-    def published_replies(cls, db, reader, user, owner_lookup):
-        """Derive original replies inside the same acquired transcript snapshot."""
-        if db is None:
+    def published_replies(self, db, user, owner_lookup):
+        """Only this original receipt can lend its execution publication."""
+        if (self.owner_lookup, self.session_entry_id) != (owner_lookup, user.id):
             return ()
-        for original in cls.for_native_user(db, reader, user):
-            if (original.owner_lookup, original.session_entry_id) != (owner_lookup, user.id):
-                return ()
-            return original.execution.published_replies(db, owner_lookup)
-        return ()
+        return self.execution.published_replies(db, owner_lookup)
 
     input_id: str = field(
         metadata={
