@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import stat
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -13,7 +13,9 @@ from .compaction_errors import CompactionJournalError, CompactionJournalUnknownE
 from .compaction_operations import NativeOperations
 from .compaction_private_inputs import PrivateInputs
 from .compaction_publications import CompactionPublications
-from .compaction_records import JournalMode, JournalSchemaObject, JournalTable, SyncMode
+from .compaction_records import (JournalMode, JournalSchemaObject, JournalTable,
+                                 SelectedSummaryAttempt, SyncMode)
+from .field_codec import FieldCodec
 from .compaction_identity import JournalCustody
 from .compaction_summaries import SelectedSummaries
 from .typed_table import TypedTable
@@ -34,10 +36,21 @@ class CompactionJournal:
         """
         from .compaction_outcomes import CompactionOutcomeSnapshot
 
+        return cls.observe_readonly(path, lambda db: CompactionOutcomeSnapshot.read(
+            db, session_file, incarnation, registry), absent=CompactionOutcomeSnapshot(()))
+
+    @classmethod
+    def observe_readonly(cls, path: Path, observe: Callable, *, absent):
+        """One read lifetime for original journal consumers; no writer setup.
+
+        All consumers share the custody, rollback-format and transaction checks
+        below. Missing storage is observed without creating a database or sidecar.
+        """
+
         try:
             initial = path.lstat()
         except FileNotFoundError:
-            return CompactionOutcomeSnapshot(())
+            return absent
         if not stat.S_ISREG(initial.st_mode) or initial.st_nlink != 1:
             raise CompactionJournalError("Journal must be a regular private file")
         try:
@@ -63,7 +76,7 @@ class CompactionJournal:
                 raise CompactionJournalError("Read-only journal requires current rollback mode")
             db.execute("BEGIN")
             try:
-                result = CompactionOutcomeSnapshot.read(db, session_file, incarnation, registry)
+                result = observe(db)
                 if JournalCustody.capture(path) != custody:
                     raise CompactionJournalError("Journal replaced during read")
                 return result
@@ -71,6 +84,46 @@ class CompactionJournal:
                 db.execute("ROLLBACK")
         finally:
             db.close()
+
+    @classmethod
+    def retained_history(cls, path: Path, session_file: str) -> dict[str, object]:
+        """Read every declared journal role for this original saved-session path.
+
+        Selected requests retain typed source facts. Native intents retain their
+        original one-way source views and byte strings; inspection never decodes
+        those views into a new source authority or an admission capability.
+        """
+        tables = TypedTable.members_with(JournalTable)
+        empty = {table.declared_name: [] for table in tables}
+
+        def read(db):
+            return {table.declared_name: [row.inspection() for row in table.for_session(
+                db, session_file)] for table in tables}
+
+        return dict(session_file=session_file,
+                    scope="original journal rows for this saved-session path; historical owners remain recorded",
+                    tables=cls.observe_readonly(path, read, absent=empty))
+
+    @classmethod
+    def retained_changes(cls, path: Path, session_file: str) -> dict[str, object]:
+        """Compare the last two original selected source cuts, not live context."""
+        def read(db):
+            attempts = SelectedSummaryAttempt.select(db,
+                where="session_file=? ORDER BY rowid DESC LIMIT 2", parameters=(session_file,))
+            if len(attempts) != 2:
+                raise ValueError("Retained-source diff requires two original selected compaction attempts")
+            current, previous = attempts
+            return dict(scope="last two original selected compaction source cuts; not current native context",
+                        previous=FieldCodec.encode(previous.identity),
+                        current=FieldCodec.encode(current.identity),
+                        **current.request.retained.changed_from(previous.request.retained))
+
+        # A missing journal has the same precise contract as insufficient cuts.
+        return cls.observe_readonly(path, read, absent={
+            "scope": "last two original selected compaction source cuts; not current native context",
+            "available": False,
+            "reason": "No original compaction journal exists",
+        })
 
     def __init__(self, path: Path):
         self.path = path
