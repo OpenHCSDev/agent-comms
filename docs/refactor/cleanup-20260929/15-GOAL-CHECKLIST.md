@@ -39,6 +39,21 @@ TC1/T9; Kepler503 pending-source batching; Sch287 source reconciliation;
 Mendel original C0/T4 site closure; Einstein verified obsolete disk cleanup.
 Full original and round-two objective stays ACTIVE.
 
+Toad287 CLOSED as fully superseded after six dependency/owner ancestry checks
+and exact preservation of all22 committed capture/evidence files on main. Only
+three obsolete pin lines differ from its common ancestor; zero unique production,
+tool or evidence scope. Branch and raw native proofs remain. Receipt:
+evidence/purechannel502-live-20261002/pr287-reconciliation.json.
+
+Heisenberg295 committed12added/10deleted production lines: each prepared ahead
+batch uses the existing restore cohort/history lock/anchor compensation once,
+with original demand validation at each awaited boundary. New matched normal69
+private recording/profile is active; acceptance and CPU improvement not claimed.
+Singer takes the concrete remaining S5 inspection consumer closure: thread rename
+currently hides frozen context manifests, and --turn OLD --diff may select a
+future manifest as predecessor. Existing identity/manifest owners remain; no new
+context store or provider operation.
+
 ## Actual many-owner channel failure and owner closure — 2026-10-02
 
 The installed mixed channel/DM gate did not cover pure-channel TRIAGE to FULL:
