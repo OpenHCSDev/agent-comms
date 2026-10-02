@@ -79,6 +79,11 @@ class SelectedSummarySource:
 class JournalTable:
     """Tables whose schema and transactions belong to the compaction journal."""
 
+    @classmethod
+    def for_session(cls, db: sqlite3.Connection, canonical: str):
+        """Every journal role derives its original session membership here."""
+        return cls.select(db, where="session_file=? ORDER BY rowid", parameters=(canonical,))
+
     def inspection(self) -> dict[str, object]:
         """The existing row declaration owns this read-only representation."""
         return FieldCodec.encode(self)
@@ -86,10 +91,6 @@ class JournalTable:
 
 class SessionJournalHistory(JournalTable):
     """Declared history families that exclude enrolling an allegedly fresh file."""
-
-    @classmethod
-    def for_session(cls, db: sqlite3.Connection, canonical: str):
-        return cls.select(db, where="session_file=?", parameters=(canonical,))
 
     @classmethod
     def require_pristine(cls, db: sqlite3.Connection, canonical: str) -> None:

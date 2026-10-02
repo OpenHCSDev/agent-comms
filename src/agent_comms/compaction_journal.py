@@ -97,9 +97,8 @@ class CompactionJournal:
         empty = {table.declared_name: [] for table in tables}
 
         def read(db):
-            return {table.declared_name: [row.inspection() for row in table.select(
-                db, where="session_file=? ORDER BY rowid", parameters=(session_file,)
-            )] for table in tables}
+            return {table.declared_name: [row.inspection() for row in table.for_session(
+                db, session_file)] for table in tables}
 
         return dict(session_file=session_file,
                     scope="original journal rows for this saved-session path; historical owners remain recorded",
