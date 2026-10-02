@@ -279,3 +279,62 @@ def test_original_committed_cut_covers_inherited_prefix_only(continued, damage):
             journal.summaries.reserve(str(session), source)
         assert journal.summaries.unresolved(str(session)) == ()
     assert originals == (session.read_bytes(), inputs.path.read_bytes())
+
+
+@pytest.mark.parametrize("damage", [None, "prefix", "inode", "header", "parent", "suffix", "raw-unknown", "inherited-marker"])
+def test_native_fork_creation_covers_only_its_original_prefix(continued, damage):
+    """A creator's snapshot covers copied context, never later/unresolved input."""
+    import hashlib
+    from agent_comms.compaction_records import NativeForkCreation, CompactionOperation
+    from agent_comms.compaction_states import CommittedOperation
+    from agent_comms.native_session_reopen import NativeSessionIdentity
+    from agent_comms.private_path import FileRevision
+    from agent_comms.text_digest import TextDigest
+
+    journal, session, inputs, source = continued
+    parent = str(session.with_name('source.jsonl'))
+    entries = [json.loads(line) for line in session.read_text().splitlines()]
+    entries[0]['parentSession'] = parent
+    entries.insert(1, dict(type='message', id='inherited', parentId=None,
+        message=dict(role='user', content=[dict(type='text', text='Authorized inherited context')])))
+    entries[2]['parentId'] = 'inherited'
+    if damage == 'inherited-marker':
+        entries.append(dict(type='compaction', id='parent-cut', parentId='user',
+            summary='Copied parent summary', firstKeptEntryId='user', tokensBefore=100,
+            details=dict(agentCommsCommit=dict(commitId='c' * 32,
+                payloadDigest='d' * 64, metadataDigest='e' * 64))))
+        with journal.transaction() as db:
+            # A source-side operation must not be consumed as the child's cut.
+            CompactionOperation('c' * 32, parent, '{}', CommittedOperation(), '{}').insert(db)
+    session.write_text(''.join(json.dumps(entry) + '\n' for entry in entries))
+    revision = FileRevision.from_stat(session.stat())
+    created = NativeForkCreation('session', str(session), NativeSessionIdentity('source', parent),
+        revision, revision, TextDigest(hashlib.sha256(session.read_bytes()).hexdigest()), len(entries))
+    with journal.transaction() as db:
+        created.insert(db)
+    if damage == 'prefix':
+        entries[1]['message']['content'][0]['text'] = 'Changed inherited context'
+    if damage == 'header':
+        entries[0]['id'] = 'different'
+    if damage == 'parent':
+        entries[0]['parentSession'] = str(session.with_name('different-source.jsonl'))
+    if damage == 'suffix':
+        entries.append(dict(type='message', id='later', parentId=entries[-1]['id'],
+            message=dict(role='user', content=[dict(type='text', text='Untracked later input')])))
+    if damage in {'prefix', 'header', 'parent', 'suffix'}:
+        session.write_text(''.join(json.dumps(entry) + '\n' for entry in entries))
+    if damage == 'inode':
+        replacement = session.with_name('replacement.jsonl')
+        replacement.write_bytes(session.read_bytes()); replacement.chmod(0o600)
+        replacement.replace(session)
+    if damage == 'raw-unknown':
+        journal.private_inputs.reserve(session, 'a' * 32)
+    source = replace(source, source=replace(source.source,
+        reserved_revision=SessionRevision.observe(str(session)).require_available()))
+    originals = session.read_bytes(), inputs.path.read_bytes()
+    if damage in {None, 'inherited-marker'}:
+        journal.summaries.reserve(str(session), source)
+    else:
+        with pytest.raises(CompactionJournalError, match='coverage floor'):
+            journal.summaries.reserve(str(session), source)
+    assert originals == (session.read_bytes(), inputs.path.read_bytes())
