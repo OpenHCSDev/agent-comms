@@ -1,6 +1,7 @@
 """Enroll an already running native test host in the actual retained custody owner."""
 
 import asyncio
+from collections import Counter
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated
@@ -9,7 +10,7 @@ from agent_comms.compaction_identity import SummaryOperationIdentity
 from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.compaction_records import CompactionOperation, SelectedSummaryAttempt
 from agent_comms.field_codec import FieldCodec, PathText
-from agent_comms.native_entries import CompactionEntry, MessageEntry, NativeEntry
+from agent_comms.native_entries import ManagedCompactionEntry, MessageEntry, NativeEntry, NativeEvidenceRead
 from agent_comms.native_input_record import NativeInputIdText
 from agent_comms.native_pi import NativeContextProof, NativeContextRecord
 
@@ -29,8 +30,12 @@ class RecordedNativeCheckpoint:
     reference: SummaryOperationIdentity
     commit_id: str
 
-    def observe(self, session: NativeSessionIdentity, entries, probe):
+    def capture(self, session: NativeSessionIdentity, evidence: NativeEvidenceRead):
+        """Borrow original records after the journal/native owners corroborate them."""
         session.require_session(self.reference.session_file)
+        evidence.require_path(Path(session.session_file))
+        header, entries = evidence.observe()
+        session.require_same_session(NativeSessionIdentity(header.id, str(evidence.source.path)))
 
         def read(db):
             attempt = SelectedSummaryAttempt.one(db, operation_id=self.reference.operation_id)
@@ -45,24 +50,73 @@ class RecordedNativeCheckpoint:
             operation.require_summary_link(attempt, admit_original=True)
             original = operation.committed_outcome()
             entry, = (row for row in entries if row.id == original.entry_id)
-            if not isinstance(entry, CompactionEntry):
-                raise ValueError("Recorded checkpoint is not an original native compaction")
-            if probe.parent_id != entry.id:
-                raise ValueError("Recorded probe must immediately follow its original checkpoint")
+            if not isinstance(entry, ManagedCompactionEntry):
+                raise ValueError("Recorded checkpoint requires an original managed native compaction")
+            branch = evidence.branch(entry.id, entries)
+            covered = operation.covered_prefix(entry, evidence, branch)
             attempt.request.retained.require_summary(entry.summary)
-            return {
-                "reference": FieldCodec.encode(attempt.identity),
-                "commit_id": operation.commit_id,
-                "native_entry_id": original.entry_id,
-                "retained_facts": FieldCodec.encode(attempt.request.retained),
-                "selected_model": FieldCodec.encode(attempt.request.selected),
-                "settings": FieldCodec.encode(attempt.request.settings),
-            }
+            return attempt, entry, covered
 
         original = CompactionJournal.observe_readonly(self.journal, read, absent=None)
         if original is None:
             raise ValueError("Recorded checkpoint has no original compaction journal")
         return original
+
+    def _report(self, attempt: SelectedSummaryAttempt, entry: ManagedCompactionEntry,
+               covered: frozenset[str]):
+        # Membership comes from the original declared fact family. These counts
+        # describe the corroborated envelope, not inferred summary prose.
+        membership = Counter(fact.declared_name for fact in attempt.request.retained.facts)
+        return {
+            "reference": FieldCodec.encode(attempt.identity),
+            "commit_id": self.commit_id,
+            "native_entry_id": entry.id,
+            "retained_facts": FieldCodec.encode(attempt.request.retained),
+            "selected_model": FieldCodec.encode(attempt.request.selected),
+            "settings": FieldCodec.encode(attempt.request.settings),
+            "revision_mass": {
+                "evaluated": False,
+                "reason": "An original scope and authorized correction evidence are required, not content differences",
+            },
+            "canonical_availability": {
+                "scope": "exact original selected-source envelope in its corroborated native commit",
+                "evaluated": bool(attempt.request.retained.facts),
+                "reason": "An empty retained envelope has no eligible fact denominator"
+                          if not attempt.request.retained.facts else "Original envelope verified against committed payload",
+                "source_digest": attempt.request.retained.source_digest.value,
+                "required": len(attempt.request.retained.facts),
+                "available": len(attempt.request.retained.facts),
+                "by_fact": {kind: {"required": count, "available": count}
+                            for kind, count in sorted(membership.items())},
+                "covered_native_entries": len(covered),
+            },
+        }
+
+    def observe(self, session: NativeSessionIdentity, evidence: NativeEvidenceRead):
+        return self._report(*self.capture(session, evidence))
+
+    def inspect(self, previous: RecordedNativeCheckpoint | None = None):
+        """Read a checkpoint or adjacent-cut difference without a new model input.
+
+        The optional previous reference is external evaluation input. It neither
+        selects a live source nor carries native lifecycle/admission state.
+        """
+        with NativeEntry.open_evidence(Path(self.reference.session_file)) as evidence:
+            header, _ = evidence.observe()
+            session = NativeSessionIdentity(header.id, str(evidence.source.path))
+            current_attempt, current_entry, covered = self.capture(session, evidence)
+            report = self._report(current_attempt, current_entry, covered)
+            if previous is not None:
+                previous_attempt, previous_entry, _ = previous.capture(session, evidence)
+                branch = evidence.branch(current_entry.id, evidence.entries)
+                if previous_entry.id == current_entry.id or previous_entry not in branch:
+                    raise ValueError("Checkpoint comparison requires distinct original ancestor cuts")
+                report["source_changes"] = {
+                    "previous": FieldCodec.encode(previous_attempt.identity),
+                    "current": FieldCodec.encode(current_attempt.identity),
+                    **current_attempt.request.retained.changed_from(previous_attempt.request.retained),
+                }
+            return report
 
 
 @dataclass(frozen=True)
@@ -91,9 +145,17 @@ class RecordedNativeProbe:
                 raise ValueError("Recorded recall answer is not a successful native terminal")
             if answer.parent_id != user.id:
                 raise ValueError("Recall requires a direct tool-free answer to its original probe")
-            checkpoint = self.checkpoint.observe(self.session, entries, user) if self.checkpoint else {
-                "applicable": False, "reason": "No compaction checkpoint declared for this control"
-            }
+            if self.checkpoint is not None:
+                checkpoint = self.checkpoint.observe(self.session, evidence)
+                if user.parent_id != checkpoint["native_entry_id"]:
+                    raise ValueError("Recorded probe must immediately follow its original checkpoint")
+            else:
+                checkpoint = {
+                    "applicable": False, "reason": "No compaction checkpoint declared for this control",
+                    "canonical_availability": {
+                        "evaluated": False, "reason": "Full-context control has no committed retained envelope"
+                    },
+                }
             return {
                 # The located proof's Path is an acquired resource coordinate.
                 # Export its original declared wire facts, not a second proof.
@@ -106,6 +168,7 @@ class RecordedNativeProbe:
                 "answer": FieldCodec.encode(answer),
                 "answer_text": answer.message.authoritative_text,
                 "checkpoint": checkpoint,
+                "canonical_availability": checkpoint["canonical_availability"],
                 "prompt_scope": "original native user and assembled-context proof, not final provider payload",
             }
 
