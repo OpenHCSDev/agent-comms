@@ -104,3 +104,18 @@ under this feature's evidence directory. Arendt's combined529 receiving owns the
 next distinct configured saved-source/continuation journey. The optional S1
 compaction and next answer remain unfinished; this budget correction ships
 independently when the parent accepts its scoped proof.
+
+## Configured continuation passed on the combined receiving
+
+Arendt529 completed the configured Sol/high saved-history journey on combined
+Core761864c8/nativead533: 42,924,939-byte original source, a peer reply during
+manual summary, one native commit, then one distinct human input Started once
+and answered. Terminal exit0, elapsed162.082 seconds. The original source hash
+is unchanged; native children closed; public inputs and input replays are zero.
+Original52901 remains UNKNOWN and unchanged. The authored receipt is preserved
+in `summary-budget-source/configured529-continuation.json`.
+
+This closes the budget/source-continuation blocker in the actual configured
+SDK/ACP/native path. It does not convert the earlier controlled fixture exit1
+into a whole-test pass, or claim optional task-boundary timing, physical UI or
+provider latency. No repeat was issued by this owner.
