@@ -108,7 +108,7 @@ else:
 
 @pytest.mark.parametrize("direct", [False, True])
 @pytest.mark.parametrize("revoke", [False, True])
-async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, direct, revoke):
+async def test_actual_raw_writes_follow_committed_admission_without_global_exclusions(tmp_path, monkeypatch, direct, revoke):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
     monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
@@ -156,7 +156,7 @@ async def test_actual_raw_writes_hold_owner_exclusions(tmp_path, monkeypatch, di
         assert not received.exists() or not received.read_text()
     else:
         assert json.loads(received.read_text())["type"] == "prompt"
-        assert observed == [["wire", "bus.jsonl", "registry.json", "sql"]] * 2
+        assert observed == [[], []]
     assert all(child.returncode is not None for child in children)
     assert _held(root) == []
 
@@ -219,8 +219,8 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
 
         def lifecycle():
             # This is intentionally a synchronous ordinary callback on the SAME
-            # loop that awaits native send. Worker deadline must free admission
-            # even while this callback blocks waiting for the registry lock.
+            # loop that awaits native send. The grant has already released
+            # registry custody; pipe backpressure cannot block this retirement.
             comms.registry.unregister(owner.name)
             lifecycle_done.append(True)
 
@@ -527,7 +527,7 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
 
 
 @pytest.mark.parametrize("direct", [False, True])
-async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
+async def test_actual_native_admission_commits_before_bytes_and_releases_feedback_readers(
     tmp_path, monkeypatch, direct
 ):
     root, root_id, _comms, _initial, people = _root(tmp_path, direct=direct)
@@ -561,15 +561,18 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
             try:
                 with boundary():
                     assert observations == ["reader refused before bytes"]
-                    # A late feedback reader cannot sneak in after admission.
+                    # The exact epoch has committed before any raw byte. A
+                    # later reader borrows it without blocking this pipe writer.
                     late = sqlite3.connect(path, isolation_level=None, timeout=0)
                     try:
-                        with pytest.raises(sqlite3.OperationalError) as blocked:
-                            late.execute("SELECT * FROM native_runtime_input").fetchall()
-                        assert blocked.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                        epochs = late.execute(
+                            "SELECT sent_owner_admission_generation FROM native_runtime_input"
+                        ).fetchall()
+                        assert len(epochs) == 1 and epochs[0][0] is not None
                     finally:
                         late.close()
-                    observations.append("late reader excluded")
+                    assert _held(root) == []
+                    observations.append("original admission committed and released")
                     yield
             except native_prompt_send.PromptAdmissionBusy:
                 assert observations == []
@@ -594,7 +597,7 @@ async def test_actual_native_admission_excludes_feedback_readers_before_bytes(
     assert "post-write" not in str(caught.value)
     assert observations == [
         "reader refused before bytes",
-        "late reader excluded",
+        "original admission committed and released",
         "sent and committed once",
     ]
     assert json.loads(received.read_text())["type"] == "prompt"

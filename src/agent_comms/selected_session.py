@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from .compaction_journal import CompactionJournal
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import _response_boundary
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from .diagnostics import PublicationMeasurements
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
@@ -204,7 +205,9 @@ class SavedSelectedSession(SelectedSession):
             expected_package=turn.launch.package, selected=selected,
         )
         if settings.trigger:
-            participant.require_current()
+            await Coordination.run_async(
+                participant.store.session.path, participant.require_current
+            )
             owner = participant.owner.thread
             self.identity.require_session(owner.require_saved_session())
             snapshot = participant.comms.registry.snapshot()

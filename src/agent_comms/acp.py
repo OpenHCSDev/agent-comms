@@ -314,7 +314,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=self.sessions.metadata(name, session_id=session_id),
+                field_meta=await self.sessions.metadata(name, session_id=session_id),
             ),
         )
 
@@ -392,7 +392,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         with bus.log.locked():
             admission_after_seq = bus.log._private_marker_unlocked().admission_after_seq
         with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
-            _accept_visible_deliveries(
+            await _accept_visible_deliveries(
                 bus,
                 wire_root_id,
                 store,
@@ -428,17 +428,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # input. Extend only an existing current generation or an all-N prefix;
             # old-generation Pi evidence cannot initialize this cursor on reconnect.
             try:
-                with Coordination(str(self._comms.root / "coordination.sqlite3")) as store:
-                    person = store.participants.get(stable_thread_lookup(owner.created_at))
-                    admission_generation = self._comms.registry.snapshot().admission_generations[
-                        thread_name
-                    ]
-                    cursor = NativeSourceCursor(bus, store, wire_root_id=wire_root_id).advance(
-                        owner=owner,
-                        owner_admission_generation=admission_generation,
-                        owner_generation=person.participant_generation,
-                        committed_input_id=None,
-                    )
+                cursor = await NativeSourceCursor.refresh_async(
+                    bus, wire_root_id=wire_root_id, owner_name=thread_name
+                )
             except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
                 cursor = None  # projection unavailable; no claim or model retry
             if cursor is not None:

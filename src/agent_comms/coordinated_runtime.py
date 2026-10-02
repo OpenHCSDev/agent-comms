@@ -85,23 +85,21 @@ class SelectedExecution:
         self.root = Path(self.root).absolute()
         self.validate()
         comms = Comms(self.root)
-        with (
-            Coordination(str(self.root / "coordination.sqlite3")) as store,
-            SelectedParticipant.select(
+        with Coordination(str(self.root / "coordination.sqlite3")) as store:
+            async with SelectedParticipant.select(
                 comms,
                 store,
                 self.wire_root_id,
                 self.owner_name,
                 self.after_seq,
-            ) as participant,
-        ):
-            if participant is None:
-                return None
-            session = await SelectedSession.prepare(
-                participant,
-                self.session_file,
-                self.fresh_private_enrollment,
-                self.selected_thinking_level,
-                self.native_package,
-            )
-            return await SelectedConsideration(participant).run(self, session)
+            ) as participant:
+                if participant is None:
+                    return None
+                session = await SelectedSession.prepare(
+                    participant,
+                    self.session_file,
+                    self.fresh_private_enrollment,
+                    self.selected_thinking_level,
+                    self.native_package,
+                )
+                return await SelectedConsideration(participant).run(self, session)
