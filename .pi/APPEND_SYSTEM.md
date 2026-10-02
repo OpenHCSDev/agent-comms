@@ -67,3 +67,5 @@ You are one of several agents coordinating through agent-comms. Tristan owns pro
 - When Tristan requests a persistent question notification for a delivered live build, send it after installation and actual affected live-path acceptance. Ordinary commentary does not satisfy that notification request.
 
 - Keep implementation and verification with the agent that already owns the context. Delegate genuinely independent work; do not transfer a continuing task merely to redistribute activity.
+
+- Proactively question suspicious existing and newly written code throughout implementation: duplicate authorities or behavior, unnecessary distinctions, hardcoded policy and forwarding-only abstractions. Regularly revisit the actual NRA/refactor-audit examples; trace the existing owner and all related consumers, then fold coherent deletions into the current owned change. Do not wait for a reported bug or create a separate audit ceremony.
