@@ -1,5 +1,6 @@
 """Read original seq326 witnesses; never invoke a coordinator or native writer."""
 
+import argparse
 import hashlib
 import json
 import os
@@ -15,7 +16,7 @@ def milliseconds(value):
     return datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp() * 1000
 
 
-def analyze():
+def analyze(sequence=326, message_prefix="6ba2aee585ff", installed=INSTALLED):
     connection = sqlite3.connect(ROOT.joinpath('coordination.sqlite3').as_uri() + '?mode=ro', uri=True)
     connection.row_factory = sqlite3.Row
     connection.execute('PRAGMA query_only=ON')
@@ -23,7 +24,7 @@ def analyze():
     try:
         claims = [dict(row) for row in connection.execute(
             'SELECT assignment_id,recipient,lifecycle,revision,accepted_at_ms,updated_at_ms '
-            'FROM wake_claims WHERE wire_seq=326 ORDER BY recipient')]
+            'FROM wake_claims WHERE wire_seq=? ORDER BY recipient', (sequence,))]
         sources = {row['input_id']: dict(row) for row in connection.execute('''
             SELECT n.input_id,n.owner_thread,n.verdict,n.session_file,n.session_entry_id,
                    w.accepted_at_ms,w.assignment_id
@@ -31,8 +32,8 @@ def analyze():
             JOIN native_runtime_triage_sources s ON s.input_id=n.input_id
             JOIN json_each(s.assignment_ids) membership
             JOIN wake_claims w ON w.assignment_id=membership.value
-            WHERE w.wire_seq=326
-        ''')}
+            WHERE w.wire_seq=?
+        ''', (sequence,))}
     finally:
         connection.rollback()
         connection.close()
@@ -79,10 +80,10 @@ def analyze():
              'native_prompt_send.py', 'tracked_turn.py', 'native_startup.py',
              'coordination_response.py', 'compaction_private_inputs.py', 'backend.py')
     return {
-        'source_wire_seq': 326, 'source_message_id_prefix': '6ba2aee585ff',
+        'source_wire_seq': sequence, 'source_message_id_prefix': message_prefix,
         'kind': 'readonly_original_witness_join', 'claims': claims,
         'requests': sorted(results, key=lambda row: row['native_preparing_at_ms']),
-        'installed_source_sha256': {name: hashlib.sha256(INSTALLED.joinpath(name).read_bytes()).hexdigest() for name in names},
+        'installed_source_sha256': {name: hashlib.sha256(installed.joinpath(name).read_bytes()).hexdigest() for name in names},
         'limits': [
             'No historical get_state-response, prompt-writer-grant, or physical-lock wait timestamps were retained.',
             'Header-to-user precedes model preparation but cannot distinguish parent admission wait from native pre-user handling.',
@@ -94,4 +95,12 @@ def analyze():
 
 
 if __name__ == '__main__':
-    Path(__file__).with_name('receipt.json').write_text(json.dumps(analyze(), indent=2) + '\n')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--seq', type=int, default=326)
+    parser.add_argument('--message-prefix', default='6ba2aee585ff')
+    parser.add_argument('--installed', type=Path, default=INSTALLED)
+    parser.add_argument('--output', type=Path, default=Path(__file__).with_name('receipt.json'))
+    arguments = parser.parse_args()
+    arguments.output.parent.mkdir(parents=True, exist_ok=True)
+    arguments.output.write_text(json.dumps(analyze(arguments.seq, arguments.message_prefix,
+        arguments.installed), indent=2) + '\n')
