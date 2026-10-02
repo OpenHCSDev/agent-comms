@@ -4,6 +4,14 @@ Lovelace01a0fe48-719e-7c51-a7c4-c29e81fa6327 is a parent-context fork and owns e
 
 ## Latest concrete checkpoints
 
+Toad339 merged as2e2754ba after complete source and scoped installed review: one existing MarkdownRenderTask now parses and highlights in a single worker request, deleting TokenRenderTask and its second transport/cache round-trip. The original108.814s physical journey preserved16 warm and7 input-paging checks, draft/Undo and18 ready bodies. Its initial exporter failure remains recorded; exports now acquire the original App mount event. Motion is still chunky (input-Up writer median21.29ms/p95164.47ms), so animation interruption and full scrolling remain Heisenberg's active assignment in the same checkout.
+
+Toad335 and Textual30/31 also merged: shared preparation, one clipped-geometry acquisition and owner-derived style revisions are accepted scoped checkpoints. They join the next coherent receiving after337; none is claimed installed by its merge.
+
+The original337 read-only publication preflight passed with20 idle owners, zero clients and no publication receipt. Schrodinger is the sole active publisher and rechecks the original frozen cohort and audience at execution. Parent owns affected default UI acceptance afterward. This is actual current state, superseding the earlier client-wait note; it is not a delivered-build claim.
+
+Lovelace pushed existing309's first tree/detail implementation ddc63c4c in the reused completed340 checkout and continues canonical source closure and actual UI verification. Einstein pushed341's seven ACP event migration checkpoint6b201c02, deleting51 old declaration lines. Kepler retains338's shared channel history migration; Mendel retains the semantic settlement/publication latency pass. No worker needs an implementation handoff or a new checkout for these continuations.
+
 Core545 and546 merged: the original boundaries source-floor check passed with its original NotSent row, full input document and source in2.454s, with no replay or changed bytes. Receiver337 is READY and is the sole next cutover;336 remains preserved as evidence. Public334 stays installed until current Toad clients/drafts permit cutover.
 
 Toad340 merged: the existing review command now processes failed real recordings, derives scroll intervals from the recorded journey, emits consecutive frames and links original CPU/writer evidence. The original335 failed capture produced six48-frame intervals; all six original hashes and its failure result remain unchanged. Parent inspected input-held-up and reversal: visible history, repeated positions then discrete advances; smoothness remains incomplete. Original sampling command now owns retained profile rate.
