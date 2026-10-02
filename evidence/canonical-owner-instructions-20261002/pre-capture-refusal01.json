@@ -1,0 +1,10 @@
+{
+  "reason": "Existing registry require_active refused STOPPED nra-architecture during parent cutover",
+  "phase": "before environment capture or native child",
+  "source_head": "da6e7490",
+  "native_children": 0,
+  "prompt_commands": 0,
+  "provider_calls": 0,
+  "public_mutations": [],
+  "at_epoch": 1790942957.801042
+}

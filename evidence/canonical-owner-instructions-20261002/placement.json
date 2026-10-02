@@ -1,0 +1,27 @@
+{
+  "owner": "Singer531",
+  "at_epoch": 1790942163.4752307,
+  "source_commit": "da6e7490",
+  "canonical_path": "/home/ts/.agent-comms/.pi/APPEND_SYSTEM.md",
+  "source_sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6",
+  "placed": [
+    {
+      "path": "/home/ts/.agent-comms/.pi/APPEND_SYSTEM.md",
+      "symlink": null,
+      "sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6"
+    },
+    {
+      "path": "/home/ts/.codex/AGENTS.md",
+      "symlink": "/home/ts/.agent-comms/.pi/APPEND_SYSTEM.md",
+      "sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6"
+    },
+    {
+      "path": "/home/ts/.pi/agent/APPEND_SYSTEM.md",
+      "symlink": "/home/ts/.agent-comms/.pi/APPEND_SYSTEM.md",
+      "sha256": "d8313217c468a2b317802ebc5a87d4cec606c689e6d1cfd26bbdd2bb052a2cc6"
+    }
+  ],
+  "originals_manifest": "/home/ts/.cache/agent-scratch/dedicated-worktree-cleanup-20261001/canonical-instructions531-20261002/originals.json",
+  "no_other_project_guidance_changed": true,
+  "no_provider_inputs_or_restarts": true
+}

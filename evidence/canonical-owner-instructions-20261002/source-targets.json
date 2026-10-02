@@ -1,0 +1,28 @@
+{
+  "symbols": [
+    "NativePiRpcLaunch",
+    "NativeArguments",
+    "RestartEnvironment",
+    "SelectedSession",
+    "RetainedOwnerLaunch",
+    "InstructionSegment",
+    "TurnContext"
+  ],
+  "methods": [
+    "bootstrap",
+    "_build",
+    "managed",
+    "tracked",
+    "launch_environment",
+    "encode_native",
+    "for_agent",
+    "main"
+  ],
+  "fields": [
+    "configuration",
+    "native_config",
+    "agent_directory",
+    "argv",
+    "OWNER_INSTRUCTIONS"
+  ]
+}
