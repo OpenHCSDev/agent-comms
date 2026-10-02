@@ -1,0 +1,21 @@
+{
+  "state": "merged scoped checkpoint; reviewed immutable receiving prepared; default unchanged",
+  "core": "5395eb6afc403224daaecfd3774ef43e2f200da8",
+  "toad_receiving_merge": "f23e9b929df75eea93c84dd438d0e71fc4485b4f",
+  "toad_installed_source": "dc6c484ce78428eb3d0fe8c7ddda1c56f4f8f1fa",
+  "source_proof": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/merged504-295-receiving-20261002/source-proof.json",
+  "prepared_release": "/home/ts/wt/comms-cleanup-live-integration-20260929/.release-private/merged504-295-20261002",
+  "native_schema_changed": false,
+  "runtime_reset": false,
+  "default_changed": false,
+  "remaining": "normal quiet client/owner cutover after performance recording and current user work, then actual default saved-history UI",
+  "latency": "public327 seven replies took62.455 to246.509 seconds; runtime preparation/admission not solved",
+  "owners": {
+    "cross_owner_latency": "Arendt Core489",
+    "batch_cursor_investigation": "Singer under Arendt; Core503 Kepler batching",
+    "compaction_preparation": "Einstein Core506",
+    "single_reply_criterion": "Schrodinger Core505",
+    "scrolling_sidebar_paint": "Heisenberg Toad298/Textual21",
+    "commands": "Mendel Toad297"
+  }
+}

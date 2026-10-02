@@ -1,3 +1,13 @@
+## Current owner checkpoint: channel latency and independent merged install, 2026-10-02 03:27 UTC
+
+- Original public327 remains seven canonical replies, three actual IGNORE decisions, two external-CLI pending. Replies took 62–247 seconds; pre-model delay is unsolved. Arendt owns cross-owner preparation/admission source closure in #489.
+- Singer's completed #504 lane now investigates the missing current native cursor from #503 gate01, under Arendt producer ownership. Kepler's source-batching implementation remains frozen; the failed full cursor acceptance is preserved. No replay or second symptom patch.
+- Einstein #506 has Arendt's exact preparation-hook grant and is consolidating existing manual/adaptive/direct/selected preparation; separate source work proceeds in parallel with latency.
+- Schrodinger #505 has coherent one-file reply relevance and deleted competing instruction decisions. Source checkpoint published; actual configured saved-recipient acceptance is his responsibility, with no parent binding wait. Integrate merged #504 normally before final readiness.
+- Heisenberg Toad #298 has actual public recording/profiling; initial original collapsed-sidebar preferences prevented navigation coverage. The existing recording journey is being corrected to reveal the actual sidebar through its control. No full acceptance claim for that interrupted recording.
+- Independent merged Core #504 + Toad #295 receiving #299 reviewed and merged (`f23e9b929df75eea93c84dd438d0e71fc4485b4f`). Immutable normal69 install/source-equal existing actual journeys and one-use original publisher artifacts validated. Default remains #502/#294/#284/Textual19 while current user work and recording continue. No native schema/reset/replay. See `evidence/merged504-295-live-20261002/prepared-installation.json`.
+- Full original goal remains ACTIVE. No claims that a scoped checkpoint solves global latency, compaction, batching or the complete scrolling scope.
+
 ## Fresh public ten-owner wave: latency still unresolved — 2026-10-02
 
 Actual fresh327id017fc0e520e7 is separate from failed326 despite identical
