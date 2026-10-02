@@ -10,7 +10,7 @@ const root = resolve(directory);
 mkdirSync(root, {recursive: true, mode: 0o700});
 const {MemoryEntryStore, DiskEntryStore} = await import(pathToFileURL(join(pkg, 'dist/core/session-entry-store.js')));
 const {SessionManager, sessionEntryToContextMessages} = await import(pathToFileURL(join(pkg, 'dist/core/session-manager.js')));
-const {CompactionContext} = await import(pathToFileURL(join(pkg, 'dist/core/session-context.js')));
+const {CompactionContext, SessionContext} = await import(pathToFileURL(join(pkg, 'dist/core/session-context.js')));
 const header = {type:'session', version:3, id:'state-count', cwd:root, timestamp:'2026-10-02T00:00:00Z'};
 const entries = [
     {type:'message', id:'a', parentId:null, message:{role:'user', content:'first'}},
@@ -42,11 +42,33 @@ try {
 // Original retained source uses the same installed body projection and selectors.
 const source = SessionManager.open(resolve(sourcePath));
 try {
-    const expected = source.buildContextEntries().flatMap(sessionEntryToContextMessages).reduce(count => count+1, 0);
+    const originalMessages = source.buildContextEntries().flatMap(sessionEntryToContextMessages).toArray();
+    const expected = originalMessages.length;
     const context = new CompactionContext(source);
     const get = source.entryStore.get;
     source.entryStore.get = () => {throw new Error('Compaction count decoded a source body');};
     try {assert.equal(context.messageCount(), expected);} finally {source.entryStore.get = get;}
+
+    // Restore must budget and install the same original acquisition. An oversized
+    // context still belongs to CompactionContext, with no resident history.
+    const selectedEntries = [...source.entryStore.contextMetadata(source.getLeafId())].length;
+    const session = {sessionManager:source, systemPrompt:'', model:{contextWindow:1e9},
+        settingsManager:{getCompactionSettings:()=>({reserveTokens:1})},
+        agent:{state:{messages:[], tools:[]}}};
+    let bodyReads=0;
+    source.entryStore.get = function(id) {bodyReads++; return get.call(this, id);};
+    try {
+        SessionContext.restore(session).requireReady();
+        assert.deepEqual(session.agent.state.messages, originalMessages);
+        assert.equal(bodyReads, selectedEntries, 'ready restore decoded the selected prefix twice');
+        bodyReads=0;
+        session.model={contextWindow:1};
+        SessionContext.restore(session);
+        assert.throws(()=>session.storedContext.requireReady(), /did not admit/);
+        assert.deepEqual(session.agent.state.messages, []);
+        assert.equal(bodyReads, selectedEntries, 'compaction selection repeats history acquisition');
+    } finally {source.entryStore.get = get;}
     console.log(JSON.stringify({ok:true, retained_message_count:expected,
-        provider_inputs:0, body_reads_for_count:0, branches_and_revision_refusal:true}));
+        provider_inputs:0, body_reads_for_count:0, branches_and_revision_refusal:true,
+        ready_restore_body_reads:selectedEntries, over_budget_history_uninstalled:true}));
 } finally {source.entryStore.close();}

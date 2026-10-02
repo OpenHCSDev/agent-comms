@@ -1,0 +1,22 @@
+{
+  "source": "4f5823db6dca2b0a948157b5c4359873b8bf4bfe",
+  "manifest": "00c2c11feaaf6e53b543d1570ae6029f8395e64ebafcdac54c352082cbc460c7",
+  "tree": "e0f93fec172aced120c0ce3e90345a27ece91ac2a0436bad3353169922dfecc7",
+  "capture": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-context-restore533-20261002/fresh-unverified/node_modules/@earendil-works/pi-coding-agent",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-00c2c11feaaf6e53/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/session-context.js",
+      "original_sha256": "9f96b7dce77ab180524fe9c586756551a7cadaefae1a1b7dcce6e9509915e047",
+      "new_sha256": "6e6f7c01737aa3270d8ce502ce15b3547d0d60f74e1100b5aac3b3e3ccd1c456"
+    }
+  ],
+  "all_other_files_identical_to_qualified0b306": true,
+  "regular_files": 19190,
+  "source_copy_bindings_exact": true,
+  "pristine_stock_recipe": "PASS;95lockedoffline dependencies",
+  "provider_calls": 0,
+  "public_changes": false,
+  "native_inputs": 0,
+  "qualification": "Source artifact; canonical preparation and Arendt533 saved-source startup/count/overbudget changed-path sanity follow"
+}

@@ -12,27 +12,28 @@ export class SessionContext {
         const manager=session.sessionManager;
         const model=session.model;
         const settings=session.settingsManager.getCompactionSettings();
-        if (!model || this.sourceBudget(session).compactionRequired(settings)) {
-                session.storedContext=new CompactionContext(manager);
-                session.storedContext.install(session.agent);
-                return session.storedContext;
-        }
-        session.storedContext=new ReadyContext(manager);
-        session.storedContext.install(session.agent);
+        const messages=model ? this.sourceMessages(manager).toArray() : [];
+        session.storedContext=(!model || this.sourceBudget(session, messages).compactionRequired(settings))
+            ? new CompactionContext(manager)
+            : new ReadyContext(manager);
+        session.storedContext.install(session.agent, messages);
         return session.storedContext;
     }
-    static sourceBudget(session) {
+    static sourceMessages(manager) {
+        return manager.buildContextEntries().flatMap(sessionEntryToContextMessages);
+    }
+    static sourceBudget(session, messages) {
         return new ContextBudget(session.model, {
             systemPrompt: session.systemPrompt,
-            messages: convertToLlm(session.sessionManager.buildContextEntries()
-                .flatMap(sessionEntryToContextMessages).toArray()),
+            messages: convertToLlm(messages),
             tools: session.agent.state.tools,
         });
     }
     compactionRequired(session, settings) {
-        return SessionContext.sourceBudget(session).compactionRequired(settings);
+        return SessionContext.sourceBudget(session, SessionContext.sourceMessages(this.manager).toArray())
+            .compactionRequired(settings);
     }
-    install(agent) { throw new Error('Concrete session context required'); }
+    install(agent, messages) { throw new Error('Concrete session context required'); }
     requireReady() { throw new Error('Native compaction did not admit the retained context'); }
     messages(agent) { throw new Error("Concrete context messages required"); }
     messageCount(agent) { throw new Error("Concrete context message count required"); }
@@ -42,12 +43,12 @@ export class ReadyContext extends SessionContext {
     requireReady() {}
     messages(agent) { return agent.state.messages.values(); }
     messageCount(agent) { return agent.state.messages.length; }
-    install(agent) {
-        agent.state.messages=this.manager.buildContextEntries().flatMap(sessionEntryToContextMessages).toArray();
+    install(agent, messages) {
+        agent.state.messages=messages;
     }
 }
 export class CompactionContext extends SessionContext {
-    messages() { return this.manager.buildContextEntries().flatMap(sessionEntryToContextMessages); }
+    messages() { return SessionContext.sourceMessages(this.manager); }
     messageCount() { return this.manager.entryStore.contextMessageCount(this.manager.getLeafId()); }
     install(agent) { agent.state.messages=[]; }
     async beforeInput(session) {

@@ -1,0 +1,5052 @@
+{
+  "original_seq": 385,
+  "source_message_id": "1ec243f17eac",
+  "wire_ts": 1790945946.952061,
+  "cohort": {
+    "stage": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-selected-publication530-sidebar323-20261002",
+    "pins": {
+      "agent_comms": "5c55d1ccf552007d569fa0343f2d66bb9aae53d1",
+      "toad": "4d5248136c91a9763ea073d4bf62136deb49b7d3",
+      "textual": "94c14b574641eb08148c3ec88e8fad9dc63dd7e5"
+    },
+    "sdk": "0.12.1",
+    "textual_diff_view": "8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9",
+    "native_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent",
+    "state": "normal69 installed source/directURLs/assets/fulltrust verified; parent activation and default gate sole owner",
+    "staging_receipt": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/selected-publication530-sidebar323-20261002/source-proof.json",
+    "bins": {
+      "python": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-selected-publication530-sidebar323-20261002/bin/python",
+      "toad": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-selected-publication530-sidebar323-20261002/bin/toad",
+      "agent-comms": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-selected-publication530-sidebar323-20261002/bin/agent-comms",
+      "agent-comms-acp": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-selected-publication530-sidebar323-20261002/bin/agent-comms-acp",
+      "agent-comms-agent": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-selected-publication530-sidebar323-20261002/bin/agent-comms-agent",
+      "pi-comms-native": "/home/ts/wt/toad-prompt-action-owner-20261002/.artifacts/runtime-selected-publication530-sidebar323-20261002/bin/pi-comms-native"
+    },
+    "native_cli": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+    "native_manifest": "ad533a9f08581561d00d5524a576bda00f6368221cc4f74ba3c68513ede8fc04",
+    "native_tree": "adb2969a4d57cb8993a92d30b924b969ca76772de5dadb31cc7b2f294ee120e9",
+    "native_configuration_note": "Sidebar323/Text26: current324 and previous321 preserved; qualifiedCore530/Native6/ad533, no historical carry or native build; parent sole publisher."
+  },
+  "rows": [
+    {
+      "owner": "compaction499-live-architecture-memory",
+      "triage": {
+        "input_id": "ee2f4569ea56c95b4a620e67a9b136ef",
+        "native_user_s": 12.978939056396484,
+        "native_finished_s": 16.413938999176025,
+        "request_wall_ms": 3425.580047,
+        "parent_finished_receipt_lag_s": 0.002561094,
+        "execute_cleanup_marker_after_finished_s": 0.107982213,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "compaction499-live-architecture-memory",
+              "created_at": 1790895107.1284342
+            },
+            "generation": 36
+          },
+          "turn_id": "6cd18c3dc88fb2229268803e8b1c8849",
+          "admission_generation": 1915
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 12.98793911933899,
+            "elapsed_ms": 0.061807,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 13.60093903541565,
+            "elapsed_ms": 613.440616,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 13.91693902015686,
+            "elapsed_ms": 928.888045,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 16.413938999176025,
+            "elapsed_ms": 3425.580047,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 2574,
+            "maximum_ns": 2574,
+            "maximum_started_ns": 421596065077669,
+            "maximum_finished_ns": 421596065080243,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 614803580,
+            "maximum_ns": 614803580,
+            "maximum_started_ns": 421596065088449,
+            "maximum_finished_ns": 421596679892029,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 593885653,
+            "maximum_ns": 593885653,
+            "maximum_started_ns": 421596065156338,
+            "maximum_finished_ns": 421596659041991,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 20768092,
+            "maximum_ns": 20768092,
+            "maximum_started_ns": 421596659094571,
+            "maximum_finished_ns": 421596679862663,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1016907,
+            "maximum_ns": 1016907,
+            "maximum_started_ns": 421596679969626,
+            "maximum_finished_ns": 421596680986533,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2232852969,
+            "maximum_ns": 2232852969,
+            "maximum_started_ns": 421596680993556,
+            "maximum_finished_ns": 421598913846525,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 35594794,
+            "maximum_ns": 35594794,
+            "maximum_started_ns": 421598913963897,
+            "maximum_finished_ns": 421598949558691,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 75613994,
+            "maximum_ns": 75613994,
+            "maximum_started_ns": 421599028671126,
+            "maximum_finished_ns": 421599104285120,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 70506334,
+            "maximum_ns": 70506334,
+            "maximum_started_ns": 421599033523793,
+            "maximum_finished_ns": 421599104030127,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 1,
+            "total_ns": 70477128,
+            "maximum_ns": 70477128,
+            "maximum_started_ns": 421599033546947,
+            "maximum_finished_ns": 421599104024075,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 1,
+            "total_ns": 2602112,
+            "maximum_ns": 2602112,
+            "maximum_started_ns": 421599033609125,
+            "maximum_finished_ns": 421599036211237,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 1,
+            "total_ns": 395350,
+            "maximum_ns": 395350,
+            "maximum_started_ns": 421599036223049,
+            "maximum_finished_ns": 421599036618399,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 1,
+            "total_ns": 1109724,
+            "maximum_ns": 1109724,
+            "maximum_started_ns": 421599036622987,
+            "maximum_finished_ns": 421599037732711,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 58030,
+            "maximum_ns": 58030,
+            "maximum_started_ns": 421599037740405,
+            "maximum_finished_ns": 421599037798435,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 37701,
+            "maximum_ns": 37701,
+            "maximum_started_ns": 421599037802964,
+            "maximum_finished_ns": 421599037840665,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 5265470,
+            "maximum_ns": 5265470,
+            "maximum_started_ns": 421599037845484,
+            "maximum_finished_ns": 421599043110954,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 23564,
+            "maximum_ns": 23564,
+            "maximum_started_ns": 421599043136994,
+            "maximum_finished_ns": 421599043160558,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 34406622,
+            "maximum_ns": 34406622,
+            "maximum_started_ns": 421599043164416,
+            "maximum_finished_ns": 421599077571038,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 32831637,
+            "maximum_ns": 32831637,
+            "maximum_started_ns": 421599043273132,
+            "maximum_finished_ns": 421599076104769,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 465152,
+            "maximum_ns": 465152,
+            "maximum_started_ns": 421599076123885,
+            "maximum_finished_ns": 421599076589037,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 968606,
+            "maximum_ns": 968606,
+            "maximum_started_ns": 421599076593936,
+            "maximum_finished_ns": 421599077562542,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 2215179,
+            "maximum_ns": 2215179,
+            "maximum_started_ns": 421599077582479,
+            "maximum_finished_ns": 421599079797658,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 7064550,
+            "maximum_ns": 7064550,
+            "maximum_started_ns": 421599079803429,
+            "maximum_finished_ns": 421599086867979,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 270883,
+            "maximum_ns": 270883,
+            "maximum_started_ns": 421599086874762,
+            "maximum_finished_ns": 421599087145645,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 40837,
+            "maximum_ns": 40837,
+            "maximum_started_ns": 421599104050776,
+            "maximum_finished_ns": 421599104091613,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "9acaa538cfdc6e7e3868a183ab52498b",
+        "native_user_s": 22.252938985824585,
+        "native_finished_s": 26.989938974380493,
+        "request_wall_ms": 4727.587649,
+        "parent_finished_receipt_lag_s": 0.002762296,
+        "execute_cleanup_marker_after_finished_s": 4.373579022,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "compaction499-live-architecture-memory",
+              "created_at": 1790895107.1284342
+            },
+            "generation": 36
+          },
+          "turn_id": "6cd18c3dc88fb2229268803e8b1c8849",
+          "admission_generation": 1915
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 22.26193904876709,
+            "elapsed_ms": 0.056267,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 22.91093897819519,
+            "elapsed_ms": 648.981178,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 23.29193902015686,
+            "elapsed_ms": 1029.944732,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 26.989938974380493,
+            "elapsed_ms": 4727.587649,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 443250,
+            "maximum_ns": 443250,
+            "maximum_started_ns": 421604751722675,
+            "maximum_finished_ns": 421604752165925,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 541899652,
+            "maximum_ns": 541899652,
+            "maximum_started_ns": 421604752176275,
+            "maximum_finished_ns": 421605294075927,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 518131264,
+            "maximum_ns": 518131264,
+            "maximum_started_ns": 421604752245275,
+            "maximum_finished_ns": 421605270376539,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 23613115,
+            "maximum_ns": 23613115,
+            "maximum_started_ns": 421605270442694,
+            "maximum_finished_ns": 421605294055809,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 828440,
+            "maximum_ns": 828440,
+            "maximum_started_ns": 421605294148775,
+            "maximum_finished_ns": 421605294977215,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2205456162,
+            "maximum_ns": 2205456162,
+            "maximum_started_ns": 421605294985741,
+            "maximum_finished_ns": 421607500441903,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 153693761,
+            "maximum_ns": 153693761,
+            "maximum_started_ns": 421607500558113,
+            "maximum_finished_ns": 421607654251874,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 658617161,
+            "maximum_ns": 658617161,
+            "maximum_started_ns": 421607719258724,
+            "maximum_finished_ns": 421608377875885,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 657456901,
+            "maximum_ns": 657456901,
+            "maximum_started_ns": 421607720016070,
+            "maximum_finished_ns": 421608377472971,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 28,
+            "total_ns": 383646311,
+            "maximum_ns": 283403846,
+            "maximum_started_ns": 421608094063024,
+            "maximum_finished_ns": 421608377466870,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 28,
+            "total_ns": 74444926,
+            "maximum_ns": 4180073,
+            "maximum_started_ns": 421607917262267,
+            "maximum_finished_ns": 421607921442340,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 27,
+            "total_ns": 9480866,
+            "maximum_ns": 682925,
+            "maximum_started_ns": 421608043091496,
+            "maximum_finished_ns": 421608043774421,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 4,
+            "total_ns": 196608330,
+            "maximum_ns": 195858428,
+            "maximum_started_ns": 421608097725195,
+            "maximum_finished_ns": 421608293583623,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 38092,
+            "maximum_ns": 38092,
+            "maximum_started_ns": 421608293601948,
+            "maximum_finished_ns": 421608293640040,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 104739,
+            "maximum_ns": 104739,
+            "maximum_started_ns": 421608293644438,
+            "maximum_finished_ns": 421608293749177,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4475192,
+            "maximum_ns": 4475192,
+            "maximum_started_ns": 421608293756380,
+            "maximum_finished_ns": 421608298231572,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 9097,
+            "maximum_ns": 9097,
+            "maximum_started_ns": 421608298238806,
+            "maximum_finished_ns": 421608298247903,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 37922786,
+            "maximum_ns": 37922786,
+            "maximum_started_ns": 421608298251190,
+            "maximum_finished_ns": 421608336173976,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 36268451,
+            "maximum_ns": 36268451,
+            "maximum_started_ns": 421608298317215,
+            "maximum_finished_ns": 421608334585666,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 390740,
+            "maximum_ns": 390740,
+            "maximum_started_ns": 421608334600925,
+            "maximum_finished_ns": 421608334991665,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 1166671,
+            "maximum_ns": 1166671,
+            "maximum_started_ns": 421608334997366,
+            "maximum_finished_ns": 421608336164037,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 4870321,
+            "maximum_ns": 4870321,
+            "maximum_started_ns": 421608336186349,
+            "maximum_finished_ns": 421608341056670,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 8458271,
+            "maximum_ns": 8458271,
+            "maximum_started_ns": 421608341072571,
+            "maximum_finished_ns": 421608349530842,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 337870,
+            "maximum_ns": 337870,
+            "maximum_started_ns": 421608349547203,
+            "maximum_finished_ns": 421608349885073,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 16471,
+            "maximum_ns": 16471,
+            "maximum_started_ns": 421608377491146,
+            "maximum_finished_ns": 421608377507617,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 17.10093903541565,
+      "attempt_last_progress_s": 37.81693911552429,
+      "intent_created_s": 38.13523244857788,
+      "append_dispatch_s": 38.633939027786255,
+      "canonical_publication_receipt_s": 38.69593906402588
+    },
+    {
+      "owner": "compaction501-live-architecture-memory",
+      "triage": {
+        "input_id": "8b2164ce92eb7a2ecfc5c6d4a5956387",
+        "native_user_s": 11.304939031600952,
+        "native_finished_s": 14.36293911933899,
+        "request_wall_ms": 3049.623824,
+        "parent_finished_receipt_lag_s": 0.003333688,
+        "execute_cleanup_marker_after_finished_s": 0.103298335,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "compaction501-live-architecture-memory",
+              "created_at": 1790900050.675298
+            },
+            "generation": 24
+          },
+          "turn_id": "d1f7963c64f4c3a9bf15d83380528922",
+          "admission_generation": 1916
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 11.312939167022705,
+            "elapsed_ms": 0.07911,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 11.855939149856567,
+            "elapsed_ms": 543.029223,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 12.122939109802246,
+            "elapsed_ms": 809.503742,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 14.36293911933899,
+            "elapsed_ms": 3049.623824,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 2575,
+            "maximum_ns": 2575,
+            "maximum_started_ns": 421594424196386,
+            "maximum_finished_ns": 421594424198961,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 23555817,
+            "maximum_ns": 23555817,
+            "maximum_started_ns": 421594424205082,
+            "maximum_finished_ns": 421594447760899,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 116541,
+            "maximum_ns": 116541,
+            "maximum_started_ns": 421594424265487,
+            "maximum_finished_ns": 421594424382028,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 23327794,
+            "maximum_ns": 23327794,
+            "maximum_started_ns": 421594424414990,
+            "maximum_finished_ns": 421594447742784,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 929312,
+            "maximum_ns": 929312,
+            "maximum_started_ns": 421594447811304,
+            "maximum_finished_ns": 421594448740616,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2560539504,
+            "maximum_ns": 2560539504,
+            "maximum_started_ns": 421594448747539,
+            "maximum_finished_ns": 421597009287043,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 59737773,
+            "maximum_ns": 59737773,
+            "maximum_started_ns": 421597009459921,
+            "maximum_finished_ns": 421597069197694,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 268368919,
+            "maximum_ns": 268368919,
+            "maximum_started_ns": 421597161191313,
+            "maximum_finished_ns": 421597429560232,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 263097558,
+            "maximum_ns": 263097558,
+            "maximum_started_ns": 421597166136336,
+            "maximum_finished_ns": 421597429233894,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 11,
+            "total_ns": 159315175,
+            "maximum_ns": 122172157,
+            "maximum_started_ns": 421597307055054,
+            "maximum_finished_ns": 421597429227211,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 11,
+            "total_ns": 26543531,
+            "maximum_ns": 3611485,
+            "maximum_started_ns": 421597189206651,
+            "maximum_finished_ns": 421597192818136,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 9,
+            "total_ns": 8598435,
+            "maximum_ns": 4652598,
+            "maximum_started_ns": 421597309579148,
+            "maximum_finished_ns": 421597314231746,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 9,
+            "total_ns": 52668056,
+            "maximum_ns": 50683031,
+            "maximum_started_ns": 421597314246294,
+            "maximum_finished_ns": 421597364929325,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 34896,
+            "maximum_ns": 34896,
+            "maximum_started_ns": 421597364947590,
+            "maximum_finished_ns": 421597364982486,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 141448,
+            "maximum_ns": 141448,
+            "maximum_started_ns": 421597364986413,
+            "maximum_finished_ns": 421597365127861,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 3635480,
+            "maximum_ns": 3635480,
+            "maximum_started_ns": 421597365133222,
+            "maximum_finished_ns": 421597368768702,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 15990,
+            "maximum_ns": 15990,
+            "maximum_started_ns": 421597368782849,
+            "maximum_finished_ns": 421597368798839,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 34781102,
+            "maximum_ns": 34781102,
+            "maximum_started_ns": 421597368801474,
+            "maximum_finished_ns": 421597403582576,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 32696521,
+            "maximum_ns": 32696521,
+            "maximum_started_ns": 421597368913637,
+            "maximum_finished_ns": 421597401610158,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 636948,
+            "maximum_ns": 636948,
+            "maximum_started_ns": 421597401640695,
+            "maximum_finished_ns": 421597402277643,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 1289073,
+            "maximum_ns": 1289073,
+            "maximum_started_ns": 421597402284225,
+            "maximum_finished_ns": 421597403573298,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 2340065,
+            "maximum_ns": 2340065,
+            "maximum_started_ns": 421597403594699,
+            "maximum_finished_ns": 421597405934764,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 8997763,
+            "maximum_ns": 8997763,
+            "maximum_started_ns": 421597405941297,
+            "maximum_finished_ns": 421597414939060,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 350193,
+            "maximum_ns": 350193,
+            "maximum_started_ns": 421597414953438,
+            "maximum_finished_ns": 421597415303631,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 74562,
+            "maximum_ns": 74562,
+            "maximum_started_ns": 421597429253561,
+            "maximum_finished_ns": 421597429328123,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "82562edae8a3a0249542f2d47837e1f4",
+        "native_user_s": 21.224939107894897,
+        "native_finished_s": 27.217939138412476,
+        "request_wall_ms": 5978.625096,
+        "parent_finished_receipt_lag_s": 0.001854194,
+        "execute_cleanup_marker_after_finished_s": 8.344228928,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "compaction501-live-architecture-memory",
+              "created_at": 1790900050.675298
+            },
+            "generation": 24
+          },
+          "turn_id": "d1f7963c64f4c3a9bf15d83380528922",
+          "admission_generation": 1916
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 21.23893904685974,
+            "elapsed_ms": 0.057419,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 21.798938989639282,
+            "elapsed_ms": 559.766346,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 22.17193913459778,
+            "elapsed_ms": 932.627453,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 27.217939138412476,
+            "elapsed_ms": 5978.625096,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 336147,
+            "maximum_ns": 336147,
+            "maximum_started_ns": 421603351104081,
+            "maximum_finished_ns": 421603351440228,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 18504041,
+            "maximum_ns": 18504041,
+            "maximum_started_ns": 421603351449506,
+            "maximum_finished_ns": 421603369953547,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 77397,
+            "maximum_ns": 77397,
+            "maximum_started_ns": 421603351509530,
+            "maximum_finished_ns": 421603351586927,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 18314843,
+            "maximum_ns": 18314843,
+            "maximum_started_ns": 421603351618737,
+            "maximum_finished_ns": 421603369933580,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 699816,
+            "maximum_ns": 699816,
+            "maximum_started_ns": 421603370032818,
+            "maximum_finished_ns": 421603370732634,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2276274907,
+            "maximum_ns": 2276274907,
+            "maximum_started_ns": 421603370742112,
+            "maximum_finished_ns": 421605647017019,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 392455035,
+            "maximum_ns": 392455035,
+            "maximum_started_ns": 421605647110616,
+            "maximum_finished_ns": 421606039565651,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 1249249718,
+            "maximum_ns": 1249249718,
+            "maximum_started_ns": 421606099943888,
+            "maximum_finished_ns": 421607349193606,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 1248218995,
+            "maximum_ns": 1248218995,
+            "maximum_started_ns": 421606100521372,
+            "maximum_finished_ns": 421607348740367,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 68,
+            "total_ns": 567362074,
+            "maximum_ns": 143659804,
+            "maximum_started_ns": 421607205070424,
+            "maximum_finished_ns": 421607348730228,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 68,
+            "total_ns": 151744998,
+            "maximum_ns": 6728092,
+            "maximum_started_ns": 421606807119664,
+            "maximum_finished_ns": 421606813847756,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 51,
+            "total_ns": 21785346,
+            "maximum_ns": 1763853,
+            "maximum_started_ns": 421607207845985,
+            "maximum_finished_ns": 421607209609838,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 34,
+            "total_ns": 247463916,
+            "maximum_ns": 116515476,
+            "maximum_started_ns": 421606983189285,
+            "maximum_finished_ns": 421607099704761,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 11,
+            "total_ns": 631687,
+            "maximum_ns": 98447,
+            "maximum_started_ns": 421606312952791,
+            "maximum_finished_ns": 421606313051238,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 11,
+            "total_ns": 778975,
+            "maximum_ns": 175292,
+            "maximum_started_ns": 421606214283540,
+            "maximum_finished_ns": 421606214458832,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4824244,
+            "maximum_ns": 4824244,
+            "maximum_started_ns": 421607250649582,
+            "maximum_finished_ns": 421607255473826,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 18876,
+            "maximum_ns": 18876,
+            "maximum_started_ns": 421607255490768,
+            "maximum_finished_ns": 421607255509644,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 44832923,
+            "maximum_ns": 44832923,
+            "maximum_started_ns": 421607255514353,
+            "maximum_finished_ns": 421607300347276,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 42633835,
+            "maximum_ns": 42633835,
+            "maximum_started_ns": 421607255610555,
+            "maximum_finished_ns": 421607298244390,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 531848,
+            "maximum_ns": 531848,
+            "maximum_started_ns": 421607298269979,
+            "maximum_finished_ns": 421607298801827,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 1524710,
+            "maximum_ns": 1524710,
+            "maximum_started_ns": 421607298807768,
+            "maximum_finished_ns": 421607300332478,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 5034662,
+            "maximum_ns": 5034662,
+            "maximum_started_ns": 421607300364589,
+            "maximum_finished_ns": 421607305399251,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 12761467,
+            "maximum_ns": 12761467,
+            "maximum_started_ns": 421607305409090,
+            "maximum_finished_ns": 421607318170557,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 404346,
+            "maximum_ns": 404346,
+            "maximum_started_ns": 421607318189483,
+            "maximum_finished_ns": 421607318593829,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 34125,
+            "maximum_ns": 34125,
+            "maximum_started_ns": 421607348765114,
+            "maximum_finished_ns": 421607348799239,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 15.287939071655273,
+      "attempt_last_progress_s": 38.06093907356262,
+      "intent_created_s": 38.78430247306824,
+      "append_dispatch_s": 39.07893896102905,
+      "canonical_publication_receipt_s": 39.16193914413452
+    },
+    {
+      "owner": "openhcs-architecture-memory",
+      "triage": {
+        "input_id": "f755fcdc7a789f309fbee22bf2ccb031",
+        "native_user_s": 13.801939010620117,
+        "native_finished_s": 17.705939054489136,
+        "request_wall_ms": 3894.050486,
+        "parent_finished_receipt_lag_s": 0.001611274,
+        "execute_cleanup_marker_after_finished_s": 0.101315236,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-architecture-memory",
+              "created_at": 1790654215.0835924
+            },
+            "generation": 86
+          },
+          "turn_id": "d579a466bc812c7c4f785297a58d8cd0",
+          "admission_generation": 1905
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 13.811939001083374,
+            "elapsed_ms": 0.079881,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 14.631939172744751,
+            "elapsed_ms": 819.771813,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 15.069939136505127,
+            "elapsed_ms": 1257.811686,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 17.705939054489136,
+            "elapsed_ms": 3894.050486,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 3086,
+            "maximum_ns": 3086,
+            "maximum_started_ns": 421596097782515,
+            "maximum_finished_ns": 421596097785601,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 953418298,
+            "maximum_ns": 953418298,
+            "maximum_started_ns": 421596097793236,
+            "maximum_finished_ns": 421597051211534,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 930054206,
+            "maximum_ns": 930054206,
+            "maximum_started_ns": 421596097860423,
+            "maximum_finished_ns": 421597027914629,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 23213758,
+            "maximum_ns": 23213758,
+            "maximum_started_ns": 421597027972268,
+            "maximum_finished_ns": 421597051186026,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1252473,
+            "maximum_ns": 1252473,
+            "maximum_started_ns": 421597051318788,
+            "maximum_finished_ns": 421597052571261,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2207685277,
+            "maximum_ns": 2207685277,
+            "maximum_started_ns": 421597052579106,
+            "maximum_finished_ns": 421599260264383,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 169943961,
+            "maximum_ns": 169943961,
+            "maximum_started_ns": 421599260432983,
+            "maximum_finished_ns": 421599430376944,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 426433285,
+            "maximum_ns": 426433285,
+            "maximum_started_ns": 421599499757603,
+            "maximum_finished_ns": 421599926190888,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 421955809,
+            "maximum_ns": 421955809,
+            "maximum_started_ns": 421599504024360,
+            "maximum_finished_ns": 421599925980169,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 23,
+            "total_ns": 198536823,
+            "maximum_ns": 113789740,
+            "maximum_started_ns": 421599812186211,
+            "maximum_finished_ns": 421599925975951,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 23,
+            "total_ns": 56836361,
+            "maximum_ns": 3878191,
+            "maximum_started_ns": 421599640044825,
+            "maximum_finished_ns": 421599643923016,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 21,
+            "total_ns": 7969847,
+            "maximum_ns": 809214,
+            "maximum_started_ns": 421599627611940,
+            "maximum_finished_ns": 421599628421154,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 7,
+            "total_ns": 30521789,
+            "maximum_ns": 29047825,
+            "maximum_started_ns": 421599814972612,
+            "maximum_finished_ns": 421599844020437,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 36209,
+            "maximum_ns": 36209,
+            "maximum_started_ns": 421599844038872,
+            "maximum_finished_ns": 421599844075081,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 101643,
+            "maximum_ns": 101643,
+            "maximum_started_ns": 421599844078918,
+            "maximum_finished_ns": 421599844180561,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4276074,
+            "maximum_ns": 4276074,
+            "maximum_started_ns": 421599844187414,
+            "maximum_finished_ns": 421599848463488,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 16611,
+            "maximum_ns": 16611,
+            "maximum_started_ns": 421599848477445,
+            "maximum_finished_ns": 421599848494056,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 44782919,
+            "maximum_ns": 44782919,
+            "maximum_started_ns": 421599848497543,
+            "maximum_finished_ns": 421599893280462,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 29376188,
+            "maximum_ns": 29376188,
+            "maximum_started_ns": 421599848619985,
+            "maximum_finished_ns": 421599877996173,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 329935,
+            "maximum_ns": 329935,
+            "maximum_started_ns": 421599878017263,
+            "maximum_finished_ns": 421599878347198,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 14909319,
+            "maximum_ns": 14909319,
+            "maximum_started_ns": 421599878351586,
+            "maximum_finished_ns": 421599893260905,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 2427150,
+            "maximum_ns": 2427150,
+            "maximum_started_ns": 421599893297865,
+            "maximum_finished_ns": 421599895725015,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 20405976,
+            "maximum_ns": 20405976,
+            "maximum_started_ns": 421599895735014,
+            "maximum_finished_ns": 421599916140990,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 235506,
+            "maximum_ns": 235506,
+            "maximum_started_ns": 421599916152973,
+            "maximum_finished_ns": 421599916388479,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 17813,
+            "maximum_ns": 17813,
+            "maximum_started_ns": 421599925992262,
+            "maximum_finished_ns": 421599926010075,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "2e7fd72f06ece9de52e127983f3650b7",
+        "native_user_s": 22.805938959121704,
+        "native_finished_s": 27.021939039230347,
+        "request_wall_ms": 4205.410547,
+        "parent_finished_receipt_lag_s": 0.002923461,
+        "execute_cleanup_marker_after_finished_s": 6.457706214,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-architecture-memory",
+              "created_at": 1790654215.0835924
+            },
+            "generation": 86
+          },
+          "turn_id": "d579a466bc812c7c4f785297a58d8cd0",
+          "admission_generation": 1905
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 22.816939115524292,
+            "elapsed_ms": 0.067447,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 23.311939001083374,
+            "elapsed_ms": 495.142922,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 23.639939069747925,
+            "elapsed_ms": 823.717652,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 27.021939039230347,
+            "elapsed_ms": 4205.410547,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 389468,
+            "maximum_ns": 389468,
+            "maximum_started_ns": 421606103721668,
+            "maximum_finished_ns": 421606104111136,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 19283298,
+            "maximum_ns": 19283298,
+            "maximum_started_ns": 421606104119612,
+            "maximum_finished_ns": 421606123402910,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 61256,
+            "maximum_ns": 61256,
+            "maximum_started_ns": 421606104173384,
+            "maximum_finished_ns": 421606104234640,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 19120691,
+            "maximum_ns": 19120691,
+            "maximum_started_ns": 421606104260689,
+            "maximum_finished_ns": 421606123381380,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 605087,
+            "maximum_ns": 605087,
+            "maximum_started_ns": 421606123475939,
+            "maximum_finished_ns": 421606124081026,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2318677604,
+            "maximum_ns": 2318677604,
+            "maximum_started_ns": 421606124086276,
+            "maximum_finished_ns": 421608442763880,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 309120117,
+            "maximum_ns": 309120117,
+            "maximum_started_ns": 421608442874900,
+            "maximum_finished_ns": 421608751995017,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 97511056,
+            "maximum_ns": 97511056,
+            "maximum_started_ns": 421608832898817,
+            "maximum_finished_ns": 421608930409873,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 96337642,
+            "maximum_ns": 96337642,
+            "maximum_started_ns": 421608833717859,
+            "maximum_finished_ns": 421608930055501,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 1,
+            "total_ns": 96309338,
+            "maximum_ns": 96309338,
+            "maximum_started_ns": 421608833738198,
+            "maximum_finished_ns": 421608930047536,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 1,
+            "total_ns": 2230839,
+            "maximum_ns": 2230839,
+            "maximum_started_ns": 421608833786649,
+            "maximum_finished_ns": 421608836017488,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 1,
+            "total_ns": 386032,
+            "maximum_ns": 386032,
+            "maximum_started_ns": 421608836026765,
+            "maximum_finished_ns": 421608836412797,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 1,
+            "total_ns": 937297,
+            "maximum_ns": 937297,
+            "maximum_started_ns": 421608836416834,
+            "maximum_finished_ns": 421608837354131,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 45736,
+            "maximum_ns": 45736,
+            "maximum_started_ns": 421608837361906,
+            "maximum_finished_ns": 421608837407642,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 28474,
+            "maximum_ns": 28474,
+            "maximum_started_ns": 421608837410448,
+            "maximum_finished_ns": 421608837438922,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 3586748,
+            "maximum_ns": 3586748,
+            "maximum_started_ns": 421608837441306,
+            "maximum_finished_ns": 421608841028054,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 9999,
+            "maximum_ns": 9999,
+            "maximum_started_ns": 421608841037953,
+            "maximum_finished_ns": 421608841047952,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 48842563,
+            "maximum_ns": 48842563,
+            "maximum_started_ns": 421608841050437,
+            "maximum_finished_ns": 421608889893000,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 26758757,
+            "maximum_ns": 26758757,
+            "maximum_started_ns": 421608841144004,
+            "maximum_finished_ns": 421608867902761,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 398585,
+            "maximum_ns": 398585,
+            "maximum_started_ns": 421608867921246,
+            "maximum_finished_ns": 421608868319831,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 21552049,
+            "maximum_ns": 21552049,
+            "maximum_started_ns": 421608868324550,
+            "maximum_finished_ns": 421608889876599,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 3181710,
+            "maximum_ns": 3181710,
+            "maximum_started_ns": 421608889910343,
+            "maximum_finished_ns": 421608893092053,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 23795370,
+            "maximum_ns": 23795370,
+            "maximum_started_ns": 421608893096872,
+            "maximum_finished_ns": 421608916892242,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 441797,
+            "maximum_ns": 441797,
+            "maximum_started_ns": 421608916923572,
+            "maximum_finished_ns": 421608917365369,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 18725,
+            "maximum_ns": 18725,
+            "maximum_started_ns": 421608930082222,
+            "maximum_finished_ns": 421608930100947,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 18.443938970565796,
+      "attempt_last_progress_s": 37.88693904876709,
+      "intent_created_s": 38.3882155418396,
+      "append_dispatch_s": 38.943938970565796,
+      "canonical_publication_receipt_s": 39.01093912124634
+    },
+    {
+      "owner": "openhcs-audit-merged-boundaries",
+      "triage": {
+        "input_id": "30c4880ed389d987ff9861fd4961e3e3",
+        "native_user_s": 13.276939153671265,
+        "native_finished_s": 18.44593906402588,
+        "request_wall_ms": 5161.773549,
+        "parent_finished_receipt_lag_s": 0.002626077,
+        "execute_cleanup_marker_after_finished_s": 0.114868895,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-boundaries",
+              "created_at": 1790873473.1996155
+            },
+            "generation": 50
+          },
+          "turn_id": "c2fd9ad6dbf8cfd836e91bbe4e1e82b5",
+          "admission_generation": 1913
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 13.283939123153687,
+            "elapsed_ms": 0.050666,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 13.854938983917236,
+            "elapsed_ms": 570.71652,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 14.318938970565796,
+            "elapsed_ms": 1034.617749,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 18.44593906402588,
+            "elapsed_ms": 5161.773549,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 3687,
+            "maximum_ns": 3687,
+            "maximum_started_ns": 421596180667550,
+            "maximum_finished_ns": 421596180671237,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 779430874,
+            "maximum_ns": 779430874,
+            "maximum_started_ns": 421596180679703,
+            "maximum_finished_ns": 421596960110577,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 749911365,
+            "maximum_ns": 749911365,
+            "maximum_started_ns": 421596180745718,
+            "maximum_finished_ns": 421596930657083,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 29371850,
+            "maximum_ns": 29371850,
+            "maximum_started_ns": 421596930715624,
+            "maximum_finished_ns": 421596960087474,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1145582,
+            "maximum_ns": 1145582,
+            "maximum_started_ns": 421596960185569,
+            "maximum_finished_ns": 421596961331151,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2156431343,
+            "maximum_ns": 2156431343,
+            "maximum_started_ns": 421596961339106,
+            "maximum_finished_ns": 421599117770449,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 74961547,
+            "maximum_ns": 74961547,
+            "maximum_started_ns": 421599117870329,
+            "maximum_finished_ns": 421599192831876,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 108099746,
+            "maximum_ns": 108099746,
+            "maximum_started_ns": 421599292378590,
+            "maximum_finished_ns": 421599400478336,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 103304938,
+            "maximum_ns": 103304938,
+            "maximum_started_ns": 421599296951327,
+            "maximum_finished_ns": 421599400256265,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 3,
+            "total_ns": 83030831,
+            "maximum_ns": 73185621,
+            "maximum_started_ns": 421599327064943,
+            "maximum_finished_ns": 421599400250564,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 3,
+            "total_ns": 7342287,
+            "maximum_ns": 2536227,
+            "maximum_started_ns": 421599327112453,
+            "maximum_finished_ns": 421599329648680,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 3,
+            "total_ns": 1115505,
+            "maximum_ns": 420557,
+            "maximum_started_ns": 421599314384870,
+            "maximum_finished_ns": 421599314805427,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 3,
+            "total_ns": 3233379,
+            "maximum_ns": 1202219,
+            "maximum_started_ns": 421599314811448,
+            "maximum_finished_ns": 421599316013667,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 3,
+            "total_ns": 145136,
+            "maximum_ns": 52420,
+            "maximum_started_ns": 421599300821412,
+            "maximum_finished_ns": 421599300873832,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 3,
+            "total_ns": 110990,
+            "maximum_ns": 44003,
+            "maximum_started_ns": 421599316077037,
+            "maximum_finished_ns": 421599316121040,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 3337054,
+            "maximum_ns": 3337054,
+            "maximum_started_ns": 421599331090483,
+            "maximum_finished_ns": 421599334427537,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 58832,
+            "maximum_ns": 58832,
+            "maximum_started_ns": 421599334439750,
+            "maximum_finished_ns": 421599334498582,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 44903978,
+            "maximum_ns": 44903978,
+            "maximum_started_ns": 421599334503942,
+            "maximum_finished_ns": 421599379407920,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 44154648,
+            "maximum_ns": 44154648,
+            "maximum_started_ns": 421599334602619,
+            "maximum_finished_ns": 421599378757267,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 456626,
+            "maximum_ns": 456626,
+            "maximum_started_ns": 421599378772646,
+            "maximum_finished_ns": 421599379229272,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 162668,
+            "maximum_ns": 162668,
+            "maximum_started_ns": 421599379235644,
+            "maximum_finished_ns": 421599379398312,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 3053217,
+            "maximum_ns": 3053217,
+            "maximum_started_ns": 421599379419713,
+            "maximum_finished_ns": 421599382472930,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 7098404,
+            "maximum_ns": 7098404,
+            "maximum_started_ns": 421599382482698,
+            "maximum_finished_ns": 421599389581102,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 339924,
+            "maximum_ns": 339924,
+            "maximum_started_ns": 421599389596371,
+            "maximum_finished_ns": 421599389936295,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 16842,
+            "maximum_ns": 16842,
+            "maximum_started_ns": 421599400271854,
+            "maximum_finished_ns": 421599400288696,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "179ab01688dbca216d4a2bfdc0e2fc92",
+        "native_user_s": 24.203938961029053,
+        "native_finished_s": 31.900938987731934,
+        "request_wall_ms": 7684.048425,
+        "parent_finished_receipt_lag_s": 0.002396422,
+        "execute_cleanup_marker_after_finished_s": 13.850051178,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-boundaries",
+              "created_at": 1790873473.1996155
+            },
+            "generation": 50
+          },
+          "turn_id": "c2fd9ad6dbf8cfd836e91bbe4e1e82b5",
+          "admission_generation": 1913
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 24.216938972473145,
+            "elapsed_ms": 0.069922,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 24.84493899345398,
+            "elapsed_ms": 628.481313,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 25.810939073562622,
+            "elapsed_ms": 1594.838796,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 31.900938987731934,
+            "elapsed_ms": 7684.048425,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 381814,
+            "maximum_ns": 381814,
+            "maximum_started_ns": 421607789958514,
+            "maximum_finished_ns": 421607790340328,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 27560116,
+            "maximum_ns": 27560116,
+            "maximum_started_ns": 421607790350156,
+            "maximum_finished_ns": 421607817910272,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 91182,
+            "maximum_ns": 91182,
+            "maximum_started_ns": 421607790411002,
+            "maximum_finished_ns": 421607790502184,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 27355488,
+            "maximum_ns": 27355488,
+            "maximum_started_ns": 421607790532482,
+            "maximum_finished_ns": 421607817887970,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 284611665,
+            "maximum_ns": 284611665,
+            "maximum_started_ns": 421607817991636,
+            "maximum_finished_ns": 421608102603301,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 1901356309,
+            "maximum_ns": 1901356309,
+            "maximum_started_ns": 421608102615274,
+            "maximum_finished_ns": 421610003971583,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 66283149,
+            "maximum_ns": 66283149,
+            "maximum_started_ns": 421610004073076,
+            "maximum_finished_ns": 421610070356225,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 193823981,
+            "maximum_ns": 193823981,
+            "maximum_started_ns": 421610135726614,
+            "maximum_finished_ns": 421610329550595,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 192653393,
+            "maximum_ns": 192653393,
+            "maximum_started_ns": 421610136658319,
+            "maximum_finished_ns": 421610329311712,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 7,
+            "total_ns": 131981820,
+            "maximum_ns": 123195036,
+            "maximum_started_ns": 421610206110615,
+            "maximum_finished_ns": 421610329305651,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 7,
+            "total_ns": 8354305,
+            "maximum_ns": 2484600,
+            "maximum_started_ns": 421610206176309,
+            "maximum_finished_ns": 421610208660909,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 3,
+            "total_ns": 1260489,
+            "maximum_ns": 484869,
+            "maximum_started_ns": 421610194556446,
+            "maximum_finished_ns": 421610195041315,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 3,
+            "total_ns": 34141940,
+            "maximum_ns": 33765527,
+            "maximum_started_ns": 421610209116292,
+            "maximum_finished_ns": 421610242881819,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 45537,
+            "maximum_ns": 45537,
+            "maximum_started_ns": 421610242903229,
+            "maximum_finished_ns": 421610242948766,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 111722,
+            "maximum_ns": 111722,
+            "maximum_started_ns": 421610242953444,
+            "maximum_finished_ns": 421610243065166,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 5108372,
+            "maximum_ns": 5108372,
+            "maximum_started_ns": 421610243072841,
+            "maximum_finished_ns": 421610248181213,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 12444,
+            "maximum_ns": 12444,
+            "maximum_started_ns": 421610248195650,
+            "maximum_finished_ns": 421610248208094,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 53963769,
+            "maximum_ns": 53963769,
+            "maximum_started_ns": 421610248211871,
+            "maximum_finished_ns": 421610302175640,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 53336280,
+            "maximum_ns": 53336280,
+            "maximum_started_ns": 421610248315227,
+            "maximum_finished_ns": 421610301651507,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 325567,
+            "maximum_ns": 325567,
+            "maximum_started_ns": 421610301667097,
+            "maximum_finished_ns": 421610301992664,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 166295,
+            "maximum_ns": 166295,
+            "maximum_started_ns": 421610301999076,
+            "maximum_finished_ns": 421610302165371,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 4342420,
+            "maximum_ns": 4342420,
+            "maximum_started_ns": 421610302187894,
+            "maximum_finished_ns": 421610306530314,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 9523099,
+            "maximum_ns": 9523099,
+            "maximum_started_ns": 421610306537518,
+            "maximum_finished_ns": 421610316060617,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 238582,
+            "maximum_ns": 238582,
+            "maximum_started_ns": 421610316072069,
+            "maximum_finished_ns": 421610316310651,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 13295,
+            "maximum_ns": 13295,
+            "maximum_started_ns": 421610329328194,
+            "maximum_finished_ns": 421610329341489,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 19.605939149856567,
+      "attempt_last_progress_s": 48.19493913650513,
+      "intent_created_s": 48.72761845588684,
+      "append_dispatch_s": 49.116939067840576,
+      "canonical_publication_receipt_s": 49.18993902206421
+    },
+    {
+      "owner": "openhcs-audit-merged-models",
+      "triage": {
+        "input_id": "afd2a04918f3c2d836db15ed072828bd",
+        "native_user_s": 11.61293911933899,
+        "native_finished_s": 14.46493911743164,
+        "request_wall_ms": 2843.04631,
+        "parent_finished_receipt_lag_s": 0.001722454,
+        "execute_cleanup_marker_after_finished_s": 0.098536269,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-models",
+              "created_at": 1790873447.6164267
+            },
+            "generation": 49
+          },
+          "turn_id": "79ce43550e8f0b200b98a4e77d842201",
+          "admission_generation": 1912
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 11.621938943862915,
+            "elapsed_ms": 0.068049,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 12.406939029693604,
+            "elapsed_ms": 784.682267,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 12.71493911743164,
+            "elapsed_ms": 1092.259289,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 14.46493911743164,
+            "elapsed_ms": 2843.04631,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 2454,
+            "maximum_ns": 2454,
+            "maximum_started_ns": 421594438924070,
+            "maximum_finished_ns": 421594438926524,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 18016127,
+            "maximum_ns": 18016127,
+            "maximum_started_ns": 421594438933297,
+            "maximum_finished_ns": 421594456949424,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 129405,
+            "maximum_ns": 129405,
+            "maximum_started_ns": 421594438987821,
+            "maximum_finished_ns": 421594439117226,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 17780740,
+            "maximum_ns": 17780740,
+            "maximum_started_ns": 421594439148666,
+            "maximum_finished_ns": 421594456929406,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 977282,
+            "maximum_ns": 977282,
+            "maximum_started_ns": 421594457012774,
+            "maximum_finished_ns": 421594457990056,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2470361557,
+            "maximum_ns": 2470361557,
+            "maximum_started_ns": 421594457997000,
+            "maximum_finished_ns": 421596928358557,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 64240618,
+            "maximum_ns": 64240618,
+            "maximum_started_ns": 421596928460640,
+            "maximum_finished_ns": 421596992701258,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 662856837,
+            "maximum_ns": 662856837,
+            "maximum_started_ns": 421597073951053,
+            "maximum_finished_ns": 421597736807890,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 658002416,
+            "maximum_ns": 658002416,
+            "maximum_started_ns": 421597078488894,
+            "maximum_finished_ns": 421597736491310,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 32,
+            "total_ns": 343033567,
+            "maximum_ns": 133247609,
+            "maximum_started_ns": 421597484074646,
+            "maximum_finished_ns": 421597617322255,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 32,
+            "total_ns": 51021261,
+            "maximum_ns": 3397008,
+            "maximum_started_ns": 421597078662884,
+            "maximum_finished_ns": 421597082059892,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 18,
+            "total_ns": 7632446,
+            "maximum_ns": 773596,
+            "maximum_started_ns": 421597231921641,
+            "maximum_finished_ns": 421597232695237,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 15,
+            "total_ns": 186083151,
+            "maximum_ns": 128295022,
+            "maximum_started_ns": 421597487562747,
+            "maximum_finished_ns": 421597615857769,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 5,
+            "total_ns": 319516,
+            "maximum_ns": 89029,
+            "maximum_started_ns": 421597186549395,
+            "maximum_finished_ns": 421597186638424,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 5,
+            "total_ns": 444513,
+            "maximum_ns": 169602,
+            "maximum_started_ns": 421597354484398,
+            "maximum_finished_ns": 421597354654000,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 3057284,
+            "maximum_ns": 3057284,
+            "maximum_started_ns": 421597657352015,
+            "maximum_finished_ns": 421597660409299,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 11281,
+            "maximum_ns": 11281,
+            "maximum_started_ns": 421597660418787,
+            "maximum_finished_ns": 421597660430068,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 42498689,
+            "maximum_ns": 42498689,
+            "maximum_started_ns": 421597660432844,
+            "maximum_finished_ns": 421597702931533,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 39222851,
+            "maximum_ns": 39222851,
+            "maximum_started_ns": 421597660528014,
+            "maximum_finished_ns": 421597699750865,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 371134,
+            "maximum_ns": 371134,
+            "maximum_started_ns": 421597699763819,
+            "maximum_finished_ns": 421597700134953,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 2780240,
+            "maximum_ns": 2780240,
+            "maximum_started_ns": 421597700140112,
+            "maximum_finished_ns": 421597702920352,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 2400550,
+            "maximum_ns": 2400550,
+            "maximum_started_ns": 421597702944237,
+            "maximum_finished_ns": 421597705344787,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 14454797,
+            "maximum_ns": 14454797,
+            "maximum_started_ns": 421597705355848,
+            "maximum_finished_ns": 421597719810645,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 560843,
+            "maximum_ns": 560843,
+            "maximum_started_ns": 421597719834390,
+            "maximum_finished_ns": 421597720395233,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 13626,
+            "maximum_ns": 13626,
+            "maximum_started_ns": 421597736508823,
+            "maximum_finished_ns": 421597736522449,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "80bbf8610ba0fc7263796cbfbd06e0d0",
+        "native_user_s": 20.980939149856567,
+        "native_finished_s": 24.63093900680542,
+        "request_wall_ms": 3638.461368,
+        "parent_finished_receipt_lag_s": 0.002723502,
+        "execute_cleanup_marker_after_finished_s": 2.23408359,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-models",
+              "created_at": 1790873447.6164267
+            },
+            "generation": 49
+          },
+          "turn_id": "79ce43550e8f0b200b98a4e77d842201",
+          "admission_generation": 1912
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 20.992938995361328,
+            "elapsed_ms": 0.072688,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 21.47093915939331,
+            "elapsed_ms": 478.670412,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 21.736938953399658,
+            "elapsed_ms": 744.325578,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 24.63093900680542,
+            "elapsed_ms": 3638.461368,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 311671,
+            "maximum_ns": 311671,
+            "maximum_started_ns": 421603453332208,
+            "maximum_finished_ns": 421603453643879,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 19691773,
+            "maximum_ns": 19691773,
+            "maximum_started_ns": 421603453650431,
+            "maximum_finished_ns": 421603473342204,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 98728,
+            "maximum_ns": 98728,
+            "maximum_started_ns": 421603453694334,
+            "maximum_finished_ns": 421603453793062,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 19501332,
+            "maximum_ns": 19501332,
+            "maximum_started_ns": 421603453819271,
+            "maximum_finished_ns": 421603473320603,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 689336,
+            "maximum_ns": 689336,
+            "maximum_started_ns": 421603473407127,
+            "maximum_finished_ns": 421603474096463,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2292852326,
+            "maximum_ns": 2292852326,
+            "maximum_started_ns": 421603474104078,
+            "maximum_finished_ns": 421605766956404,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 98198038,
+            "maximum_ns": 98198038,
+            "maximum_started_ns": 421605767069068,
+            "maximum_finished_ns": 421605865267106,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 1168499840,
+            "maximum_ns": 1168499840,
+            "maximum_started_ns": 421605938584027,
+            "maximum_finished_ns": 421607107083867,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 1167123292,
+            "maximum_ns": 1167123292,
+            "maximum_started_ns": 421605939647572,
+            "maximum_finished_ns": 421607106770864,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 74,
+            "total_ns": 425520157,
+            "maximum_ns": 122727430,
+            "maximum_started_ns": 421606984036611,
+            "maximum_finished_ns": 421607106764041,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 74,
+            "total_ns": 146099780,
+            "maximum_ns": 3557052,
+            "maximum_started_ns": 421606389155872,
+            "maximum_finished_ns": 421606392712924,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 57,
+            "total_ns": 21500795,
+            "maximum_ns": 728881,
+            "maximum_started_ns": 421606343551727,
+            "maximum_finished_ns": 421606344280608,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 42,
+            "total_ns": 132418767,
+            "maximum_ns": 42798367,
+            "maximum_started_ns": 421606185339501,
+            "maximum_finished_ns": 421606228137868,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 10,
+            "total_ns": 685318,
+            "maximum_ns": 103716,
+            "maximum_started_ns": 421606361827095,
+            "maximum_finished_ns": 421606361930811,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 10,
+            "total_ns": 731576,
+            "maximum_ns": 152268,
+            "maximum_started_ns": 421606228214965,
+            "maximum_finished_ns": 421606228367233,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4702493,
+            "maximum_ns": 4702493,
+            "maximum_started_ns": 421607027539333,
+            "maximum_finished_ns": 421607032241826,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 21070,
+            "maximum_ns": 21070,
+            "maximum_started_ns": 421607032266122,
+            "maximum_finished_ns": 421607032287192,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 42953030,
+            "maximum_ns": 42953030,
+            "maximum_started_ns": 421607032292522,
+            "maximum_finished_ns": 421607075245552,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 38419247,
+            "maximum_ns": 38419247,
+            "maximum_started_ns": 421607032394736,
+            "maximum_finished_ns": 421607070813983,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 355894,
+            "maximum_ns": 355894,
+            "maximum_started_ns": 421607070826968,
+            "maximum_finished_ns": 421607071182862,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 4039567,
+            "maximum_ns": 4039567,
+            "maximum_started_ns": 421607071189214,
+            "maximum_finished_ns": 421607075228781,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 5299213,
+            "maximum_ns": 5299213,
+            "maximum_started_ns": 421607075263537,
+            "maximum_finished_ns": 421607080562750,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 9660220,
+            "maximum_ns": 9660220,
+            "maximum_started_ns": 421607080575404,
+            "maximum_finished_ns": 421607090235624,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 390179,
+            "maximum_ns": 390179,
+            "maximum_started_ns": 421607090250833,
+            "maximum_finished_ns": 421607090641012,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 30859,
+            "maximum_ns": 30859,
+            "maximum_started_ns": 421607106789218,
+            "maximum_finished_ns": 421607106820077,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 15.816939115524292,
+      "attempt_last_progress_s": 29.227939128875732,
+      "intent_created_s": 38.04966902732849,
+      "append_dispatch_s": 38.45893907546997,
+      "canonical_publication_receipt_s": 38.52793908119202
+    },
+    {
+      "owner": "openhcs-audit-merged-runtime",
+      "triage": {
+        "input_id": "80c57f6608ce45ac146d11ebf09ef3ac",
+        "native_user_s": 11.056939125061035,
+        "native_finished_s": 14.205939054489136,
+        "request_wall_ms": 3135.46395,
+        "parent_finished_receipt_lag_s": 0.001948613,
+        "execute_cleanup_marker_after_finished_s": 0.141338163,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-runtime",
+              "created_at": 1790873422.6705143
+            },
+            "generation": 49
+          },
+          "turn_id": "a3999e9c2f612cdd49c758f7fa183603",
+          "admission_generation": 1911
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 11.069939136505127,
+            "elapsed_ms": 0.127281,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 11.930938959121704,
+            "elapsed_ms": 861.049649,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 12.189939022064209,
+            "elapsed_ms": 1120.282112,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 14.205939054489136,
+            "elapsed_ms": 3135.46395,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 2215,
+            "maximum_ns": 2215,
+            "maximum_started_ns": 421594327087792,
+            "maximum_finished_ns": 421594327090007,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 22026578,
+            "maximum_ns": 22026578,
+            "maximum_started_ns": 421594327096168,
+            "maximum_finished_ns": 421594349122746,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 89911,
+            "maximum_ns": 89911,
+            "maximum_started_ns": 421594327156292,
+            "maximum_finished_ns": 421594327246203,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 21817632,
+            "maximum_ns": 21817632,
+            "maximum_started_ns": 421594327281219,
+            "maximum_finished_ns": 421594349098851,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1249819,
+            "maximum_ns": 1249819,
+            "maximum_started_ns": 421594349187799,
+            "maximum_finished_ns": 421594350437618,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2427148905,
+            "maximum_ns": 2427148905,
+            "maximum_started_ns": 421594350447076,
+            "maximum_finished_ns": 421596777595981,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 95482111,
+            "maximum_ns": 95482111,
+            "maximum_started_ns": 421596777698735,
+            "maximum_finished_ns": 421596873180846,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 220232255,
+            "maximum_ns": 220232255,
+            "maximum_started_ns": 421596961156800,
+            "maximum_finished_ns": 421597181389055,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 214998284,
+            "maximum_ns": 214998284,
+            "maximum_started_ns": 421596966055776,
+            "maximum_finished_ns": 421597181054060,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 7,
+            "total_ns": 154016574,
+            "maximum_ns": 91338117,
+            "maximum_started_ns": 421597089710733,
+            "maximum_finished_ns": 421597181048850,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 7,
+            "total_ns": 17442621,
+            "maximum_ns": 2976562,
+            "maximum_started_ns": 421596966571242,
+            "maximum_finished_ns": 421596969547804,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 7,
+            "total_ns": 3232588,
+            "maximum_ns": 524204,
+            "maximum_started_ns": 421597076532576,
+            "maximum_finished_ns": 421597077056780,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 7,
+            "total_ns": 36888727,
+            "maximum_ns": 33763363,
+            "maximum_started_ns": 421596999891966,
+            "maximum_finished_ns": 421597033655329,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 3,
+            "total_ns": 145476,
+            "maximum_ns": 62889,
+            "maximum_started_ns": 421597093642395,
+            "maximum_finished_ns": 421597093705284,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 3,
+            "total_ns": 185391,
+            "maximum_ns": 108906,
+            "maximum_started_ns": 421597033700936,
+            "maximum_finished_ns": 421597033809842,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 3444929,
+            "maximum_ns": 3444929,
+            "maximum_started_ns": 421597093743437,
+            "maximum_finished_ns": 421597097188366,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 15309,
+            "maximum_ns": 15309,
+            "maximum_started_ns": 421597097200950,
+            "maximum_finished_ns": 421597097216259,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 56329683,
+            "maximum_ns": 56329683,
+            "maximum_started_ns": 421597097220497,
+            "maximum_finished_ns": 421597153550180,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 51536950,
+            "maximum_ns": 51536950,
+            "maximum_started_ns": 421597097290289,
+            "maximum_finished_ns": 421597148827239,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 517551,
+            "maximum_ns": 517551,
+            "maximum_started_ns": 421597148851435,
+            "maximum_finished_ns": 421597149368986,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 4156568,
+            "maximum_ns": 4156568,
+            "maximum_started_ns": 421597149377572,
+            "maximum_finished_ns": 421597153534140,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 3123340,
+            "maximum_ns": 3123340,
+            "maximum_started_ns": 421597153567774,
+            "maximum_finished_ns": 421597156691114,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 11004297,
+            "maximum_ns": 11004297,
+            "maximum_started_ns": 421597156707194,
+            "maximum_finished_ns": 421597167711491,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 558839,
+            "maximum_ns": 558839,
+            "maximum_started_ns": 421597167733443,
+            "maximum_finished_ns": 421597168292282,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 16201,
+            "maximum_ns": 16201,
+            "maximum_started_ns": 421597181073657,
+            "maximum_finished_ns": 421597181089858,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "766cec7345414e025cd188b860b9e308",
+        "native_user_s": 20.798938989639282,
+        "native_finished_s": 25.95893907546997,
+        "request_wall_ms": 5152.306323,
+        "parent_finished_receipt_lag_s": 0.002950903,
+        "execute_cleanup_marker_after_finished_s": 3.138889651,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-merged-runtime",
+              "created_at": 1790873422.6705143
+            },
+            "generation": 49
+          },
+          "turn_id": "a3999e9c2f612cdd49c758f7fa183603",
+          "admission_generation": 1911
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 20.806939125061035,
+            "elapsed_ms": 0.078899,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 21.29193902015686,
+            "elapsed_ms": 484.533313,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 21.67293906211853,
+            "elapsed_ms": 866.061968,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 25.95893907546997,
+            "elapsed_ms": 5152.306323,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 246357,
+            "maximum_ns": 246357,
+            "maximum_started_ns": 421603002721730,
+            "maximum_finished_ns": 421603002968087,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 24994693,
+            "maximum_ns": 24994693,
+            "maximum_started_ns": 421603002974549,
+            "maximum_finished_ns": 421603027969242,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 37501,
+            "maximum_ns": 37501,
+            "maximum_started_ns": 421603003028371,
+            "maximum_finished_ns": 421603003065872,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 24860128,
+            "maximum_ns": 24860128,
+            "maximum_started_ns": 421603003086271,
+            "maximum_finished_ns": 421603027946399,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 772464,
+            "maximum_ns": 772464,
+            "maximum_started_ns": 421603028064473,
+            "maximum_finished_ns": 421603028836937,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2223965112,
+            "maximum_ns": 2223965112,
+            "maximum_started_ns": 421603028845132,
+            "maximum_finished_ns": 421605252810244,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 232289597,
+            "maximum_ns": 232289597,
+            "maximum_started_ns": 421605252908681,
+            "maximum_finished_ns": 421605485198278,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 1359608345,
+            "maximum_ns": 1359608345,
+            "maximum_started_ns": 421605564738764,
+            "maximum_finished_ns": 421606924347109,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 1358592470,
+            "maximum_ns": 1358592470,
+            "maximum_started_ns": 421605565473857,
+            "maximum_finished_ns": 421606924066327,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 91,
+            "total_ns": 446805838,
+            "maximum_ns": 114418261,
+            "maximum_started_ns": 421606809641654,
+            "maximum_finished_ns": 421606924059915,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 91,
+            "total_ns": 198906016,
+            "maximum_ns": 6244265,
+            "maximum_started_ns": 421606172746453,
+            "maximum_finished_ns": 421606178990718,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 70,
+            "total_ns": 27251163,
+            "maximum_ns": 951073,
+            "maximum_started_ns": 421606532518592,
+            "maximum_finished_ns": 421606533469665,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 43,
+            "total_ns": 89667150,
+            "maximum_ns": 39585047,
+            "maximum_started_ns": 421606179451071,
+            "maximum_finished_ns": 421606219036118,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 8,
+            "total_ns": 635184,
+            "maximum_ns": 104879,
+            "maximum_started_ns": 421606359029502,
+            "maximum_finished_ns": 421606359134381,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 8,
+            "total_ns": 638730,
+            "maximum_ns": 196151,
+            "maximum_started_ns": 421606850552534,
+            "maximum_finished_ns": 421606850748685,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4863228,
+            "maximum_ns": 4863228,
+            "maximum_started_ns": 421606850757472,
+            "maximum_finished_ns": 421606855620700,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 12804,
+            "maximum_ns": 12804,
+            "maximum_started_ns": 421606855633534,
+            "maximum_finished_ns": 421606855646338,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 39749939,
+            "maximum_ns": 39749939,
+            "maximum_started_ns": 421606855650346,
+            "maximum_finished_ns": 421606895400285,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 35519602,
+            "maximum_ns": 35519602,
+            "maximum_started_ns": 421606855749764,
+            "maximum_finished_ns": 421606891269366,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 330907,
+            "maximum_ns": 330907,
+            "maximum_started_ns": 421606891285947,
+            "maximum_finished_ns": 421606891616854,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 3764785,
+            "maximum_ns": 3764785,
+            "maximum_started_ns": 421606891623257,
+            "maximum_finished_ns": 421606895388042,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 5248377,
+            "maximum_ns": 5248377,
+            "maximum_started_ns": 421606895412649,
+            "maximum_finished_ns": 421606900661026,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 10961566,
+            "maximum_ns": 10961566,
+            "maximum_started_ns": 421606900672788,
+            "maximum_finished_ns": 421606911634354,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 364090,
+            "maximum_ns": 364090,
+            "maximum_started_ns": 421606911649593,
+            "maximum_finished_ns": 421606912013683,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 18856,
+            "maximum_ns": 18856,
+            "maximum_started_ns": 421606924089711,
+            "maximum_finished_ns": 421606924108567,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 14.944939136505127,
+      "attempt_last_progress_s": 37.76893901824951,
+      "intent_created_s": 38.261882066726685,
+      "append_dispatch_s": 38.80493903160095,
+      "canonical_publication_receipt_s": 38.86393904685974
+    },
+    {
+      "owner": "openhcs-audit-open-prs",
+      "triage": {
+        "input_id": "ea130d3d9d4880f03e0ae228ccbb76b0",
+        "native_user_s": 15.902939081192017,
+        "native_finished_s": 18.7269389629364,
+        "request_wall_ms": 2812.773522,
+        "parent_finished_receipt_lag_s": 0.003825731,
+        "execute_cleanup_marker_after_finished_s": 0.183306447,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-open-prs",
+              "created_at": 1790873496.352646
+            },
+            "generation": 50
+          },
+          "turn_id": "086ca7ce49caeeb050c9b9792b243483",
+          "admission_generation": 1914
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 15.913938999176025,
+            "elapsed_ms": 0.073789,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 16.36293911933899,
+            "elapsed_ms": 449.449608,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 16.623939037322998,
+            "elapsed_ms": 709.600331,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 18.7269389629364,
+            "elapsed_ms": 2812.773522,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 3016,
+            "maximum_ns": 3016,
+            "maximum_started_ns": 421596307985691,
+            "maximum_finished_ns": 421596307988707,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 2822454682,
+            "maximum_ns": 2822454682,
+            "maximum_started_ns": 421596307994578,
+            "maximum_finished_ns": 421599130449260,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 2802374183,
+            "maximum_ns": 2802374183,
+            "maximum_started_ns": 421596308055283,
+            "maximum_finished_ns": 421599110429466,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 19904496,
+            "maximum_ns": 19904496,
+            "maximum_started_ns": 421599110521500,
+            "maximum_finished_ns": 421599130425996,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1185918,
+            "maximum_ns": 1185918,
+            "maximum_started_ns": 421599130510476,
+            "maximum_finished_ns": 421599131696394,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2177008003,
+            "maximum_ns": 2177008003,
+            "maximum_started_ns": 421599131703958,
+            "maximum_finished_ns": 421601308711961,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 243223441,
+            "maximum_ns": 243223441,
+            "maximum_started_ns": 421601308836717,
+            "maximum_finished_ns": 421601552060158,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 412772624,
+            "maximum_ns": 412772624,
+            "maximum_started_ns": 421601615764288,
+            "maximum_finished_ns": 421602028536912,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 410081363,
+            "maximum_ns": 410081363,
+            "maximum_started_ns": 421601618158546,
+            "maximum_finished_ns": 421602028239909,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 22,
+            "total_ns": 198068645,
+            "maximum_ns": 68552650,
+            "maximum_started_ns": 421601959678041,
+            "maximum_finished_ns": 421602028230691,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 22,
+            "total_ns": 66591444,
+            "maximum_ns": 4030549,
+            "maximum_started_ns": 421601758810790,
+            "maximum_finished_ns": 421601762841339,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 22,
+            "total_ns": 10480242,
+            "maximum_ns": 647477,
+            "maximum_started_ns": 421601963023071,
+            "maximum_finished_ns": 421601963670548,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 22,
+            "total_ns": 42079534,
+            "maximum_ns": 37443718,
+            "maximum_started_ns": 421601910931560,
+            "maximum_finished_ns": 421601948375278,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 2,
+            "total_ns": 110119,
+            "maximum_ns": 69813,
+            "maximum_started_ns": 421601965180710,
+            "maximum_finished_ns": 421601965250523,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 2,
+            "total_ns": 182506,
+            "maximum_ns": 140155,
+            "maximum_started_ns": 421601948441945,
+            "maximum_finished_ns": 421601948582100,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4494939,
+            "maximum_ns": 4494939,
+            "maximum_started_ns": 421601965302872,
+            "maximum_finished_ns": 421601969797811,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 15960,
+            "maximum_ns": 15960,
+            "maximum_started_ns": 421601969813120,
+            "maximum_finished_ns": 421601969829080,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 37479346,
+            "maximum_ns": 37479346,
+            "maximum_started_ns": 421601969832858,
+            "maximum_finished_ns": 421602007312204,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 34596391,
+            "maximum_ns": 34596391,
+            "maximum_started_ns": 421601969926756,
+            "maximum_finished_ns": 421602004523147,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 328442,
+            "maximum_ns": 328442,
+            "maximum_started_ns": 421602004535351,
+            "maximum_finished_ns": 421602004863793,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 2437279,
+            "maximum_ns": 2437279,
+            "maximum_started_ns": 421602004867861,
+            "maximum_finished_ns": 421602007305140,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 1934867,
+            "maximum_ns": 1934867,
+            "maximum_started_ns": 421602007321181,
+            "maximum_finished_ns": 421602009256048,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 8416812,
+            "maximum_ns": 8416812,
+            "maximum_started_ns": 421602009260657,
+            "maximum_finished_ns": 421602017677469,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 305068,
+            "maximum_ns": 305068,
+            "maximum_started_ns": 421602017693019,
+            "maximum_finished_ns": 421602017998087,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 20429,
+            "maximum_ns": 20429,
+            "maximum_started_ns": 421602028269354,
+            "maximum_finished_ns": 421602028289783,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "d652fcc66fffcde415763de73d16d3b0",
+        "native_user_s": 24.50593900680542,
+        "native_finished_s": 29.72093915939331,
+        "request_wall_ms": 5201.538765,
+        "parent_finished_receipt_lag_s": 0.002848679,
+        "execute_cleanup_marker_after_finished_s": 11.845338025,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-audit-open-prs",
+              "created_at": 1790873496.352646
+            },
+            "generation": 50
+          },
+          "turn_id": "086ca7ce49caeeb050c9b9792b243483",
+          "admission_generation": 1914
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 24.51893901824951,
+            "elapsed_ms": 0.064352,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 25.00093913078308,
+            "elapsed_ms": 482.400641,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 25.907938957214355,
+            "elapsed_ms": 1388.834769,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 29.72093915939331,
+            "elapsed_ms": 5201.538765,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 382715,
+            "maximum_ns": 382715,
+            "maximum_started_ns": 421608267816496,
+            "maximum_finished_ns": 421608268199211,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 19829002,
+            "maximum_ns": 19829002,
+            "maximum_started_ns": 421608268208138,
+            "maximum_finished_ns": 421608288037140,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 110279,
+            "maximum_ns": 110279,
+            "maximum_started_ns": 421608268264044,
+            "maximum_finished_ns": 421608268374323,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 19614737,
+            "maximum_ns": 19614737,
+            "maximum_started_ns": 421608268405191,
+            "maximum_finished_ns": 421608288019928,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 555904,
+            "maximum_ns": 555904,
+            "maximum_started_ns": 421608288094449,
+            "maximum_finished_ns": 421608288650353,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2133014550,
+            "maximum_ns": 2133014550,
+            "maximum_started_ns": 421608288657536,
+            "maximum_finished_ns": 421610421672086,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 72992014,
+            "maximum_ns": 72992014,
+            "maximum_started_ns": 421610421778308,
+            "maximum_finished_ns": 421610494770322,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 71009668,
+            "maximum_ns": 71009668,
+            "maximum_started_ns": 421610559289317,
+            "maximum_finished_ns": 421610630298985,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 70132525,
+            "maximum_ns": 70132525,
+            "maximum_started_ns": 421610559951883,
+            "maximum_finished_ns": 421610630084408,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 1,
+            "total_ns": 70111315,
+            "maximum_ns": 70111315,
+            "maximum_started_ns": 421610559967272,
+            "maximum_finished_ns": 421610630078587,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 1,
+            "total_ns": 2417462,
+            "maximum_ns": 2417462,
+            "maximum_started_ns": 421610559998171,
+            "maximum_finished_ns": 421610562415633,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 1,
+            "total_ns": 450574,
+            "maximum_ns": 450574,
+            "maximum_started_ns": 421610562424409,
+            "maximum_finished_ns": 421610562874983,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 1,
+            "total_ns": 1082412,
+            "maximum_ns": 1082412,
+            "maximum_started_ns": 421610562880323,
+            "maximum_finished_ns": 421610563962735,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 90592,
+            "maximum_ns": 90592,
+            "maximum_started_ns": 421610563968626,
+            "maximum_finished_ns": 421610564059218,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 33794,
+            "maximum_ns": 33794,
+            "maximum_started_ns": 421610564062424,
+            "maximum_finished_ns": 421610564096218,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4266386,
+            "maximum_ns": 4266386,
+            "maximum_started_ns": 421610564100506,
+            "maximum_finished_ns": 421610568366892,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 20569,
+            "maximum_ns": 20569,
+            "maximum_started_ns": 421610568388373,
+            "maximum_finished_ns": 421610568408942,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 37740050,
+            "maximum_ns": 37740050,
+            "maximum_started_ns": 421610568412529,
+            "maximum_finished_ns": 421610606152579,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 33294995,
+            "maximum_ns": 33294995,
+            "maximum_started_ns": 421610568515454,
+            "maximum_finished_ns": 421610601810449,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 521529,
+            "maximum_ns": 521529,
+            "maximum_started_ns": 421610601833673,
+            "maximum_finished_ns": 421610602355202,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 3775857,
+            "maximum_ns": 3775857,
+            "maximum_started_ns": 421610602360752,
+            "maximum_finished_ns": 421610606136609,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 4206693,
+            "maximum_ns": 4206693,
+            "maximum_started_ns": 421610606169772,
+            "maximum_finished_ns": 421610610376465,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 8799588,
+            "maximum_ns": 8799588,
+            "maximum_started_ns": 421610610386003,
+            "maximum_finished_ns": 421610619185591,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 301701,
+            "maximum_ns": 301701,
+            "maximum_started_ns": 421610619200199,
+            "maximum_finished_ns": 421610619501900,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 12764,
+            "maximum_ns": 12764,
+            "maximum_started_ns": 421610630102803,
+            "maximum_finished_ns": 421610630115567,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 20.435939073562622,
+      "attempt_last_progress_s": 48.10093903541565,
+      "intent_created_s": 48.6018500328064,
+      "append_dispatch_s": 48.954939126968384,
+      "canonical_publication_receipt_s": 49.05493903160095
+    },
+    {
+      "owner": "openhcs-helper",
+      "triage": {
+        "input_id": "a8d72d86f5d26b76ccc5c3d0644adf6d",
+        "native_user_s": 13.400938987731934,
+        "native_finished_s": 18.22093915939331,
+        "request_wall_ms": 4811.070899,
+        "parent_finished_receipt_lag_s": 0.003420723,
+        "execute_cleanup_marker_after_finished_s": 0.113181307,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-helper",
+              "created_at": 1790708584.4423254
+            },
+            "generation": 88
+          },
+          "turn_id": "654d33310bf78c0392131bfd6bac6d1f",
+          "admission_generation": 1908
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 13.409939050674438,
+            "elapsed_ms": 0.076926,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 13.884938955307007,
+            "elapsed_ms": 474.452738,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 14.135939121246338,
+            "elapsed_ms": 725.190561,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 18.22093915939331,
+            "elapsed_ms": 4811.070899,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 2595,
+            "maximum_ns": 2595,
+            "maximum_started_ns": 421596177244302,
+            "maximum_finished_ns": 421596177246897,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 632278621,
+            "maximum_ns": 632278621,
+            "maximum_started_ns": 421596177255052,
+            "maximum_finished_ns": 421596809533673,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 609942386,
+            "maximum_ns": 609942386,
+            "maximum_started_ns": 421596177316890,
+            "maximum_finished_ns": 421596787259276,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 22183164,
+            "maximum_ns": 22183164,
+            "maximum_started_ns": 421596787321885,
+            "maximum_finished_ns": 421596809505049,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1295015,
+            "maximum_ns": 1295015,
+            "maximum_started_ns": 421596809605299,
+            "maximum_finished_ns": 421596810900314,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2278564086,
+            "maximum_ns": 2278564086,
+            "maximum_started_ns": 421596810908529,
+            "maximum_finished_ns": 421599089472615,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 37568616,
+            "maximum_ns": 37568616,
+            "maximum_started_ns": 421599089574568,
+            "maximum_finished_ns": 421599127143184,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 327060871,
+            "maximum_ns": 327060871,
+            "maximum_started_ns": 421599199060521,
+            "maximum_finished_ns": 421599526121392,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 321567930,
+            "maximum_ns": 321567930,
+            "maximum_started_ns": 421599204261749,
+            "maximum_finished_ns": 421599525829679,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 15,
+            "total_ns": 178222729,
+            "maximum_ns": 92998413,
+            "maximum_started_ns": 421599432826897,
+            "maximum_finished_ns": 421599525825310,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 15,
+            "total_ns": 29287658,
+            "maximum_ns": 4122544,
+            "maximum_started_ns": 421599204406083,
+            "maximum_finished_ns": 421599208528627,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 9,
+            "total_ns": 4832750,
+            "maximum_ns": 1176510,
+            "maximum_started_ns": 421599310087164,
+            "maximum_finished_ns": 421599311263674,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 9,
+            "total_ns": 44805380,
+            "maximum_ns": 37259900,
+            "maximum_started_ns": 421599209092475,
+            "maximum_finished_ns": 421599246352375,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 7,
+            "total_ns": 472364,
+            "maximum_ns": 114216,
+            "maximum_started_ns": 421599281142695,
+            "maximum_finished_ns": 421599281256911,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 7,
+            "total_ns": 904434,
+            "maximum_ns": 630504,
+            "maximum_started_ns": 421599246420044,
+            "maximum_finished_ns": 421599247050548,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 3568744,
+            "maximum_ns": 3568744,
+            "maximum_started_ns": 421599437193483,
+            "maximum_finished_ns": 421599440762227,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 13185,
+            "maximum_ns": 13185,
+            "maximum_started_ns": 421599440775482,
+            "maximum_finished_ns": 421599440788667,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 26593173,
+            "maximum_ns": 26593173,
+            "maximum_started_ns": 421599440792144,
+            "maximum_finished_ns": 421599467385317,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 26064571,
+            "maximum_ns": 26064571,
+            "maximum_started_ns": 421599440853440,
+            "maximum_finished_ns": 421599466918011,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 303635,
+            "maximum_ns": 303635,
+            "maximum_started_ns": 421599466931938,
+            "maximum_finished_ns": 421599467235573,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 135326,
+            "maximum_ns": 135326,
+            "maximum_started_ns": 421599467241214,
+            "maximum_finished_ns": 421599467376540,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 34131691,
+            "maximum_ns": 34131691,
+            "maximum_started_ns": 421599467396879,
+            "maximum_finished_ns": 421599501528570,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 5767271,
+            "maximum_ns": 5767271,
+            "maximum_started_ns": 421599501542296,
+            "maximum_finished_ns": 421599507309567,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 245906,
+            "maximum_ns": 245906,
+            "maximum_started_ns": 421599507321379,
+            "maximum_finished_ns": 421599507567285,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 10129,
+            "maximum_ns": 10129,
+            "maximum_started_ns": 421599525841982,
+            "maximum_finished_ns": 421599525852111,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "033b3471c9fc83490097132e2c8c2e5e",
+        "native_user_s": 24.032938957214355,
+        "native_finished_s": 30.0779390335083,
+        "request_wall_ms": 6032.747615,
+        "parent_finished_receipt_lag_s": 0.003074377,
+        "execute_cleanup_marker_after_finished_s": 13.564769555,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-helper",
+              "created_at": 1790708584.4423254
+            },
+            "generation": 88
+          },
+          "turn_id": "654d33310bf78c0392131bfd6bac6d1f",
+          "admission_generation": 1908
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 24.044939041137695,
+            "elapsed_ms": 0.047981,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 24.96993899345398,
+            "elapsed_ms": 925.430402,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 26.10693907737732,
+            "elapsed_ms": 2061.585438,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 30.0779390335083,
+            "elapsed_ms": 6032.747615,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 280262,
+            "maximum_ns": 280262,
+            "maximum_started_ns": 421607707618812,
+            "maximum_finished_ns": 421607707899074,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 20036186,
+            "maximum_ns": 20036186,
+            "maximum_started_ns": 421607707908291,
+            "maximum_finished_ns": 421607727944477,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 37772,
+            "maximum_ns": 37772,
+            "maximum_started_ns": 421607707953797,
+            "maximum_finished_ns": 421607707991569,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 19884528,
+            "maximum_ns": 19884528,
+            "maximum_started_ns": 421607708038137,
+            "maximum_finished_ns": 421607727922665,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 681291,
+            "maximum_ns": 681291,
+            "maximum_started_ns": 421607728042843,
+            "maximum_finished_ns": 421607728724134,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2267295989,
+            "maximum_ns": 2267295989,
+            "maximum_started_ns": 421607728730366,
+            "maximum_finished_ns": 421609996026355,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 50196910,
+            "maximum_ns": 50196910,
+            "maximum_started_ns": 421609996164396,
+            "maximum_finished_ns": 421610046361306,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 54484446,
+            "maximum_ns": 54484446,
+            "maximum_started_ns": 421610104970931,
+            "maximum_finished_ns": 421610159455377,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 53369834,
+            "maximum_ns": 53369834,
+            "maximum_started_ns": 421610105913157,
+            "maximum_finished_ns": 421610159282991,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 1,
+            "total_ns": 53347432,
+            "maximum_ns": 53347432,
+            "maximum_started_ns": 421610105930780,
+            "maximum_finished_ns": 421610159278212,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 1,
+            "total_ns": 1745959,
+            "maximum_ns": 1745959,
+            "maximum_started_ns": 421610105975295,
+            "maximum_finished_ns": 421610107721254,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 1,
+            "total_ns": 381463,
+            "maximum_ns": 381463,
+            "maximum_started_ns": 421610107726975,
+            "maximum_finished_ns": 421610108108438,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 1,
+            "total_ns": 1098823,
+            "maximum_ns": 1098823,
+            "maximum_started_ns": 421610108114489,
+            "maximum_finished_ns": 421610109213312,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 41459,
+            "maximum_ns": 41459,
+            "maximum_started_ns": 421610109218942,
+            "maximum_finished_ns": 421610109260401,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 26079,
+            "maximum_ns": 26079,
+            "maximum_started_ns": 421610109263347,
+            "maximum_finished_ns": 421610109289426,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 2759290,
+            "maximum_ns": 2759290,
+            "maximum_started_ns": 421610109293213,
+            "maximum_finished_ns": 421610112052503,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 6803,
+            "maximum_ns": 6803,
+            "maximum_started_ns": 421610112058284,
+            "maximum_finished_ns": 421610112065087,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 21906951,
+            "maximum_ns": 21906951,
+            "maximum_started_ns": 421610112067321,
+            "maximum_finished_ns": 421610133974272,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 21429376,
+            "maximum_ns": 21429376,
+            "maximum_started_ns": 421610112115913,
+            "maximum_finished_ns": 421610133545289,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 262948,
+            "maximum_ns": 262948,
+            "maximum_started_ns": 421610133556290,
+            "maximum_finished_ns": 421610133819238,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 140907,
+            "maximum_ns": 140907,
+            "maximum_started_ns": 421610133823717,
+            "maximum_finished_ns": 421610133964624,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 3733166,
+            "maximum_ns": 3733166,
+            "maximum_started_ns": 421610133984792,
+            "maximum_finished_ns": 421610137717958,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 11116980,
+            "maximum_ns": 11116980,
+            "maximum_started_ns": 421610137722817,
+            "maximum_finished_ns": 421610148839797,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 368278,
+            "maximum_ns": 368278,
+            "maximum_started_ns": 421610148852822,
+            "maximum_finished_ns": 421610149221100,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 8907,
+            "maximum_ns": 8907,
+            "maximum_started_ns": 421610159296276,
+            "maximum_finished_ns": 421610159305183,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 19.06493902206421,
+      "attempt_last_progress_s": 48.31393909454346,
+      "intent_created_s": 48.81201648712158,
+      "append_dispatch_s": 49.2819390296936,
+      "canonical_publication_receipt_s": 49.353939056396484
+    },
+    {
+      "owner": "openhcs-helper2",
+      "triage": {
+        "input_id": "f798e218c51d30feca7dae1fdbf38448",
+        "native_user_s": 15.39893913269043,
+        "native_finished_s": 18.748939037322998,
+        "request_wall_ms": 3341.303084,
+        "parent_finished_receipt_lag_s": 0.00373026,
+        "execute_cleanup_marker_after_finished_s": 0.139343132,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-helper2",
+              "created_at": 1790713653.7134795
+            },
+            "generation": 65
+          },
+          "turn_id": "418522aee6c85f706580be3182646339",
+          "admission_generation": 1909
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 15.407938957214355,
+            "elapsed_ms": 0.047039,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 15.899939060211182,
+            "elapsed_ms": 492.53545,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 16.199939012527466,
+            "elapsed_ms": 792.403752,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 18.748939037322998,
+            "elapsed_ms": 3341.303084,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 2695,
+            "maximum_ns": 2695,
+            "maximum_started_ns": 421596306535893,
+            "maximum_finished_ns": 421596306538588,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 2648011874,
+            "maximum_ns": 2648011874,
+            "maximum_started_ns": 421596306546203,
+            "maximum_finished_ns": 421598954558077,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 2625714764,
+            "maximum_ns": 2625714764,
+            "maximum_started_ns": 421596306607529,
+            "maximum_finished_ns": 421598932322293,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 22150773,
+            "maximum_ns": 22150773,
+            "maximum_started_ns": 421598932382557,
+            "maximum_finished_ns": 421598954533330,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1262623,
+            "maximum_ns": 1262623,
+            "maximum_started_ns": 421598954632207,
+            "maximum_finished_ns": 421598955894830,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2148889699,
+            "maximum_ns": 2148889699,
+            "maximum_started_ns": 421598955902445,
+            "maximum_finished_ns": 421601104792144,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 260282633,
+            "maximum_ns": 260282633,
+            "maximum_started_ns": 421601104880061,
+            "maximum_finished_ns": 421601365162694,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 82815954,
+            "maximum_ns": 82815954,
+            "maximum_started_ns": 421601441499879,
+            "maximum_finished_ns": 421601524315833,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 79316832,
+            "maximum_ns": 79316832,
+            "maximum_started_ns": 421601444775066,
+            "maximum_finished_ns": 421601524091898,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 2,
+            "total_ns": 69122451,
+            "maximum_ns": 62655083,
+            "maximum_started_ns": 421601461433940,
+            "maximum_finished_ns": 421601524089023,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 2,
+            "total_ns": 5736242,
+            "maximum_ns": 3832243,
+            "maximum_started_ns": 421601444979093,
+            "maximum_finished_ns": 421601448811336,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 2,
+            "total_ns": 892160,
+            "maximum_ns": 465963,
+            "maximum_started_ns": 421601448825093,
+            "maximum_finished_ns": 421601449291056,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 2,
+            "total_ns": 2521919,
+            "maximum_ns": 1279124,
+            "maximum_started_ns": 421601449296947,
+            "maximum_finished_ns": 421601450576071,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 2,
+            "total_ns": 93077,
+            "maximum_ns": 47410,
+            "maximum_started_ns": 421601450583445,
+            "maximum_finished_ns": 421601450630855,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 2,
+            "total_ns": 79831,
+            "maximum_ns": 50205,
+            "maximum_started_ns": 421601450634462,
+            "maximum_finished_ns": 421601450684667,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4464712,
+            "maximum_ns": 4464712,
+            "maximum_started_ns": 421601465172306,
+            "maximum_finished_ns": 421601469637018,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 16982,
+            "maximum_ns": 16982,
+            "maximum_started_ns": 421601469652377,
+            "maximum_finished_ns": 421601469669359,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 30711369,
+            "maximum_ns": 30711369,
+            "maximum_started_ns": 421601469672956,
+            "maximum_finished_ns": 421601500384325,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 28727869,
+            "maximum_ns": 28727869,
+            "maximum_started_ns": 421601469767195,
+            "maximum_finished_ns": 421601498495064,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 318383,
+            "maximum_ns": 318383,
+            "maximum_started_ns": 421601498506756,
+            "maximum_finished_ns": 421601498825139,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 1547353,
+            "maximum_ns": 1547353,
+            "maximum_started_ns": 421601498829608,
+            "maximum_finished_ns": 421601500376961,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 2260535,
+            "maximum_ns": 2260535,
+            "maximum_started_ns": 421601500392720,
+            "maximum_finished_ns": 421601502653255,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 11674638,
+            "maximum_ns": 11674638,
+            "maximum_started_ns": 421601502658274,
+            "maximum_finished_ns": 421601514332912,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 243942,
+            "maximum_ns": 243942,
+            "maximum_started_ns": 421601514342440,
+            "maximum_finished_ns": 421601514586382,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 8225,
+            "maximum_ns": 8225,
+            "maximum_started_ns": 421601524101637,
+            "maximum_finished_ns": 421601524109862,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "28fd6d8e05924b7723b94137a47e76b8",
+        "native_user_s": 29.15593910217285,
+        "native_finished_s": 33.83993911743164,
+        "request_wall_ms": 4665.129679,
+        "parent_finished_receipt_lag_s": 4.785037654,
+        "execute_cleanup_marker_after_finished_s": 14.242883326,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-helper2",
+              "created_at": 1790713653.7134795
+            },
+            "generation": 65
+          },
+          "turn_id": "418522aee6c85f706580be3182646339",
+          "admission_generation": 1909
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 29.174939155578613,
+            "elapsed_ms": 0.116371,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 29.65993905067444,
+            "elapsed_ms": 484.809327,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 29.991939067840576,
+            "elapsed_ms": 816.291988,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 33.83993911743164,
+            "elapsed_ms": 4665.129679,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 301732,
+            "maximum_ns": 301732,
+            "maximum_started_ns": 421608278173395,
+            "maximum_finished_ns": 421608278475127,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 210150385,
+            "maximum_ns": 210150385,
+            "maximum_started_ns": 421608278482672,
+            "maximum_finished_ns": 421608488633057,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 180046198,
+            "maximum_ns": 180046198,
+            "maximum_started_ns": 421608278526144,
+            "maximum_finished_ns": 421608458572342,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 29980272,
+            "maximum_ns": 29980272,
+            "maximum_started_ns": 421608458628529,
+            "maximum_finished_ns": 421608488608801,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 687213,
+            "maximum_ns": 687213,
+            "maximum_started_ns": 421608488740581,
+            "maximum_finished_ns": 421608489427794,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2292016732,
+            "maximum_ns": 2292016732,
+            "maximum_started_ns": 421608489433795,
+            "maximum_finished_ns": 421610781450527,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 71867623,
+            "maximum_ns": 71867623,
+            "maximum_started_ns": 421610781531281,
+            "maximum_finished_ns": 421610853398904,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 4354339427,
+            "maximum_ns": 4354339427,
+            "maximum_started_ns": 421610925226662,
+            "maximum_finished_ns": 421615279566089,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 4353187113,
+            "maximum_ns": 4353187113,
+            "maximum_started_ns": 421610926136947,
+            "maximum_finished_ns": 421615279324060,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 304,
+            "total_ns": 1299393139,
+            "maximum_ns": 112068328,
+            "maximum_started_ns": 421615167250142,
+            "maximum_finished_ns": 421615279318470,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 304,
+            "total_ns": 914888305,
+            "maximum_ns": 4610588,
+            "maximum_started_ns": 421614341067990,
+            "maximum_finished_ns": 421614345678578,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 303,
+            "total_ns": 71729118,
+            "maximum_ns": 844170,
+            "maximum_started_ns": 421615170420632,
+            "maximum_finished_ns": 421615171264802,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 1,
+            "total_ns": 1899891,
+            "maximum_ns": 1899891,
+            "maximum_started_ns": 421615171275231,
+            "maximum_finished_ns": 421615173175122,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 83098,
+            "maximum_ns": 83098,
+            "maximum_started_ns": 421615173185732,
+            "maximum_finished_ns": 421615173268830,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 55255,
+            "maximum_ns": 55255,
+            "maximum_started_ns": 421615173275222,
+            "maximum_finished_ns": 421615173330477,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 6221131,
+            "maximum_ns": 6221131,
+            "maximum_started_ns": 421615173338121,
+            "maximum_finished_ns": 421615179559252,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 15299,
+            "maximum_ns": 15299,
+            "maximum_started_ns": 421615179576966,
+            "maximum_finished_ns": 421615179592265,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 53020021,
+            "maximum_ns": 53020021,
+            "maximum_started_ns": 421615179598166,
+            "maximum_finished_ns": 421615232618187,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 50357816,
+            "maximum_ns": 50357816,
+            "maximum_started_ns": 421615179693346,
+            "maximum_finished_ns": 421615230051162,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 343491,
+            "maximum_ns": 343491,
+            "maximum_started_ns": 421615230064928,
+            "maximum_finished_ns": 421615230408419,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 2191564,
+            "maximum_ns": 2191564,
+            "maximum_started_ns": 421615230416043,
+            "maximum_finished_ns": 421615232607607,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 5585026,
+            "maximum_ns": 5585026,
+            "maximum_started_ns": 421615232629969,
+            "maximum_finished_ns": 421615238214995,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 14135382,
+            "maximum_ns": 14135382,
+            "maximum_started_ns": 421615238229632,
+            "maximum_finished_ns": 421615252365014,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 417872,
+            "maximum_ns": 417872,
+            "maximum_started_ns": 421615252386064,
+            "maximum_finished_ns": 421615252803936,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 12103,
+            "maximum_ns": 12103,
+            "maximum_started_ns": 421615279339770,
+            "maximum_finished_ns": 421615279351873,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 20.19093894958496,
+      "attempt_last_progress_s": 48.669939041137695,
+      "intent_created_s": 49.25322508811951,
+      "append_dispatch_s": 49.44693899154663,
+      "canonical_publication_receipt_s": 49.514939069747925
+    },
+    {
+      "owner": "openhcs-pr159-viewer-bind-owner",
+      "triage": {
+        "input_id": "b6f45a85488abc08d9f415be5199bcc2",
+        "native_user_s": 10.712939023971558,
+        "native_finished_s": 15.96393895149231,
+        "request_wall_ms": 5242.423748,
+        "parent_finished_receipt_lag_s": 0.002455374,
+        "execute_cleanup_marker_after_finished_s": 0.108800734,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-pr159-viewer-bind-owner",
+              "created_at": 1790657026.7285714
+            },
+            "generation": 85
+          },
+          "turn_id": "c239db50a283058aba351bc541249721",
+          "admission_generation": 1906
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 10.721939086914062,
+            "elapsed_ms": 0.063731,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 11.836939096450806,
+            "elapsed_ms": 1115.277737,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 12.295938968658447,
+            "elapsed_ms": 1574.155044,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 15.96393895149231,
+            "elapsed_ms": 5242.423748,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 2475,
+            "maximum_ns": 2475,
+            "maximum_started_ns": 421594132830249,
+            "maximum_finished_ns": 421594132832724,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 20786367,
+            "maximum_ns": 20786367,
+            "maximum_started_ns": 421594132838535,
+            "maximum_finished_ns": 421594153624902,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 50946,
+            "maximum_ns": 50946,
+            "maximum_started_ns": 421594132897587,
+            "maximum_finished_ns": 421594132948533,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 20622106,
+            "maximum_ns": 20622106,
+            "maximum_started_ns": 421594132979181,
+            "maximum_finished_ns": 421594153601287,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1056121,
+            "maximum_ns": 1056121,
+            "maximum_started_ns": 421594153688062,
+            "maximum_finished_ns": 421594154744183,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2495667280,
+            "maximum_ns": 2495667280,
+            "maximum_started_ns": 421594154749724,
+            "maximum_finished_ns": 421596650417004,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 24625414,
+            "maximum_ns": 24625414,
+            "maximum_started_ns": 421596650599780,
+            "maximum_finished_ns": 421596675225194,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 70213819,
+            "maximum_ns": 70213819,
+            "maximum_started_ns": 421596769031107,
+            "maximum_finished_ns": 421596839244926,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 65617728,
+            "maximum_ns": 65617728,
+            "maximum_started_ns": 421596773371654,
+            "maximum_finished_ns": 421596838989382,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 1,
+            "total_ns": 65544809,
+            "maximum_ns": 65544809,
+            "maximum_started_ns": 421596773437299,
+            "maximum_finished_ns": 421596838982108,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 1,
+            "total_ns": 2455053,
+            "maximum_ns": 2455053,
+            "maximum_started_ns": 421596773496120,
+            "maximum_finished_ns": 421596775951173,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 1,
+            "total_ns": 393526,
+            "maximum_ns": 393526,
+            "maximum_started_ns": 421596775960922,
+            "maximum_finished_ns": 421596776354448,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 1,
+            "total_ns": 968405,
+            "maximum_ns": 968405,
+            "maximum_started_ns": 421596776358896,
+            "maximum_finished_ns": 421596777327301,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 46949,
+            "maximum_ns": 46949,
+            "maximum_started_ns": 421596777333052,
+            "maximum_finished_ns": 421596777380001,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 26881,
+            "maximum_ns": 26881,
+            "maximum_started_ns": 421596777382586,
+            "maximum_finished_ns": 421596777409467,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 2998974,
+            "maximum_ns": 2998974,
+            "maximum_started_ns": 421596777411481,
+            "maximum_finished_ns": 421596780410455,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 9989,
+            "maximum_ns": 9989,
+            "maximum_started_ns": 421596780416667,
+            "maximum_finished_ns": 421596780426656,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 33560709,
+            "maximum_ns": 33560709,
+            "maximum_started_ns": 421596780428760,
+            "maximum_finished_ns": 421596813989469,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 33000868,
+            "maximum_ns": 33000868,
+            "maximum_started_ns": 421596780478744,
+            "maximum_finished_ns": 421596813479612,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 355173,
+            "maximum_ns": 355173,
+            "maximum_started_ns": 421596813493148,
+            "maximum_finished_ns": 421596813848321,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 128774,
+            "maximum_ns": 128774,
+            "maximum_started_ns": 421596813853291,
+            "maximum_finished_ns": 421596813982065,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 2128394,
+            "maximum_ns": 2128394,
+            "maximum_started_ns": 421596813998335,
+            "maximum_finished_ns": 421596816126729,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 10002238,
+            "maximum_ns": 10002238,
+            "maximum_started_ns": 421596816132520,
+            "maximum_finished_ns": 421596826134758,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 269731,
+            "maximum_ns": 269731,
+            "maximum_started_ns": 421596826148815,
+            "maximum_finished_ns": 421596826418546,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 12564,
+            "maximum_ns": 12564,
+            "maximum_started_ns": 421596839021302,
+            "maximum_finished_ns": 421596839033866,
+            "operations": {}
+          }
+        }
+      },
+      "full": {
+        "input_id": "09e2ac3cca150270555cfd8be7c45093",
+        "native_user_s": 21.419939041137695,
+        "native_finished_s": 28.79793906211853,
+        "request_wall_ms": 7365.604087,
+        "parent_finished_receipt_lag_s": 0.002979066,
+        "execute_cleanup_marker_after_finished_s": 8.822043236,
+        "lease": {
+          "identity": {
+            "incarnation": {
+              "name": "openhcs-pr159-viewer-bind-owner",
+              "created_at": 1790657026.7285714
+            },
+            "generation": 85
+          },
+          "turn_id": "c239db50a283058aba351bc541249721",
+          "admission_generation": 1906
+        },
+        "request_stages": [
+          {
+            "stage": "preparing",
+            "observed_s": 21.432939052581787,
+            "elapsed_ms": 0.078679,
+            "callback": ""
+          },
+          {
+            "stage": "dispatch",
+            "observed_s": 22.289939165115356,
+            "elapsed_ms": 857.095815,
+            "callback": ""
+          },
+          {
+            "stage": "first_event",
+            "observed_s": 22.829939126968384,
+            "elapsed_ms": 1396.936304,
+            "callback": ""
+          },
+          {
+            "stage": "finished",
+            "observed_s": 28.79793906211853,
+            "elapsed_ms": 7365.604087,
+            "callback": ""
+          }
+        ],
+        "acquisition_operations": {
+          "open_transport": {
+            "count": 1,
+            "total_ns": 352549,
+            "maximum_ns": 352549,
+            "maximum_started_ns": 421604727851140,
+            "maximum_finished_ns": 421604728203689,
+            "operations": {}
+          },
+          "native_open": {
+            "count": 1,
+            "total_ns": 37332809,
+            "maximum_ns": 37332809,
+            "maximum_started_ns": 421604728212004,
+            "maximum_finished_ns": 421604765544813,
+            "operations": {}
+          },
+          "startup_slot": {
+            "count": 1,
+            "total_ns": 103426,
+            "maximum_ns": 103426,
+            "maximum_started_ns": 421604728265486,
+            "maximum_finished_ns": 421604728368912,
+            "operations": {}
+          },
+          "native_spawn": {
+            "count": 1,
+            "total_ns": 37116198,
+            "maximum_ns": 37116198,
+            "maximum_started_ns": 421604728395913,
+            "maximum_finished_ns": 421604765512111,
+            "operations": {}
+          },
+          "get_state_send": {
+            "count": 1,
+            "total_ns": 1173795,
+            "maximum_ns": 1173795,
+            "maximum_started_ns": 421604765659189,
+            "maximum_finished_ns": 421604766832984,
+            "operations": {}
+          },
+          "get_state_receive": {
+            "count": 1,
+            "total_ns": 2191679149,
+            "maximum_ns": 2191679149,
+            "maximum_started_ns": 421604766840599,
+            "maximum_finished_ns": 421606958519748,
+            "operations": {}
+          },
+          "attestation_publication": {
+            "count": 1,
+            "total_ns": 239441091,
+            "maximum_ns": 239441091,
+            "maximum_started_ns": 421606958607725,
+            "maximum_finished_ns": 421607198048816,
+            "operations": {}
+          },
+          "prompt_writer_join": {
+            "count": 1,
+            "total_ns": 252966005,
+            "maximum_ns": 252966005,
+            "maximum_started_ns": 421607291046929,
+            "maximum_finished_ns": 421607544012934,
+            "operations": {}
+          },
+          "admission_wait": {
+            "count": 1,
+            "total_ns": 252145040,
+            "maximum_ns": 252145040,
+            "maximum_started_ns": 421607291635314,
+            "maximum_finished_ns": 421607543780354,
+            "operations": {}
+          },
+          "admission_probe": {
+            "count": 13,
+            "total_ns": 131064381,
+            "maximum_ns": 112225475,
+            "maximum_started_ns": 421607431550400,
+            "maximum_finished_ns": 421607543775875,
+            "operations": {}
+          },
+          "coordinator_open": {
+            "count": 13,
+            "total_ns": 16336012,
+            "maximum_ns": 3406877,
+            "maximum_started_ns": 421607431607508,
+            "maximum_finished_ns": 421607435014385,
+            "operations": {}
+          },
+          "maintenance_ingress": {
+            "count": 5,
+            "total_ns": 2239647,
+            "maximum_ns": 553099,
+            "maximum_started_ns": 421607435023873,
+            "maximum_finished_ns": 421607435576972,
+            "operations": {}
+          },
+          "registry_exclusion": {
+            "count": 5,
+            "total_ns": 36876906,
+            "maximum_ns": 36129277,
+            "maximum_started_ns": 421607435583715,
+            "maximum_finished_ns": 421607471712992,
+            "operations": {}
+          },
+          "registry_snapshot": {
+            "count": 1,
+            "total_ns": 34164,
+            "maximum_ns": 34164,
+            "maximum_started_ns": 421607471730966,
+            "maximum_finished_ns": 421607471765130,
+            "operations": {}
+          },
+          "coordinator_exclusive": {
+            "count": 1,
+            "total_ns": 110269,
+            "maximum_ns": 110269,
+            "maximum_started_ns": 421607471769649,
+            "maximum_finished_ns": 421607471879918,
+            "operations": {}
+          },
+          "prompt_binding": {
+            "count": 1,
+            "total_ns": 4872575,
+            "maximum_ns": 4872575,
+            "maximum_started_ns": 421607471884767,
+            "maximum_finished_ns": 421607476757342,
+            "operations": {}
+          },
+          "selected_source_admission": {
+            "count": 1,
+            "total_ns": 13606,
+            "maximum_ns": 13606,
+            "maximum_started_ns": 421607476770547,
+            "maximum_finished_ns": 421607476784153,
+            "operations": {}
+          },
+          "raw_journal_admission": {
+            "count": 1,
+            "total_ns": 37285208,
+            "maximum_ns": 37285208,
+            "maximum_started_ns": 421607476787650,
+            "maximum_finished_ns": 421607514072858,
+            "operations": {}
+          },
+          "original_input_document": {
+            "count": 1,
+            "total_ns": 36653040,
+            "maximum_ns": 36653040,
+            "maximum_started_ns": 421607476862111,
+            "maximum_finished_ns": 421607513515151,
+            "operations": {}
+          },
+          "compaction_journal_exclusion": {
+            "count": 1,
+            "total_ns": 354402,
+            "maximum_ns": 354402,
+            "maximum_started_ns": 421607513530049,
+            "maximum_finished_ns": 421607513884451,
+            "operations": {}
+          },
+          "raw_source_clearance": {
+            "count": 1,
+            "total_ns": 171004,
+            "maximum_ns": 171004,
+            "maximum_started_ns": 421607513891133,
+            "maximum_finished_ns": 421607514062137,
+            "operations": {}
+          },
+          "admission_checks": {
+            "count": 1,
+            "total_ns": 4820927,
+            "maximum_ns": 4820927,
+            "maximum_started_ns": 421607514085963,
+            "maximum_finished_ns": 421607518906890,
+            "operations": {}
+          },
+          "raw_unknown_checkpoint": {
+            "count": 1,
+            "total_ns": 9848165,
+            "maximum_ns": 9848165,
+            "maximum_started_ns": 421607518914645,
+            "maximum_finished_ns": 421607528762810,
+            "operations": {}
+          },
+          "native_admission_record": {
+            "count": 1,
+            "total_ns": 293536,
+            "maximum_ns": 293536,
+            "maximum_started_ns": 421607528776476,
+            "maximum_finished_ns": 421607529070012,
+            "operations": {}
+          },
+          "raw_pipe_write": {
+            "count": 1,
+            "total_ns": 12103,
+            "maximum_ns": 12103,
+            "maximum_started_ns": 421607543793218,
+            "maximum_finished_ns": 421607543805321,
+            "operations": {}
+          }
+        }
+      },
+      "attempt_created_s": 16.989938974380493,
+      "attempt_last_progress_s": 38.223939180374146,
+      "intent_created_s": 38.91970658302307,
+      "append_dispatch_s": 39.22593903541565,
+      "canonical_publication_receipt_s": 39.29393911361694
+    }
+  ]
+}
