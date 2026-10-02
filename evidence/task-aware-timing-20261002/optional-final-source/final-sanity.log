@@ -1,0 +1,59 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/comms-retained-human-main-20261001
+configfile: pyproject.toml
+plugins: anyio-4.14.2, typeguard-4.5.2, asyncio-1.4.0, localserver-0.10.0, cov-7.1.0, Faker-40.39.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 7 items
+
+tests/test_task_decisions.py F..                                         [ 42%]
+tests/test_owner_compaction_runtime.py ....                              [100%]
+
+=================================== FAILURES ===================================
+____ test_explicit_subtask_observation_correction_drop_and_turn_continuity _____
+
+comms = <agent_comms.comms.Comms object at 0x7f7039d0dfd0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f703a1f4e90>
+
+    @pytest.mark.asyncio
+    async def test_explicit_subtask_observation_correction_drop_and_turn_continuity(comms, monkeypatch):
+        import threading
+        from agent_comms.owner_compaction_settings import PiCompactionDecision
+        from agent_comms.pi_vocabulary import (
+            ManualCompactionReason, OverflowCompactionReason,
+            TaskBoundaryCompactionReason, ThresholdCompactionReason,
+        )
+        from agent_comms.retained_task_facts import RetainedTaskFacts
+        from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop
+    
+        comms.messaging.initialize_private_initial_protocol()
+        owner = admit(comms, "alpha")
+        monkeypatch.setenv("PI_AGENT_ID", owner.name)
+    
+        def boundary():
+            snapshot = comms.registry.snapshot()
+            current = snapshot.require(owner.name)
+            with comms.bus.log.locked():
+                _, facts = comms.bus.log.compaction_messages_unlocked(current.incarnation)
+            retained = RetainedTaskFacts(facts)
+            assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
+            return retained.optional_boundary(current, snapshot)
+    
+>       assert boundary() == ()
+               ^^^^^^^^^^
+
+tests/test_task_decisions.py:550: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def boundary():
+        snapshot = comms.registry.snapshot()
+        current = snapshot.require(owner.name)
+        with comms.bus.log.locked():
+>           _, facts = comms.bus.log.compaction_messages_unlocked(current.incarnation)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'WireLog' object has no attribute 'compaction_messages_unlocked'
+
+tests/test_task_decisions.py:545: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_task_decisions.py::test_explicit_subtask_observation_correction_drop_and_turn_continuity
+========================= 1 failed, 6 passed in 1.24s ==========================

@@ -54,8 +54,8 @@ class PiCompactionDecision(PiCompactionSettings):
     def require_prepared(self, result):
         self.reason.require_prepared(result)
 
-    def boundary_current(self, retained, owner, registry):
-        return self.reason.boundary_current(retained, self.boundary, owner, registry)
+    async def boundary_current(self, retained, owner, registry):
+        return await self.reason.boundary_current(retained, self.boundary, owner, registry)
 
     def summary_settings(self) -> PiCompactionSettings:
         """Project this original decision into the existing native request type."""

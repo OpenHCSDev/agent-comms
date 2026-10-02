@@ -1,0 +1,193 @@
+{
+  "revision": "f76ef52dc2d77b94618b461175ccae82b51aac98",
+  "roots": [
+    {
+      "root": "src",
+      "parsed": 311,
+      "unparsed": []
+    },
+    {
+      "root": "tests",
+      "parsed": 357,
+      "unparsed": []
+    },
+    {
+      "root": "tools",
+      "parsed": 53,
+      "unparsed": []
+    }
+  ],
+  "sites": [
+    {
+      "path": "src/agent_comms/owner_compaction_adaptive.py",
+      "line": 62,
+      "kind": "Call",
+      "expression": "read_selected_compaction_decision"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_manual.py",
+      "line": 67,
+      "kind": "Call",
+      "expression": "read_selected_compaction_decision"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_runtime.py",
+      "line": 127,
+      "kind": "Call",
+      "expression": "settings.boundary_current"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 57,
+      "kind": "AsyncFunctionDef",
+      "expression": "boundary_current"
+    },
+    {
+      "path": "src/agent_comms/owner_compaction_settings.py",
+      "line": 58,
+      "kind": "Call",
+      "expression": "self.reason.boundary_current"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 133,
+      "kind": "AsyncFunctionDef",
+      "expression": "boundary_current"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 182,
+      "kind": "AsyncFunctionDef",
+      "expression": "boundary_current"
+    },
+    {
+      "path": "src/agent_comms/pi_vocabulary.py",
+      "line": 186,
+      "kind": "Call",
+      "expression": "retained.optional_boundary"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 135,
+      "kind": "AsyncFunctionDef",
+      "expression": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 137,
+      "kind": "Call",
+      "expression": "self.session.prepare_context"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 351,
+      "kind": "FunctionDef",
+      "expression": "optional_boundary"
+    },
+    {
+      "path": "src/agent_comms/retained_task_facts.py",
+      "line": 362,
+      "kind": "Call",
+      "expression": "latest.task.optional_boundary"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 119,
+      "kind": "AsyncFunctionDef",
+      "expression": "read_selected_compaction_decision"
+    },
+    {
+      "path": "src/agent_comms/selected_pi_route.py",
+      "line": 139,
+      "kind": "Call",
+      "expression": "retained.retained.optional_boundary"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 53,
+      "kind": "AsyncFunctionDef",
+      "expression": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 188,
+      "kind": "AsyncFunctionDef",
+      "expression": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 258,
+      "kind": "AsyncFunctionDef",
+      "expression": "prepare_context"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 205,
+      "kind": "Call",
+      "expression": "read_selected_compaction_decision"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 177,
+      "kind": "FunctionDef",
+      "expression": "optional_boundary"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 431,
+      "kind": "FunctionDef",
+      "expression": "optional_boundary"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 251,
+      "kind": "Call",
+      "expression": "self.prompt_send_boundary.prepare_context"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 138,
+      "kind": "Call",
+      "expression": "read_selected_compaction_decision"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 409,
+      "kind": "Call",
+      "expression": "retained.optional_boundary"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 548,
+      "kind": "Call",
+      "expression": "retained.optional_boundary"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 579,
+      "kind": "Call",
+      "expression": "optional.boundary_current"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 574,
+      "kind": "Call",
+      "expression": "decision.boundary_current"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 576,
+      "kind": "Call",
+      "expression": "optional.boundary_current"
+    },
+    {
+      "path": "tests/test_task_decisions.py",
+      "line": 581,
+      "kind": "Call",
+      "expression": "replace(optional, boundary=optional.boundary * 2).boundary_current"
+    }
+  ],
+  "limits": [
+    "Python syntax only; dynamic dispatch and native compiled source require semantic source read. Native policy and selected RPC read separately; no zero-by-omission."
+  ]
+}

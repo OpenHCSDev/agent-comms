@@ -1,0 +1,35 @@
+{
+  "source": "a14141e7f27a39f40ed192af7695bfbf5c465f69",
+  "manifest": "9f12ddf4e22d6d7a14074eb2ec22ba2f7ab376faa9a1f3b2320a0caf7d7ae3a2",
+  "tree": "d8ceeee18889e372ff72b4d068750fb06e2688762bcb95a098892761a5fd548a",
+  "capture": "/home/ts/wt/comms-task-aware-native-bundle-20261002/.artifacts/native-fork-creation520-20261002/fresh-unverified/node_modules/@earendil-works/pi-coding-agent",
+  "canonical_package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-9f12ddf4e22d6d7a/node_modules/@earendil-works/pi-coding-agent",
+  "changed_members": [
+    {
+      "path": "dist/core/session-manager.js",
+      "original_sha256": "4f3463813735a29cb071933b18fa3c65f20f7243ac7b3ae69b57127604b5aa67",
+      "new_sha256": "7b3799fbe242db43864685f7bbc8ccd84c3c48e9db5b7721aa2f28effbbd580c"
+    }
+  ],
+  "all_other_files_identical_to_qualified00c2": true,
+  "regular_files": 19190,
+  "source_copy_bindings_exact": true,
+  "pristine_stock_recipe": "PASS;95lockedoffline dependencies",
+  "provider_calls": 0,
+  "public_changes": false,
+  "native_inputs": 0,
+  "qualification": "Source artifact; canonical preparation and Einstein520 configured fresh canonical fork creation journey follows",
+  "canonical_prepare": "PASS existing pristine stock/95 locked offline recipe; all module/tree/syntax checks",
+  "artifact_source_trust": true,
+  "canonical_matches_generated_tree": true,
+  "root_mode_0700_and_safe_ancestry": true,
+  "qualified00c2_full_tree_unchanged": true,
+  "disposed_generated_duplicate_bytes": 0,
+  "duplicate_borrowers": [],
+  "borrower_scan_permission_gaps": [
+    1786010,
+    1786012,
+    3699396
+  ],
+  "acceptance": "Artifact ready; Einstein owns fresh configured canonical fork creation, optional compaction and next answer. No existing session retrospectively authenticated. No public journal carry performed."
+}

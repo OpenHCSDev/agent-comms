@@ -1,0 +1,280 @@
+{
+  "baseline": "bf84d3c8ee7e427ca3146d9ffad79818a79c25b7",
+  "roots": {
+    "src": 311,
+    "tests": 357,
+    "tools": 53
+  },
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 26,
+      "syntax": "FunctionDef",
+      "term": "verify_continued_private_session"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 45,
+      "syntax": "Attribute",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 57,
+      "syntax": "FunctionDef",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 322,
+      "syntax": "FunctionDef",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 528,
+      "syntax": "FunctionDef",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 325,
+      "syntax": "Attribute",
+      "term": "recorded_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 535,
+      "syntax": "Attribute",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 325,
+      "syntax": "Name",
+      "term": "NativeForkCreation"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 329,
+      "syntax": "Attribute",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 534,
+      "syntax": "Attribute",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 95,
+      "syntax": "ClassDef",
+      "term": "SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 374,
+      "syntax": "ClassDef",
+      "term": "NativeForkCreation"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 111,
+      "syntax": "Name",
+      "term": "SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 169,
+      "syntax": "FunctionDef",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 338,
+      "syntax": "Name",
+      "term": "SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 345,
+      "syntax": "Name",
+      "term": "SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 374,
+      "syntax": "Name",
+      "term": "SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 394,
+      "syntax": "FunctionDef",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 408,
+      "syntax": "FunctionDef",
+      "term": "recorded_prefix"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 409,
+      "syntax": "Attribute",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 77,
+      "syntax": "FunctionDef",
+      "term": "require_source_coverage"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 55,
+      "syntax": "Name",
+      "term": "ForkSessionHelper"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 58,
+      "syntax": "Name",
+      "term": "SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 63,
+      "syntax": "Attribute",
+      "term": "covered_prefix"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 114,
+      "syntax": "Name",
+      "term": "SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 118,
+      "syntax": "Name",
+      "term": "verify_continued_private_session"
+    },
+    {
+      "path": "src/agent_comms/compaction_private_inputs.py",
+      "line": 164,
+      "syntax": "Name",
+      "term": "SessionJournalHistory"
+    },
+    {
+      "path": "src/agent_comms/thread_management.py",
+      "line": 535,
+      "syntax": "Name",
+      "term": "fork_native_session"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 15,
+      "syntax": "ClassDef",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 21,
+      "syntax": "ClassDef",
+      "term": "ForkSessionHelper"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 27,
+      "syntax": "FunctionDef",
+      "term": "fork_native_session"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 23,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 24,
+      "syntax": "Name",
+      "term": "NativeForkCreation"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 18,
+      "syntax": "Name",
+      "term": "NativeForkCreation"
+    },
+    {
+      "path": "src/agent_comms/native_fork.py",
+      "line": 38,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 112,
+      "syntax": "Attribute",
+      "term": "require_source_coverage"
+    },
+    {
+      "path": "tests/test_native_context_inspection.py",
+      "line": 142,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 62,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "tests/compaction_source_successor_installed_journey.py",
+      "line": 58,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "tests/selected_summary_recovery_installed_journey.py",
+      "line": 91,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "tests/native_context_budget_installed_journey.py",
+      "line": 126,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "tests/shared_bus_restart_native.py",
+      "line": 138,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "tests/real_native_compaction_installed_pilot.py",
+      "line": 81,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    },
+    {
+      "path": "tests/turn_context_installed_journey.py",
+      "line": 91,
+      "syntax": "Name",
+      "term": "ForkSessionRequest"
+    }
+  ],
+  "limitations": [
+    "Python spelling/annotation mapping; native callback and runtime subclass resolution reviewed separately. All native fork helper source consumers were read; generated/native modules are not claimed parsed by Python AST."
+  ],
+  "native_producer": "stack/native-session-storage.patch: SessionManager.forkFrom existing source/child lock and fsync scope",
+  "native_boundary": "src/agent_comms/_pi_helpers/fork_session.mjs: original creation record with declaration-derived FieldCodec family tag"
+}

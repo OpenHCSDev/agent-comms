@@ -1,0 +1,1 @@
+{"preparedNative":"/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-ad533a9f08581561/node_modules/@earendil-works/pi-coding-agent","cases":[{"sourceBytes":27,"calls":1,"budget":4096,"progressEvents":2,"streamedChunks":1,"elapsedMs":32},{"sourceBytes":765000,"calls":3,"budget":4096,"progressEvents":6,"streamedChunks":3,"elapsedMs":71}]}
