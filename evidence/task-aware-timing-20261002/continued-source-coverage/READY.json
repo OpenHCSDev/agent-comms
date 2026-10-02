@@ -1,6 +1,6 @@
 {
-  "state": "Ready S1 optional authored-task implementation; not default activated",
-  "source": "96ab15203a24494ad75dccd0e25f4bb05181b87a",
+  "state": "Ready S1 implementation and joined empty-table carry; not public activated",
+  "source": "170af22c67d0feb69de5131108bdcb6efdd6c092",
   "integrated_main": "cca41ab5",
   "tested_installed_core": "058b72ed",
   "native_manifest": "9f12ddf4e22d6d7a14074eb2ec22ba2f7ab376faa9a1f3b2320a0caf7d7ae3a2",
@@ -52,12 +52,23 @@
     "19\t3\tstack/native-session-storage.patch",
     "2\t2\tstack/pi-native.sha256"
   ],
-  "remaining_activation_dependency": "Matched native9f12 and existing stopped declaration-derived EMPTY new journal table carry. Mendel owns carry; ordinary537 release remains independent.",
+  "remaining_activation_dependency": "Parent receiving9f12 cohort and actual stopped public declaration-derived carry. Source/operator and exact installed read accepted on preserved stopped private copy; no further configured/provider acceptance repeat required.",
   "remaining_plan_scope": "S3 cache and S4 comparative benefit/default activation remain unfinished, not claimed by this S1 checkpoint.",
-  "main_integration_risk": "537 replaced direct SQLite read lifetimes with original CoordinationStore.observing; cut/fork coverage and UNKNOWN decisions unchanged. Exact joined installed source/native trust passed. Existing empty-table carry and its installed read remain the activation dependency; no repeated provider journey.",
+  "main_integration_risk": "537 canonical observing resource integrated. Joined outside-src carry changes no installed production/native bytes versus qualified96ab wheel. Exact installed retained_history consumes all six journal table families and preserves all old records/UNKNOWN. Public stopped custody and publication remain parent-owned.",
   "excluded_native_test_numstat": [
     "26\t4\tstack/test-native-compaction-progress.mjs"
   ],
   "installed_joined_core": "96ab15203a24494ad75dccd0e25f4bb05181b87a",
-  "installed_joined_proof": "evidence/task-aware-timing-20261002/continued-source-coverage/main537-installed-source.json"
+  "installed_joined_proof": "evidence/task-aware-timing-20261002/continued-source-coverage/main537-installed-source.json",
+  "joined_carry_source": "ebb7ca44",
+  "joined_carry_receipt": "evidence/native-fork-declaration-carry520-20261002/receipt.json",
+  "joined_carry_installed_read": "evidence/task-aware-timing-20261002/continued-source-coverage/joined-carry-installed-read.json",
+  "joined_carry_created_table": "native_fork_creation",
+  "joined_carry_new_creation_rows": 0,
+  "joined_carry_old_rows_and_rowids_unchanged": true,
+  "joined_carry_old_proof_and_source_bytes_unchanged": true,
+  "carry_operator_additions": 65,
+  "carry_operator_deletions": 6,
+  "carry_control_additions": 23,
+  "carry_control_deletions": 8
 }

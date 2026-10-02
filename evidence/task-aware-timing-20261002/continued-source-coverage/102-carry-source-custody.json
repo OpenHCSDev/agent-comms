@@ -1,0 +1,501 @@
+{
+  "root": "/home/ts/wt/a520s102",
+  "source_receipt": "/home/ts/wt/a520s102/receipt.json",
+  "source_python": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-task-aware-timing02-20261002/bin/python",
+  "original_all_owned_workers_retired": true,
+  "checked_current_uid": 1000,
+  "checked_processes": 212,
+  "current_owned_open_sql_fds": [],
+  "owned_proc_read_omissions": [
+    {
+      "pid": 68488,
+      "fd": "directory"
+    },
+    {
+      "pid": 216738,
+      "fd": "directory"
+    },
+    {
+      "pid": 1561676,
+      "fd": "directory"
+    },
+    {
+      "pid": 1786010,
+      "fd": "0"
+    },
+    {
+      "pid": 1786010,
+      "fd": "1"
+    },
+    {
+      "pid": 1786010,
+      "fd": "2"
+    },
+    {
+      "pid": 1786010,
+      "fd": "3"
+    },
+    {
+      "pid": 1786010,
+      "fd": "4"
+    },
+    {
+      "pid": 1786010,
+      "fd": "5"
+    },
+    {
+      "pid": 1786010,
+      "fd": "6"
+    },
+    {
+      "pid": 1786010,
+      "fd": "7"
+    },
+    {
+      "pid": 1786010,
+      "fd": "8"
+    },
+    {
+      "pid": 1786010,
+      "fd": "9"
+    },
+    {
+      "pid": 1786010,
+      "fd": "11"
+    },
+    {
+      "pid": 1786010,
+      "fd": "12"
+    },
+    {
+      "pid": 1786010,
+      "fd": "13"
+    },
+    {
+      "pid": 1786010,
+      "fd": "15"
+    },
+    {
+      "pid": 1786010,
+      "fd": "16"
+    },
+    {
+      "pid": 1786010,
+      "fd": "17"
+    },
+    {
+      "pid": 1786010,
+      "fd": "18"
+    },
+    {
+      "pid": 1786010,
+      "fd": "19"
+    },
+    {
+      "pid": 1786010,
+      "fd": "20"
+    },
+    {
+      "pid": 1786010,
+      "fd": "21"
+    },
+    {
+      "pid": 1786010,
+      "fd": "22"
+    },
+    {
+      "pid": 1786010,
+      "fd": "23"
+    },
+    {
+      "pid": 1786010,
+      "fd": "24"
+    },
+    {
+      "pid": 1786010,
+      "fd": "25"
+    },
+    {
+      "pid": 1786010,
+      "fd": "26"
+    },
+    {
+      "pid": 1786010,
+      "fd": "27"
+    },
+    {
+      "pid": 1786010,
+      "fd": "28"
+    },
+    {
+      "pid": 1786010,
+      "fd": "29"
+    },
+    {
+      "pid": 1786010,
+      "fd": "30"
+    },
+    {
+      "pid": 1786010,
+      "fd": "31"
+    },
+    {
+      "pid": 1786010,
+      "fd": "32"
+    },
+    {
+      "pid": 1786010,
+      "fd": "33"
+    },
+    {
+      "pid": 1786010,
+      "fd": "34"
+    },
+    {
+      "pid": 1786010,
+      "fd": "35"
+    },
+    {
+      "pid": 1786010,
+      "fd": "36"
+    },
+    {
+      "pid": 1786010,
+      "fd": "37"
+    },
+    {
+      "pid": 1786010,
+      "fd": "38"
+    },
+    {
+      "pid": 1786010,
+      "fd": "40"
+    },
+    {
+      "pid": 1786010,
+      "fd": "41"
+    },
+    {
+      "pid": 1786010,
+      "fd": "42"
+    },
+    {
+      "pid": 1786010,
+      "fd": "44"
+    },
+    {
+      "pid": 1786010,
+      "fd": "45"
+    },
+    {
+      "pid": 1786010,
+      "fd": "46"
+    },
+    {
+      "pid": 1786010,
+      "fd": "47"
+    },
+    {
+      "pid": 1786010,
+      "fd": "48"
+    },
+    {
+      "pid": 1786010,
+      "fd": "49"
+    },
+    {
+      "pid": 1786010,
+      "fd": "50"
+    },
+    {
+      "pid": 1786010,
+      "fd": "51"
+    },
+    {
+      "pid": 1786010,
+      "fd": "52"
+    },
+    {
+      "pid": 1786010,
+      "fd": "53"
+    },
+    {
+      "pid": 1786010,
+      "fd": "54"
+    },
+    {
+      "pid": 1786010,
+      "fd": "55"
+    },
+    {
+      "pid": 1786010,
+      "fd": "56"
+    },
+    {
+      "pid": 1786010,
+      "fd": "57"
+    },
+    {
+      "pid": 1786010,
+      "fd": "58"
+    },
+    {
+      "pid": 1786010,
+      "fd": "61"
+    },
+    {
+      "pid": 1786010,
+      "fd": "62"
+    },
+    {
+      "pid": 1786010,
+      "fd": "63"
+    },
+    {
+      "pid": 1786010,
+      "fd": "64"
+    },
+    {
+      "pid": 1786010,
+      "fd": "65"
+    },
+    {
+      "pid": 1786010,
+      "fd": "66"
+    },
+    {
+      "pid": 1786010,
+      "fd": "67"
+    },
+    {
+      "pid": 1786010,
+      "fd": "68"
+    },
+    {
+      "pid": 1786010,
+      "fd": "69"
+    },
+    {
+      "pid": 1786010,
+      "fd": "70"
+    },
+    {
+      "pid": 1786010,
+      "fd": "71"
+    },
+    {
+      "pid": 1786010,
+      "fd": "72"
+    },
+    {
+      "pid": 1786010,
+      "fd": "73"
+    },
+    {
+      "pid": 1786010,
+      "fd": "74"
+    },
+    {
+      "pid": 1786010,
+      "fd": "75"
+    },
+    {
+      "pid": 1786010,
+      "fd": "76"
+    },
+    {
+      "pid": 1786010,
+      "fd": "77"
+    },
+    {
+      "pid": 1786010,
+      "fd": "78"
+    },
+    {
+      "pid": 1786010,
+      "fd": "79"
+    },
+    {
+      "pid": 1786010,
+      "fd": "80"
+    },
+    {
+      "pid": 1786010,
+      "fd": "81"
+    },
+    {
+      "pid": 1786010,
+      "fd": "82"
+    },
+    {
+      "pid": 1786010,
+      "fd": "83"
+    },
+    {
+      "pid": 1786010,
+      "fd": "84"
+    },
+    {
+      "pid": 1786010,
+      "fd": "85"
+    },
+    {
+      "pid": 1786010,
+      "fd": "86"
+    },
+    {
+      "pid": 1786010,
+      "fd": "87"
+    },
+    {
+      "pid": 1786010,
+      "fd": "88"
+    },
+    {
+      "pid": 1786010,
+      "fd": "89"
+    },
+    {
+      "pid": 1786010,
+      "fd": "91"
+    },
+    {
+      "pid": 1786010,
+      "fd": "92"
+    },
+    {
+      "pid": 1786010,
+      "fd": "93"
+    },
+    {
+      "pid": 1786010,
+      "fd": "94"
+    },
+    {
+      "pid": 1786010,
+      "fd": "95"
+    },
+    {
+      "pid": 1786010,
+      "fd": "96"
+    },
+    {
+      "pid": 1786010,
+      "fd": "97"
+    },
+    {
+      "pid": 1786010,
+      "fd": "99"
+    },
+    {
+      "pid": 1786010,
+      "fd": "100"
+    },
+    {
+      "pid": 1786010,
+      "fd": "101"
+    },
+    {
+      "pid": 1786010,
+      "fd": "103"
+    },
+    {
+      "pid": 1786010,
+      "fd": "104"
+    },
+    {
+      "pid": 1786010,
+      "fd": "105"
+    },
+    {
+      "pid": 1786010,
+      "fd": "106"
+    },
+    {
+      "pid": 1786010,
+      "fd": "107"
+    },
+    {
+      "pid": 1786010,
+      "fd": "108"
+    },
+    {
+      "pid": 1786010,
+      "fd": "109"
+    },
+    {
+      "pid": 1786010,
+      "fd": "110"
+    },
+    {
+      "pid": 1786010,
+      "fd": "112"
+    },
+    {
+      "pid": 1786010,
+      "fd": "113"
+    },
+    {
+      "pid": 1786010,
+      "fd": "116"
+    },
+    {
+      "pid": 1786010,
+      "fd": "117"
+    },
+    {
+      "pid": 1786010,
+      "fd": "119"
+    },
+    {
+      "pid": 1786010,
+      "fd": "159"
+    },
+    {
+      "pid": 1786010,
+      "fd": "160"
+    },
+    {
+      "pid": 1786010,
+      "fd": "162"
+    },
+    {
+      "pid": 1786012,
+      "fd": "directory"
+    },
+    {
+      "pid": 1953373,
+      "fd": "directory"
+    }
+  ],
+  "other_uid_scope": "not readable/not fixture-owned; not claimed absent",
+  "checked_at_unix": 1790960959.8978822,
+  "original_sha256": {
+    "coordination.sqlite3": "b27d759689b57f5f790814342502d8897c001f3c77bdda53052727e22b30ded6",
+    "native_prompt_bindings.sqlite3": "5b6be7c96232c15e6e2ea1982f41b794c394d01db9af660778ffd485e7ba0329",
+    "compaction-commits.sqlite3": "eacffa12a4f33de6a0d73a754eec483006188b89524e14f35932eefe8eadcc1b"
+  },
+  "public_writes": 0,
+  "providers": 0,
+  "source_mutations": 0,
+  "owned_proc_read_omission_names": {
+    "68488": "codex",
+    "216738": "codex",
+    "1561676": "codex",
+    "1786010": "systemd",
+    "1786012": "(sd-pam)",
+    "1953373": "codex"
+  },
+  "current_original_runtime_or_fixture_cmd_refs": [
+    {
+      "pid": 286364,
+      "command": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-fork-carry520-installed-20261002/bin/python tools/cutover/native_schema_carry_controls.py /home/ts/.cache/agent-scratch/mendel-native-fork-carry538-20261002 --source-python /home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-task-aware-timing02-20261002/bin/python --stopped-original /home/ts/.cache/agent-scratch/mendel-native-fork-carry538-20261002/root "
+    },
+    {
+      "pid": 286388,
+      "command": "/home/ts/wt/comms-retained-human-main-20261001/.artifacts/runtime-task-aware-timing02-20261002/bin/python /home/ts/wt/comms-goal-ledger-schema-carry-20261002/tools/cutover/native_schema_carry.py --declaration "
+    }
+  ],
+  "checked_owned_cmdlines": 214,
+  "owned_cmdline_omissions": []
+}

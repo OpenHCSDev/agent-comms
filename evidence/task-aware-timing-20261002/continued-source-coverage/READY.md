@@ -13,3 +13,11 @@ This closes S1 implementation and affected configured native/ACP acceptance. It 
 ## Normal main537 integration
 
 Published96ab1520 normally merges main537. The continued-source and journal readers use the existing CoordinationStore observation lifetime; original fork/cut coverage and uncertain-input decisions remain intact. Native9f12 is unchanged. The exact normal wheel/SDK projection passed source-resource equality (342 resources), dependency checking and full native trust. No prompt or provider call was repeated. Mendel owns the declaration-derived EMPTY NativeForkCreation carry; its joined installed read remains required before public activation. Optional receiving remains off.
+
+## Joined empty-table carry complete
+
+Normally integrated Mendel538 (`ebb7ca44`). Existing NativeSchemaDeclaration owns additive journal carry; NativeSchemaCarryPlan and both controls use the same relation. The copied original102 stores passed stopped publication, preimage/candidate custody refusals and exact row/rowid preservation. Only `native_fork_creation` was added, with zero rows. No historical fork was enrolled.
+
+The exact installed96ab wheel then read the carried journal through CompactionJournal.retained_history in0.0415s, decoding all six declared table families. All five old tables, source/proof bytes and uncertain dispositions match their retained originals; original, preimage and carried files were unchanged by this read. Both joined tool merges change zero production/native bytes; existing342-resource/SDK/native qualification remains exact. No repeat configured or provider journey.
+
+The source is merge-ready. Parent receiving9f12 and actual stopped public publication remain separate; optional timing stays OFF. The existing configured216.596s receipt remains the actual S1 native/ACP acceptance. S3/S4 and public/UI performance are not claimed.
