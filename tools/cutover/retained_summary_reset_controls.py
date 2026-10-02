@@ -12,7 +12,7 @@ from agent_comms.compaction_journal import CompactionJournal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.active_route import ActiveRoute
 from agent_comms.field_codec import FieldCodec
-from retained_summary_reset import ResetCompactionPolicy, PreserveCompactionPolicy, RuntimeCompactionPolicy
+from retained_summary_reset import RuntimeCompactionReset
 from publish_retained_summary import ReviewedArtifact, ReviewedRetainedSummaryCohort
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -48,11 +48,11 @@ inputs.record('bus:160', seq=160, owner='fixture', admission=1,
 private_file(root / 'native.jsonl', b'original sealed native bytes\n')
 private_file(root / 'native.jsonl.input-proof', b'original proof bytes\n')
 protected = {str(path): sha(path) for path in (root / inputs.filename, root / 'native.jsonl', root / 'native.jsonl.input-proof')}
-images = {path.name: path.read_bytes() for path in ResetCompactionPolicy(root).paths}
+images = {path.name: path.read_bytes() for path in RuntimeCompactionReset(root).paths}
 before = fds()
-receipt = ResetCompactionPolicy(root).apply(root / 'preimages')
+receipt = RuntimeCompactionReset(root).retain_and_remove(root / 'preimages')
 assert fds() == before
-assert all(not path.exists() for path in ResetCompactionPolicy(root).paths)
+assert all(not path.exists() for path in RuntimeCompactionReset(root).paths)
 assert all((root / 'preimages' / name).read_bytes() == body for name, body in images.items())
 assert all(path.stat().st_mode & 0o777 == 0o600 for path in (root / 'preimages').iterdir())
 assert protected == {path: sha(Path(path)) for path in protected}
@@ -74,10 +74,10 @@ for case in ('wrong-mode', 'hardlink', 'symlink', 'orphan'):
     elif case == 'symlink':
         companion.rename(root / 'original-companion')
         companion.symlink_to(root / 'original-companion')
-    members = {path: path.read_bytes() for path in ResetCompactionPolicy(root).paths if path.exists()}
+    members = {path: path.read_bytes() for path in RuntimeCompactionReset(root).paths if path.exists()}
     before = fds()
     try:
-        ResetCompactionPolicy(root).apply(root / 'preimages')
+        RuntimeCompactionReset(root).retain_and_remove(root / 'preimages')
     except (RuntimeError, ValueError, OSError):
         pass
     else:
@@ -86,30 +86,10 @@ for case in ('wrong-mode', 'hardlink', 'symlink', 'orphan'):
     assert all(path.read_bytes() == body for path, body in members.items())
     checks.append(case + ': refuses before any original removal; descriptors closed')
 
-root = base / 'preserve'
-root.mkdir(mode=0o700)
-CompactionJournal(root / 'compaction-commits.sqlite3')
-private_file(root / 'native.jsonl', b'untouched native bytes\n')
-originals = {path: (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns)
-             for path in root.iterdir()}
-policy = PreserveCompactionPolicy(root)
-assert FieldCodec.decode(RuntimeCompactionPolicy, FieldCodec.encode(policy)) == policy
-before = fds()
-assert policy.protect(set(originals), root / 'unused-preimages') == []
-preserved = policy.apply(root / 'unused-runtime-preimages')
-assert preserved['classification'] == 'runtime/preserve'
-assert preserved['retired'] == []
-assert not (root / 'unused-preimages').exists()
-assert not (root / 'unused-runtime-preimages').exists()
-assert originals == {path: (path.read_bytes(), path.stat().st_ino, path.stat().st_mtime_ns)
-                     for path in root.iterdir()}
-assert fds() == before
-checks.append('preserve policy keeps authentic runtime/native bytes and inodes unchanged, adds no copies, and closes descriptors')
-
 root = base / 'complete'
 before = fds()
 try:
-    ResetCompactionPolicy(root).apply(root / 'preimages')
+    RuntimeCompactionReset(root).retain_and_remove(root / 'preimages')
 except FileExistsError:
     pass
 else:
