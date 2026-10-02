@@ -1,0 +1,139 @@
+{
+  "state": "private-file-custody-controls-passed",
+  "checks": [
+    "authentic SQLite journal plus three named companions retained before removal; original UNKNOWN/native/proof bytes unchanged; descriptors closed",
+    "wrong-mode: refuses before any original removal; descriptors closed",
+    "hardlink: refuses before any original removal; descriptors closed",
+    "symlink: refuses before any original removal; descriptors closed",
+    "orphan: refuses before any original removal; descriptors closed",
+    "existing preimages refuse reuse of the original attempt",
+    "reviewed cohort uses original FieldCodec/PathText roundtrip; no format alias or raw fallback"
+  ],
+  "runtime_reset": {
+    "classification": "runtime/reset",
+    "original_files": [
+      {
+        "path": "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/compaction-commits.sqlite3",
+        "sha256": "60eb401f3fed11f5dd1ac993c15282558b17f844ec3068950edfc7af8e7cb3d4",
+        "size": 57344,
+        "mode": 33152,
+        "uid": 1000,
+        "gid": 1000,
+        "revision": {
+          "identity": {
+            "device": 2084,
+            "inode": 16790293
+          },
+          "size": 57344,
+          "mtime_ns": 1790866032362179828,
+          "ctime_ns": 1790866032362179828
+        }
+      },
+      {
+        "path": "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/compaction-commits.sqlite3-journal",
+        "sha256": "bffb2a683f75c315898be249ea9e549ac9ad270d6de3a50636a0be46348fa492",
+        "size": 35,
+        "mode": 33152,
+        "uid": 1000,
+        "gid": 1000,
+        "revision": {
+          "identity": {
+            "device": 2084,
+            "inode": 16790294
+          },
+          "size": 35,
+          "mtime_ns": 1790866032366179900,
+          "ctime_ns": 1790866032366179900
+        }
+      },
+      {
+        "path": "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/compaction-commits.sqlite3-wal",
+        "sha256": "fe3b9b6294a238020f4a779c83207669261dc05f20255fb196a188ec85003dda",
+        "size": 31,
+        "mode": 33152,
+        "uid": 1000,
+        "gid": 1000,
+        "revision": {
+          "identity": {
+            "device": 2084,
+            "inode": 16790295
+          },
+          "size": 31,
+          "mtime_ns": 1790866032368295805,
+          "ctime_ns": 1790866032368295805
+        }
+      },
+      {
+        "path": "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/compaction-commits.sqlite3-shm",
+        "sha256": "c78fa2d00c804c57d204589ab5daa88c1a3891f19f4d61809f77f6962eede370",
+        "size": 31,
+        "mode": 33152,
+        "uid": 1000,
+        "gid": 1000,
+        "revision": {
+          "identity": {
+            "device": 2084,
+            "inode": 16790296
+          },
+          "size": 31,
+          "mtime_ns": 1790866032369682171,
+          "ctime_ns": 1790866032369682171
+        }
+      }
+    ],
+    "retired": [
+      "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/compaction-commits.sqlite3",
+      "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/compaction-commits.sqlite3-journal",
+      "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/compaction-commits.sqlite3-wal",
+      "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/compaction-commits.sqlite3-shm"
+    ],
+    "original_revisions": [
+      {
+        "identity": {
+          "device": 2084,
+          "inode": 16790293
+        },
+        "size": 57344,
+        "mtime_ns": 1790866032362179828,
+        "ctime_ns": 1790866032362179828
+      },
+      {
+        "identity": {
+          "device": 2084,
+          "inode": 16790294
+        },
+        "size": 35,
+        "mtime_ns": 1790866032366179900,
+        "ctime_ns": 1790866032366179900
+      },
+      {
+        "identity": {
+          "device": 2084,
+          "inode": 16790295
+        },
+        "size": 31,
+        "mtime_ns": 1790866032368295805,
+        "ctime_ns": 1790866032368295805
+      },
+      {
+        "identity": {
+          "device": 2084,
+          "inode": 16790296
+        },
+        "size": 31,
+        "mtime_ns": 1790866032369682171,
+        "ctime_ns": 1790866032369682171
+      }
+    ]
+  },
+  "protected_originals": {
+    "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/input_dispositions.json": "29892be1eaebfd8ac630ffb434761cb8cb62741d8f94092d97544e63a8e76c03",
+    "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/native.jsonl": "14f308ab5a4691283d7631f87b173d36aa62aafea9e4bab26ba4b5be6468f374",
+    "/home/ts/wt/comms-retained-summary-cutover-20261001/.observations/runtime-reset02/complete/native.jsonl.input-proof": "cb0711be76b5e57a4c1491329119ba3e4dfa69a358749cc0be360dd4a5e901e5"
+  },
+  "public_actions": 0,
+  "provider_calls": 0,
+  "owner_starts": 0,
+  "prompt_count": 0,
+  "strength": "runtime resource controls; not whole cutover or public UI acceptance"
+}

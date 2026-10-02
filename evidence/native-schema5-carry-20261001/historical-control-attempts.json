@@ -1,0 +1,14 @@
+{
+  "scope": "owned fixture/setup attempts only; directories retained; no public/native/provider effects",
+  "attempts": {
+    "01": "Original producer fixture import lacked pytest dependency; installed original package unmodified.",
+    "02": "Mentioned channel selected FULL when fixture requested TRIAGE; fixed fixture source.",
+    "03": "FieldCodec rejected bare dict evidence annotation; corrected to dict[str, Any].",
+    "05": "Original4 fixture tried target490-only collector import; corrected to original WakeAssignment.select."
+  },
+  "completed": [
+    "04 singleton FULL",
+    "06 two FULL execution links",
+    "07 two FULL links and root RuntimeInstallation FieldCodec"
+  ]
+}
