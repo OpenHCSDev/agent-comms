@@ -1,0 +1,42 @@
+{
+  "classification": "private-operator-control-from-running-source-inventory-not-stopped-carry",
+  "inventory_sha256": "87dd3ae4e688ac769526ce41e333b46b2d75c7c097be4c29fe94b456e1f87e4c",
+  "candidate_sha256": "bf4b36f0900e75873f886106ab74e7f81976f5ed1edf54f5c8c50bac11c3a04b",
+  "original_release": [
+    9,
+    3,
+    3,
+    5
+  ],
+  "target_release": [
+    9,
+    3,
+    3,
+    6
+  ],
+  "relation": {
+    "rows": {
+      "operations": 3,
+      "selected_summary_attempts": 4,
+      "publications": 3,
+      "private_raw_inputs": 394,
+      "enrolled_private_sessions": 0
+    },
+    "unchanged_tables_sha256": "c1238601588bb0dd4d4cd22cc04b7814042f7e3d3b856296fe0a54546b0f6e0a",
+    "original_selected_rows_sha256": "d34c3424ddb72315698fee90b06ceac7280c4d55eb3770943264931a56fa25fd"
+  },
+  "carry": {
+    "attempts": 4,
+    "created_empty_tables": [
+      "native_fork_creation"
+    ],
+    "original_selected_rows_sha256": "eae496d4d866579deeb34f8b6aa452186deb64d1fbd5ce99d8270a8ff2c03b83",
+    "unchanged_tables_sha256": "c1238601588bb0dd4d4cd22cc04b7814042f7e3d3b856296fe0a54546b0f6e0a",
+    "original_source_bytes_preserved": true,
+    "admission_receipts_minted": 0,
+    "input_replays": 0
+  },
+  "provider_calls": 0,
+  "native_inputs": 0,
+  "owner_signals": 0
+}
