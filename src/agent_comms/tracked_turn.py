@@ -144,16 +144,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         startup: NativeStartupAdmission,
         selected_tool_mode,
         observe_event,
-        session: SelectedSession,
     ):
         super().__init__(
             launch,
             command.message,
-            session_file=launch.session_file,
             model_wait_timeout=model_wait_timeout,
             startup=startup,
         )
-        self.selected_session = session
         self.command = command
         self.provider, self.model = provider, model
         self.prompt_send_boundary = prompt_send_boundary
@@ -211,13 +208,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             model_wait_timeout=model_wait_timeout,
             prompt_send_boundary=prompt_send_boundary,
             maintenance_root=maintenance_root,
-            startup=NativeStartupAdmission.for_launch(
-                launch, root=maintenance_root, fresh_selected=session.startup(),
-                prompt_send_boundary=prompt_send_boundary,
-            ),
+            startup=session.startup_admission(launch, maintenance_root, prompt_send_boundary),
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
-            session=session,
         )
         return await turn.complete()
 
@@ -228,7 +221,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             await self.open_tools(custody)
             self.native = await self.native_session.open(
                 self.launch,
-                self.session_file,
                 reuse=False,
                 require_input_id=True,
                 startup=self.startup,
@@ -263,7 +255,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     async def open_tools(self, custody: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:
             self.tool_socket = self.selected_tool_mode.socket(
-                self.launch.session_dir, os.urandom(32).hex()
+                self.launch.session.directory, os.urandom(32).hex()
             )
             custody.push_async_callback(self.tool_socket.close)
             await self.tool_socket.start()
@@ -332,7 +324,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         state = observed.state
         if observed.identity is None:
             raise NativePiUnavailable("Native Pi omitted its private session identity")
-        self.active_session_file = self.selected_session.attest(observed.identity)
+        self.active_session_file = self.launch.session.attest(observed.identity)
         self.native.attestation = observed
         self.startup.release()
         self.startup.attest(state)

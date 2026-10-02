@@ -387,7 +387,6 @@ class OwnedTurn:
                 await self.runner.effects.publish_pending_compaction(
                     self.session_id, self.thread_name
                 )
-        self.session_file = self.thread.session_file
         self.image_options: dict[str, Any] = {"images": self.images} if self.images else {}
 
     async def stream(self):
@@ -412,7 +411,7 @@ class OwnedTurn:
             self.env_extra,
             **self.image_options,
             context_contributions=rendered.contributions,
-            session_file=self.session_file,
+            session_file=self.thread.session_file,
             steering_queue=self.backend_inbox,
             finish_event=self.finish_event,
             send_boundary=admission,

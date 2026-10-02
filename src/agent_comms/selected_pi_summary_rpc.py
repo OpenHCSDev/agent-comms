@@ -158,7 +158,7 @@ class SelectedSummarySlot:
                     raise SelectedChildUnknown("Selected source changed during summary")
                 result.settle(journal)
             except BaseException as error:
-                persistent.require_reopen(session_file)
+                persistent.require_reopen(witness)
                 # Keep the child marked unusable even if cancellation interrupts
                 # its reap. PersistentPiSession owns the shielded close task.
                 try:

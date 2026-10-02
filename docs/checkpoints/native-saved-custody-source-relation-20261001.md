@@ -304,3 +304,55 @@ Remaining concrete closure obligations:
 4. Only after the coherent source closure, batch affected sanity and run the
    actual configured ordinary saved-fork/channel/DM/compaction/cancel/continuation
    journey. No old input or uncertain provider operation is replayed.
+
+## Receiving constructor and reopen implementation
+
+The next source increment removes the independently supplied selected-file and
+directory fields from `NativePiRpcLaunch`, the duplicate selection from
+`TrackedTurnSession`, and selected-file/fork fields from `TurnSession`. A launch
+retains the ORIGINAL `SelectedSession` object, not a second identity or reader.
+`PersistentPiSession.open`, tool-resource acquisition, startup scheduling,
+ordinary `stream_agent_events`, tracked input, and `NativeSessionPreparation`
+consume that object. Saved managed launch now uses the same original native
+reopen helper and expected-ID attestation as selected saved continuation. A
+generated session still receives identity from native, not a guessed file name.
+
+The existing `SelectedSession` leaves supply pending attestation and startup
+behavior. `FirstSelectedSession` alone supplies the original minted startup
+capability; the separate `fresh_selected`, file equality reconstruction and dead
+`startup()` projection are deleted. The public native CLI consumes the shared
+bootstrap algorithm directly; it no longer constructs an RPC object with an
+invented unselected-session field just to execute Node.
+
+Reopen custody now retains ONE original `NativeSessionIdentity`, deleting its
+separate file and nullable session-ID fields. Retained/borrowed states consume
+the original observed identity. Every production poison/external-write caller
+passes that original value: selected policy observation, selected summary RPC,
+and `compact_owner_once`. Managed selection revalidates the original source via
+the existing native reopen helper, and the successor compares that selection
+against its original identity before attestation; it does not repeat source
+selection by parsing the same file again.
+
+Source-selection CLI options are declared on the existing `NativeArgument`
+family. Their shared capability rejects a second configured session selector in
+managed RPC; the native CLI still owns those external options unchanged. This
+closes `--session`, `--session-id`, `--session-dir`, `--fork`, `--continue/-c`,
+`--resume/-r` and `--no-session`, rather than treating them as unrelated raw
+tokens that can overwrite the captured owner selection. The unused managed
+`fork_session` flag chain is deleted; production caller search found no requester.
+Ordinary ACP fork remains `ForkSessionHelper` → original `NativeSessionIdentity`
+→ registered child source, not that alternate launch flag. The generic native
+CLI's original fork option is retained.
+
+Two unused context hook definitions (`summaryDeclineReason`, `requiresCompaction`)
+are deleted after searching the Python, native builder and fixture sources;
+there is no dormant paused policy asserted by their presence.
+
+Remaining source obligations are NOT hidden by these deletions: paused
+next-model dispatch still needs its original active writer/receive/commit owner;
+the tracked transport acquisition error boundary precedes its native failure
+handler; obsolete fixture constructors must migrate; Native6 preservation and
+the final configured ordinary workflow remain unfinished. In particular Singer's
+new socket-start failure is before native spawn, but historical NULL UNKNOWN is
+not automatically reclassified using that fact. No native/provider input, tests,
+public restart or installed runtime mutation occurred in this implementation.

@@ -36,11 +36,23 @@ class SelectedSession:
     def path(self) -> Path | None:
         return None
 
+    @property
+    def session_file(self) -> str | None:
+        """Wire projection of the original selected source, not another field."""
+        return None
+
+    def attestation(self):
+        from .native_attestation import PendingAttestation
+
+        return PendingAttestation()
+
+    def startup_admission(self, launch, root, boundary):
+        from .native_startup import NativeStartupAdmission
+
+        return NativeStartupAdmission.for_launch(launch, root=root)
+
     def default_action(self) -> SelectedAction:
         return CodingSelectedAction()
-
-    def startup(self) -> FreshPrivateSession | None:
-        return None
 
     def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
         return ("--thinking", thinking_level) if thinking_level is not None else ()
@@ -155,6 +167,15 @@ class SavedSelectedSession(SelectedSession):
     def path(self) -> Path:
         return self.identity.path
 
+    @property
+    def session_file(self) -> str:
+        return self.identity.session_file
+
+    def attestation(self):
+        from .native_attestation import PendingAttestation
+
+        return PendingAttestation(self.identity)
+
     def require_launch_header(self) -> None:
         FreshPrivateSession.require_launch_header(self.path, None)
 
@@ -177,8 +198,10 @@ class FirstSelectedSession(SavedSelectedSession):
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()
 
-    def startup(self) -> FreshPrivateSession:
-        return self.creation
+    def startup_admission(self, launch, root, boundary):
+        from .native_startup import SelectedNativeStartupAdmission
+
+        return SelectedNativeStartupAdmission(root, self.creation, boundary)
 
     def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
         return (

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from .child_process import AttachedChild
 from .native_attestation import NativeAttestation, PendingAttestation, SavedSessionReopenError
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
-from .native_session_reopen import NativeSessionIdentity, validate_native_reopen
+from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ class PiSessionChild:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
 
     @classmethod
-    async def start(cls, key, expected):
+    async def start(cls, key, attestation):
         launch, _ = key
         proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=launch.env)
         assert proc.stdout is not None and proc.stderr is not None
@@ -41,7 +41,7 @@ class PiSessionChild:
             PiRpcChannel(proc.stdout),
             asyncio.create_task(cls.stderr_tail(proc.stderr)),
             key,
-            PendingAttestation(expected),
+            attestation,
         )
 
     @staticmethod
@@ -78,7 +78,7 @@ class NativeCustody(ABC):
 
     retained = False
 
-    def reuse(self, key, session_file: str | None) -> PiSessionChild | None:
+    def reuse(self, key) -> PiSessionChild | None:
         return None
 
     def idle(self) -> RetainedNative:
@@ -88,10 +88,8 @@ class NativeCustody(ABC):
         await prepare()
         return await persistent.custody.idle().inspect_context(persistent, prepare)
 
-    async def expected(
-        self, launch, session_file, require_input_id
-    ) -> NativeSessionIdentity | None:
-        return None
+    async def expected(self, launch, require_input_id) -> NativeAttestation:
+        return launch.session.attestation()
 
     def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
         return successor if successor is not None else self
@@ -99,8 +97,8 @@ class NativeCustody(ABC):
     async def closed(self) -> NativeCustody:
         return self
 
-    def reopen(self, session_file: str) -> ReopenNative:
-        return ReopenNative(session_file)
+    def reopen(self, identity: NativeSessionIdentity) -> ReopenNative:
+        return ReopenNative(identity)
 
 
 class EmptyNative(NativeCustody):
@@ -120,30 +118,23 @@ class NativeCleanupFailed(RuntimeError):
 @dataclass
 class ReopenNative(NativeCustody):
     available = False
-    session_file: str
-    session_id: str | None = None
+    identity: NativeSessionIdentity
 
-    async def expected(self, launch, session_file, require_input_id):
-        if session_file != self.session_file or not require_input_id:
+    async def expected(self, launch, require_input_id):
+        if not require_input_id:
             raise SavedSessionReopenError(
                 "Saved native session requires explicit validated reopen."
             )
         try:
-            identity = await asyncio.to_thread(
-                validate_native_reopen,
-                launch.package,
-                session_file,
-                expected_session_id=self.session_id,
-            )
+            launch.session.attest(self.identity)
         except ValueError as error:
             raise SavedSessionReopenError(
                 "Saved native session failed strict reopen validation."
             ) from error
-        return identity
+        return PendingAttestation(self.identity)
 
-    def reopen(self, session_file: str) -> ReopenNative:
-        if session_file != self.session_file:
-            raise ValueError("Idle manager belongs to a different saved session")
+    def reopen(self, identity: NativeSessionIdentity) -> ReopenNative:
+        self.identity.require_same_session(identity)
         return self
 
 
@@ -168,8 +159,8 @@ class RetiringNative(NativeCustody):
             raise
         return self.successor
 
-    def reopen(self, session_file):
-        return self.successor.reopen(session_file)
+    def reopen(self, identity):
+        return self.successor.reopen(identity)
 
 
 @dataclass
@@ -194,13 +185,10 @@ class BorrowedNative(NativeCustody):
             self.child,
         )
 
-    def reopen(self, session_file):
-        identity = self.child.attestation.identity
-        if identity is not None:
-            if identity.session_file != session_file:
-                raise ValueError("Idle manager belongs to a different saved session")
-            return ReopenNative(session_file, identity.session_id)
-        return self.successor.reopen(session_file)
+    def reopen(self, identity):
+        observed = self.child.attestation.require_identity()
+        observed.require_same_session(identity)
+        return ReopenNative(observed)
 
 
 @dataclass
@@ -234,8 +222,8 @@ class RetainedNative(NativeCustody):
             )
             return response.data.require_payload()
 
-    def reuse(self, key, session_file):
-        if self.child.key == key and self.identity.session_file == session_file and self.current:
+    def reuse(self, key):
+        if self.child.key == key and self.current:
             self.child.attestation = PendingAttestation(self.identity)
             return self.child
         return None
@@ -247,7 +235,6 @@ class RetainedNative(NativeCustody):
             self.child,
         )
 
-    def reopen(self, session_file):
-        if self.identity.session_file != session_file:
-            raise ValueError("Idle manager belongs to a different saved session")
-        return ReopenNative(session_file, self.identity.session_id)
+    def reopen(self, identity):
+        self.identity.require_same_session(identity)
+        return ReopenNative(self.identity)

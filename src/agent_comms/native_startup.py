@@ -64,13 +64,7 @@ class NativeStartupAdmission:
     @classmethod
     def for_launch(
         cls, launch: NativePiRpcLaunch, *, root: Path | None = None,
-        fresh_selected: FreshPrivateSession | None = None,
-        prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None = None,
     ) -> NativeStartupAdmission:
-        if fresh_selected is not None:
-            return SelectedNativeStartupAdmission(
-                root, fresh_selected, launch.session_file, prompt_send_boundary
-            )
         if root is not None:
             return cls(root)
         return cls(
@@ -124,7 +118,7 @@ class SelectedNativeStartupAdmission(NativeStartupAdmission):
     """Custody of one original fresh enrollment and its exact startup revision."""
 
     def __init__(
-        self, root: Path | None, fresh: FreshPrivateSession, session_file: Path | None,
+        self, root: Path | None, fresh: FreshPrivateSession,
         prompt_send_boundary: Callable[..., AbstractContextManager[None]] | None,
     ):
         from .fresh_private_session import FreshPrivateSession
@@ -136,8 +130,6 @@ class SelectedNativeStartupAdmission(NativeStartupAdmission):
 
         if type(fresh) is not FreshPrivateSession:
             raise NativePiUnavailable("Selected startup requires original fresh enrollment")
-        if session_file != fresh.path:
-            raise NativePiUnavailable("Selected startup names another fresh source")
         if root is None or prompt_send_boundary is None:
             raise NativePiUnavailable("Selected first source requires enrolled locked prewrite")
         if not ThinkingLevel.supports_selected(fresh.selected_thinking_level):

@@ -101,11 +101,10 @@ def main() -> int:
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
-    process = NativePiRpcLaunch._build(
-        cli, tuple(sys.argv[1:]), Path.cwd(), dict(os.environ),
-        Path.cwd(), None, launch.native_package,
+    argv, environment = NativePiRpcLaunch.bootstrap(
+        cli, tuple(sys.argv[1:]), Path.cwd(), dict(os.environ)
     )
-    os.execvpe(process.argv[0], list(process.argv), process.env)
+    os.execvpe(argv[0], list(argv), environment)
     return 0
 
 
@@ -392,12 +391,11 @@ class NativePiRpcLaunch:
     argv: tuple[str, ...]
     cwd: Path
     env: dict[str, str]
-    session_dir: Path
-    session_file: Path | None
+    session: SelectedSession
     package: Path
 
     @classmethod
-    def _build(cls, cli, arguments, cwd, environment, directory, saved, package):
+    def bootstrap(cls, cli, arguments, cwd, environment):
         """One bootstrap/environment algorithm after original package validation.
 
         The caller retains source-selection and input custody. This method only
@@ -421,7 +419,12 @@ class NativePiRpcLaunch:
             "--import", str(cli.with_name("agent-comms-project-bootstrap.mjs")),
             str(cli), *arguments,
         )
-        return cls(argv, cwd, env, directory, saved, package)
+        return argv, env
+
+    @classmethod
+    def _build(cls, cli, arguments, cwd, environment, session, package):
+        argv, env = cls.bootstrap(cli, arguments, cwd, environment)
+        return cls(argv, cwd, env, session, package)
 
     @classmethod
     def package_for_command(cls, command: str) -> Path:
@@ -472,7 +475,6 @@ class NativePiRpcLaunch:
         worktree: Path,
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
-        fork_session: bool = False,
     ) -> NativePiRpcLaunch:
         """Prepare managed ACP/headless execution; native receipts remain separate."""
         try:
@@ -486,10 +488,13 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
         env.update(environment or {})
-        saved = Path(session_file).absolute() if session_file else None
+        from .selected_session import SelectedSession
+
+        saved = Path(session_file).absolute() if session_file is not None else None
+        session = SelectedSession.for_launch(saved.parent if saved else cwd, saved, package)
         if saved is not None:
-            arguments += ("--fork" if fork_session else "--session", str(saved))
-        return cls._build(cli, arguments, cwd, env, saved.parent if saved else cwd, saved, package)
+            arguments += ("--session", str(session.path))
+        return cls._build(cli, arguments, cwd, env, session, package)
 
     @classmethod
     def tracked(
@@ -551,7 +556,7 @@ class NativePiRpcLaunch:
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
         env = session.launch_environment(agent_dir, environment)
-        return cls._build(cli, tuple(arguments), worktree, env, session_dir, session_file, package)
+        return cls._build(cli, tuple(arguments), worktree, env, session, package)
 
 
 def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

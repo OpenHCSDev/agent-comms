@@ -94,20 +94,20 @@ class PersistentPiSession:
         return self.custody.available
 
     async def open(
-        self, launch, session_file, *, reuse, require_input_id, startup, finish_event, watchdog
+        self, launch, *, reuse, require_input_id, startup, finish_event, watchdog
     ) -> PiSessionChild:
         key = (launch, auth_revision())
-        child = self.custody.reuse(key, session_file) if reuse else None
+        child = self.custody.reuse(key) if reuse else None
         reused = child is not None
         if child is None:
             await self.close()
-            expected = await self.custody.expected(launch, session_file, require_input_id)
+            attestation = await self.custody.expected(launch, require_input_id)
             await startup.acquire(finish_event)
-            watchdog.launching(asyncio.get_running_loop().time, session_file)
-            child = await PiSessionChild.start(key, expected)
+            watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
+            child = await PiSessionChild.start(key, attestation)
             self.custody = BorrowedNative(child, self.custody)
         else:
-            watchdog.launching(asyncio.get_running_loop().time, session_file)
+            watchdog.launching(asyncio.get_running_loop().time, launch.session.session_file)
             self.custody = BorrowedNative(child, EmptyNative())
         watchdog.spawned(reused)
         return child
@@ -134,12 +134,12 @@ class PersistentPiSession:
         async with self.lock:
             await self.close()
 
-    def require_reopen(self, session_file: str) -> None:
-        self.custody = self.custody.retire(self.custody.reopen(session_file))
+    def require_reopen(self, identity: NativeSessionIdentity) -> None:
+        self.custody = self.custody.retire(self.custody.reopen(identity))
 
-    async def discard_for_external_write(self, session_file: str) -> None:
+    async def discard_for_external_write(self, identity: NativeSessionIdentity) -> None:
         async with self.lock:
-            self.require_reopen(session_file)
+            self.require_reopen(identity)
             await self.close()
 
 
@@ -194,7 +194,6 @@ async def stream_agent_events(
     session_file: str | None = None,
     steering_queue: asyncio.Queue[str | dict[str, Any]] | None = None,
     finish_event: asyncio.Event | None = None,
-    fork_session: bool = False,
     images: Sequence[ImageInput] = (),
     model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
@@ -228,7 +227,6 @@ async def stream_agent_events(
                 worktree=Path(cwd),
                 environment=env_extra,
                 session_file=session_file,
-                fork_session=fork_session,
             )
         except (OSError, ValueError, NativePiUnavailable) as error:
             yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
@@ -236,7 +234,7 @@ async def stream_agent_events(
         from .session_fence import session_writer_fence
 
         async with (
-            session_writer_fence(session_file),
+            session_writer_fence(launch.session.session_file),
             persistent_session.lock if persistent_session is not None else nullcontext(),
         ):
             try:
@@ -244,10 +242,8 @@ async def stream_agent_events(
                     TurnSession(
                         launch,
                         task,
-                        session_file=session_file,
                         steering_queue=steering_queue,
                         finish_event=finish_event,
-                        fork_session=fork_session,
                         images=images,
                         context_contributions=context_contributions,
                         model_wait_timeout=model_wait_timeout,
@@ -282,10 +278,8 @@ class TurnSession:
         self,
         launch: NativePiRpcLaunch,
         task: str,
-        session_file: str | None = None,
         steering_queue: asyncio.Queue[str | dict[str, Any]] | None = None,
         finish_event: asyncio.Event | None = None,
-        fork_session: bool = False,
         images: Sequence[ImageInput] = (),
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
@@ -304,9 +298,7 @@ class TurnSession:
     ):
         self.launch = launch
         self.task = task
-        self.session_file = session_file
         self.finish_event = finish_event
-        self.fork_session = fork_session
         self.images = images
         self.context_contributions = context_contributions
         self.watchdog = ProgressWatchdog(
@@ -488,8 +480,7 @@ class TurnSession:
             try:
                 self.native = await self.native_session.open(
                     self.launch,
-                    self.session_file,
-                    reuse=self.persistent_session is not None and not self.fork_session,
+                    reuse=self.persistent_session is not None,
                     require_input_id=self.require_input_id,
                     startup=self.startup,
                     finish_event=self.finish_event,
@@ -695,7 +686,7 @@ class TurnSession:
                 self.ensure_input_forwarding()
         self.model_name: str | None = None
         self.session_name: str | None = None
-        self.active_session_file = self.session_file
+        self.active_session_file = self.launch.session.session_file
         self.settlement_count = 0
         self.native.reader.pending.cancel_all()
         self.native.reader.pending.add(

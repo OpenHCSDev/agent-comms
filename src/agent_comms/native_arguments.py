@@ -78,6 +78,33 @@ class ThinkingArgument(NamedOption, ValueArgument):
     pass
 
 
+class SessionSelectionArgument:
+    """Managed RPC source selection belongs to the captured SelectedSession.
+
+    The native CLI still accepts these external options. A configured argument
+    cannot independently replace the original owner selection in managed RPC.
+    """
+
+    def validate_rpc(self) -> None:
+        raise ValueError("Managed Pi session selection belongs to SelectedSession")
+
+
+class SessionArgument(SessionSelectionArgument, NamedOption, ValueArgument):
+    pass
+
+
+class SessionDirArgument(SessionSelectionArgument, NamedOption, ValueArgument):
+    pass
+
+
+class SessionIdArgument(SessionSelectionArgument, NamedOption, ValueArgument):
+    pass
+
+
+class ForkArgument(SessionSelectionArgument, NamedOption, ValueArgument):
+    pass
+
+
 class ModeArgument(NamedOption, ValueArgument):
     def validate_rpc(self) -> None:
         if self.value != "rpc":
@@ -95,6 +122,18 @@ class OneShotArgument(OptionArgument):
 
     def validate_rpc(self) -> None:
         raise ValueError("Managed Pi cannot run a one-shot CLI command")
+
+
+class ContinueArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
+    short = "-c"
+
+
+class ResumeArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
+    short = "-r"
+
+
+class NoSessionArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
+    pass
 
 
 class PrintArgument(NamedOption, OneShotArgument):

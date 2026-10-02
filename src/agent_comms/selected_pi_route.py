@@ -29,8 +29,7 @@ _Observation = TypeVar("_Observation")
 async def _exchange_observation(
     persistent: PersistentPiSession,
     request: PiCommand,
-    session_file: str,
-    session_id: str,
+    source: NativeSessionIdentity,
     decode: Callable[[bytes, PiCommand], _Observation],
     *,
     expected_package: Path,
@@ -43,7 +42,7 @@ async def _exchange_observation(
     async with persistent.lock:
         try:
             retained = persistent.custody.idle().selected(
-                NativeSessionIdentity(session_id, session_file), expected_package
+                source, expected_package
             )
         except NativePiUnavailable as error:
             raise SelectedPiProbeUnknownError(str(error)) from error
@@ -67,7 +66,7 @@ async def _exchange_observation(
             if transmitted:
                 # Poison before a cancellable await. No next borrower may use
                 # old in-memory history or treat this as a paid-summary receipt.
-                persistent.require_reopen(session_file)
+                persistent.require_reopen(source)
                 # close() retains its independently shielded reap task if
                 # cancellation interrupts this caller's join.
                 with suppress(asyncio.CancelledError):
@@ -95,8 +94,8 @@ async def read_selected_compaction_decision(
     timeout: float = 3.0,
 ) -> PiCompactionDecision:
     """Observe actual selected settings/model without auth, provider or input writes."""
-    session_id = persistent.custody.idle().identity.session_id
-    source = NativeSessionIdentity(session_id, session_file)
+    source = persistent.custody.idle().identity
+    source.require_session(session_file)
     request = AgentCommsCompactionSettings(
         id=secrets.token_hex(16),
         session_id=source.session_id,
@@ -106,8 +105,7 @@ async def read_selected_compaction_decision(
     return await _exchange_observation(
         persistent,
         request,
-        session_file,
-        session_id,
+        source,
         _read_settings_response,
         expected_package=expected_package,
         timeout=timeout,
