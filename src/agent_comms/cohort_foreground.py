@@ -93,16 +93,17 @@ async def _accept_visible_deliveries(
             if marker.root_id != root_id:
                 raise IdentityConflict("private initial wire root changed")
             admitted_after = max(after_seq, marker.admission_after_seq)
-        initials = tuple(
-            initial
-            for initial in bus.log.addressed_sources(lookup, admitted_after)
-            if initial.message.seq not in sealed
-            and any(
+        visited_after = admitted_after
+        unaccepted = []
+        for initial in bus.log.addressed_sources(lookup, admitted_after):
+            # Progress comes from every original actually visited in the fixed
+            # source cut, including already sealed/historical recipient rows.
+            visited_after = initial.message.seq
+            if initial.message.seq not in sealed and any(
                 r.recipient_lookup == lookup and r.canonical_thread == owner_name
                 for r in initial.audience.recipients
-            )
-        )
-        unaccepted = initials
+            ):
+                unaccepted.append(initial)
         if len(unaccepted) > 100:
             raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
         if unaccepted and native_package is not None:
@@ -114,7 +115,7 @@ async def _accept_visible_deliveries(
             # Never create a NEW generation's selected attempt from that old
             # frozen recipient, or infer it was consumed.
             accept_delivery_cohort(bus, root_id, initial.message.seq, resource)
-        return initials[-1].message.seq if initials else admitted_after
+        return visited_after
 
     return await Coordination.run_async(store.session.path, accept)
 
