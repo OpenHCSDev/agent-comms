@@ -167,9 +167,7 @@ class CompletedExecution(AttemptExecution):
         return phase.succeeded
 
     def validate_snapshot(self, snapshot, authorized):
-        if snapshot.execution.exact_target is not None and (
-            snapshot.obligation is None or not snapshot.obligation.lifecycle.successful
-        ):
+        if snapshot.obligations and not all(row.lifecycle.successful for row in snapshot.obligations):
             raise IntegrityViolationError("completed wire execution requires terminal obligation")
 
 
@@ -222,7 +220,7 @@ class FailedExecution(InterruptedExecution):
         return ()
 
     def validate_snapshot(self, snapshot, authorized):
-        if snapshot.publication_receipt is not None:
+        if bool(snapshot.publication_receipts):
             raise IntegrityViolationError("failed execution cannot erase a publication receipt")
         if snapshot.attempt is not None and authorized:
             raise IntegrityViolationError("authorized retry cannot settle failed")

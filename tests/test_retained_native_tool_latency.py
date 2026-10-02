@@ -157,7 +157,7 @@ async def test_installed_retained_native_read_round_preserves_original_custody(t
         task = asyncio.create_task(execution.run())
         if outcome == "complete":
             result = await asyncio.wait_for(task, 90)
-            assert result.response_message_id
+            assert result.publications
         else:
             async with asyncio.timeout(60):
                 while len(ends) != 3 or provider.posts != 2:

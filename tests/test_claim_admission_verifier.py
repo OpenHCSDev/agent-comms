@@ -30,6 +30,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
 from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -90,8 +91,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 alice_lookup,
                 owner.name,
                 1,
-                assignment_ids=(assignment.assignment_id,),
-                exact_target="#team",
+                sources=(SelectedSource(assignment, initial),),
             )
             snapshot = store.snapshots.get(execution_id)
             snapshot = store.executions.mark_pending(

@@ -1,0 +1,11 @@
+{
+  "head": "369b10be7c5c7a35124556686a1ce80b2bf56ccb",
+  "coordination": 9,
+  "snapshot": 3,
+  "response": 3,
+  "native": 5,
+  "coordination_ddl_sha256": "70c9f7308ef6541ea00268e7d991f69112ef0fed7ad5e2307282a64c7c94c689",
+  "response_digest": "fc450de2f69839e529069144a9d82559d4a6b83ce35daf0b70bb28eb57a54f52",
+  "native_digest": "c06d813c4e39cdb4fa994478193fb8ba5f3b2fe4b07f7da156d2edb3e891e13c",
+  "scope": "derived-source-DDL; not installed acceptance or carry execution"
+}

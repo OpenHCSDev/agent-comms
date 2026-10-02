@@ -16,13 +16,16 @@ from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
+from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.native_pi import read_tracked_input_digest
 from agent_comms.native_prompt_binding import read_expected_prompt_binding
+from agent_comms.messages import Message, MessageType
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
 from agent_comms.wake_candidate_index import WakeCandidateIndex
+from agent_comms.wake import derive_exact_reply_target
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -140,7 +143,9 @@ async def test_native_full_four_tools_publish_and_release(
                         assert 'CANONICAL_TOOL_RUNNING' in str(tools[-1]['content'])
                     assert phase.declared_name == 'model_wait'
                     assert 'participant' not in comms.registry.snapshot().threads
-                    delta = {"role": "assistant", "content": "CODING_TOOLS_OK"}
+                    answer = Message("beta", derive_exact_reply_target(initial.message),
+                                     "CODING_TOOLS_OK", MessageType.INFO, timestamp=0)
+                    delta = {"role": "assistant", "content": json.dumps(FieldCodec.encode((answer,)))}
                     reason = "stop"
                 chunk = {
                     "id": "selected-offline",
@@ -211,9 +216,9 @@ async def test_native_full_four_tools_publish_and_release(
         outcome = await asyncio.wait_for(execution.run(), 40)
         assert not failures
         assert len(requests) == 2 + triage
-        assert outcome.response_message_id
+        assert outcome.publications
         responses = [
-            m for m in comms.views.full_history() if m.message_id == outcome.response_message_id
+            m for m in comms.views.full_history() if m.reference in tuple(receipt.reference for receipt in outcome.publications)
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
         assert comms.registry.require("beta").active_turn is None
@@ -221,7 +226,7 @@ async def test_native_full_four_tools_publish_and_release(
         if not selected_write:
             assert not comms.bus.log.claim_projection()
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            assignment = store.assignments.get(outcome.assignment_id)
+            assignment = store.assignments.get(outcome.assignment_ids[0])
             snapshot = store.snapshots.get(assignment.lifecycle.require_completion().execution_id)
             assert snapshot.execution.lifecycle.completed
             assert (

@@ -171,7 +171,7 @@ class RecoveryMonitorCapability:
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
             assert attempt is not None  # Required by the release observer.
-            if snapshot.publication_intent is not None:
+            if bool(snapshot.publication_intents):
                 raise PublicationUncertain("UNKNOWN abandonment cannot resolve frozen publication")
             cls._require_native_session_exited(
                 store.session.path.parent / "native-sessions" / loss.attempt.owner_lookup
@@ -216,7 +216,7 @@ class RecoveryMonitorCapability:
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
             assert attempt is not None  # The release observer requires an attempt.
-            if snapshot.publication_intent is not None:
+            if bool(snapshot.publication_intents):
                 raise PublicationUncertain("native failure cannot resolve frozen publication")
             reserved = NativeRuntimeInput.one(
                 store.session._connection,
@@ -340,7 +340,7 @@ class RecoveryMonitorCapability:
                 updated_at_ms=now,
                 reason_code=evidence.reason_code,
             )
-            unresolved = snapshot.publication_intent is not None
+            unresolved = bool(snapshot.publication_intents)
             if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
                 from .attempt_states import AttemptFailedAttempt
 
