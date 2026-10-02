@@ -145,7 +145,7 @@ class SelectedSummaryAdmission:
             identity.require_live_input(session_file, sent_text)
             journal = CompactionJournal(self._terminal.path)
             journal.summaries.require_original_admission(attempt)
-            identity.source.reservation_check(
+            attempt.request.reservation_check(
                 identity.source.reserved_revision, dispositions.read()
             ).require_valid()
             return dispositions.bind_originals(

@@ -50,8 +50,7 @@ class SelectedSummarySource:
     retained: RetainedTaskFacts
 
     def __post_init__(self):
-        if not self.source:
-            raise ValueError("Selected source witness required")
+        self.source.require_retained(self.retained)
 
     def summary_instructions(self, owner: Thread, instructions: str | None) -> str:
         from .turn_context import CoordinationSegment
@@ -59,6 +58,15 @@ class SelectedSummarySource:
         if owner.incarnation != self.source.incarnation:
             raise CompactionJournalError("Summary instructions belong to another current owner")
         return CoordinationSegment.capture(owner, ()).summary_instructions(instructions)
+
+    def reservation_check(self, revision, inputs):
+        return self.source.reservation_check(revision, inputs, self.retained)
+
+    def interrupted_check(self, revision, inputs, incarnation, turn):
+        return self.source.interrupted_check(revision, inputs, incarnation, turn, self.retained)
+
+    def original_has_started(self, inputs: InputDocument) -> bool:
+        return self.source.original_has_started(inputs, self.retained)
 
     def journal_json(self) -> str:
         record = FieldCodec.encode(self)
@@ -242,7 +250,7 @@ class SelectedSummaryAttempt(
         cannot retire the reservation. Historical rows and IDs stay intact.
         """
         try:
-            return self.request.source.original_has_started(inputs)
+            return self.request.original_has_started(inputs)
         except (KeyError, TypeError, ValueError):
             return False
 

@@ -18,6 +18,8 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.locked_store import LockedStore
+from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
+from agent_comms.errors import RelationViolationError
 
 
 def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
@@ -299,7 +301,7 @@ def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
         admission=1,
         turn=TurnId("turn"),
         sent_digest=TextDigest.of("wrapped input"),
-        original_digest=TextDigest.of("original"),
+        original=reserved,
     )
     for state in (MissingInput(), reserved, bound, reserved.finish_unbound()):
         assert not state.proves_started(**proof)
@@ -317,7 +319,7 @@ def test_only_exact_started_input_proves_recorded_native_delivery(mismatch):
     elif mismatch == "sent":
         proof["sent_digest"] = TextDigest.of("different wrapper")
     elif mismatch == "original":
-        proof["original_digest"] = TextDigest.of("different original")
+        proof["original"] = replace(reserved, source_text="different original")
     assert started.proves_started(**proof) is (mismatch is None)
 
 
@@ -341,13 +343,16 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
     assert store.record(
         key, seq=sequence, owner="owner", admission=1, target=target, text="original"
     )
+    retained = RetainedTaskFacts((InputTaskFact(store.read().rows[key]),))
     assert store.bind(key, admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
     assert store.started(key, turn_id="turn", native_id="a" * 32, text="wrapped input")
     document = store.read()
-    assert source.original_has_started(document)
+    assert source.original_has_started(document, retained)
     # A bus/channel delivery is still genuine native-start evidence. It cannot
     # lend that evidence to a different selected source's original ingress.
-    assert not replace(source, ingress_key="acp:foreign").original_has_started(document)
+    foreign = replace(source, originals=(replace(source.originals[0], key="acp:foreign"),))
+    with pytest.raises(RelationViolationError, match="unique original input"):
+        foreign.original_has_started(document, retained)
     original_bytes = store.path.read_bytes()
     # Routing cannot be rewritten by recording another target at the original
     # key. That ownership belongs to first durable acceptance, not start proof.
@@ -356,4 +361,4 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
     )
     assert store.path.read_bytes() == original_bytes
     assert store.read().lookup(key).target == target
-    assert source.original_has_started(store.read())
+    assert source.original_has_started(store.read(), retained)

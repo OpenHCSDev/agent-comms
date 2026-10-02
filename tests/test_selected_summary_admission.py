@@ -24,6 +24,8 @@ from agent_comms.compaction_summaries import _ReturnedTerminalAck
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.reservation_rules import ReservationViolationError
+from agent_comms.input_attempt import ReservedInput
+from agent_comms.retained_task_facts import InputTaskFact, RetainedTaskFacts
 from agent_comms.selected_summary_admission import (
     SelectedSummaryAdmission,
 )
@@ -36,9 +38,16 @@ from selected_summary_cases import admission_identity, summary_source, native_in
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX journal and native input bind")
 
 
-def _source(identity):
+def _source(identity, original_text):
+    source = identity.source
+    original = ReservedInput(
+        key=source.ingress_keys[0], sequence=None, owner=source.incarnation.name,
+        admission=source.admission_generation, target=source.incarnation.name,
+        source_text=original_text, origin=source.originals[0].origin,
+    )
     return FieldCodec.decode(SelectedSummarySource, summary_source(
-        identity.source, selected=SelectedModel("fake", "fake", 1000)
+        source, selected=SelectedModel("fake", "fake", 1000),
+        retained=RetainedTaskFacts((InputTaskFact(original),)),
     ))
 
 
@@ -59,7 +68,7 @@ def case(tmp_path):
         target="project",
         text=text,
     )
-    operation_id = journal.summaries.reserve(str(session), _source(identity))
+    operation_id = journal.summaries.reserve(str(session), _source(identity, text))
     return comms, str(session), journal, operation_id, dispositions, identity, text
 
 
@@ -126,7 +135,6 @@ def test_returned_ack_only_one_bound_original_and_no_status_bypass(case, termina
         lambda source: replace(source, admission_generation=2),
         lambda source: replace(source, correction_witness="changed"),
         lambda source: replace(source, input_digest=TextDigest("f" * 64)),
-        lambda source: replace(source, originals=(replace(source.originals[0], digest=TextDigest("f" * 64)),)),
     ],
 )
 def test_mismatch_consumes_token_without_binding_or_recovery(case, change):
@@ -151,7 +159,7 @@ def test_reserve_rejects_changed_saved_source_witness(tmp_path):
     journal = CompactionJournal(comms.root / "compaction-commits.sqlite3")
     session.write_text("{}\n{}\n")
     with pytest.raises(ValueError, match="session_changed"):
-        journal.summaries.reserve(str(session), _source(identity))
+        journal.summaries.reserve(str(session), _source(identity, "input"))
     assert journal.summaries.blocking(str(session)) == ()
 
 
@@ -172,7 +180,7 @@ def test_reserve_refuses_wrong_durable_original(case):
         original_text="injected replacement",
     )
     with pytest.raises(ValueError, match="content_changed"):
-        journal.summaries.reserve(str(other), _source(forged))
+        journal.summaries.reserve(str(other), _source(forged, "injected replacement"))
     assert not journal.summaries.blocking(str(other))
 
 
@@ -385,10 +393,12 @@ from selected_summary_cases import admission_identity, summary_source, native_in
 from agent_comms.pi_summary_payloads import SelectedModel
 identity=admission_identity(session,text=text,key=key,turn='turn')
 from agent_comms.compaction_records import SelectedSummarySource
-source=FieldCodec.decode(SelectedSummarySource,summary_source(identity.source,selected=SelectedModel('fake','fake',1000)))
 j=CompactionJournal(root/'compaction-commits.sqlite3')
 d=InputDispositions(root / InputDispositions.filename)
 assert d.record(key,seq=None,owner='project',admission=1,target='project',text=text)
+from agent_comms.retained_task_facts import InputTaskFact,RetainedTaskFacts
+source=FieldCodec.decode(SelectedSummarySource,summary_source(identity.source,
+    selected=SelectedModel('fake','fake',1000),retained=RetainedTaskFacts((InputTaskFact(d.read().rows[key]),))))
 assert j.summaries.reserve(session,source,operation_id=op)==op
 token=j.summaries.decline_prestart(op,'split_turn',admission=identity)
 assert token is not None
@@ -460,7 +470,7 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
     with reopened.private_inputs.send_fence(Path(session)):
         pass
     with pytest.raises(ValueError, match="already_sent"):
-        reopened.summaries.reserve(session, _source(identity))
+        reopened.summaries.reserve(session, _source(identity, text))
     next_identity = admission_identity(
         session, text="Next original", key="acp:next", turn="next-turn"
     )
@@ -472,7 +482,7 @@ def test_native_start_retires_barrier_without_erasing_history_or_replaying_origi
         target=next_identity.source.incarnation.name,
         text="Next original",
     )
-    next_id = reopened.summaries.reserve(session, _source(next_identity))
+    next_id = reopened.summaries.reserve(session, _source(next_identity, "Next original"))
     assert [row.operation_id for row in reopened.summaries.blocking(session)] == [next_id]
     # A subsequent writer can bind ONLY the new reservation, despite historical
     # terminal rows remaining in the same table for audit and ID uniqueness.

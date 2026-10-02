@@ -9,6 +9,7 @@ from typing import ClassVar
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
+from .retained_task_facts import RetainedTaskFacts
 from .selected_source import SelectedAdmissionSource, SelectedSource, SessionObservation
 from .thread_identity import ThreadIncarnation, TurnId
 
@@ -40,6 +41,7 @@ class ReservationCheck(RuleCheck):
 class InputSourceCheck(ReservationCheck):
     source: SelectedAdmissionSource
     rows: tuple[InputAttempt, ...]
+    retained: RetainedTaskFacts
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -170,6 +172,8 @@ class ContentChangedRule(ReservationRule):
 
     def violated(self, check: InputSourceCheck) -> bool:
         return any(
-            not row.matches_original_provenance(original)
-            for original, row in zip(check.source.originals, check.rows, strict=True)
+            not row.matches_original_source(original)
+            for original, row in zip(
+                check.retained.original_inputs(check.source.originals), check.rows, strict=True
+            )
         )
