@@ -1,0 +1,102 @@
+{
+  "phase": "source-closure-validated-joined-installed-journey-pending",
+  "source_head": "229e408b303cd9b87f9e4191970b33f45f2635bd",
+  "pr": 546,
+  "integration_owner": "Mendel",
+  "receiving_builder": "Schrodinger",
+  "writer_grant": "Mendel directly granted InputAttempt/InputDocument/continued_private_session/PrivateInputs and related consumers, retaining545 cursor/coverage/historical inputs only",
+  "production": {
+    "files": [
+      {
+        "path": "src/agent_comms/continued_private_session.py",
+        "added": 2,
+        "deleted": 8,
+        "sha256": "51281818021ebc0ad06a5af94af9e31c90ce31d6559c143943be32bac833f7a7"
+      },
+      {
+        "path": "src/agent_comms/input_attempt.py",
+        "added": 19,
+        "deleted": 9,
+        "sha256": "802e22ad921b6ec2e0b1273c39a8b23fce51e3d031a5e490fd7aab8e5bfb6002"
+      },
+      {
+        "path": "src/agent_comms/input_disposition.py",
+        "added": 14,
+        "deleted": 3,
+        "sha256": "1dbe4ef0da61c47db5c6b9b5bf5cb3f8d3fc1af54ae2bf1e690354a5327122f5"
+      }
+    ],
+    "added_lines": 35,
+    "deleted_lines": 20,
+    "new_classes": 0,
+    "new_fields": 0,
+    "durable_format_change": false
+  },
+  "single_decision_owner": "InputDocument.require_compaction_ready consumes original StoredInput.unsettled_for family",
+  "family": {
+    "StoredInput": "Confirmed non-delivery defaults to permission; attention flag remains distinct.",
+    "ReservedInput": "Exact original pending membership permits its pre-send compaction.",
+    "SentInput": "Original native binding blocks compaction irrespective of admission or supplied key.",
+    "BoundUnknownInput": "Inherits native binding uncertainty from SentInput.",
+    "StartedInput": "Original native-start receipt settles delivery.",
+    "NotSentInput": "Inherits confirmed non-delivery; remains attention-unresolved and ineligible for reservation/binding."
+  },
+  "consumers": [
+    "InputDocument.compaction_rows selected original view",
+    "verify_continued_private_session original source incarnation/pending membership",
+    "Existing CompactionBoundary/SelectedOriginalBinding/FutureInputQueue/SelectedSummaries/PrivateInputs chain unchanged"
+  ],
+  "ast": {
+    "before": "before-ast.json",
+    "after": "after-ast.json",
+    "parsed_modules": 311,
+    "parse_omissions": [],
+    "require_compaction_ready_declarations": 1,
+    "unsettled_for_call_consumers": 1,
+    "limits": [
+      "Lexical Python AST does not prove dynamic dispatch.",
+      "External native boundary read manually; no JavaScript AST coverage or dependency edits."
+    ]
+  },
+  "checks": [
+    {
+      "source_head": "b5194017976b3334f35c45e57ca7ad79f4f23b26",
+      "log": "end-sanity.log",
+      "result": "77 passed in3.47s",
+      "detects": [
+        "Confirmed unsent original wrongly blocks actual continued journal reservation",
+        "Uncertain/mismatched raw history admits a summary",
+        "Input codec/disposition transitions mutate or misclassify original records"
+      ]
+    },
+    {
+      "source_head": "229e408b303cd9b87f9e4191970b33f45f2635bd",
+      "log": "final-owner-dispatch.log",
+      "result": "2 passed in0.13s",
+      "detects": [
+        "Moving binding behavior to existing SentInput drops UNKNOWN exclusion",
+        "Started/NotSent inheritance grants replay or loses original notice",
+        "Exact pending name incorrectly permits already-bound original"
+      ]
+    }
+  ],
+  "installed_journey": {
+    "state": "pending-one-joined-545+546-actual-path",
+    "owner": "Mendel",
+    "configured_driver": "tests/turn_context_installed_journey.py::run_configured",
+    "selected_cursor_driver": "tests/native_evidence_reader_installed_journey.py",
+    "native_dependency": "derive960296/source-tree01de from joined527manifest; old9f reference superseded",
+    "environment": "Reuse released existing69receiver only; no newenv/nativecopy/sourceoverlay"
+  },
+  "originals": {
+    "key": "acp:0d9d2784d0f34858947e138b375e83e5",
+    "disposition": "not_sent unchanged",
+    "historical_failed540_receipt": "preserved; sourceprep qualified separately",
+    "live334_nested_cause": "not retained; no assertion of historical traceback certainty",
+    "79cb_and418": "untouched; no replay"
+  },
+  "provider_calls_during_source_batch": 0,
+  "native_children_started": 0,
+  "public_writes": 0,
+  "replays": 0
+}
