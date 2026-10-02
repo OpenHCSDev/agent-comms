@@ -158,6 +158,11 @@ async def configured_pure_channel(arguments):
         private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
     originals, proof, failure = [], {}, None
+    if arguments.configured_task_timing:
+        assert arguments.owners == arguments.wave_size == 1
+        policy = json.loads(os.environ.get('AGENT_COMMS_COMPACTION_POLICY', '{}'))
+        policy['taskAware'] = True
+        os.environ['AGENT_COMMS_COMPACTION_POLICY'] = json.dumps(policy)
     begun = time.perf_counter()
     reading = asyncio.Event()
     read_spans = []
@@ -182,7 +187,11 @@ async def configured_pure_channel(arguments):
             originals = [service.bus.publisher.publish_ordinary(Message(sender.name, '#openhcs',
                 f'{stage.name} original {ordinal}: New isolated user channel question to all participants: '
                 'please answer here with the value of 10+2. This is a fresh question, '
-                'not continuation or retry of any previous input. No project edits are requested.',
+                'not continuation or retry of any previous input. No project edits are requested.' + (
+                    ' Before answering, use comms_subtask exactly once with to your own current '
+                    'private thread, text "Verified 10 plus 2", and completed true. This explicitly '
+                    'marks only that small subtask, not a completed goal. Use no file-writing tools.'
+                    if arguments.configured_task_timing else ''),
                 MessageType.INFO),
                 _human_origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                 for ordinal in range(arguments.wave_size)]
@@ -312,6 +321,10 @@ async def configured_pure_channel(arguments):
                     diagnostic = json.loads(diagnostics[0].read_text())
                     raise AssertionError(diagnostic.get('source_error',diagnostic.get('reason')))
                 await asyncio.sleep(.1)
+        if arguments.configured_task_timing:
+            proof['task_timing'] = await configured_task_timing(
+                arguments, service, attachment, names[0], sender, stage
+            )
         if arguments.configured_saved_preparation:
             from agent_comms.compaction_journal import CompactionJournal
             from agent_comms.compaction_records import SelectedSummarySource
@@ -364,6 +377,63 @@ async def configured_pure_channel(arguments):
                 'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
             (stage/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
             print(json.dumps(receipt,indent=2),flush=True)
+
+
+async def configured_task_timing(arguments, service, attachment, name, sender, stage):
+    """One new original after a real authored marker on the same saved owner.
+
+    Reuses the ordinary selected/native/ACP path and original captured provider
+    configuration. The sole fixture opt-in is the declared compaction policy.
+    """
+    from agent_comms.compaction_journal import CompactionJournal
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_entries import NativeEntry
+
+    snapshot = service.registry.snapshot()
+    owner = snapshot.require(name)
+    retained = service.bus.log.retained_context(name, service.registry).retained
+    boundary = retained.optional_boundary(owner, snapshot)
+    assert len(boundary) == 1, 'Configured owner did not author the requested explicit completed subtask'
+    journal = CompactionJournal(service.root/'compaction-commits.sqlite3')
+    before = journal.summaries.history(owner.session_file)
+    assert not journal.summaries.attempted_boundary(owner.session_file, boundary)
+    original = service.messaging.send_user_message('#openhcs',
+        'New independent question: what is 11 plus 2? Answer here. Do not record another '
+        'subtask, complete a goal, edit files, or retry any earlier question.',
+        worktree=sender.worktree)
+    async with asyncio.timeout(arguments.observation_seconds):
+        while True:
+            current = service.registry.require(name)
+            with Coordination(str(service.root/'coordination.sqlite3')) as store:
+                claims = WakeAssignment.select(store.session._connection,
+                    where='wire_seq=?', parameters=(original.seq,))
+            if len(claims) == 1 and claims[0].lifecycle.completed and current.active_turn is None:
+                break
+            diagnostics = list((service.root/'diagnostics').glob('*.json'))
+            if diagnostics:
+                raise AssertionError(json.loads(diagnostics[0].read_text()).get('source_error'))
+            await asyncio.sleep(.1)
+    after = journal.summaries.history(owner.session_file)
+    attempts = tuple(attempt for attempt in after if attempt.operation_id not in
+                     {previous.operation_id for previous in before})
+    assert len(attempts) == 1, 'Explicit boundary did not cause exactly one journaled optional attempt'
+    attempt, = attempts
+    assert attempt.request.retained.contains_source(boundary[0])
+    assert attempt.state.commit_id
+    assert journal.operations.get(attempt.state.commit_id).state.committed
+    assert journal.summaries.attempted_boundary(owner.session_file, boundary)
+    replies = tuple(message for message in service.bus.log.full_history()
+                    if message.sender == name and message.target == '#openhcs' and message.seq > original.seq)
+    assert len(replies) == 1 and '13' in replies[0].body
+    with NativeEntry.open_evidence(Path(owner.session_file)) as evidence:
+        _, entries = evidence.observe()
+    return {'explicit_authored_boundary': FieldCodec.encode(boundary),
+            'new_original_reference': FieldCodec.encode(original.reference),
+            'optional_attempt': attempt.operation_id, 'committed': True,
+            'same_saved_owner_continued': current.session_file == owner.session_file,
+            'once_channel_reply': replies[0].reference.message_id,
+            'native_saved_entries': len(entries), 'provider_configuration_copied': False,
+            'old_input_replays': 0, 'default_activation': False}
 
 
 async def configured_cancel_continue(arguments, service, attachment, name, sender, stage):
@@ -730,7 +800,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
 
 
 async def run(arguments):
-    if arguments.configured_pure_channel or arguments.configured_saved_preparation:
+    if arguments.configured_pure_channel or arguments.configured_saved_preparation or arguments.configured_task_timing:
         return await configured_pure_channel(arguments)
     if arguments.configured_owner:
         return await configured_mixed_routes(arguments)
@@ -1215,6 +1285,8 @@ if __name__=='__main__':
     parser.add_argument('--wave-size',type=int,default=1)
     parser.add_argument('--configured-owner',help='Read only this original model/level; submit fresh private mixed-route originals')
     parser.add_argument('--configured-pure-channel',action='store_true')
+    parser.add_argument('--configured-task-timing',action='store_true',
+                        help='One configured saved fork: explicit subtask then optional compaction and new original continuation')
     parser.add_argument('--configured-saved-preparation',action='store_true',
                         help='One saved configured fork: ordinary ACP admission, cancel, then a distinct new original')
     parser.add_argument('--busy-reader',action='store_true')
