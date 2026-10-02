@@ -21,7 +21,6 @@ from .registration import Registration
 from .selected_pi_route import read_selected_compaction_decision
 from .selected_source import SelectedAdmissionSource, SessionRevision, SessionRevisionUnavailable
 from .selected_summary_admission import SelectedSummaryAdmission
-from .text_digest import TextDigest
 from .thread_identity import TurnId
 
 
@@ -30,7 +29,7 @@ async def maybe_compact_owner_turn(
     thread_name: str,
     turn_id: str,
     prepared: StateData,
-    original_input_key: str,
+    original_input_keys: tuple[str, ...],
     persistent: PersistentPiSession,
     *,
     input_text: str,
@@ -41,8 +40,8 @@ async def maybe_compact_owner_turn(
     """Return False only for a clean trigger skip; errors never dispatch input.
 
     Called under the ACP session turn lock before any native user start. The
-    original input is durable but provably unbound; the bridge permits only
-    that one row and rechecks every ingress revision at native commit.
+    original batch is durable but provably unbound; the bridge checks every
+    original receipt and ingress revision together at native commit.
     """
     snapshot = registry.snapshot()
     try:
@@ -75,24 +74,13 @@ async def maybe_compact_owner_turn(
         revision = SessionRevision.observe(session_file).require_available()
     except SessionRevisionUnavailable as error:
         raise PiSettingsEvidenceError("Selected saved source is unavailable") from error
-    original = bridge.inputs.read().lookup(original_input_key)
-    if not original.exists:
-        raise PiSettingsEvidenceError("Selected original input or saved session is unavailable")
-    digest = TextDigest.of(input_text)
-    source = SelectedAdmissionSource(
-        incarnation=owner.incarnation,
-        owner=owner.process_identity,
-        turn=TurnId(turn_id),
-        ingress_key=original_input_key,
-        admission_generation=turn.admission_generation,
-        correction_witness=f"{turn.admission_generation}:{digest.value}",
-        input_digest=digest,
-        original_digest=original.digest,
-        reserved_revision=revision,
+    source = SelectedAdmissionSource.capture(
+        owner, TurnId(turn_id), turn.admission_generation, original_input_keys,
+        bridge.inputs.read(), input_text, revision,
     )
     result = await bridge.compact_selected(
         owner, owner_generation, persistent, source, selected, settings,
-        pending_input_key=original_input_key, on_admission=on_admission,
+        pending_input_keys=original_input_keys, on_admission=on_admission,
         on_event=on_event,
     )
     return result.adaptive_result()

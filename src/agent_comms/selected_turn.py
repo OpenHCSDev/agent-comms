@@ -172,8 +172,8 @@ class SelectedAttempt:
             prompt = await SelectedPrompt(participant).full(
                 self.stage.assignments, self.obligations, action
             )
-            request = await SelectedRequest.reserve(
-                participant, session, self.stage, self.token, prompt, package=package
+            request = SelectedRequest.reserve(
+                participant, session, self.stage, self.token, prompt
             )
         except NativePiUnavailable:
             # The attempt exists even if preparation fails before a request can
@@ -250,13 +250,12 @@ class SelectedConsideration:
             PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {', '.join(participant.batch.targets)}")
         )
         stage = TriageNativeSend(participant.batch.assignments)
-        request = await SelectedRequest.reserve(
+        request = SelectedRequest.reserve(
             participant,
             session,
             stage,
             prepare_fence_token(),
             SelectedPrompt(participant).triage(),
-            package=execution.native_package,
         )
         with request.native_failures():
             participant.transition(PromptAcceptancePhase())

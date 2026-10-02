@@ -48,7 +48,7 @@ class OwnerCompactionCommit:
         source: SelectedSource,
         selected: SelectedModel, settings: PiCompactionDecision, *,
         instructions: str | None = None,
-        pending_input_key: str | None = None,
+        pending_input_keys: tuple[str, ...] = (),
         before_summary: Callable[[], None] | None = None,
         on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
         on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
@@ -102,7 +102,7 @@ class OwnerCompactionCommit:
         return await compact_owner_once(
             self, owner, owner_generation, persistent, summarize,
             settings=settings, context_window=selected.context_window,
-            pending_input_key=pending_input_key, settings_paths=settings_paths,
+            pending_input_keys=pending_input_keys, settings_paths=settings_paths,
             on_admission=on_admission, on_event=on_event,
         )
 
@@ -112,7 +112,7 @@ class OwnerCompactionCommit:
         owner_generation: int,
         witness: NativeWitness,
         *,
-        pending_input_key: str | None = None,
+        pending_input_keys: tuple[str, ...] = (),
         settings_paths: tuple[str, ...] | None = None,
     ) -> CompactionSource:
         """Capture BEFORE generating a summary; no provider work under these locks.
@@ -121,11 +121,11 @@ class OwnerCompactionCommit:
         may wait through the summary; no UNKNOWN input is replayed or resolved.
         """
         with self.boundary.hold(
-            owner, owner_generation, witness, pending_input_key=pending_input_key
+            owner, owner_generation, witness, pending_input_keys=pending_input_keys
         ) as held:
             if self.journal.operations.unresolved(witness.session_file):
                 raise CompactionJournalError("Unresolved native commit; reconcile before preparation")
-            return held.capture(pending_input_key, settings_paths)
+            return held.capture(pending_input_keys, settings_paths)
 
     def prepare_source(
         self,
@@ -135,7 +135,7 @@ class OwnerCompactionCommit:
         prepared: NativePreparation,
         settings: PiCompactionSettings,
         context_window: int,
-        pending_input_key: str | None = None,
+        pending_input_keys: tuple[str, ...] = (),
         settings_paths: tuple[str, ...] | None = None,
     ) -> tuple[NativePreparation, CompactionSource]:
         """Read Pi's saved cut point, then capture owner/ingress source before summarizing.
@@ -150,7 +150,7 @@ class OwnerCompactionCommit:
             owner,
             owner_generation,
             prepared.witness,
-            pending_input_key=pending_input_key,
+            pending_input_keys=pending_input_keys,
             settings_paths=settings_paths,
         )
         # Capture determines the required original facts. Native policy then
@@ -168,7 +168,7 @@ class OwnerCompactionCommit:
                                source: CompactionSource) -> None:
         with self.boundary.hold(
             owner, owner_generation, source.native,
-            pending_input_key=source.pending_input_key,
+            pending_input_keys=source.pending_input_keys,
         ) as held:
             source.require_current(held)
 
@@ -213,7 +213,7 @@ class OwnerCompactionCommit:
         payload = NativeSummaryPayload(summary=summary, tokens_before=tokens_before, details=details, usage=usage)
         native_intent = NativeIntent(witness, payload.payload_digest(witness), payload.metadata_digest())
         with self.boundary.hold(
-            owner, owner_generation, witness, pending_input_key=source.pending_input_key
+            owner, owner_generation, witness, pending_input_keys=source.pending_input_keys
         ) as held:
             source.require_current(held)
             source.retained.require_summary(summary)
@@ -227,7 +227,7 @@ class OwnerCompactionCommit:
                     incarnation=owner.incarnation,
                     owner=owner.process_identity,
                     turn=TurnId(source.turn_id),
-                    pending_input_key=source.pending_input_key,
+                    pending_input_keys=source.pending_input_keys,
                 ).require_valid()
                 selected = SelectedCommitReference(
                     selected_attempt.operation_id, TextDigest.of(selected_attempt.source_json).value,
@@ -251,7 +251,7 @@ class OwnerCompactionCommit:
     ) -> SelectedSummaryAdmission:
         """Continue one original after a correlated, unchanged prestart decline."""
         with self.boundary.hold(
-            owner, owner_generation, source.native, pending_input_key=source.pending_input_key
+            owner, owner_generation, source.native, pending_input_keys=source.pending_input_keys
         ) as held:
             source.require_current(held)
             self.journal.summaries.require_current(attempt, source.native.session_file)
@@ -276,7 +276,7 @@ class OwnerCompactionCommit:
         committed_source = source.after_native_commit(evidence)
         with self.boundary.hold(
             owner, owner_generation, committed_source.native,
-            pending_input_key=source.pending_input_key,
+            pending_input_keys=source.pending_input_keys,
         ) as held:
             committed_source.require_current(held)
             if self.journal.operations.get(operation.commit_id) != operation:

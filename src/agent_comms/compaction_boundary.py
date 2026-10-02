@@ -42,7 +42,7 @@ class CompactionBoundary:
         witness: NativeWitness,
         *,
         settled: bool = True,
-        pending_input_key: str | None = None,
+        pending_input_keys: tuple[str, ...] = (),
     ) -> Iterator[HeldCompaction]:
         expected = owner.compaction_attestation(owner_generation, witness)
         # Existing bus publication acquires bus BEFORE registry. Never invert
@@ -59,7 +59,7 @@ class CompactionBoundary:
             ):
                 if settled:
                     self.inputs._read_unlocked().compaction_rows(
-                        owner, pending_input_key, self.future_queue
+                        owner, pending_input_keys, self.future_queue
                     )
                 yield HeldCompaction(
                     self, witness, receipt, fd,
@@ -116,7 +116,7 @@ class HeldCompaction:
 
     def capture(
         self,
-        pending_input_key: str | None,
+        pending_input_keys: tuple[str, ...],
         settings_paths: tuple[str, ...] | None,
     ) -> CompactionSource:
         root = self.boundary.root.stat()
@@ -125,7 +125,7 @@ class HeldCompaction:
         owner = snapshot.threads[self.receipt.thread]
         inputs = self.boundary.inputs._read_unlocked()
         rows, input_facts = inputs.compaction_material(
-            owner, pending_input_key, self.boundary.future_queue
+            owner, pending_input_keys, self.boundary.future_queue
         )
         bus_revision, facts = WireLog(
             self.boundary.root / "bus.jsonl"
@@ -144,7 +144,7 @@ class HeldCompaction:
             bus_revision,
             TextDigest.of(json.dumps(FieldCodec.encode(rows), sort_keys=True)).value,
             RetainedTaskFacts(facts).for_owner(owner, snapshot),
-            pending_input_key,
-            settings_paths,
-            self.boundary.settings_revision(settings_paths),
+            pending_inputs=inputs.originals(pending_input_keys),
+            settings_paths=settings_paths,
+            settings_revision=self.boundary.settings_revision(settings_paths),
         )

@@ -18,10 +18,7 @@ class SelectedRequest:
     admission: PrivateSendAdmission
 
     @classmethod
-    async def reserve(cls, participant, session, stage, token, prompt, *, package):
-        # Every triage/FULL original crosses this same boundary, including
-        # continuation after a prior triage changed the saved native context.
-        await session.prepare_context(participant, package)
+    def reserve(cls, participant, session, stage, token, prompt):
         return cls(
             participant,
             PrivateSendAdmission.reserve(

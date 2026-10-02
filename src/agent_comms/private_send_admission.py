@@ -133,6 +133,10 @@ class PrivateSendAdmission:
         )
         self.owner.require_registry(self.bus._registry)
 
+    async def prepare_context(self, turn: TrackedTurnSession) -> None:
+        """Use this original request's selected source and acquired native custody."""
+        await self.session.prepare_context(self.selected, turn)
+
     async def execute(
         self,
         package: Path,

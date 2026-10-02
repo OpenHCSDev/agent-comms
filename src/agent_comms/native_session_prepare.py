@@ -72,13 +72,6 @@ class NativeSessionPreparation(backend.TurnSession):
             environment=environment,
             session_file=session_file,
         )
-        return await cls.open_launch(persistent, launch)
-
-    @classmethod
-    async def open_launch(
-        cls, persistent: backend.PersistentPiSession, launch: NativePiRpcLaunch
-    ) -> StateData:
-        """Attest the original selected launch without reserving or sending input."""
         preparation = cls(launch, "", persistent_session=persistent)
         owner = asyncio.current_task()
         async with session_writer_fence(launch.session.session_file), persistent.lock:

@@ -64,23 +64,23 @@ async def compact_manual_owner(
         OwnerCompactionCommit, runner.comms.registry.store.path, Path(package)
     )
 
-    pending_input_key = None
+    pending_input_keys = ()
     refusals = bridge.journal.summaries.blocking(session_file)
     for refusal in refusals:
         refusal.state.manual_recovery()
         prior = refusal.source()
         if prior.incarnation != owner.incarnation:
             raise CompactionJournalError("Refused selected source belongs to another owner")
-        key = prior.pending_input_key
-        if key is not None:
-            row = bridge.inputs.read().lookup(key)
-            if not row.accepts_reservation:
+        keys = prior.pending_input_keys
+        if keys:
+            inputs = bridge.inputs.read()
+            if any(not inputs.lookup(key).accepts_reservation for key in keys):
                 raise CompactionJournalError("Refused original input is no longer unbound")
-            if pending_input_key is not None and pending_input_key != key:
+            if pending_input_keys and pending_input_keys != keys:
                 raise CompactionJournalError(
                     "Multiple unresolved originals require explicit review"
                 )
-            pending_input_key = key
+            pending_input_keys = keys
 
     settings = await read_selected_compaction_decision(
         persistent, session_file=session_file,
@@ -100,7 +100,7 @@ async def compact_manual_owner(
     return await bridge.compact_selected(
         owner, generation, persistent, source, selected, settings,
         instructions=instructions.strip() if instructions else None,
-        pending_input_key=pending_input_key, before_summary=retire_refusals,
+        pending_input_keys=pending_input_keys, before_summary=retire_refusals,
         on_event=lambda event: runner.effects._emit_event(session_id, event),
         reason="manual",
     )

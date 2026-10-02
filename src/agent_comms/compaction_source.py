@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
+from .input_attempt import StoredInput
 from .field_codec import FieldCodec, projected
 from .owner_compaction_prepare import NativeWitness
 from .retained_task_facts import RetainedTaskFacts
@@ -28,9 +29,13 @@ class CompactionSource:
     bus_revision: str
     input_revision: str
     retained: RetainedTaskFacts
-    pending_input_key: str | None = None
+    pending_inputs: tuple[StoredInput, ...]
     settings_paths: tuple[str, ...] | None = None
     settings_revision: tuple[str, ...] | None = None
+
+    @property
+    def pending_input_keys(self) -> tuple[str, ...]:
+        return tuple(row.key for row in self.pending_inputs)
 
     @projected(view="journal", name="native_json")
     def encoded_native(self) -> str:
@@ -38,7 +43,7 @@ class CompactionSource:
 
 
     def require_current(self, held: HeldCompaction) -> None:
-        if self != held.capture(self.pending_input_key, self.settings_paths):
+        if self != held.capture(self.pending_input_keys, self.settings_paths):
             raise RelationViolationError("Compaction source changed; derive fresh evidence")
 
     def at_prepared_cut(self, witness: NativeWitness) -> CompactionSource:

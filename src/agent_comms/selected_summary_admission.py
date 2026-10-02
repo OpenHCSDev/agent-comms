@@ -148,8 +148,8 @@ class SelectedSummaryAdmission:
             identity.source.reservation_check(
                 identity.source.reserved_revision, dispositions.read()
             ).require_valid()
-            return dispositions.bind(
-                identity.source.ingress_key,
+            return dispositions.bind_originals(
+                identity.source.ingress_keys,
                 admission=identity.source.admission_generation,
                 turn_id=identity.source.turn.value,
                 native_id=native_id,

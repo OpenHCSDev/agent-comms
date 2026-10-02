@@ -92,7 +92,7 @@ async def compact_owner_once(
     *,
     settings: PiCompactionSettings,
     context_window: int,
-    pending_input_key: str | None = None,
+    pending_input_keys: tuple[str, ...] = (),
     settings_paths: tuple[str, ...] | None = None,
     on_admission: Callable[[SelectedSummaryAdmission], None] | None = None,
     on_event: Callable[[AgentEvent], Awaitable[None]] | None = None,
@@ -120,7 +120,7 @@ async def compact_owner_once(
             prepared=prepared,
             settings=settings,
             context_window=context_window,
-            pending_input_key=pending_input_key,
+            pending_input_keys=pending_input_keys,
             settings_paths=settings_paths,
         )
         if on_event is not None:
