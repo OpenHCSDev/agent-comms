@@ -591,3 +591,30 @@ def test_same_native_cut_policy_keeps_hard_preparation_independent(tmp_path):
     optional.require_prepared(refusal)
     with pytest.raises(ValueError, match='No complete optional cut'):
         hard.require_prepared(refusal)
+
+
+@pytest.mark.asyncio
+async def test_optional_clean_decline_has_no_write_or_input_grant():
+    from types import SimpleNamespace
+    from agent_comms.pi_summary_payloads import SummaryDeclinedData
+    from agent_comms.pi_vocabulary import TaskBoundaryCompactionReason, ManualCompactionReason
+
+    data = SummaryDeclinedData(version=1, operation_id='original-optional',
+                               status='declined', reason='split_turn')
+    settled = []
+    refused = []
+    journal = SimpleNamespace(summaries=SimpleNamespace(
+        refuse=lambda operation, reason: refused.append((operation, reason))))
+    result = data.manual_summary(journal, TaskBoundaryCompactionReason, settled.append)
+    assert settled == [data] and not refused
+    assert await result.commit_with(lambda _: pytest.fail('Optional decline wrote native history')) is None
+    assert result.admit_original(None, None, None, None, None) is None
+    assert result.compaction_result(None) is result and not result.adaptive_result()
+    with pytest.raises(ValueError, match='declined manual summary'):
+        data.manual_summary(journal, ManualCompactionReason, settled.append)
+    assert refused == [(data.operation_id, data.reason)]
+    unsafe = SummaryDeclinedData(version=1, operation_id='required-context',
+                                 status='declined', reason='context_requires_compaction')
+    with pytest.raises(ValueError, match='original remains unbound'):
+        unsafe.manual_summary(journal, TaskBoundaryCompactionReason, settled.append)
+    assert settled == [data]
