@@ -68,5 +68,13 @@
       "metaclass_registry"
     ],
     "local_git_checkout_mismatch": "2d99d9ab79c06b1fb3c3583aae7360663e1cadff: six of six Python files differ; not substituted"
+  },
+  {
+    "label": "outside-operator-after-durable-owner-correction",
+    "repo": "/home/ts/wt/comms-native-compaction-source-carry-20261002",
+    "revision": "2e447c940ec0a6fdcfc6a5aef7ad0da37dcd0bcc",
+    "roots": [
+      "tools"
+    ]
   }
 ]
