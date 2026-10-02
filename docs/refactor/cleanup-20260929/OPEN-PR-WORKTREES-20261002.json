@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-10-02T05:57:23.706243+00:00",
+  "as_of": "2026-10-02T06:13:00.259227+00:00",
   "scope": "All open PRs in OpenHCSDev agent-comms/toad/textual/textual-diff-view; source/receiving ownership for this goal.",
   "default_prefix": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/runtime-certified508-corrected-candidate-20261002",
   "prs": [
@@ -17,7 +17,10 @@
         {
           "path": "/home/ts/wt/comms-context-history-owner-20261002",
           "head": "b9341d40f7abae8c15d468b6def6f12fd90c59b8",
-          "status": "?? .artifacts/\n"
+          "status": "?? .artifacts/\n",
+          "exists": true,
+          "branch": "fix/selected-turn-context-closure-20261002",
+          "registered": true
         }
       ]
     },
@@ -35,7 +38,10 @@
         {
           "path": "/home/ts/wt/comms-native-compaction-source-carry-20261002",
           "head": "ce4db5cd950c674926187c2ecb24096be988a19c",
-          "status": ""
+          "status": "",
+          "exists": true,
+          "branch": "fix/native-compaction-source-carry-20261002",
+          "registered": true
         }
       ]
     },
@@ -53,14 +59,17 @@
         {
           "path": "/home/ts/wt/comms-async-bus-read-publication-custody-20261002",
           "head": "1059126a62b256ec2e7d167b022d3cc93a1441b7",
-          "status": "?? .artifacts/\n"
+          "status": " M tests/shared_bus_restart_native.py\n?? .artifacts/\n",
+          "exists": true,
+          "branch": "fix/async-bus-read-publication-custody-20261002",
+          "registered": true
         }
       ]
     },
     {
       "repo": "agent-comms",
       "headRefName": "fix/selected-preparation-compaction-owner-20261002",
-      "headRefOid": "34c5a666091ebd6cc8014b9cb507fb1c2f26075a",
+      "headRefOid": "3e24e510b3422dbd465a7a1e76283b0f5e840ae9",
       "isDraft": true,
       "number": 506,
       "title": "fix: journal selected saved-context preparation before input",
@@ -70,15 +79,18 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-retained-human-main-20261001",
-          "head": "34c5a666091ebd6cc8014b9cb507fb1c2f26075a",
-          "status": " M evidence/selected-owner-preparation-20261002/ast-owner-map/after.json\n M evidence/selected-owner-preparation-20261002/ast-owner-map/before.json\n?? .artifacts/\n"
+          "head": "3e24e510b3422dbd465a7a1e76283b0f5e840ae9",
+          "status": "?? .artifacts/\n",
+          "exists": true,
+          "branch": "fix/selected-preparation-compaction-owner-20261002",
+          "registered": true
         }
       ]
     },
     {
       "repo": "agent-comms",
       "headRefName": "fix/request-budget-compaction-custody-20261001",
-      "headRefOid": "479a5222a6dffcea2b51d1cada36aa33d600e6f1",
+      "headRefOid": "65d5788b1bca75e412f382a18a2f8b37b08acc0c",
       "isDraft": true,
       "number": 489,
       "title": "Own native runtime facts and lifecycle through existing nominal authorities",
@@ -88,15 +100,18 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-request-budget-compaction-custody-20261001",
-          "head": "479a5222a6dffcea2b51d1cada36aa33d600e6f1",
-          "status": "?? .observations/\n"
+          "head": "65d5788b1bca75e412f382a18a2f8b37b08acc0c",
+          "status": "?? .observations/\n",
+          "exists": true,
+          "branch": "fix/request-budget-compaction-custody-20261001",
+          "registered": true
         }
       ]
     },
     {
       "repo": "agent-comms",
       "headRefName": "refactor/cleanup-live-integration-20260929",
-      "headRefOid": "0bf2dc5313ede8adeced033acca5df915d86c2c4",
+      "headRefOid": "398141869817893eb0fd2398f59205aacd25d28e",
       "isDraft": true,
       "number": 432,
       "title": "Track live checkpoint and remaining nominal integration scope",
@@ -106,8 +121,11 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/comms-cleanup-live-integration-20260929",
-          "head": "0bf2dc5313ede8adeced033acca5df915d86c2c4",
-          "status": "?? .artifacts/\n?? .release-private/\n?? docs/refactor/cleanup-20260929/OPEN-PR-WORKTREES-20261002.json\n?? evidence/performance275-feedback-edges-20261001/pr275-body.md\n?? evidence/performance275-feedback-edges-20261001/pr277-body.md\n?? evidence/performance275-feedback-edges-20261001/pr278-ready-body.md\n"
+          "head": "398141869817893eb0fd2398f59205aacd25d28e",
+          "status": "?? .artifacts/\n?? .release-private/\n?? evidence/performance275-feedback-edges-20261001/pr275-body.md\n?? evidence/performance275-feedback-edges-20261001/pr277-body.md\n?? evidence/performance275-feedback-edges-20261001/pr278-ready-body.md\n",
+          "exists": true,
+          "branch": "refactor/cleanup-live-integration-20260929",
+          "registered": true
         }
       ]
     },
@@ -125,7 +143,10 @@
         {
           "path": "/home/ts/wt/toad-receiving-native5-batch490-20261001",
           "head": "21f8651f8d9c62da4b615fa48fb1177d26a84ea0",
-          "status": "?? .artifacts/\n"
+          "status": "?? .artifacts/\n",
+          "exists": true,
+          "branch": "deploy/async509-selected-receiving-20261002",
+          "registered": true
         }
       ]
     },
@@ -144,8 +165,8 @@
     {
       "repo": "toad",
       "headRefName": "perf/sidebar-scene-after305-20261002",
-      "headRefOid": "4bb730c08eedf8f6eb1709e53d497c826b65ba3a",
-      "isDraft": true,
+      "headRefOid": "063c4981c23fac0cfe2068419d2f6e5250978715",
+      "isDraft": false,
       "number": 308,
       "title": "perf: close repeated sidebar scene and style work after305",
       "url": "https://github.com/OpenHCSDev/toad/pull/308",
@@ -154,8 +175,11 @@
       "worktrees": [
         {
           "path": "/home/ts/wt/toad-viewport-raster-cpu-continuation-20261001",
-          "head": "4bb730c08eedf8f6eb1709e53d497c826b65ba3a",
-          "status": " M tests/channel_views_pilot.py\n M tests/guards/test_sidebar_retirement.py\n?? .artifacts/\n"
+          "head": "063c4981c23fac0cfe2068419d2f6e5250978715",
+          "status": "?? .artifacts/\n",
+          "exists": true,
+          "branch": "perf/sidebar-scene-after305-20261002",
+          "registered": true
         }
       ]
     },
@@ -173,7 +197,10 @@
         {
           "path": "/home/ts/wt/toad-receiving-pending-source503-20261002",
           "head": "eafe19c0e91f095e6e288670853e50d31935ac9b",
-          "status": ""
+          "status": "",
+          "exists": true,
+          "branch": "deploy/pending-source503-20261002",
+          "registered": true
         }
       ]
     },
@@ -191,7 +218,10 @@
         {
           "path": "/home/ts/wt/textual-intrinsic-placement-after18-20261001",
           "head": "5908ed46c0f982749e0e7d554aad7a6a230b6b7e",
-          "status": "?? .artifacts/\n"
+          "status": "?? .artifacts/\n",
+          "exists": true,
+          "branch": "perf/native-scene-after21-20261002",
+          "registered": true
         }
       ]
     }
