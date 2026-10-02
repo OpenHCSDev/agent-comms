@@ -12,7 +12,8 @@ historical8–16s interval.
 
 Use the original joined Coordination worker for the existing context-proof
 method and both consumers. NativeToolMode owns asynchronous completion;
-CodingToolMode lends its original owner completion to that same worker. Keep
+CodingToolOwner owns empty/nonempty completion and lends release to that worker;
+CodingToolMode delegates the existing native-tool family contract. Keep
 all byte/revision/context-generation and claim fences. No cached proof, earlier
 receipt substitution, alternative reader, input replay or native change.
 
@@ -24,5 +25,6 @@ do not blindly thread its shared claims or change legitimate parallel execution.
 Before AST uses the existing NRA Package parser over the full production root.
 Dynamic receiver ambiguity and separate native JS ownership are explicit.
 Checks follow the coherent source batch and cover joined cancellation, original
-proof and claim completion; installed saved-source verification is read-only.
+proof and claim completion. One configured native turn uses a distinct SDK fork
+and input, preserving the original saved source, failed inputs and UNKNOWN.
 Parent's next configured channel wave owns end-user latency acceptance.
