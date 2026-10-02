@@ -1,0 +1,57 @@
+{
+  "assessment": "PASS at channel read/paint strength; not whole cross-owner latency or async bus closure",
+  "functional_core": "74877f2dd108ed211871a098064178eaf3a4fdb5",
+  "toad": "8b24f308e5385ea94bfcc163c5c0a9b8e0364cf9",
+  "textual": "68a0d1cf62fdde8aeef9834836ecf0caf7b169c7",
+  "native": "5184 unchanged",
+  "package_count": 69,
+  "receiving_source_proof_sha256": "090186954297f25b3c0e4a53475bd2cc48e4cfb25c9771f3a82d5b8a028ca693",
+  "receiving_source_proof_path": "/home/ts/wt/toad-receiving-native5-batch490-20261001/.artifacts/certified508-corrected-receiving-20261002/source-proof.json",
+  "raw_capture": "/home/ts/.cache/agent-scratch/certified-sequence508-channel-20261002-03/physical",
+  "recorder_receipt_sha256": "dc463cdbd2b17fe3f1a41601b235310d3c6d6fdcfc9fc834a886e54ceb39afc8",
+  "duration_seconds": 31.55353685404407,
+  "actions": [
+    "saved-owner startup",
+    "Ctrl+G",
+    "Ctrl+B reveal copied collapsed sidebar",
+    "real native #openhcs channel click",
+    "channel history paint",
+    "real history click",
+    "End"
+  ],
+  "target": "#openhcs",
+  "history_follows_tail": true,
+  "history_lock_held": false,
+  "physical_frame_review": "channel-end original replies/cohort rows visible; selected #openhcs, no active turns",
+  "cleanup_remaining_owned_pids": [],
+  "cleanup_errors": [],
+  "protection": {
+    "protected_equal": true,
+    "read_ledger": {
+      "before_sha256": "3d4f29aec65adc86388475008910c4597a3c88d75ebd3c266d1b93f394a4f89e",
+      "after_sha256": "3d4f29aec65adc86388475008910c4597a3c88d75ebd3c266d1b93f394a4f89e",
+      "changed": false
+    },
+    "public_messages_submitted": 0,
+    "provider_calls_submitted": 0,
+    "owner_restarts": 0
+  },
+  "earlier_driver_failures": [
+    {
+      "run": "01",
+      "reason": "finalize argument12 outside14..30; recorder not launched"
+    },
+    {
+      "run": "02",
+      "reason": "copied collapsed sidebar produced no visible channel target; cleanup0/protection unchanged"
+    }
+  ],
+  "artifact_hashes": {
+    "phase-saved-startup.png": "b79e0151936d1fbe9b98dc660647fd79006611397c84abf8a36eeaaa7cbeceb6",
+    "phase-channel-bar.png": "4141eef4fe57325262a56487e337ec11a962c33070ea94ce8ab9472c2daa6ff3",
+    "phase-channel-painted.png": "16ece0429249021b7558947704a8265db7c611c311cfb53a88911d2d267973b7",
+    "phase-channel-end.png": "e5f4570553698b0a8bdeb730968ac268ee6fdbbdc16651a09fce56d5bb04aadb",
+    "channel-click-target.json": "85b0edd6dba7de80f9e9bf0b91da02b7840138471d952d38b16061b5906361a6",
+    "terminal.mp4": "00c7f96cc11c12defe64fa1c249f52b9cb12d686487d5e8ae1f8f6f6f8b57a2b"
+  }
+}
