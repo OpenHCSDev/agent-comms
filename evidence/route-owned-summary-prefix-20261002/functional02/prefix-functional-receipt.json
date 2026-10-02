@@ -1,0 +1,37 @@
+{
+  "complete": true,
+  "actual_prefix_admitted": true,
+  "bounded_fallback_qualifies": false,
+  "source_unchanged": true,
+  "package": "/home/ts/wt/comms-task-aware-native-bundle-20261002/stack/.pi-native-960296fdddafb01c/node_modules/@earendil-works/pi-coding-agent",
+  "original_route": {
+    "stage": "route",
+    "provider": "openai-codex",
+    "api": "openai-codex-responses",
+    "canonicalEndpoint": true,
+    "systemHash": "046049751cce57c108385efca2900818cd3cc4bdb66e2c26cc53b5e768e56500",
+    "toolsHash": "b7028753435029a968e43709da4486c3c11fe8a209c0f08b69afdab0fb7cc186",
+    "orderedPrefixHash": "7c07eec5a635bee819b5b873581c7feae045a58b5455d637308e10db3b7c4bbd",
+    "messageCount": 14,
+    "toolCount": 41,
+    "prefixCapabilityEntered": true
+  },
+  "selected_request": {
+    "stage": "selected-request",
+    "provider": "openai-codex",
+    "api": "openai-codex-responses",
+    "canonicalEndpoint": true,
+    "systemHash": "046049751cce57c108385efca2900818cd3cc4bdb66e2c26cc53b5e768e56500",
+    "toolsHash": "b7028753435029a968e43709da4486c3c11fe8a209c0f08b69afdab0fb7cc186",
+    "orderedPrefixHash": "7c07eec5a635bee819b5b873581c7feae045a58b5455d637308e10db3b7c4bbd",
+    "messageCount": 14,
+    "toolCount": 41,
+    "toolChoiceNone": true,
+    "originalInstructions": true,
+    "originalTools": true,
+    "boundProvider": true
+  },
+  "body_or_credentials_exported": false,
+  "paid_comparison": false,
+  "observation_scope": "Original native API formation and selectedStream before auth; actual configured SDK/ACP provider completion and journal commit are in receipt.json"
+}

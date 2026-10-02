@@ -52,14 +52,30 @@ recipe syntax and Python patcher compilation were batched after the coherent
 implementation. These detect corrupt hunks/preimages and malformed executable
 source; they do not qualify an installed package or a provider result.
 
-## Remaining acceptance
+## Installed functional acceptance
 
-The Native9f12/00c2 artifacts remain unchanged. A matching artifact/pin must be
-produced by the existing single native builder, then one affected configured
-saved-session/inspection journey must observe this producer and original prefix.
-No old artifact or historical reader qualifies the new producer. Keep the PR
-draft until that ordinary installed path is verified; no standalone new env,
-native build, provider call or cache comparison was run here.
+Sch's normal native960 artifact is trusted and pinned. Native9f12/00c2 originals
+and public receiving/default remain unchanged. Current Corea3617335 normally
+integrates mainf58/542; its same owned521 environment was refreshed with a normal
+wheel and all339 source/assets plus wheel members matched. Native prefix bytes
+are unchanged. No new environment, native copy or competing build.
+
+Functional02 passed the actual configured Sol/high saved42MB SDK-fork→ACP→native
+manual compaction→original journal commit→one fresh distinct input/answer journey
+in165.3164s. One real private peer publication occurred during summary streaming.
+The actual Codex route at its canonical baseURL admitted the prefix:14 ordered
+messages and41 tools, with formation/request system/tools/order SHA equality,
+original instructions/tools, bound Provider and toolChoice:none. Bounded fallback
+did not qualify. No provider/model/transport override, public input or replay.
+Original saved source hash is unchanged; private native children closed. This is
+SDK/ACP/native functional acceptance, not physical Toad UI or cache savings.
+Small immutable receipts, metadata-only observation and exact installed proof
+are in functional02/. Full original private journals/input/native files remain
+under .artifacts/summary-prefix527-functional02.
+
+Failed01 on pre542 Core98ef remains preserved separately; its original new input
+is not replayed. See FUNCTIONAL-CHECKPOINT.md for the exact fence and merged
+original-owner correction, plus the observer's real launch/import boundaries.
 
 Real cache hits, cost/latency comparisons and recall remain unmeasured. The separate
 paid comparison has no budget grant. Missing normalized cache counters must not be
