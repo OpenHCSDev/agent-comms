@@ -91,7 +91,7 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ContextObserved)
     async def observe_context(self, event):
-        event.context.record(self.comms.bus.log, self.thread, self.turn_lease)
+        await event.context.record(self.comms.bus.log, self.thread, self.turn_lease)
 
     @property
     def reply_targets(self):
