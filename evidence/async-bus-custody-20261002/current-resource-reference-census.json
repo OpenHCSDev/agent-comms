@@ -1,0 +1,991 @@
+{
+  "source_parent": "0e6034c82256a0efe602593de44328c0ead77cc9",
+  "scope": "AST declarations/call references for original resource boundaries; semantic source receipt owns interpretation, not identifier counts",
+  "references": [
+    {
+      "path": "src/agent_comms/acp.py",
+      "line": 435,
+      "call": "NativeSourceCursor.refresh_async"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 69,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/attempt_recovery.py",
+      "line": 284,
+      "call": "(entry / 'cmdline').read_bytes"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 184,
+      "call": "RouteTotalRow.select"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 114,
+      "call": "RouteSourceRow.select"
+    },
+    {
+      "path": "src/agent_comms/bus_route_counts.py",
+      "line": 155,
+      "call": "RouteTotalRow.select"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 814,
+      "definition": "join_retirement",
+      "async": true
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 893,
+      "call": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 104,
+      "call": "selector.select"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1073,
+      "call": "selector.select"
+    },
+    {
+      "path": "src/agent_comms/child_process.py",
+      "line": 1198,
+      "call": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 89,
+      "call": "bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/cohort_foreground.py",
+      "line": 97,
+      "call": "bus.log.addressed_sources"
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 230,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 309,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/cohort_schema.py",
+      "line": 407,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/compaction_outcomes.py",
+      "line": 87,
+      "call": "CompactionOperation.select"
+    },
+    {
+      "path": "src/agent_comms/compaction_publications.py",
+      "line": 21,
+      "call": "CompactionPublication.select"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 87,
+      "call": "cls.select"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 104,
+      "call": "cls.select"
+    },
+    {
+      "path": "src/agent_comms/compaction_records.py",
+      "line": 92,
+      "call": "table.select"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 240,
+      "call": "CompactionOperation.select"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 255,
+      "call": "SelectedSummaryAttempt.select"
+    },
+    {
+      "path": "src/agent_comms/compaction_summaries.py",
+      "line": 142,
+      "call": "PrivateRawInput.select"
+    },
+    {
+      "path": "src/agent_comms/continued_private_session.py",
+      "line": 121,
+      "call": "NativeRuntimeInput.select"
+    },
+    {
+      "path": "src/agent_comms/coordinated_runtime.py",
+      "line": 90,
+      "call": "SelectedParticipant.select"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 129,
+      "call": "ClaimBatchMembers.select"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 146,
+      "call": "CohortDeliveryReceipts.select"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 254,
+      "call": "WakeAssignment.select"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 256,
+      "call": "ClaimBatchReceipts.select"
+    },
+    {
+      "path": "src/agent_comms/coordination_cohort.py",
+      "line": 317,
+      "call": "ClaimBatchReceipts.select"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 207,
+      "definition": "_response_boundary",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 109,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 354,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/coordination_response.py",
+      "line": 452,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 265,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/assignments.py",
+      "line": 358,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 250,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/attempts.py",
+      "line": 413,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line": 76,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/executions.py",
+      "line": 340,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "line": 68,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/participants.py",
+      "line": 100,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/publications.py",
+      "line": 206,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/publications.py",
+      "line": 348,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/recovery.py",
+      "line": 55,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/recovery.py",
+      "line": 112,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/responses.py",
+      "line": 181,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 25,
+      "definition": "run_async",
+      "async": true
+    },
+    {
+      "path": "src/agent_comms/coordinator.py",
+      "line": 39,
+      "call": "join_retirement"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 116,
+      "definition": "trusted_metadata",
+      "async": true
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 96,
+      "call": "NativeSourceCursor.read_async"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 159,
+      "call": "NativeSourceCursor.refresh_async"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 214,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 429,
+      "call": "self.limit.select"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 487,
+      "call": "GoalProviderUsage.select"
+    },
+    {
+      "path": "src/agent_comms/goal_failure_observation.py",
+      "line": 93,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 188,
+      "call": "GoalHistoryEntry.select"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 124,
+      "call": "self.bus.log.addressed_sources"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 348,
+      "call": "self.bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 67,
+      "call": "bus.addressed_sources"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 250,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 278,
+      "definition": "sources",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 382,
+      "call": "self.sources"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 467,
+      "call": "self.sources"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 251,
+      "call": "self.displayed.select"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 260,
+      "call": "archive.sources"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 304,
+      "call": "self.sources"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 423,
+      "call": "self.sources"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 439,
+      "call": "self.sources"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 172,
+      "call": "self.bus.history.sources"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 45,
+      "call": "copied_helper.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/native_compaction_writer.py",
+      "line": 45,
+      "call": "COMPACTION_HELPER.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 458,
+      "call": "MANIFEST.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_send.py",
+      "line": 96,
+      "call": "select.select"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 162,
+      "call": "cls.select"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 177,
+      "call": "ResponseObligation.select"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 40,
+      "definition": "read_async",
+      "async": true
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 51,
+      "definition": "advance_async",
+      "async": true
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 70,
+      "definition": "refresh_async",
+      "async": true
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 41,
+      "call": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 56,
+      "call": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 71,
+      "call": "Coordination.run_async"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 122,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 195,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 223,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/nk_foreground.py",
+      "line": 135,
+      "call": "select.select"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 81,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 538,
+      "call": "WakeAssignment.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 597,
+      "call": "ResponseObligation.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 618,
+      "call": "ExecutionAssignmentLink.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 555,
+      "call": "ClaimBatchReceipts.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 563,
+      "call": "ClaimBatchMembers.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 571,
+      "call": "CohortDeliveryReceipts.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 579,
+      "call": "AwarenessClaimGenerations.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 612,
+      "call": "ExecutionRecord.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 629,
+      "call": "WakeAssignment.select"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 635,
+      "call": "AwarenessClaimGenerations.select"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 106,
+      "call": "Path(f'/proc/{process.pid}/environ').read_bytes"
+    },
+    {
+      "path": "src/agent_comms/owner_launch.py",
+      "line": 100,
+      "call": "Path(f'/proc/{process.pid}/cmdline').read_bytes"
+    },
+    {
+      "path": "src/agent_comms/participant_store.py",
+      "line": 161,
+      "call": "ParticipantAliases.select"
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 406,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 484,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/pi_events.py",
+      "line": 342,
+      "call": "request.select"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 96,
+      "call": "NotificationAssignment.select"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 75,
+      "definition": "require_read_window",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 122,
+      "definition": "capture_deliveries",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 136,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 163,
+      "definition": "addressed_page",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 205,
+      "definition": "conversation_sources",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 251,
+      "definition": "keyed_receipt",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 295,
+      "definition": "read_bytes",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 306,
+      "definition": "decode_bytes",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 140,
+      "call": "DeliverySources.select"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 151,
+      "call": "self.capture_deliveries"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 159,
+      "call": "self.capture_deliveries"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 176,
+      "call": "witness.require_read_window"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 238,
+      "call": "self.capture_deliveries"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 293,
+      "call": "self.decode_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 134,
+      "call": "row.decode_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 189,
+      "call": "self.capture_deliveries"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 293,
+      "call": "self.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 131,
+      "call": "row.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/private_send_admission.py",
+      "line": 180,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 339,
+      "call": "NativeRuntimeInput.select"
+    },
+    {
+      "path": "src/agent_comms/private_send_stage.py",
+      "line": 330,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/private_sidecar.py",
+      "line": 235,
+      "call": "SnapshotMeta.select"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 148,
+      "call": "self.bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 154,
+      "call": "source.addressed_page"
+    },
+    {
+      "path": "src/agent_comms/read_basis.py",
+      "line": 73,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 284,
+      "call": "ResponseObligation.select"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 286,
+      "call": "PublicationReceipts.select"
+    },
+    {
+      "path": "src/agent_comms/recovery_reader.py",
+      "line": 54,
+      "call": "ExecutionAssignmentLink.select"
+    },
+    {
+      "path": "src/agent_comms/recovery_reader.py",
+      "line": 60,
+      "call": "ResponseObligation.select"
+    },
+    {
+      "path": "src/agent_comms/recovery_reader.py",
+      "line": 62,
+      "call": "PublicationIntents.select"
+    },
+    {
+      "path": "src/agent_comms/restart_queue.py",
+      "line": 320,
+      "call": "select.select"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 75,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 152,
+      "definition": "sources",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 110,
+      "call": "cls.sources"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 160,
+      "call": "bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/selected_result.py",
+      "line": 48,
+      "call": "NativeSourceCursor.advance_async"
+    },
+    {
+      "path": "src/agent_comms/selected_session.py",
+      "line": 59,
+      "call": "_response_boundary"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 318,
+      "call": "receipt.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/selected_tool_broker.py",
+      "line": 183,
+      "call": "source.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/selected_turn.py",
+      "line": 162,
+      "call": "write_authority.select"
+    },
+    {
+      "path": "src/agent_comms/selected_write_authority.py",
+      "line": 21,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/selected_write_authority.py",
+      "line": 27,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/selected_write_authority.py",
+      "line": 47,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/session_lifecycle.py",
+      "line": 303,
+      "call": "self.effects.cursors.trusted_metadata"
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 126,
+      "definition": "_async_store_lock",
+      "async": true
+    },
+    {
+      "path": "src/agent_comms/store_files.py",
+      "line": 69,
+      "definition": "certified_read",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 98,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 106,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 117,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 153,
+      "call": "original_source.references"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 466,
+      "call": "original_source.references"
+    },
+    {
+      "path": "src/agent_comms/task_sources.py",
+      "line": 358,
+      "call": "scope.select"
+    },
+    {
+      "path": "src/agent_comms/todos.py",
+      "line": 407,
+      "call": "Todo.select"
+    },
+    {
+      "path": "src/agent_comms/tool_output.py",
+      "line": 35,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/tracked_turn.py",
+      "line": 309,
+      "call": "_async_store_lock"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 227,
+      "call": "self.log.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 232,
+      "call": "log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 184,
+      "call": "InputDisplay.select"
+    },
+    {
+      "path": "src/agent_comms/transcript_routes.py",
+      "line": 244,
+      "call": "source.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 403,
+      "call": "self.bus.history.sources"
+    },
+    {
+      "path": "src/agent_comms/turn_context.py",
+      "line": 88,
+      "call": "path.read_bytes"
+    },
+    {
+      "path": "src/agent_comms/turn_input_source.py",
+      "line": 90,
+      "call": "comms.bus.log.certified_read"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 396,
+      "definition": "references",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 473,
+      "definition": "select",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 493,
+      "call": "cls.select"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 439,
+      "call": "cls.references"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 66,
+      "definition": "certified_read",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 75,
+      "definition": "conversation_sources",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 89,
+      "definition": "addressed_sources",
+      "async": false
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 70,
+      "call": "lock.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 81,
+      "call": "lock.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 83,
+      "call": "source.conversation_sources"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 97,
+      "call": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 98,
+      "call": "source.addressed_page"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 320,
+      "call": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 351,
+      "call": "source.keyed_receipt"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 453,
+      "call": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 454,
+      "call": "source.references"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 105,
+      "call": "self.certified_read"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 106,
+      "call": "source.addressed_page"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 480,
+      "call": "lock.certified_read"
+    }
+  ]
+}

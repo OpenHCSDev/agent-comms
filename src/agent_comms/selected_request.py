@@ -10,6 +10,7 @@ from .native_pi import NativePiTerminalFailure, NativePiUnavailable
 from .private_send_admission import PrivateSendAdmission
 from .selected_participant import SelectedParticipant
 from .selected_result import publish_native_failure
+from .turn_context import RenderedInput
 
 
 @dataclass(frozen=True)
@@ -18,7 +19,7 @@ class SelectedRequest:
     admission: PrivateSendAdmission
 
     @classmethod
-    def reserve(cls, participant, session, stage, token, prompt):
+    def reserve(cls, participant, session, stage, token, prompt: RenderedInput):
         return cls(
             participant,
             PrivateSendAdmission.reserve(
